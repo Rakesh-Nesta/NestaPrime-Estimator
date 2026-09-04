@@ -65,3 +65,30 @@ export async function listRegionalMultipliers(token) {
   const res = await fetch(`${API_BASE}/regional-multipliers`, { headers: authHeaders(token) });
   return handle(res);
 }
+
+export async function listSports(token) {
+  const res = await fetch(`${API_BASE}/sports`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listProjectSports(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/sports`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function addProjectSport(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/sports`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function removeProjectSport(token, projectId, selectionId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/sports/${selectionId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}

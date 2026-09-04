@@ -10,4 +10,5 @@ from app.models.project import (  # noqa: F401
     UnitSystem,
 )
 from app.models.regional_multiplier import RegionalMultiplier  # noqa: F401
+from app.models.sport import ProjectSport, Sport, SportCategory  # noqa: F401
 from app.models.user import User, UserRole  # noqa: F401

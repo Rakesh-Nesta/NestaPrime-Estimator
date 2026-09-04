@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
 import ProjectSetup from "./ProjectSetup";
+import SportSelection from "./SportSelection";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -9,6 +10,7 @@ export default function App() {
   const [accessToken, setAccessToken] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [activeProject, setActiveProject] = useState(null);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -35,7 +37,15 @@ export default function App() {
             {user.name} · <span className="font-medium">{user.role}</span>
           </p>
         </header>
-        <ProjectSetup token={accessToken} />
+        {activeProject ? (
+          <SportSelection
+            token={accessToken}
+            project={activeProject}
+            onBack={() => setActiveProject(null)}
+          />
+        ) : (
+          <ProjectSetup token={accessToken} onProjectCreated={setActiveProject} />
+        )}
       </div>
     );
   }

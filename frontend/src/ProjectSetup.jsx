@@ -52,7 +52,7 @@ const emptyForm = {
   existingBuildingClearHeightFt: "",
 };
 
-export default function ProjectSetup({ token }) {
+export default function ProjectSetup({ token, onProjectCreated }) {
   const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
   const [multipliers, setMultipliers] = useState([]);
@@ -129,8 +129,14 @@ export default function ProjectSetup({ token }) {
         </div>
 
         <button
-          onClick={() => { setResult(null); setForm(emptyForm); }}
+          onClick={() => onProjectCreated(result)}
           className="mt-6 w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700"
+        >
+          Select sports for this project &rarr;
+        </button>
+        <button
+          onClick={() => { setResult(null); setForm(emptyForm); }}
+          className="mt-2 w-full bg-white text-gray-600 border border-gray-300 rounded py-2 font-medium hover:bg-gray-50"
         >
           Start another project
         </button>

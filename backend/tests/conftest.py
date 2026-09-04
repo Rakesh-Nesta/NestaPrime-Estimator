@@ -9,8 +9,9 @@ from app.db.session import get_db
 from app.main import app
 from app.models.user import User, UserRole
 from app.models.regional_multiplier import RegionalMultiplier
+from app.models.sport import Sport
 from app.core.security import hash_password
-from app.seed_data import REGIONAL_MULTIPLIER_SEED
+from app.seed_data import REGIONAL_MULTIPLIER_SEED, SPORTS_SEED
 
 # Tests run against the same Postgres container as dev (docker-compose),
 # in a separate database so they never touch real data.
@@ -38,6 +39,19 @@ def db_session():
                     wind_zone=wind,
                     seismic_zone=seismic,
                     is_confirmed=confirmed,
+                )
+            )
+        for key, order, name, category, playing, build, min_height, body in SPORTS_SEED:
+            session.add(
+                Sport(
+                    key=key,
+                    display_order=order,
+                    name=name,
+                    category=category,
+                    playing_dims=playing,
+                    build_dims=build,
+                    min_clear_height_ft=min_height,
+                    governing_body=body,
                 )
             )
         session.commit()
