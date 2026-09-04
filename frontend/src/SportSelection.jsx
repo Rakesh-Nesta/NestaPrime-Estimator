@@ -90,7 +90,7 @@ export default function SportSelection({ token, project, onBack }) {
               return (
                 <div
                   key={sel.id}
-                  className="flex items-center justify-between bg-blue-50 rounded px-3 py-2 text-sm"
+                  className="flex items-start justify-between bg-blue-50 rounded px-3 py-2 text-sm"
                 >
                   <span>
                     <span className="font-medium">{sport?.name ?? sel.sport_id}</span>
@@ -98,10 +98,20 @@ export default function SportSelection({ token, project, onBack }) {
                     {sel.building_status.replaceAll("_", " ")}
                     {" · "}
                     {sel.number_of_courts} court{sel.number_of_courts > 1 ? "s" : ""}
+                    {sel.recommended_base ? (
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Base (D.2): {sel.recommended_base.recommended}
+                        {sel.recommended_base.alternative && ` (alt: ${sel.recommended_base.alternative})`}
+                      </span>
+                    ) : (
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        Base: not yet in D.2 matrix — pending Director confirmation
+                      </span>
+                    )}
                   </span>
                   <button
                     onClick={() => handleRemove(sel.id)}
-                    className="text-red-600 hover:underline"
+                    className="text-red-600 hover:underline shrink-0 ml-2"
                   >
                     Remove
                   </button>

@@ -126,6 +126,24 @@ export default function ProjectSetup({ token, onProjectCreated }) {
             onText="Required before foundation design (D.4)"
             offText="Not required"
           />
+          <Flag
+            label="Rock breaking"
+            active={result.rock_breaking_required}
+            onText="Required — rocky soil (D.4)"
+            offText="Not required"
+          />
+          <Flag
+            label="Sand + CNS layer"
+            active={result.sand_cns_layer_required}
+            onText="Required — black cotton soil (D.4)"
+            offText="Not required"
+          />
+          <Flag
+            label="Dewatering"
+            active={result.dewatering_required}
+            onText="Required — water-logged site (D.4)"
+            offText="Not required"
+          />
         </div>
 
         <button

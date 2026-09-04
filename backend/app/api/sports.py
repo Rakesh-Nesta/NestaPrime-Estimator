@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
 from app.db.session import get_db
-from app.models.project import BuildingStatus, Project
+from app.models.project import BuildingStatus, Project, SoilType
 from app.models.sport import ProjectSport, Sport, SportCategory
 
 sports_router = APIRouter(prefix="/sports", tags=["sports"])
@@ -14,6 +14,80 @@ project_sports_router = APIRouter(prefix="/projects", tags=["project-sports"])
 
 READ_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 WRITE_ROLES = ("sales", "pm", "director")
+
+# D.2 Base selection matrix — sport groups as given in the table (not every
+# one of the 30 sports is covered; uncovered combinations return None rather
+# than guessing a composition the blueprint never specified).
+_INDOOR_SMOOTH = {"badminton", "table_tennis", "squash", "gymnasium"}
+_TURF_FIELD = {"box_cricket", "football_11", "football_7", "football_5_futsal"}
+_HARD_COURT = {"tennis", "basketball_outdoor", "pickleball"}
+_ATHLETIC_TRACK = {"athletic_track_400m", "athletic_track_200_250m"}
+_POOL = {"swimming_pool_25m", "swimming_pool_50m"}
+
+
+class BaseRecommendation(BaseModel):
+    recommended: str
+    alternative: str | None
+    why: str
+
+
+def _recommend_base(
+    sport: Sport, building_status: BuildingStatus, soil_type: SoilType
+) -> BaseRecommendation | None:
+    key = sport.key
+
+    if key in _INDOOR_SMOOTH and building_status in (
+        BuildingStatus.EXISTING_BUILDING,
+        BuildingStatus.NEW_PEB_BUILDING,
+    ):
+        return BaseRecommendation(recommended="PCC 4-6 in", alternative="RCC 6 in", why="Smooth for wooden/PU")
+
+    if key in _TURF_FIELD and building_status in (BuildingStatus.OPEN_AIR, BuildingStatus.COVERED_SHED):
+        if soil_type == SoilType.NORMAL:
+            return BaseRecommendation(
+                recommended='WBM 8-10 in (+ PCC 4 in box)', alternative=None, why="Drainage for turf life"
+            )
+        if soil_type == SoilType.ROCKY:
+            return BaseRecommendation(recommended="RCC 6 in direct", alternative=None, why="Rock breaking costly")
+        if soil_type == SoilType.BLACK_COTTON:
+            return BaseRecommendation(
+                recommended="Sand layer 6 in + WBM 10 in + geotextile",
+                alternative="RCC 6 in",
+                why="Swelling soil",
+            )
+        return None
+
+    if key in _HARD_COURT and building_status == BuildingStatus.OPEN_AIR and soil_type == SoilType.NORMAL:
+        return BaseRecommendation(
+            recommended="WBM 6 in + Asphalt 3 in", alternative="PCC 6 in", why="Bounce consistency"
+        )
+
+    if key in _ATHLETIC_TRACK and building_status == BuildingStatus.OPEN_AIR and soil_type == SoilType.NORMAL:
+        return BaseRecommendation(
+            recommended="WBM 8 in + Asphalt 2 in", alternative="RCC + asphalt", why="Even surface"
+        )
+
+    if key == "padel" and building_status in (BuildingStatus.OPEN_AIR, BuildingStatus.COVERED_SHED):
+        return BaseRecommendation(
+            recommended="RCC 6 in over WBM 6 in + perimeter beam",
+            alternative=None,
+            why="Glass post anchoring",
+        )
+
+    if key in _POOL:
+        return BaseRecommendation(recommended="RCC 8-12 in shell", alternative=None, why="Water load")
+
+    if key == "kids_play_area" and building_status == BuildingStatus.OPEN_AIR and soil_type == SoilType.NORMAL:
+        return BaseRecommendation(recommended="WBM 6 in", alternative="PCC 4 in", why="Impact base")
+
+    if key == "beach_volleyball" and building_status == BuildingStatus.OPEN_AIR:
+        return BaseRecommendation(
+            recommended="Drainage layer + geotextile + 16 in sand",
+            alternative=None,
+            why="Sand drainage",
+        )
+
+    return None
 
 
 class SportOut(BaseModel):
@@ -52,6 +126,7 @@ class ProjectSportOut(BaseModel):
     building_status: BuildingStatus
     number_of_courts: int
     clear_height_ok: bool = True  # derived; _to_out() sets the real value
+    recommended_base: BaseRecommendation | None = None  # derived, D.1/D.2
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,6 +136,7 @@ def _to_out(project_sport: ProjectSport, sport: Sport, project: Project) -> Proj
     out.clear_height_ok = not _violates_min_clear_height(
         sport, project_sport.building_status, project
     )
+    out.recommended_base = _recommend_base(sport, project_sport.building_status, project.soil_type)
     return out
 
 

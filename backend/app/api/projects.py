@@ -87,6 +87,12 @@ class ProjectOut(BaseModel):
     tender_mode: bool
     soil_test_required: bool = False  # derived, not stored — D.4; _to_out() sets the real value
 
+    # D.4 site-prep triggers (B.2's worked examples), all derived — none
+    # stored, all recomputed by _to_out() on every read.
+    rock_breaking_required: bool = False
+    dewatering_required: bool = False
+    sand_cns_layer_required: bool = False
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -97,6 +103,11 @@ def _to_out(project: Project) -> ProjectOut:
         or project.building_status == BuildingStatus.NEW_PEB_BUILDING
         or project.site_condition == SiteCondition.WATER_LOGGED
     )
+    # D.4 / B.2: Soil = Rocky -> rock-breaking; Soil = Black cotton ->
+    # sand-filling + CNS layer; Site = Water-logged -> dewatering.
+    out.rock_breaking_required = project.soil_type == SoilType.ROCKY
+    out.dewatering_required = project.site_condition == SiteCondition.WATER_LOGGED
+    out.sand_cns_layer_required = project.soil_type == SoilType.BLACK_COTTON
     return out
 
 
