@@ -8,7 +8,7 @@ const BUILDING_STATUSES = [
   ["covered_shed", "Covered shed"],
 ];
 
-export default function SportSelection({ token, project, onBack }) {
+export default function SportSelection({ token, project, onBack, onNext }) {
   const [sports, setSports] = useState([]);
   const [selections, setSelections] = useState([]);
   const [drafts, setDrafts] = useState({}); // sportId -> { building_status, number_of_courts }
@@ -74,12 +74,14 @@ export default function SportSelection({ token, project, onBack }) {
               Project <span className="font-mono">{project.project_no}</span>
             </p>
           </div>
-          <button
-            onClick={onBack}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            &larr; Back to Project Setup
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+              &larr; Back to Project Setup
+            </button>
+            <button onClick={onNext} className="text-sm text-blue-600 hover:underline">
+              Additional Scope &rarr;
+            </button>
+          </div>
         </div>
 
         {selections.length > 0 && (

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, clients, projects, regional_multipliers, sports
+from app.api import auth, clients, projects, regional_multipliers, scope_items, sports
 
 app = FastAPI(title="NestaPrime Estimator API", version="0.1.0")
 
@@ -19,6 +19,8 @@ app.include_router(projects.router)
 app.include_router(regional_multipliers.router)
 app.include_router(sports.sports_router)
 app.include_router(sports.project_sports_router)
+app.include_router(scope_items.scope_items_router)
+app.include_router(scope_items.project_scope_items_router)
 
 
 @app.get("/health")

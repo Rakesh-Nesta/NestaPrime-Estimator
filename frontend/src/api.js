@@ -92,3 +92,30 @@ export async function removeProjectSport(token, projectId, selectionId) {
   });
   if (!res.ok && res.status !== 204) return handle(res);
 }
+
+export async function listScopeItems(token) {
+  const res = await fetch(`${API_BASE}/scope-items`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listProjectScopeItems(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/scope-items`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function addProjectScopeItem(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/scope-items`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function removeProjectScopeItem(token, projectId, selectionId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/scope-items/${selectionId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}

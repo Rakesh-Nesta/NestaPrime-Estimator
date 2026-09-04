@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
 import ProjectSetup from "./ProjectSetup";
+import ScopeChecklist from "./ScopeChecklist";
 import SportSelection from "./SportSelection";
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeProject, setActiveProject] = useState(null);
+  const [screen, setScreen] = useState("sports"); // "sports" | "scope"
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -37,14 +39,26 @@ export default function App() {
             {user.name} · <span className="font-medium">{user.role}</span>
           </p>
         </header>
-        {activeProject ? (
+        {!activeProject && (
+          <ProjectSetup
+            token={accessToken}
+            onProjectCreated={(project) => { setActiveProject(project); setScreen("sports"); }}
+          />
+        )}
+        {activeProject && screen === "sports" && (
           <SportSelection
             token={accessToken}
             project={activeProject}
             onBack={() => setActiveProject(null)}
+            onNext={() => setScreen("scope")}
           />
-        ) : (
-          <ProjectSetup token={accessToken} onProjectCreated={setActiveProject} />
+        )}
+        {activeProject && screen === "scope" && (
+          <ScopeChecklist
+            token={accessToken}
+            project={activeProject}
+            onBack={() => setScreen("sports")}
+          />
         )}
       </div>
     );

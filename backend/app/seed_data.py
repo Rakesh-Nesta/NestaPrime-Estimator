@@ -96,3 +96,40 @@ SPORTS_SEED = [
     ("multipurpose_court", 30, "Multipurpose court", "outdoor", "120 x 80", "per sports chosen",
      120, 80, None, None, None, "Per sport marked (FIBA / FIVB / BWF / USA Pickleball)"),
 ]
+
+# Part I — Additional Scope Checklist (Module 10). "unchecked = excluded
+# and listed under Exclusions" — nothing here is on by default; a project
+# includes an item by explicitly adding it.
+# (key, display_order, group, name)
+SCOPE_ITEMS_SEED = [
+    ("changing_rooms", 1, "civil", "Changing rooms"),
+    ("toilets", 2, "civil", "Toilets"),
+    ("storage", 3, "civil", "Storage"),
+    ("first_aid", 4, "civil", "First-aid"),
+    ("security_cabin", 5, "civil", "Security cabin"),
+    ("cafeteria_kiosk", 6, "civil", "Cafeteria / kiosk"),
+    ("pavilion_gallery", 7, "civil", "Pavilion / gallery + seating count"),
+    ("walkways", 8, "civil", "Walkways"),
+    ("boundary_wall", 9, "civil", "Boundary wall"),
+    ("electrical_connection_load_sanction", 10, "electrical", "Connection & load sanction"),
+    ("dg", 11, "electrical", "DG"),
+    ("solar", 12, "electrical", "Solar"),
+    ("cctv", 13, "electrical", "CCTV"),
+    ("pa_system", 14, "electrical", "PA"),
+    ("wifi", 15, "electrical", "Wi-Fi"),
+    ("scoreboards_electrical", 16, "electrical", "Scoreboards"),
+    ("borewell", 17, "water", "Borewell"),
+    ("municipal_connection", 18, "water", "Municipal connection"),
+    ("rainwater_harvesting", 19, "water", "Rainwater harvesting"),
+    ("irrigation", 20, "water", "Irrigation"),
+    ("tank", 21, "water", "Tank"),
+    ("parking", 22, "external", "Parking"),
+    ("landscaping", 23, "external", "Landscaping"),
+    ("signage", 24, "external", "Signage"),
+    ("main_gate", 25, "external", "Main gate"),
+    ("design_structural_drawings", 26, "services", "Design & structural drawings"),
+    ("soil_test_service", 27, "services", "Soil test"),
+    ("nocs", 28, "services", "NOCs"),
+    ("peb_design_fee", 29, "services", "PEB design fee"),
+    ("amc", 30, "maintenance", "AMC (turf brushing, infill top-up, acrylic re-coat 5-7 yr)"),
+]
