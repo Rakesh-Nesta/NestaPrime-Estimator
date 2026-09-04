@@ -458,6 +458,61 @@ def test_structural_signoff_required_for_wind_and_seismic_zone(client, director_
     assert "Seismic zone IV" in body["structural_signoff_reasons"]
 
 
+def test_flooring_selects_tier_by_package(client, director_user):
+    """F.1/B.1: package tier picks primary/secondary/budget flooring."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    for package, expected_tier, expected_text in [
+        ("premium", "primary", "Wooden sprung 22 mm + BWF-approved PVC mat 4.5-7 mm"),
+        ("standard", "secondary", "PU 6 mm"),
+        ("budget", "budget", "PVC mat 4.5 mm on PCC"),
+    ]:
+        project_id = _create_project(client, headers, client_id, package=package)
+        res = client.post(
+            f"/projects/{project_id}/sports",
+            json={"sport_id": badminton_id, "building_status": "open_air"},
+            headers=headers,
+        )
+        flooring = res.json()["recommended_flooring"]
+        assert flooring["selected_tier"] == expected_tier, package
+        assert flooring["selected"] == expected_text, package
+
+
+def test_flooring_falls_back_when_tier_missing(client, director_user):
+    """Squash has no secondary/budget row -- budget package must fall back
+    to the only tier that exists (primary)."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    squash_id = _sport_id(client, headers, "squash")
+    project_id = _create_project(client, headers, client_id, package="budget")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": squash_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    flooring = res.json()["recommended_flooring"]
+    assert flooring["selected_tier"] == "primary"
+    assert flooring["selected"] == "Hardwood strip 22 mm (maple/beech) on sprung battens"
+
+
+def test_flooring_none_for_sport_not_in_f1_f2_tables(client, director_user):
+    """Shooting range has no row in F.1 -- must not fabricate a flooring."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    shooting_id = _sport_id(client, headers, "shooting_range_10m")
+    project_id = _create_project(client, headers, client_id)
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": shooting_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    assert res.json()["recommended_flooring"] is None
+
+
 def test_add_unknown_sport_is_rejected(client, director_user):
     headers = _login(client, director_user)
     client_id = _create_client(client, headers)

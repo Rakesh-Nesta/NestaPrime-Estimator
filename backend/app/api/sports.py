@@ -219,6 +219,108 @@ def _structural_signoff_reasons(
     return reasons
 
 
+class FlooringRecommendation(BaseModel):
+    primary: str
+    secondary: str | None
+    budget: str | None
+    why: str
+    selected: str
+    selected_tier: str  # "primary" | "secondary" | "budget"
+
+
+# F.1 (indoor) + F.2 (outdoor) flooring guides, keyed by sport. Two sports
+# have no row in either table — shooting_range_10m and archery_range — and
+# correctly get no recommendation rather than a guess. tennis (F.2 splits
+# hard/clay/grass; our Sport list has one combined "tennis" entry) defaults
+# to the hard-court row, the most common surface.
+_FLOORING_TABLE: dict[str, tuple[str, str | None, str | None, str]] = {
+    "badminton": (
+        "Wooden sprung 22 mm + BWF-approved PVC mat 4.5-7 mm", "PU 6 mm", "PVC mat 4.5 mm on PCC",
+        "BWF tournaments are played on approved PVC mats laid over a wooden or synthetic base; bare wood is a club finish",
+    ),
+    "table_tennis": (
+        "Hardwood 22 mm or ITTF-approved PVC/PU 4.5-6 mm", "PU 6 mm", "Vinyl 4 mm",
+        "ITTF approves wood and synthetic; non-reflective, non-slip",
+    ),
+    "squash": (
+        "Hardwood strip 22 mm (maple/beech) on sprung battens", None, None,
+        "WSF specifies unsealed hardwood floor",
+    ),
+    "basketball_indoor": ("Maple 22 mm", "PU 6 mm", "Vinyl 4 mm", "Tournament standard"),
+    "volleyball_indoor": ("PU 6 mm", "Teak 22 mm", "Vinyl 4 mm", "Shock absorption"),
+    "gymnasium": (
+        "Rubber 8 mm (cardio) / 15-20 mm (free weights)", "Wooden", "Vinyl", "Equipment drops",
+    ),
+    "kabaddi": ("PU 6 mm / mat", "Wooden", "Vinyl", "Barefoot grip"),
+    "wrestling_boxing_martial_arts": ("Rubber 15-20 mm + mat", "PU mat", None, "Falls"),
+    "indoor_cricket_nets": ("Turf 30 mm", "Rubber mat", None, "Ball behaviour"),
+    "football_11": (
+        "FIFA Quality Pro 50-60 mm", "FIFA Quality 50 mm", "Multi-sport 40 mm", "Certification",
+    ),
+    "football_7": ("Multi-sport 40 mm", "Cricket 40 mm", "Poly 30 mm", "Cost/performance"),
+    "football_5_futsal": ("Multi-sport 40 mm", "Cricket 40 mm", "Poly 30 mm", "Cost/performance"),
+    "box_cricket": ("Cricket turf 40 mm", "Multi-sport 40 mm", "Poly 35 mm", "Bounce"),
+    "cricket_practice_nets": ("Cricket 30 mm", "Multi 30 mm", "Poly 25 mm", "Bowling"),
+    "tennis": ("Acrylic 3-5 mm (5-8 coats)", "Synthetic 5 mm", "Concrete + paint", "ITF"),
+    "padel": ("Monofilament 12 mm + sand", None, None, "FIP"),
+    "pickleball": ("Acrylic 3 mm", "Concrete + coating", None, "USA Pickleball"),
+    "basketball_outdoor": ("Acrylic 3 mm", "PU 5 mm", "Concrete + coating", "Weather"),
+    "volleyball_outdoor": ("PU 5 mm", "Sand", "Concrete", "All-weather"),
+    "beach_volleyball": ("Washed silica sand 16 in", None, None, "FIVB"),
+    "hockey_turf": (
+        "FIH water-based 12-15 mm (needs irrigation)", "FIH sand-dressed 20-25 mm",
+        "Multi-sport 40 mm (non-FIH, school use)",
+        "FIH pitches are short-pile; 50 mm turf is football turf and is not hockey-legal",
+    ),
+    "athletic_track_400m": (
+        "Sandwich system 13 mm", "Full-PU 13 mm", "Spray-coat 13 mm (non-certified)",
+        "World Athletics certified systems; spike-resistant",
+    ),
+    "athletic_track_200_250m": (
+        "Sandwich system 13 mm", "Full-PU 13 mm", "Spray-coat 13 mm (non-certified)",
+        "World Athletics certified systems; spike-resistant",
+    ),
+    "skating_rink": ("Concrete + coating", "Tiles", None, "Smooth"),
+    "kids_play_area": (
+        "EPDM system 40 mm (10 mm EPDM wearing + 30 mm SBR base; CFH 1.5 m)",
+        "Rubber tiles 25-40 mm", "Grass / sand",
+        "Fall protection - 15 mm EPDM alone gives CFH under 1 m",
+    ),
+    "swimming_pool_25m": ("Anti-slip tiles", "Mosaic", "Marble", "Non-slip"),
+    "swimming_pool_50m": ("Anti-slip tiles", "Mosaic", "Marble", "Non-slip"),
+    "multipurpose_court": ("Acrylic 3 mm", "PU 5 mm", "Concrete", "Multi-line"),
+}
+
+
+def _recommend_flooring(sport: Sport, package: Package) -> FlooringRecommendation | None:
+    """F.1/F.2, tiered by B.1's own rule for the package field: 'Pre-selects
+    flooring, structure, lighting, scope'."""
+    row = _FLOORING_TABLE.get(sport.key)
+    if row is None:
+        return None
+    primary, secondary, budget, why = row
+
+    if package == Package.PREMIUM:
+        selected, tier = primary, "primary"
+    elif package == Package.BUDGET:
+        if budget is not None:
+            selected, tier = budget, "budget"
+        elif secondary is not None:
+            selected, tier = secondary, "secondary"
+        else:
+            selected, tier = primary, "primary"
+    else:  # STANDARD
+        if secondary is not None:
+            selected, tier = secondary, "secondary"
+        else:
+            selected, tier = primary, "primary"
+
+    return FlooringRecommendation(
+        primary=primary, secondary=secondary, budget=budget, why=why,
+        selected=selected, selected_tier=tier,
+    )
+
+
 class SportOut(BaseModel):
     id: uuid.UUID
     key: str
@@ -259,6 +361,7 @@ class ProjectSportOut(BaseModel):
     recommended_structure: StructureRecommendation | None = None  # derived, E.4
     structural_signoff_required: bool = False  # derived, E.5
     structural_signoff_reasons: list[str] = []  # derived, E.5
+    recommended_flooring: FlooringRecommendation | None = None  # derived, F.1/F.2
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -281,6 +384,7 @@ def _to_out(
         sport, project_sport.building_status, project, regional
     )
     out.structural_signoff_required = len(out.structural_signoff_reasons) > 0
+    out.recommended_flooring = _recommend_flooring(sport, project.package)
     return out
 
 

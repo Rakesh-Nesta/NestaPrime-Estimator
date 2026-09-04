@@ -123,6 +123,15 @@ export default function SportSelection({ token, project, onBack }) {
                         Structural engineer sign-off required (E.5): {sel.structural_signoff_reasons.join(", ")}
                       </span>
                     )}
+                    {sel.recommended_flooring ? (
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Flooring (F.1/F.2, {sel.recommended_flooring.selected_tier}): {sel.recommended_flooring.selected}
+                      </span>
+                    ) : (
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        Flooring: not yet in F.1/F.2 matrix — pending Director confirmation
+                      </span>
+                    )}
                   </span>
                   <button
                     onClick={() => handleRemove(sel.id)}
