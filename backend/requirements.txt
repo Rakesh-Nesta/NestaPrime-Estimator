@@ -1,0 +1,12 @@
+fastapi>=0.115
+uvicorn[standard]>=0.34
+sqlalchemy>=2.0.36
+alembic>=1.14
+psycopg[binary]>=3.2.10
+pydantic>=2.13
+pydantic-settings>=2.7
+python-jose[cryptography]>=3.3
+passlib[argon2]>=1.7.4
+python-multipart>=0.0.20
+pytest>=8.3
+httpx>=0.28
