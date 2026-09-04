@@ -8,7 +8,9 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User, UserRole
+from app.models.regional_multiplier import RegionalMultiplier
 from app.core.security import hash_password
+from app.seed_data import REGIONAL_MULTIPLIER_SEED
 
 # Tests run against the same Postgres container as dev (docker-compose),
 # in a separate database so they never touch real data.
@@ -23,6 +25,22 @@ def db_session():
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
+        for city, labour, transport, material, climate, rainfall, coastal, wind, seismic, confirmed in REGIONAL_MULTIPLIER_SEED:
+            session.add(
+                RegionalMultiplier(
+                    city=city,
+                    labour_multiplier=labour,
+                    transport_multiplier=transport,
+                    material_multiplier=material,
+                    climate_zone=climate,
+                    rainfall_zone=rainfall,
+                    coastal=coastal,
+                    wind_zone=wind,
+                    seismic_zone=seismic,
+                    is_confirmed=confirmed,
+                )
+            )
+        session.commit()
         yield session
     finally:
         session.close()

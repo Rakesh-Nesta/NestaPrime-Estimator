@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
+import ProjectSetup from "./ProjectSetup";
 
 export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [user, setUser] = useState(null);
+  const [accessToken, setAccessToken] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -15,6 +17,7 @@ export default function App() {
     try {
       const { access_token } = await login(email, password);
       const me = await getCurrentUser(access_token);
+      setAccessToken(access_token);
       setUser(me);
     } catch (err) {
       setError(err.message);
@@ -25,16 +28,14 @@ export default function App() {
 
   if (user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="bg-white shadow rounded-lg p-8 max-w-sm w-full text-center">
-          <h1 className="text-xl font-semibold text-gray-900">Welcome, {user.name}</h1>
-          <p className="text-gray-500 mt-1">
-            Signed in as <span className="font-medium">{user.role}</span>
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-900">NestaPrime Estimator</h1>
+          <p className="text-sm text-gray-500">
+            {user.name} · <span className="font-medium">{user.role}</span>
           </p>
-          <p className="text-sm text-gray-400 mt-4">
-            Phase 1a foundation — Project Setup and the estimation engine come next.
-          </p>
-        </div>
+        </header>
+        <ProjectSetup token={accessToken} />
       </div>
     );
   }

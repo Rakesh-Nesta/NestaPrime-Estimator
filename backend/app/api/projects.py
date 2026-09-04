@@ -1,0 +1,144 @@
+import uuid
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy.orm import Session
+
+from app.core.auth import require_roles
+from app.db.session import get_db
+from app.models.client import Client, ClientType
+from app.models.project import (
+    BuildingStatus,
+    Package,
+    PowerAvailable,
+    Project,
+    SiteAccess,
+    SiteCondition,
+    SoilType,
+    UnitSystem,
+)
+
+router = APIRouter(prefix="/projects", tags=["projects"])
+
+# D.4: soil test (and so safe_bearing_capacity) is mandatory for these
+# combinations before a real build proceeds — enforced here as a warning
+# field on the response, not a hard block, since Phase 1a has no soil-report
+# upload flow yet to attach as evidence.
+SBC_MANDATORY_SOILS = {SoilType.ROCKY, SoilType.BLACK_COTTON, SoilType.FILLED}
+
+
+def _generate_project_no(db: Session) -> str:
+    """P-YYMM-#### (M.2 rule 10) — one number shared later by the Cost
+    Sheet, Estimate and Quotation records once those exist."""
+    yymm = datetime.now(UTC).strftime("%y%m")
+    prefix = f"P-{yymm}-"
+    existing = (
+        db.query(Project.project_no)
+        .filter(Project.project_no.like(f"{prefix}%"))
+        .all()
+    )
+    max_seq = 0
+    for (project_no,) in existing:
+        try:
+            max_seq = max(max_seq, int(project_no.rsplit("-", 1)[-1]))
+        except ValueError:
+            continue
+    return f"{prefix}{max_seq + 1:04d}"
+
+
+class ProjectCreate(BaseModel):
+    client_id: uuid.UUID
+    city: str
+    site_address: str | None = None
+    site_state_code: str | None = None
+    distance_km: float | None = None
+    site_condition: SiteCondition
+    soil_type: SoilType
+    building_status: BuildingStatus
+    site_access: SiteAccess
+    power_available: PowerAvailable
+    water_available: bool
+    number_of_courts: int = 1
+    unit_system: UnitSystem = UnitSystem.FEET
+    package: Package
+    safe_bearing_capacity: float | None = None
+    existing_building_clear_height_ft: float | None = None
+
+
+class ProjectOut(BaseModel):
+    id: uuid.UUID
+    project_no: str
+    client_id: uuid.UUID
+    city: str
+    site_address: str | None
+    distance_km: float | None
+    site_condition: SiteCondition
+    soil_type: SoilType
+    building_status: BuildingStatus
+    site_access: SiteAccess
+    power_available: PowerAvailable
+    water_available: bool
+    number_of_courts: int
+    unit_system: UnitSystem
+    package: Package
+    safe_bearing_capacity: float | None
+    existing_building_clear_height_ft: float | None
+    tender_mode: bool
+    soil_test_required: bool = False  # derived, not stored — D.4; _to_out() sets the real value
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+def _to_out(project: Project) -> ProjectOut:
+    out = ProjectOut.model_validate(project)
+    out.soil_test_required = (
+        project.soil_type in SBC_MANDATORY_SOILS
+        or project.building_status == BuildingStatus.NEW_PEB_BUILDING
+        or project.site_condition == SiteCondition.WATER_LOGGED
+    )
+    return out
+
+
+@router.post("", response_model=ProjectOut, status_code=201)
+def create_project(
+    payload: ProjectCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    client = db.query(Client).filter(Client.id == payload.client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    if (
+        payload.existing_building_clear_height_ft is not None
+        and payload.building_status != BuildingStatus.EXISTING_BUILDING
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="existing_building_clear_height_ft only applies when building_status is existing_building",
+        )
+
+    project = Project(
+        project_no=_generate_project_no(db),
+        # B.2: Client = Government auto-switches Tender Mode on — not a
+        # user-settable field, derived here at creation time.
+        tender_mode=(client.type == ClientType.GOVERNMENT),
+        **payload.model_dump(),
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return _to_out(project)
+
+
+@router.get("/{project_id}", response_model=ProjectOut)
+def get_project(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("sales", "pm", "director", "procurement", "site_engineer")),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return _to_out(project)
