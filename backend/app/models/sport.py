@@ -35,6 +35,17 @@ class Sport(Base):
     playing_dims: Mapped[str] = mapped_column(String(200), nullable=False)
     build_dims: Mapped[str] = mapped_column(String(300), nullable=False)
 
+    # Numeric L x W (ft) parsed from the C.1/C.2 text above, club/base
+    # figure where the table gives a club/tournament pair. Null where the
+    # dimension is genuinely variable (per-lane, custom footprint, oval
+    # track) rather than a fixed rectangle — used by Part H's lighting
+    # fixture-count formula (playing area) and reserved for Part D.3/E.2's
+    # take-off math once those are built.
+    playing_l_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    playing_w_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    build_l_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    build_w_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+
     # Indoor sports only (C.1) — checked against the project/sport's
     # building clear height per B.1a: "Min structure height: building
     # height >= sport min". Null for outdoor sports (C.2, no ceiling).

@@ -513,6 +513,86 @@ def test_flooring_none_for_sport_not_in_f1_f2_tables(client, director_user):
     assert res.json()["recommended_flooring"] is None
 
 
+def test_lighting_matches_blueprint_worked_example(client, director_user):
+    """Part H's own worked example: 50x25 ft box cricket (open air) = 116
+    sqm x 500 lux / (26,000 lm x UF 0.6 x MF 0.7 = 10,920) = 5.3 -> 6
+    fixtures. Standard package doesn't get an E.4 structure for box
+    cricket, so it mounts on poles (4), below the formula result of 6,
+    so the floor doesn't change the outcome here."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id)  # standard package
+    box_cricket_id = _sport_id(client, headers, "box_cricket")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": box_cricket_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    lighting = res.json()["recommended_lighting"]
+    assert lighting["area_sqm"] == 116.1
+    assert lighting["lux_level"] == 500
+    assert lighting["fixtures"] == 6
+
+
+def test_lighting_pole_count_floors_fixture_count(client, director_user):
+    """Padel has no explicit E.4 row that mounts on a structure at all in
+    the open-air case covered here -- Type F court structure counts as
+    poles per H's rule (open air/Type D/Type G -> poles), so its 4-pole
+    floor should apply if the formula result is lower."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    tennis_id = _sport_id(client, headers, "tennis")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": tennis_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    lighting = res.json()["recommended_lighting"]
+    assert lighting["mounting_mode"] == "poles"
+    assert lighting["pole_count"] == 4
+    assert lighting["fixtures"] >= 4
+    assert lighting["fixtures"] % 2 == 0
+
+
+def test_lighting_mounts_on_structure_when_structure_recommended(client, director_user):
+    """Football 7-a-side gets a Type B structure (E.4) -- mounts on the
+    structure, no pole floor applied."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    football_7_id = _sport_id(client, headers, "football_7")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": football_7_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    lighting = res.json()["recommended_lighting"]
+    assert lighting["mounting_mode"] == "structure"
+    assert lighting["pole_count"] is None
+
+
+def test_lighting_none_for_sport_without_playing_dims_or_lux_row(client, director_user):
+    """Gymnasium has 'custom' playing dims (no numeric L x W) -- must not
+    fabricate an area. Archery range has neither a numeric area nor a
+    lux-table row."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id)
+
+    for key in ("gymnasium", "archery_range"):
+        sport_id = _sport_id(client, headers, key)
+        res = client.post(
+            f"/projects/{project_id}/sports",
+            json={"sport_id": sport_id, "building_status": "open_air"},
+            headers=headers,
+        )
+        assert res.json()["recommended_lighting"] is None, key
+
+
 def test_add_unknown_sport_is_rejected(client, director_user):
     headers = _login(client, director_user)
     client_id = _create_client(client, headers)

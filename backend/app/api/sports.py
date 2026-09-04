@@ -1,3 +1,4 @@
+import math
 import re
 import uuid
 
@@ -321,6 +322,128 @@ def _recommend_flooring(sport: Sport, package: Package) -> FlooringRecommendatio
     )
 
 
+class LightingRecommendation(BaseModel):
+    lux_tier: str  # "practice" | "match" | "tournament" — Phase 1b defaults to "match"
+    lux_level: int
+    area_sqm: float
+    mounting_mode: str  # "structure" | "poles"
+    pole_count: int | None
+    fixture_spec: str
+    fixtures: int
+    why: str
+
+
+_SQFT_PER_SQM = 10.7639
+
+# H's lux table, by sport group. None = that tier has no figure in the
+# table (e.g. Gym has only a practice figure).
+_LUX_TABLE: dict[str, dict[str, int | None]] = {
+    "court": {"practice": 200, "match": 500, "tournament": 750},
+    "football_cricket": {"practice": 200, "match": 500, "tournament": 750},  # tournament up to 1000 per H
+    "pool": {"practice": 300, "match": 500, "tournament": None},
+    "gym": {"practice": 300, "match": None, "tournament": None},
+}
+
+_COURT_SPORTS = {
+    "badminton", "table_tennis", "squash", "basketball_indoor", "basketball_outdoor",
+    "volleyball_indoor", "volleyball_outdoor", "kabaddi", "wrestling_boxing_martial_arts",
+    "tennis", "padel", "pickleball", "multipurpose_court",
+}
+_FOOTBALL_CRICKET_SPORTS = {
+    "football_11", "football_7", "football_5_futsal", "box_cricket",
+    "cricket_practice_nets", "indoor_cricket_nets",
+}
+
+# B.1a's own UF/MF table, which "replaces every indoor/outdoor test in this
+# document" — more precise than H's generic indoor/outdoor split.
+_UF_MF_BY_STATUS: dict[BuildingStatus, tuple[float, float]] = {
+    BuildingStatus.EXISTING_BUILDING: (0.7, 0.8),
+    BuildingStatus.NEW_PEB_BUILDING: (0.7, 0.8),
+    BuildingStatus.COVERED_SHED: (0.6, 0.7),
+    BuildingStatus.OPEN_AIR: (0.6, 0.7),
+}
+
+# H's pole table (open-air only): lower bound of each range used as the
+# Phase 1b default fixture-count floor.
+_POLE_COUNT: dict[str, int] = {
+    "box_cricket": 4,
+    "football_7": 6,
+    "tennis": 4,
+    "basketball_outdoor": 4,
+    "padel": 4,
+    "swimming_pool_25m": 6,
+    "swimming_pool_50m": 6,
+}
+
+# Only fixture in the blueprint's worked example — 200 W at 130 lm/W.
+_FIXTURE_LUMENS = 26000
+_FIXTURE_SPEC = "200 W / 26,000 lm (Phase 1b default fixture)"
+
+
+def _sport_lux_category(key: str) -> str | None:
+    if key in _COURT_SPORTS:
+        return "court"
+    if key in _FOOTBALL_CRICKET_SPORTS:
+        return "football_cricket"
+    if key in _POOL_KEYS:
+        return "pool"
+    if key == "gymnasium":
+        return "gym"
+    return None
+
+
+def _recommend_lighting(
+    sport: Sport,
+    building_status: BuildingStatus,
+    number_of_courts: int,
+    structure: StructureRecommendation | None,
+) -> LightingRecommendation | None:
+    """Part H: fixtures = ceil((area_sqm * lux) / (lumens_per_fixture * UF *
+    MF)). area_sqm follows the blueprint's own worked example (which uses
+    the sport's PLAYING dimensions, e.g. box cricket 50x25 ft = 116 sqm),
+    not the build dimensions the formula's prose label suggests. Sports
+    without a playing-area number (variable/custom footprints) or without
+    a row in H's lux table return None rather than a guess."""
+    if sport.playing_l_ft is None or sport.playing_w_ft is None:
+        return None
+
+    category = _sport_lux_category(sport.key)
+    if category is None:
+        return None
+
+    lux_by_tier = _LUX_TABLE[category]
+    lux_tier = "match" if lux_by_tier["match"] is not None else "practice"
+    lux_level = lux_by_tier[lux_tier]
+    if lux_level is None:
+        return None
+
+    area_sqm = float(sport.playing_l_ft) * float(sport.playing_w_ft) * number_of_courts / _SQFT_PER_SQM
+    uf, mf = _UF_MF_BY_STATUS[building_status]
+
+    formula_fixtures = math.ceil((area_sqm * lux_level) / (_FIXTURE_LUMENS * uf * mf))
+
+    # E.5: "Types A/B/C/E -> on columns/trusses, no poles; open air/Type
+    # D/Type G -> poles" -- driven by the sport's own recommended structure.
+    structure_type = structure.structure_type if structure else None
+    uses_poles = structure_type is None or structure_type in ("D", "G")
+
+    pole_count = _POLE_COUNT.get(sport.key) if uses_poles else None
+    fixtures = max(formula_fixtures, pole_count) if pole_count is not None else formula_fixtures
+    if uses_poles and pole_count is not None and fixtures % 2 != 0:
+        fixtures += 1  # every pole carries at least one fixture
+
+    return LightingRecommendation(
+        lux_tier=lux_tier,
+        lux_level=lux_level,
+        area_sqm=round(area_sqm, 1),
+        mounting_mode="poles" if uses_poles else "structure",
+        pole_count=pole_count,
+        fixture_spec=_FIXTURE_SPEC,
+        fixtures=fixtures,
+        why=f"{lux_level} lux ({lux_tier}) over {round(area_sqm, 1)} sqm playing area",
+    )
+
+
 class SportOut(BaseModel):
     id: uuid.UUID
     key: str
@@ -329,6 +452,10 @@ class SportOut(BaseModel):
     category: SportCategory
     playing_dims: str
     build_dims: str
+    playing_l_ft: float | None
+    playing_w_ft: float | None
+    build_l_ft: float | None
+    build_w_ft: float | None
     min_clear_height_ft: float | None
     governing_body: str
     source_citation: str | None
@@ -362,6 +489,7 @@ class ProjectSportOut(BaseModel):
     structural_signoff_required: bool = False  # derived, E.5
     structural_signoff_reasons: list[str] = []  # derived, E.5
     recommended_flooring: FlooringRecommendation | None = None  # derived, F.1/F.2
+    recommended_lighting: LightingRecommendation | None = None  # derived, Part H
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -385,6 +513,9 @@ def _to_out(
     )
     out.structural_signoff_required = len(out.structural_signoff_reasons) > 0
     out.recommended_flooring = _recommend_flooring(sport, project.package)
+    out.recommended_lighting = _recommend_lighting(
+        sport, project_sport.building_status, project_sport.number_of_courts, out.recommended_structure
+    )
     return out
 
 

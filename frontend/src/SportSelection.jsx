@@ -132,6 +132,17 @@ export default function SportSelection({ token, project, onBack }) {
                         Flooring: not yet in F.1/F.2 matrix — pending Director confirmation
                       </span>
                     )}
+                    {sel.recommended_lighting ? (
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Lighting (H): {sel.recommended_lighting.fixtures} x {sel.recommended_lighting.fixture_spec}
+                        {" "}({sel.recommended_lighting.mounting_mode}
+                        {sel.recommended_lighting.pole_count ? `, ${sel.recommended_lighting.pole_count} poles` : ""})
+                      </span>
+                    ) : (
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        Lighting: not enough data (no numeric playing area or lux row) — pending Director confirmation
+                      </span>
+                    )}
                   </span>
                   <button
                     onClick={() => handleRemove(sel.id)}
