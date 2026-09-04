@@ -119,3 +119,30 @@ export async function removeProjectScopeItem(token, projectId, selectionId) {
   });
   if (!res.ok && res.status !== 204) return handle(res);
 }
+
+export async function listLabourCategories(token) {
+  const res = await fetch(`${API_BASE}/labour-categories`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listRateItems(token) {
+  const res = await fetch(`${API_BASE}/rate-items`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createRateItem(token, payload) {
+  const res = await fetch(`${API_BASE}/rate-items`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function confirmRateItem(token, rateItemId) {
+  const res = await fetch(`${API_BASE}/rate-items/${rateItemId}/confirm`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}

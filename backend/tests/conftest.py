@@ -8,11 +8,17 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User, UserRole
+from app.models.rate_item import LabourCategory
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.scope_item import ScopeItem
 from app.models.sport import Sport
 from app.core.security import hash_password
-from app.seed_data import REGIONAL_MULTIPLIER_SEED, SCOPE_ITEMS_SEED, SPORTS_SEED
+from app.seed_data import (
+    LABOUR_CATEGORIES_SEED,
+    REGIONAL_MULTIPLIER_SEED,
+    SCOPE_ITEMS_SEED,
+    SPORTS_SEED,
+)
 
 # Tests run against the same Postgres container as dev (docker-compose),
 # in a separate database so they never touch real data.
@@ -66,6 +72,10 @@ def db_session():
         for key, order, group, name in SCOPE_ITEMS_SEED:
             session.add(
                 ScopeItem(key=key, display_order=order, group=group, name=name)
+            )
+        for key, name, default_percent in LABOUR_CATEGORIES_SEED:
+            session.add(
+                LabourCategory(key=key, name=name, default_percent=default_percent)
             )
         session.commit()
         yield session

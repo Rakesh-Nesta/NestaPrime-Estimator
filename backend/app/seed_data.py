@@ -133,3 +133,18 @@ SCOPE_ITEMS_SEED = [
     ("peb_design_fee", 29, "services", "PEB design fee"),
     ("amc", 30, "maintenance", "AMC (turf brushing, infill top-up, acrylic re-coat 5-7 yr)"),
 ]
+
+# J.2 — Labour category fallback %, used only when a rate item has no
+# activity rate card of its own.
+# (key, name, default_percent)
+LABOUR_CATEGORIES_SEED = [
+    ("civil_base_site_prep", "Civil / base / site prep", 30.0),
+    ("ms_fabrication_erection", "MS fabrication & erection", 22.0),
+    ("turf_laying", "Turf laying", 12.0),
+    ("wooden_flooring", "Wooden flooring", 16.0),
+    ("acrylic_pu", "Acrylic / PU", 20.0),
+    ("electrical", "Electrical", 25.0),
+    ("netting", "Netting", 15.0),
+    ("pool_mep", "Pool MEP", 25.0),
+    ("blended_fallback", "Blended fallback", 22.0),
+]

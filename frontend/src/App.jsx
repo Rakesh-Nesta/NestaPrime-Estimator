@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
 import ProjectSetup from "./ProjectSetup";
+import RateSheet from "./RateSheet";
 import ScopeChecklist from "./ScopeChecklist";
 import SportSelection from "./SportSelection";
 
@@ -12,7 +13,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeProject, setActiveProject] = useState(null);
-  const [screen, setScreen] = useState("sports"); // "sports" | "scope"
+  const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates"
+  const [preRatesScreen, setPreRatesScreen] = useState("sports");
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -35,17 +37,35 @@ export default function App() {
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-900">NestaPrime Estimator</h1>
-          <p className="text-sm text-gray-500">
-            {user.name} · <span className="font-medium">{user.role}</span>
-          </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                if (screen === "rates") {
+                  setScreen(preRatesScreen);
+                } else {
+                  setPreRatesScreen(screen);
+                  setScreen("rates");
+                }
+              }}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              {screen === "rates" ? "Back to project" : "Rate Sheet"}
+            </button>
+            <p className="text-sm text-gray-500">
+              {user.name} · <span className="font-medium">{user.role}</span>
+            </p>
+          </div>
         </header>
-        {!activeProject && (
+        {screen === "rates" && (
+          <RateSheet token={accessToken} onBack={() => setScreen(preRatesScreen)} />
+        )}
+        {screen !== "rates" && !activeProject && (
           <ProjectSetup
             token={accessToken}
             onProjectCreated={(project) => { setActiveProject(project); setScreen("sports"); }}
           />
         )}
-        {activeProject && screen === "sports" && (
+        {screen !== "rates" && activeProject && screen === "sports" && (
           <SportSelection
             token={accessToken}
             project={activeProject}
@@ -53,7 +73,7 @@ export default function App() {
             onNext={() => setScreen("scope")}
           />
         )}
-        {activeProject && screen === "scope" && (
+        {screen !== "rates" && activeProject && screen === "scope" && (
           <ScopeChecklist
             token={accessToken}
             project={activeProject}
