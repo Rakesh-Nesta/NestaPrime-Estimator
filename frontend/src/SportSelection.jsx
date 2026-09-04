@@ -108,6 +108,21 @@ export default function SportSelection({ token, project, onBack }) {
                         Base: not yet in D.2 matrix — pending Director confirmation
                       </span>
                     )}
+                    {sel.recommended_structure ? (
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Structure (E.4): Type {sel.recommended_structure.structure_type} ·{" "}
+                        {sel.recommended_structure.section} · {sel.recommended_structure.height}
+                      </span>
+                    ) : (
+                      <span className="block text-xs text-gray-400 mt-0.5">
+                        Structure: none recommended (fit-out or not yet in E.4 matrix)
+                      </span>
+                    )}
+                    {sel.structural_signoff_required && (
+                      <span className="block text-xs text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1">
+                        Structural engineer sign-off required (E.5): {sel.structural_signoff_reasons.join(", ")}
+                      </span>
+                    )}
                   </span>
                   <button
                     onClick={() => handleRemove(sel.id)}

@@ -267,6 +267,197 @@ def test_project_site_prep_triggers_match_soil_and_site_condition(client, direct
     assert body["sand_cns_layer_required"] is False
 
 
+def test_structure_recommended_for_new_peb_building(client, director_user):
+    """E.4: Badminton/basketball/TT in a new PEB hall -> Type E, 24-30 ft."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id, building_status="new_peb_building", city="Bengaluru")
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": badminton_id, "building_status": "new_peb_building"},
+        headers=headers,
+    )
+    structure = res.json()["recommended_structure"]
+    assert structure["structure_type"] == "E"
+    assert structure["height"] == "24-30 ft"
+
+
+def test_no_structure_recommended_inside_existing_building(client, director_user):
+    """B.1a: Existing building is fit-out only -- no new structure, ever,
+    regardless of what E.4's table would otherwise say for the sport."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(
+        client, headers, client_id, building_status="existing_building",
+        existing_building_clear_height_ft=30, city="Bengaluru",
+    )
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": badminton_id, "building_status": "existing_building"},
+        headers=headers,
+    )
+    assert res.json()["recommended_structure"] is None
+
+
+def test_box_cricket_structure_depends_on_package(client, director_user):
+    """E.4: box cricket budget -> Type A, premium -> Type B, standard is
+    not distinguished by the table so returns None."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    box_cricket_id = _sport_id(client, headers, "box_cricket")
+
+    for package, expected_type in [("budget", "A"), ("premium", "B"), ("standard", None)]:
+        project_id = _create_project(client, headers, client_id, package=package, city="Bengaluru")
+        res = client.post(
+            f"/projects/{project_id}/sports",
+            json={"sport_id": box_cricket_id, "building_status": "open_air"},
+            headers=headers,
+        )
+        structure = res.json()["recommended_structure"]
+        assert (structure["structure_type"] if structure else None) == expected_type, package
+
+
+def test_structural_signoff_not_required_for_benign_case(client, director_user):
+    """No PEB/pool/padel, normal soil, level site, private client, a city
+    with no coastal/wind/seismic data -- nothing should trigger sign-off."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers, client_type="school")
+    project_id = _create_project(client, headers, client_id, building_status="covered_shed", city="Bengaluru")
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": badminton_id, "building_status": "covered_shed"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is False
+    assert body["structural_signoff_reasons"] == []
+
+
+def test_structural_signoff_required_for_peb_pool_and_padel(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+
+    peb_project = _create_project(client, headers, client_id, building_status="new_peb_building", city="Bengaluru")
+    badminton_id = _sport_id(client, headers, "badminton")
+    res = client.post(
+        f"/projects/{peb_project}/sports",
+        json={"sport_id": badminton_id, "building_status": "new_peb_building"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "PEB structure (Type E)" in body["structural_signoff_reasons"]
+
+    pool_project = _create_project(client, headers, client_id, city="Bengaluru")
+    pool_id = _sport_id(client, headers, "swimming_pool_25m")
+    res = client.post(
+        f"/projects/{pool_project}/sports",
+        json={"sport_id": pool_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Swimming pool" in body["structural_signoff_reasons"]
+
+    padel_project = _create_project(client, headers, client_id, city="Bengaluru")
+    padel_id = _sport_id(client, headers, "padel")
+    res = client.post(
+        f"/projects/{padel_project}/sports",
+        json={"sport_id": padel_id, "building_status": "open_air"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Padel (glass loads)" in body["structural_signoff_reasons"]
+
+
+def test_structural_signoff_required_for_black_cotton_and_water_logged(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    black_cotton_project = _create_project(
+        client, headers, client_id, soil_type="black_cotton", building_status="covered_shed", city="Bengaluru"
+    )
+    res = client.post(
+        f"/projects/{black_cotton_project}/sports",
+        json={"sport_id": badminton_id, "building_status": "covered_shed"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Black cotton soil" in body["structural_signoff_reasons"]
+
+    waterlogged_project = _create_project(
+        client, headers, client_id, site_condition="water_logged", building_status="covered_shed", city="Bengaluru"
+    )
+    res = client.post(
+        f"/projects/{waterlogged_project}/sports",
+        json={"sport_id": badminton_id, "building_status": "covered_shed"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Water-logged site" in body["structural_signoff_reasons"]
+
+
+def test_structural_signoff_required_for_government_client(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, headers, client_id, building_status="covered_shed", city="Bengaluru")
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": badminton_id, "building_status": "covered_shed"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Government / Tender client" in body["structural_signoff_reasons"]
+
+
+def test_structural_signoff_required_for_coastal_city(client, director_user):
+    """Mumbai is seeded coastal=True -- must trigger regardless of sport."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id, building_status="covered_shed", city="Mumbai")
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": badminton_id, "building_status": "covered_shed"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Coastal" in body["structural_signoff_reasons"]
+
+
+def test_structural_signoff_required_for_wind_and_seismic_zone(client, director_user):
+    """Delhi NCR is seeded wind_zone=4, seismic_zone=IV -- both >= threshold."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    project_id = _create_project(client, headers, client_id, building_status="covered_shed", city="Delhi NCR")
+    badminton_id = _sport_id(client, headers, "badminton")
+
+    res = client.post(
+        f"/projects/{project_id}/sports",
+        json={"sport_id": badminton_id, "building_status": "covered_shed"},
+        headers=headers,
+    )
+    body = res.json()
+    assert body["structural_signoff_required"] is True
+    assert "Wind zone 4" in body["structural_signoff_reasons"]
+    assert "Seismic zone IV" in body["structural_signoff_reasons"]
+
+
 def test_add_unknown_sport_is_rejected(client, director_user):
     headers = _login(client, director_user)
     client_id = _create_client(client, headers)
