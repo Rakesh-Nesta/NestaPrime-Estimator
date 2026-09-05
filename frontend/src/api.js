@@ -307,3 +307,11 @@ export async function markQuotationLost(token, quotationId, reason) {
   });
   return handle(res);
 }
+
+export async function getSchedule(token, projectSportId, startDate) {
+  const params = startDate ? `?start_date=${startDate}` : "";
+  const res = await fetch(`${API_BASE}/schedule/project-sports/${projectSportId}${params}`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}

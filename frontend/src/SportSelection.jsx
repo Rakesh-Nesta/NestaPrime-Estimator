@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { addProjectSport, listProjectSports, listSports, removeProjectSport } from "./api";
+import { addProjectSport, getSchedule, listProjectSports, listSports, removeProjectSport } from "./api";
 
 const BUILDING_STATUSES = [
   ["existing_building", "Existing building"],
@@ -14,6 +14,7 @@ export default function SportSelection({ token, project, onBack, onNext }) {
   const [drafts, setDrafts] = useState({}); // sportId -> { building_status, number_of_courts }
   const [cardErrors, setCardErrors] = useState({}); // sportId -> message
   const [loading, setLoading] = useState(true);
+  const [schedules, setSchedules] = useState({}); // selectionId -> schedule | "loading"
 
   useEffect(() => {
     Promise.all([listSports(token), listProjectSports(token, project.id)])
@@ -56,6 +57,20 @@ export default function SportSelection({ token, project, onBack, onNext }) {
     setSelections((s) => s.filter((sel) => sel.id !== selectionId));
   }
 
+  async function handleToggleSchedule(selectionId) {
+    if (schedules[selectionId]) {
+      setSchedules((s) => { const next = { ...s }; delete next[selectionId]; return next; });
+      return;
+    }
+    setSchedules((s) => ({ ...s, [selectionId]: "loading" }));
+    try {
+      const schedule = await getSchedule(token, selectionId);
+      setSchedules((s) => ({ ...s, [selectionId]: schedule }));
+    } catch (err) {
+      setSchedules((s) => ({ ...s, [selectionId]: { error: err.message } }));
+    }
+  }
+
   if (loading) {
     return <p className="text-center text-gray-500 mt-10">Loading sports…</p>;
   }
@@ -92,8 +107,9 @@ export default function SportSelection({ token, project, onBack, onNext }) {
               return (
                 <div
                   key={sel.id}
-                  className="flex items-start justify-between bg-blue-50 rounded px-3 py-2 text-sm"
+                  className="bg-blue-50 rounded px-3 py-2 text-sm"
                 >
+                <div className="flex items-start justify-between">
                   <span>
                     <span className="font-medium">{sport?.name ?? sel.sport_id}</span>
                     {" · "}
@@ -146,12 +162,22 @@ export default function SportSelection({ token, project, onBack, onNext }) {
                       </span>
                     )}
                   </span>
-                  <button
-                    onClick={() => handleRemove(sel.id)}
-                    className="text-red-600 hover:underline shrink-0 ml-2"
-                  >
-                    Remove
-                  </button>
+                  <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                    <button
+                      onClick={() => handleToggleSchedule(sel.id)}
+                      className="text-blue-600 hover:underline"
+                    >
+                      {schedules[sel.id] ? "Hide schedule" : "Schedule (N)"}
+                    </button>
+                    <button
+                      onClick={() => handleRemove(sel.id)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+                {schedules[sel.id] && <ScheduleDetails schedule={schedules[sel.id]} />}
                 </div>
               );
             })}
@@ -238,6 +264,48 @@ function SportCard({ sport, draft, setDraft, error, onAdd }) {
       </div>
 
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+    </div>
+  );
+}
+
+function ScheduleDetails({ schedule }) {
+  if (schedule === "loading") {
+    return <p className="text-xs text-gray-400 mt-2">Loading schedule…</p>;
+  }
+  if (schedule.error) {
+    return <p className="text-xs text-red-600 mt-2">{schedule.error}</p>;
+  }
+  return (
+    <div className="mt-2 bg-white rounded border border-gray-200 p-2 text-xs space-y-2">
+      <p className="font-medium text-gray-700">
+        Total: {schedule.total_days} days ({schedule.total_weeks} weeks)
+      </p>
+      <table className="w-full text-left">
+        <tbody>
+          {schedule.activities.map((a, i) => (
+            <tr key={i} className={a.parallel ? "text-gray-400" : "text-gray-600"}>
+              <td className="pr-2 py-0.5">
+                {a.name}
+                {a.parallel && " (parallel)"}
+              </td>
+              <td className="pr-2 py-0.5">{a.duration_days}d</td>
+              <td className="py-0.5">{a.start_date} &rarr; {a.end_date}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="font-medium text-gray-700 mt-1">Payment schedule (N)</p>
+      <table className="w-full text-left">
+        <tbody>
+          {schedule.payment_schedule.map((p, i) => (
+            <tr key={i} className="text-gray-600">
+              <td className="pr-2 py-0.5">{p.name}</td>
+              <td className="pr-2 py-0.5">{p.percent}%</td>
+              <td className="py-0.5">{p.date}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

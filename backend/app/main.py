@@ -9,6 +9,7 @@ from app.api import (
     projects,
     rate_items,
     regional_multipliers,
+    schedule,
     scope_items,
     sports,
     tender,
@@ -41,6 +42,7 @@ app.include_router(tender.tender_calc_router)
 app.include_router(documents.cost_sheets_router)
 app.include_router(documents.estimates_router)
 app.include_router(documents.quotations_router)
+app.include_router(schedule.schedule_router)
 
 
 @app.get("/health")
