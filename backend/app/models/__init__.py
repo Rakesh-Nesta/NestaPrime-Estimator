@@ -1,4 +1,5 @@
 from app.models.client import Client, ClientType  # noqa: F401
+from app.models.margin_policy import MarginPolicy  # noqa: F401
 from app.models.project import (  # noqa: F401
     BuildingStatus,
     Package,

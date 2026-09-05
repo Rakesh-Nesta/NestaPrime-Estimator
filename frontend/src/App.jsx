@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
+import PricingCalculator from "./PricingCalculator";
 import ProjectSetup from "./ProjectSetup";
 import RateSheet from "./RateSheet";
 import ScopeChecklist from "./ScopeChecklist";
@@ -13,8 +14,19 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeProject, setActiveProject] = useState(null);
-  const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates"
-  const [preRatesScreen, setPreRatesScreen] = useState("sports");
+  const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
+  const [preNavScreen, setPreNavScreen] = useState("sports");
+
+  const TOP_LEVEL_SCREENS = ["rates", "pricing"];
+
+  function goToTopLevel(target) {
+    if (TOP_LEVEL_SCREENS.includes(screen)) {
+      setScreen(screen === target ? preNavScreen : target);
+    } else {
+      setPreNavScreen(screen);
+      setScreen(target);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -38,17 +50,10 @@ export default function App() {
         <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-900">NestaPrime Estimator</h1>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => {
-                if (screen === "rates") {
-                  setScreen(preRatesScreen);
-                } else {
-                  setPreRatesScreen(screen);
-                  setScreen("rates");
-                }
-              }}
-              className="text-sm text-blue-600 hover:underline"
-            >
+            <button onClick={() => goToTopLevel("pricing")} className="text-sm text-blue-600 hover:underline">
+              {screen === "pricing" ? "Back to project" : "Pricing Calculator"}
+            </button>
+            <button onClick={() => goToTopLevel("rates")} className="text-sm text-blue-600 hover:underline">
               {screen === "rates" ? "Back to project" : "Rate Sheet"}
             </button>
             <p className="text-sm text-gray-500">
@@ -57,15 +62,18 @@ export default function App() {
           </div>
         </header>
         {screen === "rates" && (
-          <RateSheet token={accessToken} onBack={() => setScreen(preRatesScreen)} />
+          <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen !== "rates" && !activeProject && (
+        {screen === "pricing" && (
+          <PricingCalculator token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
           <ProjectSetup
             token={accessToken}
             onProjectCreated={(project) => { setActiveProject(project); setScreen("sports"); }}
           />
         )}
-        {screen !== "rates" && activeProject && screen === "sports" && (
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (
           <SportSelection
             token={accessToken}
             project={activeProject}
@@ -73,7 +81,7 @@ export default function App() {
             onNext={() => setScreen("scope")}
           />
         )}
-        {screen !== "rates" && activeProject && screen === "scope" && (
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "scope" && (
           <ScopeChecklist
             token={accessToken}
             project={activeProject}

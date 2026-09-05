@@ -148,3 +148,17 @@ LABOUR_CATEGORIES_SEED = [
     ("pool_mep", "Pool MEP", 25.0),
     ("blended_fallback", "Blended fallback", 22.0),
 ]
+
+# K.2 — margin floor per client type + whether that type is a "competitive
+# segment" (drives the +3 vs +5 point gap to target margin). Both are
+# blueprint defaults [confirm], Director-editable later.
+# (client_type, floor_margin_percent, competitive_segment)
+MARGIN_POLICY_SEED = [
+    ("school", 18.0, True),
+    ("college", 18.0, True),
+    ("housing_society", 20.0, False),
+    ("corporate", 15.0, True),
+    ("club", 20.0, False),
+    ("government", 12.0, True),
+    ("individual", 22.0, False),
+]

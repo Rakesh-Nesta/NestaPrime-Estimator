@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.user import User, UserRole
+from app.models.margin_policy import MarginPolicy
 from app.models.rate_item import LabourCategory
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.scope_item import ScopeItem
@@ -15,6 +16,7 @@ from app.models.sport import Sport
 from app.core.security import hash_password
 from app.seed_data import (
     LABOUR_CATEGORIES_SEED,
+    MARGIN_POLICY_SEED,
     REGIONAL_MULTIPLIER_SEED,
     SCOPE_ITEMS_SEED,
     SPORTS_SEED,
@@ -76,6 +78,14 @@ def db_session():
         for key, name, default_percent in LABOUR_CATEGORIES_SEED:
             session.add(
                 LabourCategory(key=key, name=name, default_percent=default_percent)
+            )
+        for client_type, floor_margin_percent, competitive_segment in MARGIN_POLICY_SEED:
+            session.add(
+                MarginPolicy(
+                    client_type=client_type,
+                    floor_margin_percent=floor_margin_percent,
+                    competitive_segment=competitive_segment,
+                )
             )
         session.commit()
         yield session

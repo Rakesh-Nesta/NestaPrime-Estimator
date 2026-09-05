@@ -146,3 +146,17 @@ export async function confirmRateItem(token, rateItemId) {
   });
   return handle(res);
 }
+
+export async function listMarginPolicies(token) {
+  const res = await fetch(`${API_BASE}/margin-policies`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function priceQuote(token, payload) {
+  const res = await fetch(`${API_BASE}/pricing/quote`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
