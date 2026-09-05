@@ -12,7 +12,7 @@ const GROUP_LABELS = {
 
 const GROUP_ORDER = ["civil", "electrical", "water", "external", "services", "maintenance"];
 
-export default function ScopeChecklist({ token, project, onBack }) {
+export default function ScopeChecklist({ token, project, onBack, onNext }) {
   const [items, setItems] = useState([]);
   const [selections, setSelections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,9 +64,16 @@ export default function ScopeChecklist({ token, project, onBack }) {
               Project <span className="font-mono">{project.project_no}</span>
             </p>
           </div>
-          <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
-            &larr; Back to Sport Selection
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+              &larr; Back to Sport Selection
+            </button>
+            {project.tender_mode && (
+              <button onClick={onNext} className="text-sm text-blue-600 hover:underline">
+                Tender Mode &rarr;
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-xs text-gray-400 mt-2">
           Unchecked items are excluded and listed under Exclusions (Part I). {selections.length} of{" "}

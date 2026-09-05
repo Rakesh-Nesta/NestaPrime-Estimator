@@ -160,3 +160,38 @@ export async function priceQuote(token, payload) {
   });
   return handle(res);
 }
+
+export async function getTenderDetails(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/tender-details`, {
+    headers: authHeaders(token),
+  });
+  if (res.status === 404) return null;
+  return handle(res);
+}
+
+export async function createTenderDetails(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/tender-details`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function performanceBgCost(token, payload) {
+  const res = await fetch(`${API_BASE}/tender/performance-bg-cost`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function netReceivable(token, payload) {
+  const res = await fetch(`${API_BASE}/tender/net-receivable`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}

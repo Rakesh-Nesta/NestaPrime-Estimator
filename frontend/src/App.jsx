@@ -5,6 +5,7 @@ import ProjectSetup from "./ProjectSetup";
 import RateSheet from "./RateSheet";
 import ScopeChecklist from "./ScopeChecklist";
 import SportSelection from "./SportSelection";
+import TenderMode from "./TenderMode";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -86,6 +87,14 @@ export default function App() {
             token={accessToken}
             project={activeProject}
             onBack={() => setScreen("sports")}
+            onNext={() => setScreen("tender")}
+          />
+        )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "tender" && (
+          <TenderMode
+            token={accessToken}
+            project={activeProject}
+            onBack={() => setScreen("scope")}
           />
         )}
       </div>
