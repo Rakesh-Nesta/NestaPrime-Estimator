@@ -1,4 +1,15 @@
 from app.models.client import Client, ClientType  # noqa: F401
+from app.models.document import (  # noqa: F401
+    CostSheet,
+    CostSheetStatus,
+    Estimate,
+    EstimateOption,
+    EstimateOptionClientStatus,
+    EstimateStatus,
+    Quotation,
+    QuotationLine,
+    QuotationStatus,
+)
 from app.models.margin_policy import MarginPolicy  # noqa: F401
 from app.models.project import (  # noqa: F401
     BuildingStatus,

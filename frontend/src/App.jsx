@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
+import Documents from "./Documents";
 import PricingCalculator from "./PricingCalculator";
 import ProjectSetup from "./ProjectSetup";
 import RateSheet from "./RateSheet";
@@ -88,10 +89,18 @@ export default function App() {
             project={activeProject}
             onBack={() => setScreen("sports")}
             onNext={() => setScreen("tender")}
+            onDocuments={() => setScreen("documents")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "tender" && (
           <TenderMode
+            token={accessToken}
+            project={activeProject}
+            onBack={() => setScreen("scope")}
+          />
+        )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "documents" && (
+          <Documents
             token={accessToken}
             project={activeProject}
             onBack={() => setScreen("scope")}

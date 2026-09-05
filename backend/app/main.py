@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     auth,
     clients,
+    documents,
     pricing,
     projects,
     rate_items,
@@ -37,6 +38,9 @@ app.include_router(pricing.margin_policies_router)
 app.include_router(pricing.pricing_router)
 app.include_router(tender.tender_details_router)
 app.include_router(tender.tender_calc_router)
+app.include_router(documents.cost_sheets_router)
+app.include_router(documents.estimates_router)
+app.include_router(documents.quotations_router)
 
 
 @app.get("/health")

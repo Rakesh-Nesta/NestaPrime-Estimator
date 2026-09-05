@@ -12,7 +12,7 @@ const GROUP_LABELS = {
 
 const GROUP_ORDER = ["civil", "electrical", "water", "external", "services", "maintenance"];
 
-export default function ScopeChecklist({ token, project, onBack, onNext }) {
+export default function ScopeChecklist({ token, project, onBack, onNext, onDocuments }) {
   const [items, setItems] = useState([]);
   const [selections, setSelections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +73,9 @@ export default function ScopeChecklist({ token, project, onBack, onNext }) {
                 Tender Mode &rarr;
               </button>
             )}
+            <button onClick={onDocuments} className="text-sm text-blue-600 hover:underline">
+              Documents &rarr;
+            </button>
           </div>
         </div>
         <p className="text-xs text-gray-400 mt-2">

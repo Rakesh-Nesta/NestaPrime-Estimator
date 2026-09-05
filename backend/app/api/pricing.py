@@ -56,6 +56,70 @@ def list_margin_policies(
     return [_policy_to_out(p) for p in policies]
 
 
+class PricingResult(BaseModel):
+    cost: float
+    floor_margin_percent: float
+    target_margin_percent: float
+    selling_price_ex_gst: float
+    discount_amount: float
+    selling_after_discount: float
+    margin_percent: float
+    markup_percent: float
+    below_floor: bool
+    gst_rate_percent: float
+    gst_amount: float
+    quotation_total: float
+
+
+def compute_pricing(
+    cost: float,
+    policy: MarginPolicy,
+    discount_type: str | None,
+    discount_value: float,
+) -> PricingResult:
+    """K.1 steps 7-12 + K.2/K.4, shared by /pricing/quote and the document
+    state machine (Estimate options, Quotations) so both price identically."""
+    floor = float(policy.floor_margin_percent)
+    target = _target_margin_percent(policy)
+    if target >= 100:
+        raise HTTPException(status_code=400, detail="Target margin must be below 100%")
+
+    selling_price_ex_gst = cost / (1 - target / 100)
+
+    if discount_type == "percent":
+        discount_amount = selling_price_ex_gst * discount_value / 100
+    elif discount_type == "amount":
+        discount_amount = discount_value
+    else:
+        discount_amount = 0.0
+
+    selling_after_discount = selling_price_ex_gst - discount_amount
+    if selling_after_discount <= 0:
+        raise HTTPException(status_code=400, detail="Discount cannot reduce selling price to zero or below")
+
+    margin_percent = (selling_after_discount - cost) / selling_after_discount * 100
+    markup_percent = (selling_after_discount - cost) / cost * 100
+    below_floor = margin_percent < floor
+
+    gst_amount = selling_after_discount * GST_RATE_PERCENT / 100
+    quotation_total = selling_after_discount + gst_amount
+
+    return PricingResult(
+        cost=cost,
+        floor_margin_percent=floor,
+        target_margin_percent=target,
+        selling_price_ex_gst=selling_price_ex_gst,
+        discount_amount=discount_amount,
+        selling_after_discount=selling_after_discount,
+        margin_percent=margin_percent,
+        markup_percent=markup_percent,
+        below_floor=below_floor,
+        gst_rate_percent=GST_RATE_PERCENT,
+        gst_amount=gst_amount,
+        quotation_total=quotation_total,
+    )
+
+
 class PricingQuoteRequest(BaseModel):
     cost_incl_contingency: float = Field(gt=0)
     client_type: ClientType
@@ -92,43 +156,20 @@ def price_quote(
     if not policy:
         raise HTTPException(status_code=404, detail="No margin policy for this client type")
 
-    floor = float(policy.floor_margin_percent)
-    target = _target_margin_percent(policy)
-    if target >= 100:
-        raise HTTPException(status_code=400, detail="Target margin must be below 100%")
-
-    cost = payload.cost_incl_contingency
-    selling_price_ex_gst = cost / (1 - target / 100)
-
-    if payload.discount_type == "percent":
-        discount_amount = selling_price_ex_gst * payload.discount_value / 100
-    elif payload.discount_type == "amount":
-        discount_amount = payload.discount_value
-    else:
-        discount_amount = 0.0
-
-    selling_after_discount = selling_price_ex_gst - discount_amount
-    if selling_after_discount <= 0:
-        raise HTTPException(status_code=400, detail="Discount cannot reduce selling price to zero or below")
-
-    margin_percent = (selling_after_discount - cost) / selling_after_discount * 100
-    markup_percent = (selling_after_discount - cost) / cost * 100
-    below_floor = margin_percent < floor
-
-    gst_amount = selling_after_discount * GST_RATE_PERCENT / 100
-    quotation_total = selling_after_discount + gst_amount
-
+    result = compute_pricing(
+        payload.cost_incl_contingency, policy, payload.discount_type, payload.discount_value
+    )
     return PricingQuoteOut(
-        cost_incl_contingency=cost,
-        floor_margin_percent=floor,
-        target_margin_percent=target,
-        selling_price_ex_gst=selling_price_ex_gst,
-        discount_amount=discount_amount,
-        selling_after_discount=selling_after_discount,
-        margin_percent=margin_percent,
-        markup_percent=markup_percent,
-        below_floor=below_floor,
-        gst_rate_percent=GST_RATE_PERCENT,
-        gst_amount=gst_amount,
-        quotation_total=quotation_total,
+        cost_incl_contingency=result.cost,
+        floor_margin_percent=result.floor_margin_percent,
+        target_margin_percent=result.target_margin_percent,
+        selling_price_ex_gst=result.selling_price_ex_gst,
+        discount_amount=result.discount_amount,
+        selling_after_discount=result.selling_after_discount,
+        margin_percent=result.margin_percent,
+        markup_percent=result.markup_percent,
+        below_floor=result.below_floor,
+        gst_rate_percent=result.gst_rate_percent,
+        gst_amount=result.gst_amount,
+        quotation_total=result.quotation_total,
     )

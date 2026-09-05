@@ -195,3 +195,115 @@ export async function netReceivable(token, payload) {
   });
   return handle(res);
 }
+
+// --- Part M: document state machine (Cost Sheet -> Estimate -> Quotation) ---
+
+export async function listCostSheets(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/cost-sheets`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createCostSheet(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/cost-sheets`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function verifyCostSheet(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/verify`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function reviseCostSheet(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/revise`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listEstimates(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/estimates`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createEstimate(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/estimates`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function sendEstimate(token, estimateId) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/send`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function updateEstimateOptionClientStatus(token, estimateId, optionId, payload) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/options/${optionId}/client-status`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listQuotations(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/quotations`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createQuotation(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/quotations`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function releaseQuotation(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/release`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function sendQuotation(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/send`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function markQuotationWon(token, quotationId, reason) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/mark-won`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ reason: reason || null }),
+  });
+  return handle(res);
+}
+
+export async function markQuotationLost(token, quotationId, reason) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/mark-lost`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ reason: reason || null }),
+  });
+  return handle(res);
+}
