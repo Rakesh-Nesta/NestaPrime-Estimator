@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.settings import get_current_setting_value
 from app.api.sports import _POOL_KEYS, _recommend_base, _recommend_flooring, _recommend_structure
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -16,11 +17,18 @@ schedule_router = APIRouter(prefix="/schedule", tags=["schedule"])
 
 READ_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 
+# Fallbacks used only when Part Q's Master Settings has no row yet for the
+# key (e.g. a fresh test DB) -- see _get_setting_int below for live values.
 MOBILISATION_DAYS_DEFAULT = 5  # N: "3-7 days"
-LIGHTING_ELECTRICAL_DAYS = 4  # N: "3-5 days", runs parallel, never the bottleneck at this size
-PEB_DAYS = 35  # N: "4-6 weeks", midpoint
-POOL_DAYS = 84  # N: "10-14 weeks", midpoint
-HANDOVER_DAYS = 2
+LIGHTING_ELECTRICAL_DAYS_DEFAULT = 4  # N: "3-5 days", runs parallel, never the bottleneck at this size
+PEB_DAYS_DEFAULT = 35  # N: "4-6 weeks", midpoint
+POOL_DAYS_DEFAULT = 84  # N: "10-14 weeks", midpoint
+HANDOVER_DAYS_DEFAULT = 2
+
+
+def _get_setting_int(db: Session, key: str, default: int) -> int:
+    value = get_current_setting_value(db, key)
+    return int(value) if value is not None else default
 
 # N: curing days keyed to (base type, flooring type) -- both are text we
 # generate ourselves in D.2/F.1-F.2's own vocabulary, so keyword matching
@@ -89,7 +97,7 @@ class ScheduleOut(BaseModel):
 def get_schedule(
     project_sport_id: uuid.UUID,
     start_date: date | None = None,
-    mobilisation_days: int = MOBILISATION_DAYS_DEFAULT,
+    mobilisation_days: int | None = None,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
@@ -114,6 +122,18 @@ def get_schedule(
     project = db.query(Project).filter(Project.id == project_sport.project_id).first()
 
     start = start_date or date.today()
+    resolved_mobilisation_days = (
+        mobilisation_days
+        if mobilisation_days is not None
+        else _get_setting_int(db, "schedule_mobilisation_days_default", MOBILISATION_DAYS_DEFAULT)
+    )
+    lighting_electrical_days = _get_setting_int(
+        db, "schedule_lighting_electrical_days", LIGHTING_ELECTRICAL_DAYS_DEFAULT
+    )
+    peb_days = _get_setting_int(db, "schedule_peb_days", PEB_DAYS_DEFAULT)
+    pool_days = _get_setting_int(db, "schedule_pool_days", POOL_DAYS_DEFAULT)
+    handover_days = _get_setting_int(db, "schedule_handover_days", HANDOVER_DAYS_DEFAULT)
+
     activities: list[ScheduleActivity] = []
     cursor = 0
 
@@ -136,7 +156,7 @@ def get_schedule(
         if not parallel:
             cursor = activity_end
 
-    add("Mobilisation & site prep", mobilisation_days)
+    add("Mobilisation & site prep", resolved_mobilisation_days)
 
     area_sqft = None
     if sport.build_l_ft is not None and sport.build_w_ft is not None:
@@ -153,10 +173,10 @@ def get_schedule(
     flooring_complete_day = None
 
     if is_pool:
-        add("Pool construction", POOL_DAYS, note="N: 10-14 weeks, midpoint")
+        add("Pool construction", pool_days, note="N: 10-14 weeks, midpoint")
         flooring_complete_day = cursor
     elif is_peb:
-        add("PEB construction", PEB_DAYS, note="N: 4-6 weeks, midpoint")
+        add("PEB construction", peb_days, note="N: 4-6 weeks, midpoint")
         if area_sqft is not None and flooring_text:
             lay_days = _flooring_lay_days(area_sqft, flooring_text)
             if lay_days is not None:
@@ -185,12 +205,12 @@ def get_schedule(
 
     add(
         "Lighting & electrical",
-        LIGHTING_ELECTRICAL_DAYS,
+        lighting_electrical_days,
         note="N: parallel, 3-5 days -- listed but not on the critical path at this size",
         parallel=True,
     )
 
-    add("Handover & testing", HANDOVER_DAYS)
+    add("Handover & testing", handover_days)
 
     total_days = cursor
     total_weeks = math.ceil(total_days / 7)

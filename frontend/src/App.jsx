@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
 import Documents from "./Documents";
+import MasterSettings from "./MasterSettings";
 import PricingCalculator from "./PricingCalculator";
 import ProjectSetup from "./ProjectSetup";
 import RateSheet from "./RateSheet";
@@ -19,7 +20,7 @@ export default function App() {
   const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
   const [preNavScreen, setPreNavScreen] = useState("sports");
 
-  const TOP_LEVEL_SCREENS = ["rates", "pricing"];
+  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings"];
 
   function goToTopLevel(target) {
     if (TOP_LEVEL_SCREENS.includes(screen)) {
@@ -58,6 +59,9 @@ export default function App() {
             <button onClick={() => goToTopLevel("rates")} className="text-sm text-blue-600 hover:underline">
               {screen === "rates" ? "Back to project" : "Rate Sheet"}
             </button>
+            <button onClick={() => goToTopLevel("settings")} className="text-sm text-blue-600 hover:underline">
+              {screen === "settings" ? "Back to project" : "Master Settings"}
+            </button>
             <p className="text-sm text-gray-500">
               {user.name} · <span className="font-medium">{user.role}</span>
             </p>
@@ -68,6 +72,9 @@ export default function App() {
         )}
         {screen === "pricing" && (
           <PricingCalculator token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "settings" && (
+          <MasterSettings token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
           <ProjectSetup

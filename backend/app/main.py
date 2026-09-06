@@ -11,6 +11,7 @@ from app.api import (
     regional_multipliers,
     schedule,
     scope_items,
+    settings,
     sports,
     tender,
 )
@@ -43,6 +44,8 @@ app.include_router(documents.cost_sheets_router)
 app.include_router(documents.estimates_router)
 app.include_router(documents.quotations_router)
 app.include_router(schedule.schedule_router)
+app.include_router(settings.settings_router)
+app.include_router(settings.overrides_router)
 
 
 @app.get("/health")

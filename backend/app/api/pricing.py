@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import ClientType
@@ -16,18 +17,22 @@ pricing_router = APIRouter(prefix="/pricing", tags=["pricing"])
 # Procurement — enforced here at the API, same as rate-items.
 READ_ROLES = ("pm", "director")
 
-# K.4: "The GST rate itself (18%) is a Master Setting (Q.1), not
-# hard-coded, in case it ever changes" -- Part Q (Master Settings) isn't
-# built yet, so this stays a documented constant until it is.
-GST_RATE_PERCENT = 18.0
+# Fallbacks used only when Part Q's Master Settings has no row yet for the
+# key (e.g. a fresh test DB) -- see get_gst_rate_percent /
+# get_current_setting_value in app.api.settings for the live values.
+GST_RATE_PERCENT_DEFAULT = 18.0
+COMPETITIVE_SEGMENT_POINTS_DEFAULT = 3.0
+NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT = 5.0
 
-COMPETITIVE_SEGMENT_POINTS = 3.0
-NON_COMPETITIVE_SEGMENT_POINTS = 5.0
 
-
-def _target_margin_percent(policy: MarginPolicy) -> float:
+def _target_margin_percent(db: Session, policy: MarginPolicy) -> float:
     """K.2: 'target = floor + (competitive_segment ? 3 : 5) points.'"""
-    gap = COMPETITIVE_SEGMENT_POINTS if policy.competitive_segment else NON_COMPETITIVE_SEGMENT_POINTS
+    if policy.competitive_segment:
+        gap_str = get_current_setting_value(db, "competitive_segment_gap_points")
+        gap = float(gap_str) if gap_str is not None else COMPETITIVE_SEGMENT_POINTS_DEFAULT
+    else:
+        gap_str = get_current_setting_value(db, "non_competitive_segment_gap_points")
+        gap = float(gap_str) if gap_str is not None else NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT
     return float(policy.floor_margin_percent) + gap
 
 
@@ -41,9 +46,9 @@ class MarginPolicyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-def _policy_to_out(policy: MarginPolicy) -> MarginPolicyOut:
+def _policy_to_out(db: Session, policy: MarginPolicy) -> MarginPolicyOut:
     out = MarginPolicyOut.model_validate(policy)
-    out.target_margin_percent = _target_margin_percent(policy)
+    out.target_margin_percent = _target_margin_percent(db, policy)
     return out
 
 
@@ -53,7 +58,7 @@ def list_margin_policies(
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
     policies = db.query(MarginPolicy).order_by(MarginPolicy.client_type).all()
-    return [_policy_to_out(p) for p in policies]
+    return [_policy_to_out(db, p) for p in policies]
 
 
 class PricingResult(BaseModel):
@@ -72,6 +77,7 @@ class PricingResult(BaseModel):
 
 
 def compute_pricing(
+    db: Session,
     cost: float,
     policy: MarginPolicy,
     discount_type: str | None,
@@ -80,7 +86,7 @@ def compute_pricing(
     """K.1 steps 7-12 + K.2/K.4, shared by /pricing/quote and the document
     state machine (Estimate options, Quotations) so both price identically."""
     floor = float(policy.floor_margin_percent)
-    target = _target_margin_percent(policy)
+    target = _target_margin_percent(db, policy)
     if target >= 100:
         raise HTTPException(status_code=400, detail="Target margin must be below 100%")
 
@@ -101,7 +107,8 @@ def compute_pricing(
     markup_percent = (selling_after_discount - cost) / cost * 100
     below_floor = margin_percent < floor
 
-    gst_amount = selling_after_discount * GST_RATE_PERCENT / 100
+    gst_rate_percent = get_gst_rate_percent(db)
+    gst_amount = selling_after_discount * gst_rate_percent / 100
     quotation_total = selling_after_discount + gst_amount
 
     return PricingResult(
@@ -114,7 +121,7 @@ def compute_pricing(
         margin_percent=margin_percent,
         markup_percent=markup_percent,
         below_floor=below_floor,
-        gst_rate_percent=GST_RATE_PERCENT,
+        gst_rate_percent=gst_rate_percent,
         gst_amount=gst_amount,
         quotation_total=quotation_total,
     )
@@ -157,7 +164,7 @@ def price_quote(
         raise HTTPException(status_code=404, detail="No margin policy for this client type")
 
     result = compute_pricing(
-        payload.cost_incl_contingency, policy, payload.discount_type, payload.discount_value
+        db, payload.cost_incl_contingency, policy, payload.discount_type, payload.discount_value
     )
     return PricingQuoteOut(
         cost_incl_contingency=result.cost,

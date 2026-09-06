@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.rate_item import LabourCategory, RateItem, RateSource
@@ -20,7 +21,8 @@ READ_ROLES = ("pm", "director", "procurement", "site_engineer")
 WRITE_ROLES = ("pm", "director", "procurement")
 CONFIRM_ROLES = ("pm", "director")
 
-STALE_AFTER_DAYS = 90
+# Fallback when Part Q's Master Settings has no row yet (e.g. a fresh test DB).
+STALE_AFTER_DAYS_DEFAULT = 90
 
 
 class LabourCategoryOut(BaseModel):
@@ -71,12 +73,15 @@ class RateItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-def _to_out(item: RateItem) -> RateItemOut:
+def _to_out(db: Session, item: RateItem) -> RateItemOut:
+    stale_after_days_str = get_current_setting_value(db, "rate_stale_after_days")
+    stale_after_days = int(stale_after_days_str) if stale_after_days_str is not None else STALE_AFTER_DAYS_DEFAULT
+
     out = RateItemOut.model_validate(item)
     out.is_stale = (
         item.source == RateSource.AI
         and item.confirmed_date is not None
-        and (datetime.now(UTC).date() - item.confirmed_date).days > STALE_AFTER_DAYS
+        and (datetime.now(UTC).date() - item.confirmed_date).days > stale_after_days
     )
     return out
 
@@ -87,7 +92,7 @@ def list_rate_items(
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
     items = db.query(RateItem).order_by(RateItem.category, RateItem.item_name).all()
-    return [_to_out(i) for i in items]
+    return [_to_out(db, i) for i in items]
 
 
 @rate_items_router.post("", response_model=RateItemOut, status_code=201)
@@ -111,7 +116,7 @@ def create_rate_item(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _to_out(item)
+    return _to_out(db, item)
 
 
 @rate_items_router.post("/{rate_item_id}/confirm", response_model=RateItemOut)
@@ -133,4 +138,4 @@ def confirm_rate_item(
     item.confirmed_date = datetime.now(UTC).date()
     db.commit()
     db.refresh(item)
-    return _to_out(item)
+    return _to_out(db, item)

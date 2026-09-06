@@ -315,3 +315,33 @@ export async function getSchedule(token, projectSportId, startDate) {
   });
   return handle(res);
 }
+
+// --- Part Q: Master Settings & Overrides ---
+
+export async function listSettings(token) {
+  const res = await fetch(`${API_BASE}/settings`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function getSettingHistory(token, key) {
+  const res = await fetch(`${API_BASE}/settings/${key}/history`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createSettingVersion(token, payload) {
+  const res = await fetch(`${API_BASE}/settings`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function bulkUpdateSettings(token, payload) {
+  const res = await fetch(`${API_BASE}/settings/bulk-update`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}

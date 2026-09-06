@@ -162,3 +162,25 @@ MARGIN_POLICY_SEED = [
     ("government", 12.0, True),
     ("individual", 22.0, False),
 ]
+
+# Q.1/Q.2 — Master Settings for the [confirm] values that don't already
+# have a dedicated strongly-typed table (MarginPolicy: K.2 margins,
+# RegionalMultiplier: city multipliers, RateItem: material rates,
+# LabourCategory: J.2 labour %). These were Python constants; seeding them
+# here makes them Director-editable per Q's own principle: "no rate,
+# percentage, floor or multiplier is hard-coded."
+# (key, value, unit, effective_from ISO date)
+SETTINGS_SEED = [
+    ("gst_rate_percent", "18.0", "%", "2026-01-01"),  # K.4: "not hard-coded, in case it ever changes"
+    ("estimate_validity_days", "15", "days", "2026-01-01"),
+    ("quotation_validity_days", "30", "days", "2026-01-01"),
+    ("estimate_price_range_percent", "5.0", "%", "2026-01-01"),
+    ("rate_stale_after_days", "90", "days", "2026-01-01"),
+    ("competitive_segment_gap_points", "3.0", "points", "2026-01-01"),
+    ("non_competitive_segment_gap_points", "5.0", "points", "2026-01-01"),
+    ("schedule_mobilisation_days_default", "5", "days", "2026-01-01"),
+    ("schedule_lighting_electrical_days", "4", "days", "2026-01-01"),
+    ("schedule_peb_days", "35", "days", "2026-01-01"),
+    ("schedule_pool_days", "84", "days", "2026-01-01"),
+    ("schedule_handover_days", "2", "days", "2026-01-01"),
+]

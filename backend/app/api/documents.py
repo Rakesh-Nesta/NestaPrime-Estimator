@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.api.pricing import GST_RATE_PERCENT, _target_margin_percent, compute_pricing
+from app.api.pricing import _target_margin_percent, compute_pricing
+from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
@@ -34,9 +35,22 @@ COST_ROLES = ("pm", "director")
 # status / won-lost, but the responses below strip cost-side fields for it.
 DOCUMENT_ROLES = ("sales", "pm", "director")
 
-ESTIMATE_VALIDITY_DAYS = 15
-QUOTATION_VALIDITY_DAYS = 30
-PRICE_RANGE_PERCENT = 5.0  # M.1: "range_pct [confirm 5%]"
+# Fallbacks used only when Part Q's Master Settings has no row yet for the
+# key (e.g. a fresh test DB) -- see get_current_setting_value calls below
+# for the live values.
+ESTIMATE_VALIDITY_DAYS_DEFAULT = 15
+QUOTATION_VALIDITY_DAYS_DEFAULT = 30
+PRICE_RANGE_PERCENT_DEFAULT = 5.0  # M.1: "range_pct [confirm 5%]"
+
+
+def _get_setting_float(db: Session, key: str, default: float) -> float:
+    value = get_current_setting_value(db, key)
+    return float(value) if value is not None else default
+
+
+def _get_setting_int(db: Session, key: str, default: int) -> int:
+    value = get_current_setting_value(db, key)
+    return int(value) if value is not None else default
 
 
 def _document_no(project_no: str, prefix: str, revision_major: int, revision_minor: int = 0) -> str:
@@ -308,7 +322,9 @@ def create_estimate(
 
     client = db.query(Client).filter(Client.id == project.client_id).first()
     policy = _get_margin_policy(db, client.type)
-    target = _target_margin_percent(policy)
+    target = _target_margin_percent(db, policy)
+    gst_rate_percent = get_gst_rate_percent(db)
+    price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
 
     estimate = Estimate(
         project_id=project_id,
@@ -332,14 +348,14 @@ def create_estimate(
             )
 
         selling_ex_gst = option_payload.cost_for_option / (1 - target / 100)
-        selling_incl_gst = selling_ex_gst * (1 + GST_RATE_PERCENT / 100)
+        selling_incl_gst = selling_ex_gst * (1 + gst_rate_percent / 100)
         option = EstimateOption(
             estimate_id=estimate.id,
             project_sport_id=option_payload.project_sport_id,
             package=option_payload.package,
             cost_for_option=option_payload.cost_for_option,
-            price_low=selling_incl_gst * (1 - PRICE_RANGE_PERCENT / 100),
-            price_high=selling_incl_gst * (1 + PRICE_RANGE_PERCENT / 100),
+            price_low=selling_incl_gst * (1 - price_range_percent / 100),
+            price_high=selling_incl_gst * (1 + price_range_percent / 100),
         )
         db.add(option)
         options.append(option)
@@ -390,9 +406,10 @@ def send_estimate(
     if estimate.status != EstimateStatus.DRAFT:
         raise HTTPException(status_code=400, detail=f"Cannot send an estimate in {estimate.status.value} status")
 
+    validity_days = _get_setting_int(db, "estimate_validity_days", ESTIMATE_VALIDITY_DAYS_DEFAULT)
     estimate.status = EstimateStatus.SENT
     estimate.sent_at = datetime.now(UTC)
-    estimate.expires_at = estimate.sent_at + timedelta(days=ESTIMATE_VALIDITY_DAYS)
+    estimate.expires_at = estimate.sent_at + timedelta(days=validity_days)
     db.commit()
     options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
     db.refresh(estimate)
@@ -533,7 +550,7 @@ def create_quotation(
     policy = _get_margin_policy(db, client.type)
 
     cost_total = sum(float(o.cost_for_option) for o in included_options)
-    pricing = compute_pricing(cost_total, policy, payload.discount_type, payload.discount_value)
+    pricing = compute_pricing(db, cost_total, policy, payload.discount_type, payload.discount_value)
 
     quotation = Quotation(
         project_id=project_id,
@@ -627,9 +644,10 @@ def send_quotation(
     if quotation.status != QuotationStatus.RELEASED:
         raise HTTPException(status_code=400, detail="Only a Released quotation can be sent")
 
+    validity_days = _get_setting_int(db, "quotation_validity_days", QUOTATION_VALIDITY_DAYS_DEFAULT)
     quotation.status = QuotationStatus.SENT
     quotation.sent_at = datetime.now(UTC)
-    quotation.expires_at = quotation.sent_at + timedelta(days=QUOTATION_VALIDITY_DAYS)
+    quotation.expires_at = quotation.sent_at + timedelta(days=validity_days)
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(quotation, current_user.role.value)
