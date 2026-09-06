@@ -14,6 +14,7 @@ from app.api import (
     scope_items,
     settings,
     sports,
+    structures,
     tender,
 )
 
@@ -48,6 +49,7 @@ app.include_router(schedule.schedule_router)
 app.include_router(settings.settings_router)
 app.include_router(settings.overrides_router)
 app.include_router(reports.router)
+app.include_router(structures.structures_router)
 
 
 @app.get("/health")
