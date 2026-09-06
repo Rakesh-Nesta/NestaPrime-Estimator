@@ -62,13 +62,11 @@ class CostSheet(Base):
     still be entered directly (a single whole-project figure, the original
     document-state-machine skeleton's simplification), OR built up from
     real CostSheetLine rows below and then set via POST .../recompute,
-    which applies K.1 steps 1, 2 and 6 (material, labour-category-%
-    fallback, contingency by work_package). K.1 steps 3-5A (site
-    establishment, freight/crane, design & approvals, tender/warranty
+    which applies K.1 steps 1, 2, 3 and 6 (material, labour-category-%
+    fallback, site establishment % (D.4), contingency by work_package).
+    K.1 steps 4-5A (freight/crane, design & approvals, tender/warranty
     overheads, company overhead recovery) are not yet wired into the
-    recompute -- still a documented gap pending the Structures/Base
-    take-off engine (D/E) that will populate these lines from real
-    quantities instead of manual entry."""
+    recompute -- still a documented gap."""
 
     __tablename__ = "cost_sheets"
 

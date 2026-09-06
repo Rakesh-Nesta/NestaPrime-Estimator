@@ -13,6 +13,7 @@ from app.api import (
     schedule,
     scope_items,
     settings,
+    site_works,
     sports,
     structures,
     tender,
@@ -50,6 +51,7 @@ app.include_router(settings.settings_router)
 app.include_router(settings.overrides_router)
 app.include_router(reports.router)
 app.include_router(structures.structures_router)
+app.include_router(site_works.site_works_router)
 
 
 @app.get("/health")

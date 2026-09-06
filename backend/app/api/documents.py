@@ -58,6 +58,7 @@ CONTINGENCY_PERCENT_DEFAULT = {
     WorkPackage.SERVICES: 0.0,
 }
 BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT = 22.0  # J.2 "Blended fallback"
+SITE_ESTABLISHMENT_PERCENT_DEFAULT = 6.0  # D.4 "[confirm 4-8%]" -- midpoint
 
 
 def _get_setting_float(db: Session, key: str, default: float) -> float:
@@ -309,9 +310,17 @@ def _labour_percent_for_line(db: Session, line: CostSheetLine, blended_fallback_
 
 def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     """K.1 steps 1 (material), 2 (labour, category-% fallback) and 6
-    (contingency grouped by work_package). Steps 3-5A (site establishment,
-    freight/crane, design & approvals, tender/warranty overheads, company
-    overhead recovery) are not applied yet -- see the CostSheet docstring."""
+    (contingency grouped by work_package), and 3 (site establishment %, D.4).
+    Steps 4-5A (freight/crane, design & approvals, tender/warranty
+    overheads, company overhead recovery) are not applied yet -- see the
+    CostSheet docstring.
+
+    Site establishment is "% of (1+2)" globally (K.1 step 3), but since a
+    percentage of a sum equals the sum of that percentage applied to each
+    addend, applying it directly per work_package before that package's own
+    contingency is mathematically identical to computing one global amount
+    and allocating it back out proportionally -- so it's folded in here
+    without a separate allocation pass."""
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet.id).all()
     if not lines:
         raise HTTPException(status_code=400, detail="Cannot recompute a cost sheet with no lines")
@@ -328,12 +337,17 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
         labour = material * labour_percent / 100
         package_base[line.work_package] = package_base.get(line.work_package, 0.0) + material + labour
 
+    site_establishment_percent = _get_setting_float(
+        db, "site_establishment_percent", SITE_ESTABLISHMENT_PERCENT_DEFAULT
+    )
+
     cost_incl_contingency = 0.0
     for work_package, base in package_base.items():
+        loaded = base * (1 + site_establishment_percent / 100)
         contingency_percent = _get_setting_float(
             db, f"contingency_{work_package.value}_percent", CONTINGENCY_PERCENT_DEFAULT[work_package]
         )
-        cost_incl_contingency += base * (1 + contingency_percent / 100)
+        cost_incl_contingency += loaded * (1 + contingency_percent / 100)
     return cost_incl_contingency
 
 

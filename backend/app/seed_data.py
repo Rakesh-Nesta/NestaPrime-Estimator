@@ -193,4 +193,6 @@ SETTINGS_SEED = [
     ("contingency_accessories_percent", "2.0", "%", "2026-01-01"),
     ("contingency_scope_percent", "5.0", "%", "2026-01-01"),
     ("contingency_services_percent", "0.0", "%", "2026-01-01"),
+    # D.4: "Site establishment [confirm 4-8%]" -- K.1 step 3.
+    ("site_establishment_percent", "6.0", "%", "2026-01-01"),
 ]
