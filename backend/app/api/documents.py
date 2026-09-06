@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.client import Client
 from app.models.document import (
     CostSheet,
+    CostSheetLine,
     CostSheetStatus,
     Estimate,
     EstimateOption,
@@ -20,9 +21,11 @@ from app.models.document import (
     Quotation,
     QuotationLine,
     QuotationStatus,
+    WorkPackage,
 )
 from app.models.margin_policy import MarginPolicy
 from app.models.project import Package, Project
+from app.models.rate_item import LabourCategory, RateSource
 from app.models.sport import ProjectSport
 
 cost_sheets_router = APIRouter(tags=["cost-sheets"])
@@ -41,6 +44,20 @@ DOCUMENT_ROLES = ("sales", "pm", "director")
 ESTIMATE_VALIDITY_DAYS_DEFAULT = 15
 QUOTATION_VALIDITY_DAYS_DEFAULT = 30
 PRICE_RANGE_PERCENT_DEFAULT = 5.0  # M.1: "range_pct [confirm 5%]"
+
+# K.1 step 6 defaults, keyed by work_package -- overridable per Part Q.
+CONTINGENCY_PERCENT_DEFAULT = {
+    WorkPackage.CIVIL: 5.0,
+    WorkPackage.STRUCTURE: 5.0,
+    WorkPackage.FLOORING: 3.0,
+    WorkPackage.ELECTRICAL: 3.0,
+    WorkPackage.POOL: 8.0,
+    WorkPackage.HVAC: 5.0,
+    WorkPackage.ACCESSORIES: 2.0,
+    WorkPackage.SCOPE: 5.0,
+    WorkPackage.SERVICES: 0.0,
+}
+BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT = 22.0  # J.2 "Blended fallback"
 
 
 def _get_setting_float(db: Session, key: str, default: float) -> float:
@@ -74,7 +91,11 @@ def _get_margin_policy(db: Session, client_type) -> MarginPolicy:
 
 
 class CostSheetCreate(BaseModel):
-    cost_total: float = Field(gt=0)
+    # A whole-project figure typed directly still works (the original
+    # document-state-machine simplification); omit it to start an empty
+    # Draft and build the total up from real CostSheetLine rows + /recompute
+    # instead.
+    cost_total: float = Field(default=0.0, ge=0)
 
 
 class CostSheetOut(BaseModel):
@@ -167,6 +188,11 @@ def verify_cost_sheet(
         raise HTTPException(status_code=404, detail="Cost sheet not found")
     if cost_sheet.status != CostSheetStatus.DRAFT:
         raise HTTPException(status_code=400, detail=f"Cannot verify a cost sheet in {cost_sheet.status.value} status")
+    if cost_sheet.cost_total <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot verify a cost sheet with no cost -- enter cost_total or add lines and /recompute",
+        )
 
     cost_sheet.status = CostSheetStatus.VERIFIED
     cost_sheet.verified_by_id = current_user.id
@@ -186,7 +212,11 @@ def revise_cost_sheet(
     current_user=Depends(require_roles(*COST_ROLES)),
 ):
     """M.2 rule 4: 'Any edit to a Verified Cost Sheet creates CS-R(n+1) in
-    Draft requiring re-verification'; the prior revision becomes Superseded."""
+    Draft requiring re-verification'; the prior revision becomes Superseded.
+    Known gap: the new revision does not carry over the old revision's
+    CostSheetLine rows (M.2 rule 4's 'refresh to current settings' choice
+    isn't implemented at line level yet) -- re-enter cost_total directly or
+    re-add lines and /recompute on the new revision."""
     current = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not current:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
@@ -206,6 +236,188 @@ def revise_cost_sheet(
     db.commit()
     db.refresh(new_revision)
     return new_revision
+
+
+# --------------------------------------------------------------------------
+# Cost Sheet lines (Part O COST_SHEETS.lines[]) -- the take-off quantity
+# engine's foundation. Manually entered for now; Parts D/E/F will populate
+# these programmatically once their formulas are built.
+# --------------------------------------------------------------------------
+
+
+class CostSheetLineCreate(BaseModel):
+    project_sport_id: uuid.UUID | None = None
+    rate_item_id: uuid.UUID | None = None
+    work_package: WorkPackage
+    category: str
+    item_name: str
+    spec: str | None = None
+    unit: str
+    quantity: float = Field(gt=0)
+    rate: float = Field(ge=0)
+    source: RateSource = RateSource.MANUAL
+    city_of_quote: str | None = None
+    labour_category_id: uuid.UUID | None = None
+
+
+class CostSheetLineOut(BaseModel):
+    id: uuid.UUID
+    cost_sheet_id: uuid.UUID
+    project_sport_id: uuid.UUID | None
+    rate_item_id: uuid.UUID | None
+    work_package: WorkPackage
+    category: str
+    item_name: str
+    spec: str | None
+    unit: str
+    quantity: float
+    rate: float
+    amount: float  # quantity x rate, computed -- not a stored column
+    source: RateSource
+    city_of_quote: str | None
+    labour_category_id: uuid.UUID | None
+    created_at: datetime
+
+
+def _line_to_out(line: CostSheetLine) -> CostSheetLineOut:
+    return CostSheetLineOut(
+        id=line.id,
+        cost_sheet_id=line.cost_sheet_id,
+        project_sport_id=line.project_sport_id,
+        rate_item_id=line.rate_item_id,
+        work_package=line.work_package,
+        category=line.category,
+        item_name=line.item_name,
+        spec=line.spec,
+        unit=line.unit,
+        quantity=float(line.quantity),
+        rate=float(line.rate),
+        amount=float(line.quantity) * float(line.rate),
+        source=line.source,
+        city_of_quote=line.city_of_quote,
+        labour_category_id=line.labour_category_id,
+        created_at=line.created_at,
+    )
+
+
+def _labour_percent_for_line(db: Session, line: CostSheetLine, blended_fallback_percent: float) -> float:
+    if line.labour_category_id is None:
+        return blended_fallback_percent
+    category = db.query(LabourCategory).filter(LabourCategory.id == line.labour_category_id).first()
+    return float(category.default_percent) if category else blended_fallback_percent
+
+
+def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
+    """K.1 steps 1 (material), 2 (labour, category-% fallback) and 6
+    (contingency grouped by work_package). Steps 3-5A (site establishment,
+    freight/crane, design & approvals, tender/warranty overheads, company
+    overhead recovery) are not applied yet -- see the CostSheet docstring."""
+    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet.id).all()
+    if not lines:
+        raise HTTPException(status_code=400, detail="Cannot recompute a cost sheet with no lines")
+
+    blended_fallback = db.query(LabourCategory).filter(LabourCategory.key == "blended_fallback").first()
+    blended_fallback_percent = (
+        float(blended_fallback.default_percent) if blended_fallback else BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT
+    )
+
+    package_base: dict[WorkPackage, float] = {}
+    for line in lines:
+        material = float(line.quantity) * float(line.rate)
+        labour_percent = _labour_percent_for_line(db, line, blended_fallback_percent)
+        labour = material * labour_percent / 100
+        package_base[line.work_package] = package_base.get(line.work_package, 0.0) + material + labour
+
+    cost_incl_contingency = 0.0
+    for work_package, base in package_base.items():
+        contingency_percent = _get_setting_float(
+            db, f"contingency_{work_package.value}_percent", CONTINGENCY_PERCENT_DEFAULT[work_package]
+        )
+        cost_incl_contingency += base * (1 + contingency_percent / 100)
+    return cost_incl_contingency
+
+
+@cost_sheets_router.post(
+    "/cost-sheets/{cost_sheet_id}/lines", response_model=CostSheetLineOut, status_code=201
+)
+def add_cost_sheet_line(
+    cost_sheet_id: uuid.UUID,
+    payload: CostSheetLineCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    if cost_sheet.status != CostSheetStatus.DRAFT:
+        raise HTTPException(status_code=400, detail="Lines can only be added to a Draft cost sheet")
+
+    if payload.project_sport_id is not None:
+        project_sport = (
+            db.query(ProjectSport)
+            .filter(ProjectSport.id == payload.project_sport_id, ProjectSport.project_id == cost_sheet.project_id)
+            .first()
+        )
+        if not project_sport:
+            raise HTTPException(status_code=404, detail="Sport selection not on this project")
+
+    line = CostSheetLine(cost_sheet_id=cost_sheet_id, **payload.model_dump())
+    db.add(line)
+    db.commit()
+    db.refresh(line)
+    return _line_to_out(line)
+
+
+@cost_sheets_router.get("/cost-sheets/{cost_sheet_id}/lines", response_model=list[CostSheetLineOut])
+def list_cost_sheet_lines(
+    cost_sheet_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    return [_line_to_out(line) for line in lines]
+
+
+@cost_sheets_router.delete("/cost-sheets/{cost_sheet_id}/lines/{line_id}", status_code=204)
+def delete_cost_sheet_line(
+    cost_sheet_id: uuid.UUID,
+    line_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    if cost_sheet.status != CostSheetStatus.DRAFT:
+        raise HTTPException(status_code=400, detail="Lines can only be removed from a Draft cost sheet")
+
+    line = (
+        db.query(CostSheetLine)
+        .filter(CostSheetLine.id == line_id, CostSheetLine.cost_sheet_id == cost_sheet_id)
+        .first()
+    )
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+    db.delete(line)
+    db.commit()
+
+
+@cost_sheets_router.post("/cost-sheets/{cost_sheet_id}/recompute", response_model=CostSheetOut)
+def recompute_cost_sheet(
+    cost_sheet_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    if cost_sheet.status != CostSheetStatus.DRAFT:
+        raise HTTPException(status_code=400, detail="Only a Draft cost sheet can be recomputed")
+
+    cost_sheet.cost_total = _compute_cost_sheet_total(db, cost_sheet)
+    db.commit()
+    db.refresh(cost_sheet)
+    return cost_sheet
 
 
 # --------------------------------------------------------------------------

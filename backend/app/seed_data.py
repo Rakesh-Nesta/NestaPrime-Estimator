@@ -183,4 +183,14 @@ SETTINGS_SEED = [
     ("schedule_peb_days", "35", "days", "2026-01-01"),
     ("schedule_pool_days", "84", "days", "2026-01-01"),
     ("schedule_handover_days", "2", "days", "2026-01-01"),
+    # K.1 step 6: contingency grouped by each line's work_package.
+    ("contingency_civil_percent", "5.0", "%", "2026-01-01"),
+    ("contingency_structure_percent", "5.0", "%", "2026-01-01"),
+    ("contingency_flooring_percent", "3.0", "%", "2026-01-01"),
+    ("contingency_electrical_percent", "3.0", "%", "2026-01-01"),
+    ("contingency_pool_percent", "8.0", "%", "2026-01-01"),
+    ("contingency_hvac_percent", "5.0", "%", "2026-01-01"),
+    ("contingency_accessories_percent", "2.0", "%", "2026-01-01"),
+    ("contingency_scope_percent", "5.0", "%", "2026-01-01"),
+    ("contingency_services_percent", "0.0", "%", "2026-01-01"),
 ]
