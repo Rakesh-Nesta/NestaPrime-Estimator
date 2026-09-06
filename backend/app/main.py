@@ -5,6 +5,7 @@ from app.api import (
     auth,
     clients,
     documents,
+    flooring,
     pricing,
     projects,
     rate_items,
@@ -52,6 +53,7 @@ app.include_router(settings.overrides_router)
 app.include_router(reports.router)
 app.include_router(structures.structures_router)
 app.include_router(site_works.site_works_router)
+app.include_router(flooring.flooring_router)
 
 
 @app.get("/health")
