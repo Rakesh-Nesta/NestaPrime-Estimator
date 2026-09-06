@@ -60,6 +60,33 @@ CONTINGENCY_PERCENT_DEFAULT = {
 BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT = 22.0  # J.2 "Blended fallback"
 SITE_ESTABLISHMENT_PERCENT_DEFAULT = 6.0  # D.4 "[confirm 4-8%]" -- midpoint
 
+# J.2: "Preferred: activity-based labour rates ... so labour follows
+# effort, not material value." Named activities, matched by the labour
+# category on the line AND the line's own unit -- an activity rate only
+# applies when a line's unit matches what that activity is priced in.
+# wooden_flooring, acrylic_pu and electrical have Settings keys below for
+# completeness (J.2 names all six) but no take-off engine yet produces a
+# line in their matching unit (sqft/sqft-per-coat/point), so they never
+# fire today -- a documented, honest gap, not a bug. Netting and pool_mep
+# have no activity-rate alternative in J.2's own table, so they always use
+# the category-% fallback, by design. None of these Settings carry a
+# numeric default -- J.2 gives no [confirm] figure for them, unlike the %
+# fallback table -- so every Cost Sheet uses the % fallback until the
+# Director actually configures a real rate in Master Settings.
+ACTIVITY_RATE_RULES: list[tuple[str, str, str]] = [
+    ("ms_fabrication_erection", "kg", "activity_rate_ms_per_kg"),
+    ("civil_base_site_prep", "cum", "activity_rate_concrete_per_cum"),
+    ("turf_laying", "sqm", "activity_rate_turf_laying_per_sqm"),
+]
+J2_NAMED_ACTIVITY_CATEGORY_KEYS = {
+    "ms_fabrication_erection",
+    "civil_base_site_prep",
+    "turf_laying",
+    "wooden_flooring",
+    "acrylic_pu",
+    "electrical",
+}
+
 
 def _get_setting_float(db: Session, key: str, default: float) -> float:
     value = get_current_setting_value(db, key)
@@ -194,6 +221,16 @@ def verify_cost_sheet(
             status_code=400,
             detail="Cannot verify a cost sheet with no cost -- enter cost_total or add lines and /recompute",
         )
+    if current_user.role.value != "director":
+        missing = _categories_missing_activity_rate(db, cost_sheet_id)
+        if len(missing) > 3:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"More than 3 categories lack activity rates ({', '.join(sorted(missing))}) "
+                    "-- Director confirmation required (J.2)"
+                ),
+            )
 
     cost_sheet.status = CostSheetStatus.VERIFIED
     cost_sheet.verified_by_id = current_user.id
@@ -301,19 +338,67 @@ def _line_to_out(line: CostSheetLine) -> CostSheetLineOut:
     )
 
 
-def _labour_percent_for_line(db: Session, line: CostSheetLine, blended_fallback_percent: float) -> float:
-    if line.labour_category_id is None:
-        return blended_fallback_percent
-    category = db.query(LabourCategory).filter(LabourCategory.id == line.labour_category_id).first()
-    return float(category.default_percent) if category else blended_fallback_percent
+def _activity_rate_for_line(db: Session, line: CostSheetLine, category_key: str | None) -> float | None:
+    if category_key is None:
+        return None
+    for rule_category_key, rule_unit, settings_key in ACTIVITY_RATE_RULES:
+        if category_key == rule_category_key and line.unit == rule_unit:
+            value = get_current_setting_value(db, settings_key)
+            return float(value) if value is not None else None
+    return None
+
+
+def _labour_amount_and_warning(
+    db: Session, line: CostSheetLine, material: float, blended_fallback_percent: float
+) -> tuple[float, str | None]:
+    """J.2: activity rate first (Rs/unit x quantity), category % as
+    fallback -- with the fallback surfaced as a warning whenever the
+    category is one of J.2's own named activities."""
+    category = (
+        db.query(LabourCategory).filter(LabourCategory.id == line.labour_category_id).first()
+        if line.labour_category_id
+        else None
+    )
+    category_key = category.key if category else None
+
+    activity_rate = _activity_rate_for_line(db, line, category_key)
+    if activity_rate is not None:
+        return float(line.quantity) * activity_rate, None
+
+    percent = float(category.default_percent) if category else blended_fallback_percent
+    warning = None
+    if category_key in J2_NAMED_ACTIVITY_CATEGORY_KEYS:
+        warning = f"Activity rate missing for {category.name} -- using fallback {percent:g}%"
+    return material * percent / 100, warning
+
+
+def _categories_missing_activity_rate(db: Session, cost_sheet_id: uuid.UUID) -> set[str]:
+    """J.2: 'If more than 3 categories on a Cost Sheet lack activity rates,
+    PM verification requires Director confirmation.' Counted only among
+    J.2's own named activity categories -- netting and pool_mep never had
+    an activity-rate alternative in the blueprint, so they don't count as
+    'missing' one."""
+    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    missing: set[str] = set()
+    for line in lines:
+        category = (
+            db.query(LabourCategory).filter(LabourCategory.id == line.labour_category_id).first()
+            if line.labour_category_id
+            else None
+        )
+        if not category or category.key not in J2_NAMED_ACTIVITY_CATEGORY_KEYS:
+            continue
+        if _activity_rate_for_line(db, line, category.key) is None:
+            missing.add(category.key)
+    return missing
 
 
 def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
-    """K.1 steps 1 (material), 2 (labour, category-% fallback) and 6
-    (contingency grouped by work_package), and 3 (site establishment %, D.4).
-    Steps 4-5A (freight/crane, design & approvals, tender/warranty
-    overheads, company overhead recovery) are not applied yet -- see the
-    CostSheet docstring.
+    """K.1 steps 1 (material), 2 (labour -- activity rate first, category-%
+    fallback per J.2), 3 (site establishment %, D.4) and 6 (contingency
+    grouped by work_package). Steps 4-5A (freight/crane, design & approvals,
+    tender/warranty overheads, company overhead recovery) are not applied
+    yet -- see the CostSheet docstring.
 
     Site establishment is "% of (1+2)" globally (K.1 step 3), but since a
     percentage of a sum equals the sum of that percentage applied to each
@@ -333,8 +418,7 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     package_base: dict[WorkPackage, float] = {}
     for line in lines:
         material = float(line.quantity) * float(line.rate)
-        labour_percent = _labour_percent_for_line(db, line, blended_fallback_percent)
-        labour = material * labour_percent / 100
+        labour, _warning = _labour_amount_and_warning(db, line, material, blended_fallback_percent)
         package_base[line.work_package] = package_base.get(line.work_package, 0.0) + material + labour
 
     site_establishment_percent = _get_setting_float(
@@ -432,6 +516,35 @@ def recompute_cost_sheet(
     db.commit()
     db.refresh(cost_sheet)
     return cost_sheet
+
+
+@cost_sheets_router.get("/cost-sheets/{cost_sheet_id}/labour-warnings", response_model=list[str])
+def get_labour_warnings(
+    cost_sheet_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """J.2: 'the Cost Sheet shows a warning line "Activity rate missing
+    for [category] -- using fallback X%".' One warning per line whose
+    category has a preferred activity rate (J.2) that isn't configured or
+    doesn't match this line's unit."""
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+
+    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    blended_fallback = db.query(LabourCategory).filter(LabourCategory.key == "blended_fallback").first()
+    blended_fallback_percent = (
+        float(blended_fallback.default_percent) if blended_fallback else BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT
+    )
+
+    warnings = []
+    for line in lines:
+        material = float(line.quantity) * float(line.rate)
+        _, warning = _labour_amount_and_warning(db, line, material, blended_fallback_percent)
+        if warning:
+            warnings.append(warning)
+    return warnings
 
 
 # --------------------------------------------------------------------------
