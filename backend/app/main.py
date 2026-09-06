@@ -6,6 +6,7 @@ from app.api import (
     clients,
     documents,
     flooring,
+    lighting,
     pricing,
     projects,
     rate_items,
@@ -54,6 +55,7 @@ app.include_router(reports.router)
 app.include_router(structures.structures_router)
 app.include_router(site_works.site_works_router)
 app.include_router(flooring.flooring_router)
+app.include_router(lighting.lighting_router)
 
 
 @app.get("/health")
