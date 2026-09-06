@@ -9,6 +9,7 @@ from app.api import (
     projects,
     rate_items,
     regional_multipliers,
+    reports,
     schedule,
     scope_items,
     settings,
@@ -46,6 +47,7 @@ app.include_router(documents.quotations_router)
 app.include_router(schedule.schedule_router)
 app.include_router(settings.settings_router)
 app.include_router(settings.overrides_router)
+app.include_router(reports.router)
 
 
 @app.get("/health")

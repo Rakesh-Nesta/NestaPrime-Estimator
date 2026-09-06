@@ -345,3 +345,27 @@ export async function bulkUpdateSettings(token, payload) {
   });
   return handle(res);
 }
+
+// --- Part T: Reporting & Extraction ---
+
+export async function listReports(token) {
+  const res = await fetch(`${API_BASE}/reports`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function generateReport(token, payload) {
+  const res = await fetch(`${API_BASE}/reports/generate`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function releaseReport(token, reportId) {
+  const res = await fetch(`${API_BASE}/reports/${reportId}/release`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
