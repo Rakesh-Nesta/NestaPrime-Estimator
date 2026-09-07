@@ -5,6 +5,8 @@ import {
   createCostSheet,
   createEstimate,
   createQuotation,
+  downloadEstimatePdfBlob,
+  downloadQuotationPdfBlob,
   listCostSheets,
   listEstimates,
   listProjectSports,
@@ -19,6 +21,15 @@ import {
   updateEstimateOptionClientStatus,
   verifyCostSheet,
 } from "./api";
+
+function downloadBlobAsFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function Documents({ token, project, role, onBack }) {
   const [projectSports, setProjectSports] = useState([]);
@@ -228,7 +239,18 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   const [optionForm, setOptionForm] = useState({ project_sport_id: "", package: "standard", cost_for_option: "" });
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
+  const [pdfError, setPdfError] = useState("");
   const canWaive = role === "pm" || role === "director";
+
+  async function handleDownloadPdf(estimate) {
+    setPdfError("");
+    try {
+      const blob = await downloadEstimatePdfBlob(token, estimate.id);
+      downloadBlobAsFile(blob, `${estimate.document_no}.pdf`);
+    } catch (err) {
+      setPdfError(err.message);
+    }
+  }
   const sportNameByProjectSportId = Object.fromEntries(
     projectSports.map((ps) => [ps.id, sportsById[ps.sport_id]?.name ?? ps.sport_id])
   );
@@ -256,6 +278,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   return (
     <div className="bg-white shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-gray-700">Estimate (M.1 stage 2)</h3>
+      {pdfError && <p className="text-xs text-red-600">{pdfError}</p>}
 
       {estimates.map((est) => (
         <div key={est.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-2">
@@ -270,6 +293,9 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                   Send
                 </button>
               )}
+              <button onClick={() => handleDownloadPdf(est)} className="text-xs text-blue-600 hover:underline">
+                Download PDF
+              </button>
               <button
                 onClick={() => setOpenAttachmentsFor(openAttachmentsFor === est.id ? null : est.id)}
                 className="text-xs text-gray-500 hover:underline"
@@ -363,7 +389,18 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
   const [discountValue, setDiscountValue] = useState("");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
+  const [pdfError, setPdfError] = useState("");
   const canWaive = role === "pm" || role === "director";
+
+  async function handleDownloadPdf(quotation) {
+    setPdfError("");
+    try {
+      const blob = await downloadQuotationPdfBlob(token, quotation.id);
+      downloadBlobAsFile(blob, `${quotation.document_no}.pdf`);
+    } catch (err) {
+      setPdfError(err.message);
+    }
+  }
 
   const approvableOptions = estimates.flatMap((est) =>
     est.options
@@ -393,6 +430,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
   return (
     <div className="bg-white shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-gray-700">Quotation (M.1 stage 3)</h3>
+      {pdfError && <p className="text-xs text-red-600">{pdfError}</p>}
 
       {quotations.map((q) => (
         <div key={q.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-2">
@@ -409,6 +447,9 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
                 Release
               </button>
             )}
+            <button onClick={() => handleDownloadPdf(q)} className="text-blue-600 hover:underline">
+              Download PDF
+            </button>
             {q.status === "released" && (
               <button onClick={() => handleSend(q.id)} className="text-blue-600 hover:underline">
                 Send

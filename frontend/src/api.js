@@ -542,6 +542,26 @@ export async function downloadAttachmentBlob(token, attachmentId) {
   return res.blob();
 }
 
+// --- Part M.6: client-facing Estimate / Quotation PDFs ---
+
+export async function downloadEstimatePdfBlob(token, estimateId) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/pdf`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `PDF generation failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function downloadQuotationPdfBlob(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/pdf`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `PDF generation failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 export async function supersedeAttachment(token, attachmentId, { tag, approvalStrength, file }) {
   const formData = new FormData();
   if (tag) formData.append("tag", tag);
