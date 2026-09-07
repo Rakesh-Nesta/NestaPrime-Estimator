@@ -239,7 +239,9 @@ def test_estimate_send_sets_status_and_fifteen_day_validity(client, director_use
 
 
 def test_sales_can_record_client_status_on_option(client, db_session, director_user):
-    """M.4: Sales may record Client approved/demand/rejected."""
+    """M.4: Sales may record Client approved/demand/rejected. M.3: needs an
+    approval_evidence attachment first (Sales can upload one, e.g. a
+    WhatsApp screenshot of the client's approval)."""
     director_headers = _director_headers(client, director_user)
     project_id, project_sport_id = _full_project_setup(client, director_headers, client_type="school")
     _verified_cost_sheet(client, director_headers, project_id)
@@ -251,12 +253,18 @@ def test_sales_can_record_client_status_on_option(client, db_session, director_u
     option_id = estimate["options"][0]["id"]
 
     sales_headers = _sales_headers(client, db_session)
+    client.post(
+        "/attachments",
+        data={"doc_type": "estimate", "doc_id": estimate["id"], "tag": "approval_evidence", "approval_strength": "informal"},
+        files={"file": ("whatsapp-screenshot.png", b"fake-image-bytes", "image/png")},
+        headers=sales_headers,
+    )
     res = client.patch(
         f"/estimates/{estimate['id']}/options/{option_id}/client-status",
         json={"client_status": "approved"},
         headers=sales_headers,
     )
-    assert res.status_code == 200
+    assert res.status_code == 200, res.text
     assert res.json()["client_status"] == "approved"
     assert res.json()["cost_for_option"] is None
 
@@ -278,9 +286,11 @@ def _approved_estimate(client, headers, client_type="government", cost_for_optio
         headers=headers,
     ).json()
     option_id = estimate["options"][0]["id"]
+    # M.3: approving without evidence needs a PM/Director waiver -- these
+    # quotation-lifecycle tests aren't about evidence itself.
     client.patch(
         f"/estimates/{estimate['id']}/options/{option_id}/client-status",
-        json={"client_status": "approved"},
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
         headers=headers,
     )
     return project_id, estimate["id"], option_id
@@ -399,7 +409,11 @@ def test_quotation_lifecycle_release_send_mark_won(client, director_user):
     assert send_res.json()["status"] == "sent"
     assert send_res.json()["expires_at"] is not None
 
-    won_res = client.post(f"/quotations/{quotation_id}/mark-won", json={"reason": "Best offer"}, headers=headers)
+    won_res = client.post(
+        f"/quotations/{quotation_id}/mark-won",
+        json={"reason": "Best offer", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
     assert won_res.status_code == 200
     assert won_res.json()["status"] == "won"
     assert won_res.json()["won_lost_reason"] == "Best offer"

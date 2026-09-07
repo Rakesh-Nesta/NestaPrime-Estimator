@@ -19,6 +19,9 @@ dist/
 # Docker / data
 pgdata/
 
+# Uploaded attachments (Part M.3) -- local disk storage, Phase 1 (P.1)
+backend/uploads/
+
 # Editors / OS
 .vscode/
 .idea/

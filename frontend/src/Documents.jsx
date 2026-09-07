@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AttachmentsPanel from "./AttachmentsPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
 import {
   createCostSheet,
@@ -19,7 +20,7 @@ import {
   verifyCostSheet,
 } from "./api";
 
-export default function Documents({ token, project, onBack }) {
+export default function Documents({ token, project, role, onBack }) {
   const [projectSports, setProjectSports] = useState([]);
   const [sports, setSports] = useState([]);
   const [costSheets, setCostSheets] = useState([]);
@@ -113,6 +114,7 @@ export default function Documents({ token, project, onBack }) {
           <EstimatePanel
             token={token}
             project={project}
+            role={role}
             activeCostSheet={activeCostSheet}
             projectSports={projectSports}
             sportsById={sportsById}
@@ -123,6 +125,7 @@ export default function Documents({ token, project, onBack }) {
           <QuotationPanel
             token={token}
             project={project}
+            role={role}
             estimates={estimates}
             quotations={quotations}
             onAction={withErrorHandling}
@@ -135,6 +138,7 @@ export default function Documents({ token, project, onBack }) {
 
 function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
   const [costTotal, setCostTotal] = useState("");
+  const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const active = costSheets.find((c) => c.status !== "superseded");
 
   const handleCreate = onAction(async () => {
@@ -155,23 +159,32 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
     <div className="bg-white shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-gray-700">Cost Sheet (M.1 stage 1)</h3>
       {costSheets.map((cs) => (
-        <div key={cs.id} className="border border-gray-200 rounded px-3 py-2 text-sm flex items-center justify-between">
-          <span>
-            {cs.document_no} · Rs {cs.cost_total.toLocaleString()} ·{" "}
-            <StatusBadge status={cs.status} />
-          </span>
-          <div className="flex items-center gap-3">
-            {cs.status === "draft" && (
-              <>
-                <button onClick={() => onBuild(cs)} className="text-xs text-blue-600 hover:underline">
-                  Build from take-off
-                </button>
-                <button onClick={() => handleVerify(cs.id)} className="text-xs text-blue-600 hover:underline">
-                  Verify
-                </button>
-              </>
-            )}
+        <div key={cs.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-2">
+          <div className="flex items-center justify-between">
+            <span>
+              {cs.document_no} · Rs {cs.cost_total.toLocaleString()} ·{" "}
+              <StatusBadge status={cs.status} />
+            </span>
+            <div className="flex items-center gap-3">
+              {cs.status === "draft" && (
+                <>
+                  <button onClick={() => onBuild(cs)} className="text-xs text-blue-600 hover:underline">
+                    Build from take-off
+                  </button>
+                  <button onClick={() => handleVerify(cs.id)} className="text-xs text-blue-600 hover:underline">
+                    Verify
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setOpenAttachmentsFor(openAttachmentsFor === cs.id ? null : cs.id)}
+                className="text-xs text-gray-500 hover:underline"
+              >
+                {openAttachmentsFor === cs.id ? "Hide attachments" : "Attachments"}
+              </button>
+            </div>
           </div>
+          {openAttachmentsFor === cs.id && <AttachmentsPanel token={token} docType="cost_sheet" docId={cs.id} />}
         </div>
       ))}
       <div className="flex items-center gap-2">
@@ -211,8 +224,11 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
   );
 }
 
-function EstimatePanel({ token, project, activeCostSheet, projectSports, sportsById, estimates, onAction }) {
+function EstimatePanel({ token, project, role, activeCostSheet, projectSports, sportsById, estimates, onAction }) {
   const [optionForm, setOptionForm] = useState({ project_sport_id: "", package: "standard", cost_for_option: "" });
+  const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
+  const [waiverReasons, setWaiverReasons] = useState({});
+  const canWaive = role === "pm" || role === "director";
   const sportNameByProjectSportId = Object.fromEntries(
     projectSports.map((ps) => [ps.id, sportsById[ps.sport_id]?.name ?? ps.sport_id])
   );
@@ -230,8 +246,11 @@ function EstimatePanel({ token, project, activeCostSheet, projectSports, sportsB
     setOptionForm({ project_sport_id: "", package: "standard", cost_for_option: "" });
   });
   const handleSend = onAction(async (id) => sendEstimate(token, id));
-  const handleClientStatus = onAction(async (estimateId, optionId, client_status) =>
-    updateEstimateOptionClientStatus(token, estimateId, optionId, { client_status })
+  const handleClientStatus = onAction(async (estimateId, optionId, client_status, waiveEvidenceReason) =>
+    updateEstimateOptionClientStatus(token, estimateId, optionId, {
+      client_status,
+      ...(waiveEvidenceReason ? { waive_evidence_reason: waiveEvidenceReason } : {}),
+    })
   );
 
   return (
@@ -245,21 +264,42 @@ function EstimatePanel({ token, project, activeCostSheet, projectSports, sportsB
               {est.document_no} · <StatusBadge status={est.status} /> · client:{" "}
               <StatusBadge status={est.client_status} />
             </span>
-            {est.status === "draft" && (
-              <button onClick={() => handleSend(est.id)} className="text-xs text-blue-600 hover:underline">
-                Send
+            <div className="flex items-center gap-3">
+              {est.status === "draft" && (
+                <button onClick={() => handleSend(est.id)} className="text-xs text-blue-600 hover:underline">
+                  Send
+                </button>
+              )}
+              <button
+                onClick={() => setOpenAttachmentsFor(openAttachmentsFor === est.id ? null : est.id)}
+                className="text-xs text-gray-500 hover:underline"
+              >
+                {openAttachmentsFor === est.id ? "Hide attachments" : "Attachments"}
               </button>
-            )}
+            </div>
           </div>
+          {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
           {est.options.map((opt) => (
-            <div key={opt.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+            <div key={opt.id} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
               <span>
                 {sportNameByProjectSportId[opt.project_sport_id] ?? opt.project_sport_id} ({opt.package}): Rs{" "}
                 {opt.price_low.toLocaleString()} - Rs {opt.price_high.toLocaleString()} incl. GST ·{" "}
                 <StatusBadge status={opt.client_status} />
               </span>
-              <div className="flex gap-1">
-                <button onClick={() => handleClientStatus(est.id, opt.id, "approved")} className="text-green-700 hover:underline">
+              <div className="flex items-center gap-1">
+                {canWaive && (
+                  <input
+                    type="text"
+                    placeholder="waiver reason (PM/Director)"
+                    value={waiverReasons[opt.id] || ""}
+                    onChange={(e) => setWaiverReasons((w) => ({ ...w, [opt.id]: e.target.value }))}
+                    className="text-xs border border-gray-300 rounded px-1 py-0.5 w-40"
+                  />
+                )}
+                <button
+                  onClick={() => handleClientStatus(est.id, opt.id, "approved", waiverReasons[opt.id])}
+                  className="text-green-700 hover:underline"
+                >
                   Approve
                 </button>
                 <button onClick={() => handleClientStatus(est.id, opt.id, "rejected")} className="text-red-700 hover:underline">
@@ -318,9 +358,12 @@ function EstimatePanel({ token, project, activeCostSheet, projectSports, sportsB
   );
 }
 
-function QuotationPanel({ token, project, estimates, quotations, onAction }) {
+function QuotationPanel({ token, project, role, estimates, quotations, onAction }) {
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const [discountValue, setDiscountValue] = useState("");
+  const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
+  const [waiverReasons, setWaiverReasons] = useState({});
+  const canWaive = role === "pm" || role === "director";
 
   const approvableOptions = estimates.flatMap((est) =>
     est.options
@@ -342,7 +385,9 @@ function QuotationPanel({ token, project, estimates, quotations, onAction }) {
   });
   const handleRelease = onAction(async (id) => releaseQuotation(token, id));
   const handleSend = onAction(async (id) => sendQuotation(token, id));
-  const handleWon = onAction(async (id) => markQuotationWon(token, id, "Client accepted"));
+  const handleWon = onAction(async (id, waiveEvidenceReason) =>
+    markQuotationWon(token, id, { reason: "Client accepted", waiveEvidenceReason })
+  );
   const handleLost = onAction(async (id) => markQuotationLost(token, id, "Client declined"));
 
   return (
@@ -350,7 +395,7 @@ function QuotationPanel({ token, project, estimates, quotations, onAction }) {
       <h3 className="text-sm font-semibold text-gray-700">Quotation (M.1 stage 3)</h3>
 
       {quotations.map((q) => (
-        <div key={q.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-1">
+        <div key={q.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-2">
           <div className="flex items-center justify-between">
             <span>
               {q.document_no} · <StatusBadge status={q.status} />
@@ -358,7 +403,7 @@ function QuotationPanel({ token, project, estimates, quotations, onAction }) {
             </span>
             <span className="font-semibold">Rs {q.quotation_total.toLocaleString()}</span>
           </div>
-          <div className="flex gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             {q.status === "draft" && (
               <button onClick={() => handleRelease(q.id)} className="text-blue-600 hover:underline">
                 Release
@@ -371,7 +416,16 @@ function QuotationPanel({ token, project, estimates, quotations, onAction }) {
             )}
             {q.status === "sent" && (
               <>
-                <button onClick={() => handleWon(q.id)} className="text-green-700 hover:underline">
+                {canWaive && (
+                  <input
+                    type="text"
+                    placeholder="waiver reason (PM/Director)"
+                    value={waiverReasons[q.id] || ""}
+                    onChange={(e) => setWaiverReasons((w) => ({ ...w, [q.id]: e.target.value }))}
+                    className="text-xs border border-gray-300 rounded px-1 py-0.5 w-40"
+                  />
+                )}
+                <button onClick={() => handleWon(q.id, waiverReasons[q.id])} className="text-green-700 hover:underline">
                   Mark Won
                 </button>
                 <button onClick={() => handleLost(q.id)} className="text-red-700 hover:underline">
@@ -379,7 +433,14 @@ function QuotationPanel({ token, project, estimates, quotations, onAction }) {
                 </button>
               </>
             )}
+            <button
+              onClick={() => setOpenAttachmentsFor(openAttachmentsFor === q.id ? null : q.id)}
+              className="text-gray-500 hover:underline"
+            >
+              {openAttachmentsFor === q.id ? "Hide attachments" : "Attachments"}
+            </button>
           </div>
+          {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
         </div>
       ))}
 

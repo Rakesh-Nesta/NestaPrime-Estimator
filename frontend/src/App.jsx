@@ -117,6 +117,7 @@ export default function App() {
           <Documents
             token={accessToken}
             project={activeProject}
+            role={user.role}
             onBack={() => setScreen("scope")}
           />
         )}

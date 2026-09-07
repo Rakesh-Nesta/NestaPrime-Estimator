@@ -9,6 +9,7 @@ from app.api.pricing import _target_margin_percent, compute_pricing
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client import Client
 from app.models.document import (
     CostSheet,
@@ -26,7 +27,48 @@ from app.models.document import (
 from app.models.margin_policy import MarginPolicy
 from app.models.project import Package, Project
 from app.models.rate_item import LabourCategory, RateSource
+from app.models.setting import DocumentType
 from app.models.sport import ProjectSport
+
+# M.3: quotations at or above this value (or any Government/Tender deal)
+# require Formal evidence before Won, not just Informal.
+FORMAL_EVIDENCE_REQUIRED_ABOVE_RS = 2_500_000.0  # "[confirm]"
+
+
+def _has_evidence(db: Session, doc_type: DocumentType, doc_id: uuid.UUID, require_formal: bool = False) -> bool:
+    query = db.query(Attachment).filter(
+        Attachment.doc_type == doc_type,
+        Attachment.doc_id == doc_id,
+        Attachment.tag == AttachmentTag.APPROVAL_EVIDENCE,
+        Attachment.superseded_by_id.is_(None),
+    )
+    if require_formal:
+        query = query.filter(Attachment.approval_strength == ApprovalStrength.FORMAL)
+    return query.first() is not None
+
+
+def _enforce_approval_evidence(
+    db: Session,
+    doc_type: DocumentType,
+    doc_id: uuid.UUID,
+    current_user,
+    waive_evidence_reason: str | None,
+    require_formal: bool = False,
+) -> None:
+    """M.3: 'A stage cannot move to its approved status without at least
+    one attachment tagged approval_evidence unless PM/Director waives it
+    (logged).' Government/Tender and quotations >= Rs 25L require Formal
+    evidence specifically (M.3)."""
+    if _has_evidence(db, doc_type, doc_id, require_formal=require_formal):
+        return
+    if not waive_evidence_reason:
+        kind = "Formal approval_evidence" if require_formal else "an approval_evidence attachment"
+        raise HTTPException(
+            status_code=422,
+            detail=f"This action needs {kind}, or a PM/Director waiver reason (M.3)",
+        )
+    if current_user.role.value not in ("pm", "director"):
+        raise HTTPException(status_code=403, detail="Only PM/Director may waive approval evidence (M.4)")
 
 cost_sheets_router = APIRouter(tags=["cost-sheets"])
 estimates_router = APIRouter(tags=["estimates"])
@@ -830,6 +872,7 @@ def send_estimate(
 class EstimateOptionStatusUpdate(BaseModel):
     client_status: EstimateOptionClientStatus
     client_demand_note: str | None = None
+    waive_evidence_reason: str | None = None
 
 
 @estimates_router.patch(
@@ -842,7 +885,10 @@ def update_option_client_status(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
-    """M.4: 'record Client approved / demand / rejected' -- Sales included."""
+    """M.4: 'record Client approved / demand / rejected' -- Sales included.
+    M.3: an option can't move to Client approved without an
+    approval_evidence attachment on the Estimate, unless PM/Director waives
+    it."""
     option = (
         db.query(EstimateOption)
         .filter(EstimateOption.id == option_id, EstimateOption.estimate_id == estimate_id)
@@ -850,6 +896,11 @@ def update_option_client_status(
     )
     if not option:
         raise HTTPException(status_code=404, detail="Estimate option not found")
+
+    if payload.client_status == EstimateOptionClientStatus.APPROVED:
+        _enforce_approval_evidence(
+            db, DocumentType.ESTIMATE, estimate_id, current_user, payload.waive_evidence_reason
+        )
 
     option.client_status = payload.client_status
     option.client_demand_note = payload.client_demand_note
@@ -1066,6 +1117,7 @@ def send_quotation(
 
 class WonLostRequest(BaseModel):
     reason: str | None = None
+    waive_evidence_reason: str | None = None
 
 
 @quotations_router.post("/quotations/{quotation_id}/mark-won", response_model=QuotationOut)
@@ -1075,7 +1127,10 @@ def mark_quotation_won(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
-    """M.2 rule 3: 'cannot be marked Won until the Cost Sheet is verified.'"""
+    """M.2 rule 3: 'cannot be marked Won until the Cost Sheet is verified.'
+    M.3: needs an approval_evidence attachment (Formal specifically for
+    Government/Tender or quotations >= Rs 25L) unless PM/Director waives
+    it."""
     quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
@@ -1083,6 +1138,13 @@ def mark_quotation_won(
         raise HTTPException(status_code=400, detail="Only a Sent quotation can be marked Won")
     if quotation.cost_basis_unverified:
         raise HTTPException(status_code=400, detail="Cannot mark Won while the cost basis is unverified")
+
+    project = db.query(Project).filter(Project.id == quotation.project_id).first()
+    require_formal = project.tender_mode or float(quotation.quotation_total) >= FORMAL_EVIDENCE_REQUIRED_ABOVE_RS
+    _enforce_approval_evidence(
+        db, DocumentType.QUOTATION, quotation_id, current_user, payload.waive_evidence_reason,
+        require_formal=require_formal,
+    )
 
     quotation.status = QuotationStatus.WON
     quotation.won_lost_reason = payload.reason

@@ -290,11 +290,14 @@ export async function sendQuotation(token, quotationId) {
   return handle(res);
 }
 
-export async function markQuotationWon(token, quotationId, reason) {
+export async function markQuotationWon(token, quotationId, { reason, waiveEvidenceReason } = {}) {
   const res = await fetch(`${API_BASE}/quotations/${quotationId}/mark-won`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ reason: reason || null }),
+    body: JSON.stringify({
+      reason: reason || null,
+      ...(waiveEvidenceReason ? { waive_evidence_reason: waiveEvidenceReason } : {}),
+    }),
   });
   return handle(res);
 }
@@ -466,6 +469,52 @@ export async function addHvacTakeoff(token, costSheetId, payload) {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+// --- Part M.3: Attachments & approval evidence ---
+
+export async function listAttachments(token, docType, docId, includeSuperseded = false) {
+  const params = new URLSearchParams({ doc_type: docType, doc_id: docId });
+  if (includeSuperseded) params.set("include_superseded", "true");
+  const res = await fetch(`${API_BASE}/attachments?${params.toString()}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function uploadAttachment(token, { docType, docId, tag, approvalStrength, file }) {
+  const formData = new FormData();
+  formData.append("doc_type", docType);
+  formData.append("doc_id", docId);
+  formData.append("tag", tag);
+  if (approvalStrength) formData.append("approval_strength", approvalStrength);
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/attachments`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  return handle(res);
+}
+
+export async function downloadAttachmentBlob(token, attachmentId) {
+  const res = await fetch(`${API_BASE}/attachments/${attachmentId}/download`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Download failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function supersedeAttachment(token, attachmentId, { tag, approvalStrength, file }) {
+  const formData = new FormData();
+  if (tag) formData.append("tag", tag);
+  if (approvalStrength) formData.append("approval_strength", approvalStrength);
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/attachments/${attachmentId}/supersede`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
   });
   return handle(res);
 }

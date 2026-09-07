@@ -83,7 +83,7 @@ def _released_quotation(client, headers, cost_for_option=850000, client_type="go
     option_id = estimate["options"][0]["id"]
     client.patch(
         f"/estimates/{estimate['id']}/options/{option_id}/client-status",
-        json={"client_status": "approved"},
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
         headers=headers,
     )
 

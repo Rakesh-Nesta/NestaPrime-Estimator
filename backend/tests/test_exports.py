@@ -220,7 +220,7 @@ def _won_quotation(client, headers):
     option_id = estimate["options"][0]["id"]
     client.patch(
         f"/estimates/{estimate['id']}/options/{option_id}/client-status",
-        json={"client_status": "approved"},
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
         headers=headers,
     )
     quotation = client.post(
@@ -230,7 +230,11 @@ def _won_quotation(client, headers):
     ).json()
     client.post(f"/quotations/{quotation['id']}/release", headers=headers)
     client.post(f"/quotations/{quotation['id']}/send", headers=headers)
-    won = client.post(f"/quotations/{quotation['id']}/mark-won", json={"reason": "Client accepted"}, headers=headers)
+    won = client.post(
+        f"/quotations/{quotation['id']}/mark-won",
+        json={"reason": "Client accepted", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
     assert won.status_code == 200, won.text
     return quotation["id"], won.json()
 
@@ -252,7 +256,7 @@ def test_billing_handoff_requires_won_status(client, director_user):
     option_id = estimate["options"][0]["id"]
     client.patch(
         f"/estimates/{estimate['id']}/options/{option_id}/client-status",
-        json={"client_status": "approved"},
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
         headers=headers,
     )
     quotation = client.post(

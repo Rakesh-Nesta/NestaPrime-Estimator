@@ -94,6 +94,19 @@ def db_session():
         Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def isolated_attachment_storage(tmp_path):
+    """Attachments (Part M.3) write real files to disk, and that storage
+    root isn't test-database-isolated the way db_session is -- without
+    this, every test run would leave orphaned files under the project's
+    own backend/uploads/ forever. Redirect to pytest's own tmp_path, which
+    pytest cleans up on its own retention schedule."""
+    original = settings.attachment_storage_root
+    settings.attachment_storage_root = str(tmp_path / "uploads")
+    yield
+    settings.attachment_storage_root = original
+
+
 @pytest.fixture()
 def client(db_session):
     def override_get_db():

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    attachments,
     auth,
     clients,
     documents,
@@ -60,6 +61,7 @@ app.include_router(flooring.flooring_router)
 app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
 app.include_router(exports.exports_router)
+app.include_router(attachments.attachments_router)
 
 
 @app.get("/health")
