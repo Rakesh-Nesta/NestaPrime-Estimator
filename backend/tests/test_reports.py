@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 
@@ -95,7 +97,7 @@ def _released_quotation(client, headers, cost_for_option=850000, client_type="go
     return release_res.json()
 
 
-TODAY = "2026-09-06"
+TODAY = datetime.now(UTC).date().isoformat()  # must track the real run date -- quotations are released "now"
 
 
 # ---------------------------------------------------------------------------
