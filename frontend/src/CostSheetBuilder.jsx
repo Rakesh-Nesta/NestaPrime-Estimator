@@ -12,6 +12,7 @@ import {
   addLightingTakeoff,
   addLineMarkingTakeoff,
   addPlayEquipmentTakeoff,
+  addPoolTakeoff,
   addStructureTakeoff,
   addTurfTakeoff,
   addWoodenFlooringTakeoff,
@@ -38,6 +39,7 @@ const TABS = [
   { key: "athletics", label: "Athletic track (G.3)" },
   { key: "play_equipment", label: "Play equipment (G.4)" },
   { key: "gym", label: "Gym (G.2)" },
+  { key: "pool", label: "Pool (G.1)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -1502,6 +1504,313 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 }
 
 // ---------------------------------------------------------------------------
+// Swimming pool (Part G.1)
+// ---------------------------------------------------------------------------
+
+function NamedRateList({ rows, onAdd, onUpdate, onRemove, namePlaceholder, addLabel, extraField }) {
+  return (
+    <div className="space-y-1">
+      {rows.map((row, i) => (
+        <div key={i} className="grid grid-cols-12 gap-2 items-end">
+          <div className={extraField ? "col-span-6" : "col-span-8"}>
+            <TextInput value={row.name} onChange={(v) => onUpdate(i, "name", v)} placeholder={namePlaceholder} />
+          </div>
+          {extraField && (
+            <div className="col-span-2">
+              <NumberInput value={row.quantity} onChange={(v) => onUpdate(i, "quantity", v)} placeholder="Qty" />
+            </div>
+          )}
+          <div className="col-span-3">
+            <NumberInput value={row.rate} onChange={(v) => onUpdate(i, "rate", v)} placeholder="Rs" />
+          </div>
+          <button type="button" onClick={() => onRemove(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+            Remove
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={onAdd} className="text-xs text-blue-600 hover:underline">
+        + {addLabel}
+      </button>
+    </div>
+  );
+}
+
+function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [projectSportId, setProjectSportId] = useState("");
+  const [shell, setShell] = useState({
+    length_ft: "", width_ft: "", shallow_depth_ft: "", deep_depth_ft: "", liner_type: "rcc", shell_thickness_in: "10",
+    excavation_rate_per_cum: "", pcc_rate_per_cum: "", rcc_rate_per_cum: "", steel_rate_per_kg: "",
+    plaster_rate_per_sqm: "", tile_rate_per_sqm: "", coping_rate_per_m: "", frp_shell_rate_per_sqm: "",
+  });
+  const setShellField = (k) => (v) => setShell((s) => ({ ...s, [k]: v }));
+
+  const [filtrationOn, setFiltrationOn] = useState(false);
+  const [filtration, setFiltration] = useState({
+    turnover_hours: "5", pump_rate: "", sand_filter_rate: "", pipework_length_m: "", pipework_rate_per_m: "",
+    plant_room_area_sqft: "", plant_room_rate_per_sqft: "", skimmer_count: "", skimmer_rate_each: "", balancing_tank_rate: "",
+  });
+  const setFiltrationField = (k) => (v) => setFiltration((s) => ({ ...s, [k]: v }));
+
+  const [treatmentOn, setTreatmentOn] = useState(false);
+  const [treatment, setTreatment] = useState({ treatment_type: "chlorine", dosing_system_rate: "", test_kit_rate: "" });
+  const setTreatmentField = (k) => (v) => setTreatment((s) => ({ ...s, [k]: v }));
+
+  const [deckOn, setDeckOn] = useState(false);
+  const [deck, setDeck] = useState({ deck_width_ft: "", anti_slip_tile_rate_per_sqm: "", channel_drain_rate_per_m: "" });
+  const setDeckField = (k) => (v) => setDeck((s) => ({ ...s, [k]: v }));
+  const [safetyItems, setSafetyItems] = useState([]);
+
+  const [waterOn, setWaterOn] = useState(false);
+  const [water, setWater] = useState({ source: "borewell", water_rate_per_cum: "" });
+  const setWaterField = (k) => (v) => setWater((s) => ({ ...s, [k]: v }));
+
+  const [options, setOptions] = useState([]);
+  const [compliance, setCompliance] = useState([]);
+
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  function makeListHandlers(setList) {
+    return {
+      onAdd: () => setList((rows) => [...rows, { name: "", quantity: "1", rate: "" }]),
+      onUpdate: (i, field, value) => setList((rows) => rows.map((row, idx) => (idx === i ? { ...row, [field]: value } : row))),
+      onRemove: (i) => setList((rows) => rows.filter((_, idx) => idx !== i)),
+    };
+  }
+  const safetyHandlers = makeListHandlers(setSafetyItems);
+  const optionHandlers = makeListHandlers(setOptions);
+  const complianceHandlers = makeListHandlers(setCompliance);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const shellPayload = {
+        length_ft: Number(shell.length_ft),
+        width_ft: Number(shell.width_ft),
+        shallow_depth_ft: Number(shell.shallow_depth_ft),
+        deep_depth_ft: Number(shell.deep_depth_ft),
+        liner_type: shell.liner_type,
+        shell_thickness_in: num(shell.shell_thickness_in),
+        excavation_rate_per_cum: num(shell.excavation_rate_per_cum),
+        pcc_rate_per_cum: num(shell.pcc_rate_per_cum),
+        rcc_rate_per_cum: num(shell.rcc_rate_per_cum),
+        steel_rate_per_kg: num(shell.steel_rate_per_kg),
+        plaster_rate_per_sqm: num(shell.plaster_rate_per_sqm),
+        tile_rate_per_sqm: num(shell.tile_rate_per_sqm),
+        coping_rate_per_m: num(shell.coping_rate_per_m),
+        frp_shell_rate_per_sqm: num(shell.frp_shell_rate_per_sqm),
+      };
+
+      const payload = {
+        project_sport_id: projectSportId,
+        shell: shellPayload,
+        filtration: filtrationOn
+          ? {
+              turnover_hours: num(filtration.turnover_hours) ?? 5,
+              pump_rate: Number(filtration.pump_rate),
+              sand_filter_rate: Number(filtration.sand_filter_rate),
+              pipework_length_m: num(filtration.pipework_length_m),
+              pipework_rate_per_m: num(filtration.pipework_rate_per_m),
+              plant_room_area_sqft: num(filtration.plant_room_area_sqft),
+              plant_room_rate_per_sqft: num(filtration.plant_room_rate_per_sqft),
+              skimmer_count: filtration.skimmer_count ? Number(filtration.skimmer_count) : undefined,
+              skimmer_rate_each: num(filtration.skimmer_rate_each),
+              balancing_tank_rate: num(filtration.balancing_tank_rate),
+            }
+          : undefined,
+        treatment: treatmentOn
+          ? {
+              treatment_type: treatment.treatment_type,
+              dosing_system_rate: Number(treatment.dosing_system_rate),
+              test_kit_rate: Number(treatment.test_kit_rate),
+            }
+          : undefined,
+        deck: deckOn
+          ? {
+              deck_width_ft: Number(deck.deck_width_ft),
+              anti_slip_tile_rate_per_sqm: Number(deck.anti_slip_tile_rate_per_sqm),
+              channel_drain_rate_per_m: Number(deck.channel_drain_rate_per_m),
+              safety_items: safetyItems
+                .filter((it) => it.name && it.quantity && it.rate)
+                .map((it) => ({ item_name: it.name, quantity: Number(it.quantity), rate: Number(it.rate) })),
+            }
+          : undefined,
+        water: waterOn ? { source: water.source, water_rate_per_cum: Number(water.water_rate_per_cum) } : undefined,
+        options: options
+          .filter((o) => o.name && o.rate)
+          .map((o) => ({ option_name: o.name, rate: Number(o.rate) })),
+        compliance: compliance
+          .filter((c) => c.name && c.rate)
+          .map((c) => ({ item_name: c.name, rate: Number(c.rate) })),
+      };
+
+      const res = await addPoolTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
+      <p className="text-[11px] text-gray-400">
+        Pool boundary fence (Type G, mandatory): use the Structures (E) tab. Lighting: use the Lighting (H) tab
+        (pool already has a 6-pole default and its own 300/500 lux figures). Schedule already treats pool as a
+        10-14 week lump activity.
+      </p>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Shell</p>
+        <div className="grid grid-cols-4 gap-2">
+          <Field label="Length (ft)"><NumberInput value={shell.length_ft} onChange={setShellField("length_ft")} required /></Field>
+          <Field label="Width (ft)"><NumberInput value={shell.width_ft} onChange={setShellField("width_ft")} required /></Field>
+          <Field label="Shallow depth (ft)"><NumberInput value={shell.shallow_depth_ft} onChange={setShellField("shallow_depth_ft")} required /></Field>
+          <Field label="Deep depth (ft)"><NumberInput value={shell.deep_depth_ft} onChange={setShellField("deep_depth_ft")} required /></Field>
+        </div>
+        <Field label="Liner type">
+          <SelectInput
+            value={shell.liner_type}
+            onChange={setShellField("liner_type")}
+            options={[{ value: "rcc", label: "RCC" }, { value: "frp", label: "FRP (supplied system)" }]}
+          />
+        </Field>
+        {shell.liner_type === "rcc" ? (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Shell thickness (in)" hint="8-12in per blueprint"><NumberInput value={shell.shell_thickness_in} onChange={setShellField("shell_thickness_in")} /></Field>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <Field label="Excavation Rs/cum"><NumberInput value={shell.excavation_rate_per_cum} onChange={setShellField("excavation_rate_per_cum")} required /></Field>
+              <Field label="PCC Rs/cum"><NumberInput value={shell.pcc_rate_per_cum} onChange={setShellField("pcc_rate_per_cum")} required /></Field>
+              <Field label="RCC + waterproofing Rs/cum"><NumberInput value={shell.rcc_rate_per_cum} onChange={setShellField("rcc_rate_per_cum")} required /></Field>
+              <Field label="Steel Rs/kg"><NumberInput value={shell.steel_rate_per_kg} onChange={setShellField("steel_rate_per_kg")} required /></Field>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Plaster Rs/sqm"><NumberInput value={shell.plaster_rate_per_sqm} onChange={setShellField("plaster_rate_per_sqm")} required /></Field>
+              <Field label="Tiles/mosaic Rs/sqm"><NumberInput value={shell.tile_rate_per_sqm} onChange={setShellField("tile_rate_per_sqm")} required /></Field>
+              <Field label="Coping Rs/m"><NumberInput value={shell.coping_rate_per_m} onChange={setShellField("coping_rate_per_m")} required /></Field>
+            </div>
+          </>
+        ) : (
+          <Field label="FRP shell Rs/sqm">
+            <NumberInput value={shell.frp_shell_rate_per_sqm} onChange={setShellField("frp_shell_rate_per_sqm")} required />
+          </Field>
+        )}
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <CheckboxField label="Filtration" checked={filtrationOn} onChange={setFiltrationOn} />
+        {filtrationOn && (
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Turnover (hours)" hint="4-6h per blueprint"><NumberInput value={filtration.turnover_hours} onChange={setFiltrationField("turnover_hours")} /></Field>
+              <Field label="Pump Rs (lump)"><NumberInput value={filtration.pump_rate} onChange={setFiltrationField("pump_rate")} required /></Field>
+              <Field label="Sand filter Rs (lump)"><NumberInput value={filtration.sand_filter_rate} onChange={setFiltrationField("sand_filter_rate")} required /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Pipework length (m)"><NumberInput value={filtration.pipework_length_m} onChange={setFiltrationField("pipework_length_m")} /></Field>
+              <Field label="Pipework Rs/m"><NumberInput value={filtration.pipework_rate_per_m} onChange={setFiltrationField("pipework_rate_per_m")} /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Plant room area (sqft)"><NumberInput value={filtration.plant_room_area_sqft} onChange={setFiltrationField("plant_room_area_sqft")} /></Field>
+              <Field label="Plant room Rs/sqft"><NumberInput value={filtration.plant_room_rate_per_sqft} onChange={setFiltrationField("plant_room_rate_per_sqft")} /></Field>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Skimmer count"><NumberInput value={filtration.skimmer_count} onChange={setFiltrationField("skimmer_count")} /></Field>
+              <Field label="Skimmer Rs each"><NumberInput value={filtration.skimmer_rate_each} onChange={setFiltrationField("skimmer_rate_each")} /></Field>
+              <Field label="Balancing tank Rs (lump)"><NumberInput value={filtration.balancing_tank_rate} onChange={setFiltrationField("balancing_tank_rate")} /></Field>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <CheckboxField label="Treatment" checked={treatmentOn} onChange={setTreatmentOn} />
+        {treatmentOn && (
+          <div className="grid grid-cols-3 gap-2">
+            <Field label="Treatment type">
+              <SelectInput
+                value={treatment.treatment_type}
+                onChange={setTreatmentField("treatment_type")}
+                options={["chlorine", "salt", "uv", "ozone"].map((v) => ({ value: v, label: v }))}
+              />
+            </Field>
+            <Field label="Dosing system Rs"><NumberInput value={treatment.dosing_system_rate} onChange={setTreatmentField("dosing_system_rate")} required /></Field>
+            <Field label="Test kit Rs"><NumberInput value={treatment.test_kit_rate} onChange={setTreatmentField("test_kit_rate")} required /></Field>
+          </div>
+        )}
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <CheckboxField label="Deck & safety" checked={deckOn} onChange={setDeckOn} />
+        {deckOn && (
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Deck width (ft)"><NumberInput value={deck.deck_width_ft} onChange={setDeckField("deck_width_ft")} required /></Field>
+              <Field label="Anti-slip tiles Rs/sqm"><NumberInput value={deck.anti_slip_tile_rate_per_sqm} onChange={setDeckField("anti_slip_tile_rate_per_sqm")} required /></Field>
+              <Field label="Channel drain Rs/m"><NumberInput value={deck.channel_drain_rate_per_m} onChange={setDeckField("channel_drain_rate_per_m")} required /></Field>
+            </div>
+            <p className="text-xs font-medium text-gray-600">Safety items (ladders, lane ropes, blocks, lifeguard chair, depth markers)</p>
+            <NamedRateList
+              rows={safetyItems}
+              {...safetyHandlers}
+              namePlaceholder="e.g. Ladder, Lane ropes (set), Lifeguard chair"
+              addLabel="Add safety item"
+              extraField
+            />
+          </>
+        )}
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <CheckboxField label="Water" checked={waterOn} onChange={setWaterOn} />
+        {waterOn && (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Source">
+              <SelectInput
+                value={water.source}
+                onChange={setWaterField("source")}
+                options={[{ value: "borewell", label: "Borewell" }, { value: "tanker", label: "Tanker" }]}
+              />
+            </Field>
+            <Field label="Water Rs/cum"><NumberInput value={water.water_rate_per_cum} onChange={setWaterField("water_rate_per_cum")} required /></Field>
+          </div>
+        )}
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-medium text-gray-600">Options (heating, cover, underwater lights, PEB cover + dehumidification)</p>
+        <NamedRateList
+          rows={options}
+          {...optionHandlers}
+          namePlaceholder="e.g. Heat pump heating, Pool cover, Underwater lights"
+          addLabel="Add option"
+        />
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-medium text-gray-600">Compliance (pool safety NOC, lifeguard note, signage)</p>
+        <NamedRateList
+          rows={compliance}
+          {...complianceHandlers}
+          namePlaceholder="e.g. Pool safety NOC, Drowning-prevention signage"
+          addLabel="Add compliance item"
+        />
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -1847,6 +2156,7 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "athletics" && <AthleticsForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "play_equipment" && <PlayEquipmentForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "gym" && <GymForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "pool" && <PoolForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}

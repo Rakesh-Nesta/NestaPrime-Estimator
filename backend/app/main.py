@@ -15,6 +15,7 @@ from app.api import (
     lighting,
     pdf_documents,
     play_equipment,
+    pool,
     pricing,
     projects,
     purchase_orders,
@@ -68,6 +69,7 @@ app.include_router(flooring.flooring_router)
 app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
 app.include_router(gym.gym_router)
+app.include_router(pool.pool_router)
 app.include_router(accessories.accessories_router)
 app.include_router(athletics.athletics_router)
 app.include_router(play_equipment.play_equipment_router)

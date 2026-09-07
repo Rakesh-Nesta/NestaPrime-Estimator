@@ -591,6 +591,15 @@ export async function addGymTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function addPoolTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/pool`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 // --- Part M.3: Attachments & approval evidence ---
 
 export async function listAttachments(token, docType, docId, includeSuperseded = false) {
