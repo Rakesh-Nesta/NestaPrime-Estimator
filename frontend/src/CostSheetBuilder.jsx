@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  addAccessoriesTakeoff,
   addBaseTakeoff,
   addCostSheetLine,
   addDrainageTakeoff,
@@ -23,8 +24,38 @@ const TABS = [
   { key: "turf", label: "Turf (F.5)" },
   { key: "lighting", label: "Lighting (H)" },
   { key: "hvac", label: "HVAC (G.5)" },
+  { key: "accessories", label: "Accessories (I)" },
   { key: "manual", label: "Manual line" },
 ];
+
+// Mirrors the backend's ACCESSORY_CATALOG (app/api/accessories.py) --
+// purely to render one rate input per known item; the backend stays the
+// source of truth and rejects the request if a rate is missing, so a
+// stale/incomplete list here only means a plainer form, not a silent gap.
+const ACCESSORY_CATALOG = {
+  badminton: [["Badminton net + post set", "set", 1]],
+  table_tennis: [["Table tennis net + post set", "set", 1]],
+  basketball_indoor: [["Basketball goal (backboard + ring)", "nos", 2]],
+  basketball_outdoor: [["Basketball goal (backboard + ring)", "nos", 2]],
+  volleyball_indoor: [["Volleyball net + post set", "set", 1]],
+  volleyball_outdoor: [["Volleyball net + post set", "set", 1]],
+  beach_volleyball: [["Volleyball net + post set", "set", 1]],
+  indoor_cricket_nets: [["Cricket stumps set (2 ends)", "set", 1]],
+  cricket_practice_nets: [["Cricket stumps set (2 ends)", "set", 1]],
+  box_cricket: [["Cricket stumps set (2 ends)", "set", 1]],
+  football_11: [["Football goal with net", "nos", 2]],
+  football_7: [["Football goal with net", "nos", 2]],
+  football_5_futsal: [["Football goal with net", "nos", 2]],
+  tennis: [["Tennis net + post set", "set", 1]],
+  padel: [
+    ["Padel glass wall/door panel set", "set", 1],
+    ["Padel net", "nos", 1],
+  ],
+  pickleball: [["Pickleball net + post set", "set", 1]],
+  hockey_turf: [["Hockey goal with net", "nos", 2]],
+  athletic_track_400m: [["Starting block", "nos", 8]],
+  archery_range: [["Archery target (butt/boss)", "nos", 1]],
+};
 
 // ---------------------------------------------------------------------------
 // Recommendation-layer wiring: Sport Selection's D.2/E.4/F.1-F.2/H
@@ -760,6 +791,132 @@ function HvacForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 }
 
 // ---------------------------------------------------------------------------
+// Accessories (Part I / Module 9)
+// ---------------------------------------------------------------------------
+
+function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [projectSportId, setProjectSportId] = useState("");
+  const [rates, setRates] = useState({});
+  const [customItems, setCustomItems] = useState([]);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  const selectedProjectSport = projectSports.find((ps) => ps.id === projectSportId);
+  const sport = selectedProjectSport ? sportsById[selectedProjectSport.sport_id] : null;
+  const catalogItems = sport ? ACCESSORY_CATALOG[sport.key] ?? [] : [];
+
+  function addCustomItem() {
+    setCustomItems((items) => [...items, { item_name: "", unit: "nos", quantity: "1", rate: "" }]);
+  }
+  function updateCustomItem(i, field, value) {
+    setCustomItems((items) => items.map((it, idx) => (idx === i ? { ...it, [field]: value } : it)));
+  }
+  function removeCustomItem(i) {
+    setCustomItems((items) => items.filter((_, idx) => idx !== i));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: projectSportId,
+        rates: Object.fromEntries(
+          catalogItems
+            .filter(([name]) => rates[name] !== undefined && rates[name] !== "")
+            .map(([name]) => [name, Number(rates[name])])
+        ),
+        custom_items: customItems
+          .filter((it) => it.item_name && it.rate)
+          .map((it) => ({
+            item_name: it.item_name,
+            unit: it.unit || "nos",
+            quantity: Number(it.quantity) || 1,
+            rate: Number(it.rate),
+          })),
+      };
+      const res = await addAccessoriesTakeoff(token, costSheetId, payload);
+      setResult(res);
+      setCustomItems([]);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
+
+      {sport && catalogItems.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500">
+            Auto quantities for {sport.name} ({selectedProjectSport.number_of_courts} court
+            {selectedProjectSport.number_of_courts === 1 ? "" : "s"}):
+          </p>
+          {catalogItems.map(([name, unit, qtyPerCourt]) => (
+            <Field key={name} label={name} hint={`${qtyPerCourt * selectedProjectSport.number_of_courts} ${unit} total`}>
+              <NumberInput
+                value={rates[name] ?? ""}
+                onChange={(v) => setRates((r) => ({ ...r, [name]: v }))}
+                placeholder="Rs/unit"
+              />
+            </Field>
+          ))}
+        </div>
+      )}
+      {sport && catalogItems.length === 0 && (
+        <p className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
+          No accessories catalog for {sport.name} yet — add items manually below.
+        </p>
+      )}
+
+      <div className="space-y-2 border-t border-gray-100 pt-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-600">Custom items (optional extras, e.g. scoreboard, umpire chair)</p>
+          <button type="button" onClick={addCustomItem} className="text-xs text-blue-600 hover:underline">
+            + Add item
+          </button>
+        </div>
+        {customItems.map((item, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-5">
+              <TextInput value={item.item_name} onChange={(v) => updateCustomItem(i, "item_name", v)} placeholder="Item name" />
+            </div>
+            <div className="col-span-2">
+              <TextInput value={item.unit} onChange={(v) => updateCustomItem(i, "unit", v)} placeholder="Unit" />
+            </div>
+            <div className="col-span-2">
+              <NumberInput value={item.quantity} onChange={(v) => updateCustomItem(i, "quantity", v)} placeholder="Qty" />
+            </div>
+            <div className="col-span-2">
+              <NumberInput value={item.rate} onChange={(v) => updateCustomItem(i, "rate", v)} placeholder="Rs/unit" />
+            </div>
+            <button
+              type="button"
+              onClick={() => removeCustomItem(i)}
+              className="col-span-1 text-xs text-red-600 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={!projectSportId}
+        className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+      >
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -1080,6 +1237,7 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "turf" && <TurfForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "lighting" && <LightingForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "hvac" && <HvacForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "accessories" && <AccessoriesForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}
