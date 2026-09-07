@@ -720,6 +720,30 @@ export async function listAttachments(token, docType, docId, includeSuperseded =
   return handle(res);
 }
 
+export async function listMessages(token, docType, docId) {
+  const params = new URLSearchParams({ doc_type: docType, doc_id: docId });
+  const res = await fetch(`${API_BASE}/messages?${params.toString()}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createMessage(token, { docType, docId, channel, recipient, templateKey, subject, bodyNote, attachmentId }) {
+  const res = await fetch(`${API_BASE}/messages`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      doc_type: docType,
+      doc_id: docId,
+      channel,
+      recipient,
+      template_key: templateKey || null,
+      subject: subject || null,
+      body_note: bodyNote || null,
+      attachment_id: attachmentId || null,
+    }),
+  });
+  return handle(res);
+}
+
 export async function uploadAttachment(token, { docType, docId, tag, approvalStrength, signatoryName, signatoryDesignation, file }) {
   const formData = new FormData();
   formData.append("doc_type", docType);

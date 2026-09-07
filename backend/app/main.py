@@ -14,6 +14,7 @@ from app.api import (
     gym,
     hvac,
     lighting,
+    messages,
     pdf_documents,
     play_equipment,
     pool,
@@ -77,6 +78,7 @@ app.include_router(athletics.athletics_router)
 app.include_router(play_equipment.play_equipment_router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
+app.include_router(messages.messages_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
 app.include_router(purchase_orders.purchase_orders_router)

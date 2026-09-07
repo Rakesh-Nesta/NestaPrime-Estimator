@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import AttachmentsPanel from "./AttachmentsPanel";
 import ClientSignatoriesPanel from "./ClientSignatoriesPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
+import MessagesPanel from "./MessagesPanel";
 import {
   createCostSheet,
   createEstimate,
@@ -153,6 +154,7 @@ export default function Documents({ token, project, role, onBack }) {
 function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
   const [costTotal, setCostTotal] = useState("");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
+  const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const active = costSheets.find((c) => c.status !== "superseded");
 
   const handleCreate = onAction(async () => {
@@ -196,9 +198,16 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
               >
                 {openAttachmentsFor === cs.id ? "Hide attachments" : "Attachments"}
               </button>
+              <button
+                onClick={() => setOpenMessagesFor(openMessagesFor === cs.id ? null : cs.id)}
+                className="text-xs text-gray-500 hover:underline"
+              >
+                {openMessagesFor === cs.id ? "Hide messages" : "Messages"}
+              </button>
             </div>
           </div>
           {openAttachmentsFor === cs.id && <AttachmentsPanel token={token} docType="cost_sheet" docId={cs.id} />}
+          {openMessagesFor === cs.id && <MessagesPanel token={token} docType="cost_sheet" docId={cs.id} />}
         </div>
       ))}
       <div className="flex items-center gap-2">
@@ -241,6 +250,7 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
 function EstimatePanel({ token, project, role, activeCostSheet, projectSports, sportsById, estimates, onAction }) {
   const [optionForm, setOptionForm] = useState({ project_sport_id: "", package: "standard", cost_for_option: "" });
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
+  const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const canWaive = role === "pm" || role === "director";
@@ -305,9 +315,16 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
               >
                 {openAttachmentsFor === est.id ? "Hide attachments" : "Attachments"}
               </button>
+              <button
+                onClick={() => setOpenMessagesFor(openMessagesFor === est.id ? null : est.id)}
+                className="text-xs text-gray-500 hover:underline"
+              >
+                {openMessagesFor === est.id ? "Hide messages" : "Messages"}
+              </button>
             </div>
           </div>
           {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
+          {openMessagesFor === est.id && <MessagesPanel token={token} docType="estimate" docId={est.id} />}
           {est.options.map((opt) => (
             <div key={opt.id} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
               <span>
@@ -391,6 +408,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const [discountValue, setDiscountValue] = useState("");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
+  const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const canWaive = role === "pm" || role === "director";
@@ -483,8 +501,15 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
             >
               {openAttachmentsFor === q.id ? "Hide attachments" : "Attachments"}
             </button>
+            <button
+              onClick={() => setOpenMessagesFor(openMessagesFor === q.id ? null : q.id)}
+              className="text-gray-500 hover:underline"
+            >
+              {openMessagesFor === q.id ? "Hide messages" : "Messages"}
+            </button>
           </div>
           {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
+          {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}
         </div>
       ))}
 
