@@ -84,8 +84,9 @@ def test_with_no_activity_rate_configured_the_percent_fallback_still_applies(cli
 
     res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
     # material 6800, blended fallback 22% labour = 1496, base 8296,
-    # site estab 6% -> 8793.76, contingency (structure) 5% -> 9233.448
-    assert round(res.json()["cost_total"], 2) == 9233.45
+    # site estab 6% -> 8793.76, warranty reserve 1% -> 8881.6976,
+    # overhead recovery 10% -> 9769.86736, contingency (structure) 5% -> 10258.36
+    assert round(res.json()["cost_total"], 2) == 10258.36
 
 
 def test_activity_rate_missing_warning_for_named_category(client, director_user):
@@ -111,7 +112,7 @@ def test_configuring_an_activity_rate_removes_the_warning_and_changes_the_total(
     _add_line(client, headers, cost_sheet_id, labour_category_id=ms_category_id, quantity=100, rate=68)
 
     baseline = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
-    assert round(baseline["cost_total"], 2) == 9233.45  # % fallback path
+    assert round(baseline["cost_total"], 2) == 10258.36  # % fallback path
 
     client.post(
         "/settings",
@@ -124,11 +125,12 @@ def test_configuring_an_activity_rate_removes_the_warning_and_changes_the_total(
 
     updated = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
     # material 6800, labour = 100kg x Rs25/kg = 2500, base 9300,
-    # site estab 6% -> 9858, contingency 5% -> 10350.90
+    # site estab 6% -> 9858, warranty reserve 1% -> 9956.58, overhead
+    # recovery 10% -> 10952.238, contingency 5% -> 11499.85
     material = 100 * 68
     labour = 100 * 25.0
     base = material + labour
-    expected = base * 1.06 * 1.05
+    expected = base * 1.06 * 1.01 * 1.10 * 1.05
     assert round(updated["cost_total"], 2) == round(expected, 2)
     assert round(updated["cost_total"], 2) != round(baseline["cost_total"], 2)
 

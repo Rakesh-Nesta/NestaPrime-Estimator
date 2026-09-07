@@ -62,11 +62,15 @@ class CostSheet(Base):
     still be entered directly (a single whole-project figure, the original
     document-state-machine skeleton's simplification), OR built up from
     real CostSheetLine rows below and then set via POST .../recompute,
-    which applies K.1 steps 1, 2, 3 and 6 (material, labour-category-%
-    fallback, site establishment % (D.4), contingency by work_package).
-    K.1 steps 4-5A (freight/crane, design & approvals, tender/warranty
-    overheads, company overhead recovery) are not yet wired into the
-    recompute -- still a documented gap."""
+    which applies K.1 steps 1, 2, 3 (site establishment %, D.4; freight
+    and crane hire are PM-entered lines via POST .../freight-crane), 4
+    (design & approvals -- CAR/workmen's-comp, via POST
+    .../design-approvals), 4B (warranty reserve %, private/non-Tender
+    projects only), 5A (company overhead recovery %) and 6 (contingency
+    by work_package). K.1 step 4A (Tender Mode's own overheads -- BG
+    cost, DLP reserve, BOCW cess, tender fee) is not applied -- Tender
+    Mode is a separate, larger, not-yet-integrated feature (Part L);
+    see documents.py's _compute_cost_sheet_total for the exact reasoning."""
 
     __tablename__ = "cost_sheets"
 

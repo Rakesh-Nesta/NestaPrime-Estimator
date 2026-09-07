@@ -184,7 +184,8 @@ def test_wooden_flooring_uses_activity_rate_once_configured(client, director_use
     labour = area_sqft * 40.0  # activity rate x quantity, not x material
     base = material + labour
     site_estab = base * 1.06  # 6% default
-    expected = site_estab * 1.03  # flooring contingency 3%
+    loaded = site_estab * 1.01 * 1.10  # K.1 4B warranty reserve 1%, 5A overhead recovery 10% defaults
+    expected = loaded * 1.03  # flooring contingency 3%
     assert round(recomputed["cost_total"], 2) == round(expected, 2)
 
 

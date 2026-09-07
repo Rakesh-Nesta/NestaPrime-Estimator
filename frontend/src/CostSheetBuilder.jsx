@@ -6,7 +6,9 @@ import {
   addAthleticsTakeoff,
   addBaseTakeoff,
   addCostSheetLine,
+  addDesignApprovalsTakeoff,
   addDrainageTakeoff,
+  addFreightCraneTakeoff,
   addGymTakeoff,
   addHockeyIrrigationTakeoff,
   addHvacTakeoff,
@@ -44,6 +46,8 @@ const TABS = [
   { key: "pool", label: "Pool (G.1)" },
   { key: "natural_grass", label: "Natural grass (F.4)" },
   { key: "hockey_irrigation", label: "Hockey irrigation (F.4)" },
+  { key: "freight_crane", label: "Freight & crane (K.1 step 3)" },
+  { key: "design_approvals", label: "Design & approvals (K.1 step 4)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -1939,6 +1943,117 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
 }
 
 // ---------------------------------------------------------------------------
+// Freight & crane (K.1 step 3)
+// ---------------------------------------------------------------------------
+
+function FreightCraneForm({ token, costSheetId, onAdded }) {
+  const [f, setF] = useState({ trips: "", distance_km: "", rate_per_km: "", crane_days: "", crane_day_rate: "" });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        trips: f.trips ? Number(f.trips) : undefined,
+        distance_km: f.distance_km ? Number(f.distance_km) : undefined,
+        rate_per_km: f.rate_per_km ? Number(f.rate_per_km) : undefined,
+        crane_days: f.crane_days ? Number(f.crane_days) : undefined,
+        crane_day_rate: f.crane_day_rate ? Number(f.crane_day_rate) : undefined,
+      };
+      const res = await addFreightCraneTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-[11px] text-gray-400">
+        B.1: "Freight = trips x km x Rs/km." Distance blank = the project's own distance-from-hub. Trip count and
+        crane-days are your own judgment call -- the blueprint gives no formula for either, so nothing here is
+        computed for you.
+      </p>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Freight (optional)</p>
+        <div className="grid grid-cols-3 gap-2">
+          <Field label="Trips"><NumberInput value={f.trips} onChange={set("trips")} min="1" /></Field>
+          <Field label="Distance (km)" hint="blank = project default"><NumberInput value={f.distance_km} onChange={set("distance_km")} /></Field>
+          <Field label="Rate Rs/km"><NumberInput value={f.rate_per_km} onChange={set("rate_per_km")} /></Field>
+        </div>
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Crane hire (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Days"><NumberInput value={f.crane_days} onChange={set("crane_days")} min="1" /></Field>
+          <Field label="Rate Rs/day"><NumberInput value={f.crane_day_rate} onChange={set("crane_day_rate")} /></Field>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Design & approvals (K.1 step 4)
+// ---------------------------------------------------------------------------
+
+function DesignApprovalsForm({ token, costSheetId, onAdded }) {
+  const [f, setF] = useState({ car_policy_premium: "", workmens_comp_premium: "" });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        car_policy_premium: f.car_policy_premium ? Number(f.car_policy_premium) : undefined,
+        workmens_comp_premium: f.workmens_comp_premium ? Number(f.workmens_comp_premium) : undefined,
+      };
+      const res = await addDesignApprovalsTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-[11px] text-gray-400">
+        K.1 step 4: "only items NOT already ticked as scope lines in step 1 -- CAR policy and workmen's
+        compensation insurance are priced here and only here." The structural engineer's own fee is already a
+        step-1 scope line (E.5) and does not belong here. Enter the actual premium quoted for each; no formula is
+        given for either.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="CAR policy premium (Rs)"><NumberInput value={f.car_policy_premium} onChange={set("car_policy_premium")} /></Field>
+        <Field label="Workmen's comp premium (Rs)"><NumberInput value={f.workmens_comp_premium} onChange={set("workmens_comp_premium")} /></Field>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -2300,6 +2415,8 @@ export default function CostSheetBuilder({ token, costSheet, projectType, projec
           {tab === "pool" && <PoolForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "natural_grass" && <NaturalGrassForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "hockey_irrigation" && <HockeyIrrigationForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "freight_crane" && <FreightCraneForm token={token} costSheetId={costSheet.id} onAdded={refresh} />}
+          {tab === "design_approvals" && <DesignApprovalsForm token={token} costSheetId={costSheet.id} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}

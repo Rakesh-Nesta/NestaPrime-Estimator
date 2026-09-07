@@ -162,8 +162,10 @@ def test_line_on_a_sport_not_in_this_project_is_rejected(client, director_user):
 def test_recompute_with_blended_fallback_labour_and_default_contingency(client, director_user):
     """No labour_category on the line -> J.2 'blended 22%' fallback.
     material 100kg x 68 = 6800; labour 6800*0.22 = 1496; base 8296;
-    site_establishment_percent default 6% -> 8793.76; contingency_
-    structure_percent default 5% -> 8793.76*1.05 = 9233.45 (rounded)."""
+    site_establishment_percent default 6% -> 8793.76; warranty reserve
+    (K.1 4B) default 1% -> 8881.6976; company overhead recovery
+    (K.1 5A) default 10% -> 9769.86736; contingency_structure_percent
+    default 5% -> 9769.86736*1.05 = 10258.36 (rounded)."""
     headers = _director_headers(client, director_user)
     _, cost_sheet_id = _empty_draft_cost_sheet(client, headers)
     client.post(
@@ -174,17 +176,18 @@ def test_recompute_with_blended_fallback_labour_and_default_contingency(client, 
 
     res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
     assert res.status_code == 200, res.text
-    assert round(res.json()["cost_total"], 2) == 9233.45
+    assert round(res.json()["cost_total"], 2) == 10258.36
 
     fetched = client.get(f"/cost-sheets/{cost_sheet_id}", headers=headers)
-    assert round(fetched.json()["cost_total"], 2) == 9233.45
+    assert round(fetched.json()["cost_total"], 2) == 10258.36
 
 
 def test_recompute_uses_lines_own_labour_category_when_set(client, director_user):
     """turf_laying category = 12%: material 200sqm x 45 = 9000;
     labour 9000*0.12 = 1080; base 10080; site_establishment_percent
-    default 6% -> 10684.80; contingency_flooring_percent default 3% ->
-    10684.80*1.03 = 11005.34."""
+    default 6% -> 10684.80; warranty reserve 1% -> 10791.648; overhead
+    recovery 10% -> 11870.8128; contingency_flooring_percent default 3%
+    -> 11870.8128*1.03 = 12226.94 (rounded)."""
     headers = _director_headers(client, director_user)
     _, cost_sheet_id = _empty_draft_cost_sheet(client, headers)
     turf_category_id = _labour_category_id(client, headers, "turf_laying")
@@ -204,7 +207,7 @@ def test_recompute_uses_lines_own_labour_category_when_set(client, director_user
     )
 
     res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
-    assert round(res.json()["cost_total"], 2) == 11005.34
+    assert round(res.json()["cost_total"], 2) == 12226.94
 
 
 def test_contingency_is_grouped_per_work_package_not_pooled(client, director_user):
@@ -234,7 +237,7 @@ def test_contingency_is_grouped_per_work_package_not_pooled(client, director_use
     )
 
     res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
-    assert round(res.json()["cost_total"], 2) == round(9233.448 + 11005.344, 2)
+    assert round(res.json()["cost_total"], 2) == round(10258.360728 + 12226.937184, 2)
 
 
 def test_deleting_a_line_and_recomputing_drops_it_from_the_total(client, director_user):
@@ -295,7 +298,7 @@ def test_contingency_percent_is_a_live_master_setting(client, director_user):
         headers=headers,
     )
     baseline = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
-    assert round(baseline["cost_total"], 2) == 9233.45  # 6% site estab, 5% default contingency
+    assert round(baseline["cost_total"], 2) == 10258.36  # 6% site estab, 1% warranty, 10% overhead, 5% default contingency
 
     client.post(
         "/settings",
@@ -303,7 +306,7 @@ def test_contingency_percent_is_a_live_master_setting(client, director_user):
         headers=headers,
     )
     updated = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
-    assert round(updated["cost_total"], 2) == round(8296 * 1.06 * 1.10, 2)
+    assert round(updated["cost_total"], 2) == round(8296 * 1.06 * 1.01 * 1.10 * 1.10, 2)
 
 
 def test_full_chain_recomputed_cost_sheet_flows_into_a_real_quotation(client, director_user):
@@ -331,9 +334,12 @@ def test_full_chain_recomputed_cost_sheet_flows_into_a_real_quotation(client, di
     )
     recomputed = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
     # services labour% has no dedicated category here (blended 22% fallback),
-    # site establishment defaults to 6%, and services contingency defaults
-    # to 0% -- so cost_total == material x 1.22 x 1.06.
-    assert round(recomputed["cost_total"], 2) == round(850000 * 1.22 * 1.06, 2)
+    # site establishment defaults to 6%, overhead recovery 10% applies by
+    # default, services contingency defaults to 0%, and this is a
+    # Government client -- tender_mode is auto-on, so K.1 4B's warranty
+    # reserve is correctly skipped (mutually exclusive with 4A's Tender
+    # Mode DLP reserve) -- so cost_total == material x 1.22 x 1.06 x 1.10.
+    assert round(recomputed["cost_total"], 2) == round(850000 * 1.22 * 1.06 * 1.10, 2)
 
     verify_res = client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
     assert verify_res.status_code == 200
@@ -351,4 +357,4 @@ def test_full_chain_recomputed_cost_sheet_flows_into_a_real_quotation(client, di
         },
         headers=headers,
     ).json()
-    assert estimate["options"][0]["cost_for_option"] == round(850000 * 1.22 * 1.06, 2)
+    assert estimate["options"][0]["cost_for_option"] == round(850000 * 1.22 * 1.06 * 1.10, 2)

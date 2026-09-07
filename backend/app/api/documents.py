@@ -103,6 +103,11 @@ CONTINGENCY_PERCENT_DEFAULT = {
 }
 BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT = 22.0  # J.2 "Blended fallback"
 SITE_ESTABLISHMENT_PERCENT_DEFAULT = 6.0  # D.4 "[confirm 4-8%]" -- midpoint
+# K.1 step 4B: "Warranty reserve 1% (private clients; Appendix B)" --
+# mutually exclusive with step 4A's Tender Mode DLP reserve (never both).
+WARRANTY_RESERVE_PERCENT_DEFAULT = 1.0
+# K.1 step 5A: "Company overhead recovery [confirm 10%] of step 5."
+COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT = 10.0
 
 # J.2: "Preferred: activity-based labour rates ... so labour follows
 # effort, not material value." Named activities, matched by the labour
@@ -449,20 +454,36 @@ def _categories_missing_activity_rate(db: Session, cost_sheet_id: uuid.UUID) -> 
 
 def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     """K.1 steps 1 (material), 2 (labour -- activity rate first, category-%
-    fallback per J.2), 3 (site establishment %, D.4) and 6 (contingency
-    grouped by work_package). Steps 4-5A (freight/crane, design & approvals,
-    tender/warranty overheads, company overhead recovery) are not applied
-    yet -- see the CostSheet docstring.
+    fallback per J.2), 3 (site establishment %, D.4; freight/crane are
+    PM-entered CostSheetLine rows via POST .../freight-crane, so they flow
+    through steps 1-2 like any other line rather than needing a separate
+    term here), 4 (design & approvals -- likewise PM-entered lines via
+    POST .../design-approvals), 4B (warranty reserve %, private/non-Tender
+    projects only), 5A (company overhead recovery % of step 5) and 6
+    (contingency grouped by work_package).
 
-    Site establishment is "% of (1+2)" globally (K.1 step 3), but since a
-    percentage of a sum equals the sum of that percentage applied to each
-    addend, applying it directly per work_package before that package's own
-    contingency is mathematically identical to computing one global amount
-    and allocating it back out proportionally -- so it's folded in here
-    without a separate allocation pass."""
+    Step 4A (Tender Mode's own overheads -- BG cost, DLP reserve, BOCW
+    cess, tender fee) is deliberately NOT applied: Tender Mode is a
+    separate, larger, not-yet-integrated feature (Part L). A tender_mode
+    project therefore gets neither 4A's DLP reserve nor 4B's warranty
+    reserve right now (K.1's own text makes the two mutually exclusive)
+    -- an honest reflection of that gap, not a miscalculation.
+
+    Site establishment, warranty reserve and company overhead recovery are
+    each "a flat % of a running subtotal" globally (K.1 steps 3/4B/5A),
+    but since a percentage of a sum equals the sum of that percentage
+    applied to each addend, multiplying each work_package's own subtotal
+    by every one of these flat factors before that package's own
+    contingency is mathematically identical to computing one global
+    amount at each step and allocating it back out proportionally -- so
+    they're all folded into the same per-package loop without a separate
+    allocation pass, in the same order the blueprint lists them (3, 4B,
+    5A) ahead of contingency (6)."""
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet.id).all()
     if not lines:
         raise HTTPException(status_code=400, detail="Cannot recompute a cost sheet with no lines")
+
+    project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
 
     blended_fallback = db.query(LabourCategory).filter(LabourCategory.key == "blended_fallback").first()
     blended_fallback_percent = (
@@ -478,10 +499,20 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     site_establishment_percent = _get_setting_float(
         db, "site_establishment_percent", SITE_ESTABLISHMENT_PERCENT_DEFAULT
     )
+    warranty_reserve_percent = (
+        0.0
+        if (project is not None and project.tender_mode)
+        else _get_setting_float(db, "warranty_reserve_percent", WARRANTY_RESERVE_PERCENT_DEFAULT)
+    )
+    company_overhead_percent = _get_setting_float(
+        db, "company_overhead_recovery_percent", COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT
+    )
 
     cost_incl_contingency = 0.0
     for work_package, base in package_base.items():
         loaded = base * (1 + site_establishment_percent / 100)
+        loaded *= 1 + warranty_reserve_percent / 100
+        loaded *= 1 + company_overhead_percent / 100
         contingency_percent = _get_setting_float(
             db, f"contingency_{work_package.value}_percent", CONTINGENCY_PERCENT_DEFAULT[work_package]
         )

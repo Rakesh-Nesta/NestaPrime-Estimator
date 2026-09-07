@@ -15,6 +15,7 @@ from app.api import (
     hvac,
     lighting,
     messages,
+    overheads,
     pdf_documents,
     play_equipment,
     pool,
@@ -76,6 +77,7 @@ app.include_router(pool.pool_router)
 app.include_router(accessories.accessories_router)
 app.include_router(athletics.athletics_router)
 app.include_router(play_equipment.play_equipment_router)
+app.include_router(overheads.overheads_router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
 app.include_router(messages.messages_router)
