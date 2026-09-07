@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,6 +11,8 @@ from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client import Client
+from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus
+from app.models.vendor import Vendor
 from app.models.document import (
     CostSheet,
     CostSheetLine,
@@ -599,12 +601,30 @@ def get_labour_warnings(
     return warnings
 
 
+def _po_lookup_for_cost_sheet(
+    db: Session, cost_sheet_id: uuid.UUID
+) -> dict[uuid.UUID, tuple[PurchaseOrderLine, PurchaseOrder, Vendor]]:
+    """Part O: one PO line per CostSheetLine at most (see
+    PurchaseOrderLine's own docstring on why split-sourcing isn't
+    modelled), so a single cost_sheet_line_id -> (PurchaseOrderLine,
+    PurchaseOrder, Vendor) map covers every line -- a cancelled PO isn't
+    procurement in progress, so it's excluded here. Shared by the
+    Consumption Sheet's JSON view (below) and its Excel export."""
+    po_rows = (
+        db.query(PurchaseOrderLine, PurchaseOrder, Vendor)
+        .join(PurchaseOrder, PurchaseOrder.id == PurchaseOrderLine.purchase_order_id)
+        .join(Vendor, Vendor.id == PurchaseOrder.vendor_id)
+        .filter(PurchaseOrder.cost_sheet_id == cost_sheet_id, PurchaseOrder.status != PurchaseOrderStatus.CANCELLED)
+        .all()
+    )
+    return {po_line.cost_sheet_line_id: (po_line, po, vendor) for po_line, po, vendor in po_rows}
+
+
 class ConsumptionSheetRowOut(BaseModel):
     """J.3 Material Consumption Sheet columns. Vendor / delivery date /
-    received qty are always null -- there is no Purchase Order or delivery
-    tracking anywhere in the app yet (Part O's PURCHASE_ORDERS is a
-    separate, unbuilt entity), so this reports what's actually knowable
-    today rather than fabricating placeholder procurement data."""
+    received qty are now a real read of Part O's PURCHASE_ORDERS when a
+    PO has been raised for this line; a line with no PO yet still shows
+    null rather than fabricated procurement data."""
 
     id: uuid.UUID
     category: str
@@ -616,9 +636,11 @@ class ConsumptionSheetRowOut(BaseModel):
     order_qty: float
     rate: float
     amount: float
-    vendor: None = None
-    delivery_date: None = None
-    received_qty: None = None
+    vendor: str | None = None
+    po_no: str | None = None
+    delivery_date: date | None = None
+    received_qty: float | None = None
+    balance_qty: float | None = None
     # J.3's example remark ("Galvanised, coastal") is a spec/finish note --
     # already folded into item_name by the take-off engines that apply a
     # finish (e.g. Structures' coastal galvanising) rather than tracked in
@@ -646,11 +668,17 @@ def get_consumption_sheet(
         raise HTTPException(status_code=404, detail="Cost sheet not found")
 
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    po_by_cost_sheet_line_id = _po_lookup_for_cost_sheet(db, cost_sheet_id)
+
     rows = []
     for line in lines:
         order_qty = float(line.quantity)
         wastage_percent = float(line.wastage_percent) if line.wastage_percent is not None else None
         theoretical_qty = order_qty / (1 + wastage_percent / 100) if wastage_percent else order_qty
+
+        procurement = po_by_cost_sheet_line_id.get(line.id)
+        po_line, po, vendor = procurement if procurement else (None, None, None)
+
         rows.append(
             ConsumptionSheetRowOut(
                 id=line.id,
@@ -663,6 +691,11 @@ def get_consumption_sheet(
                 order_qty=order_qty,
                 rate=float(line.rate),
                 amount=order_qty * float(line.rate),
+                vendor=vendor.name if vendor else None,
+                po_no=po.po_no if po else None,
+                delivery_date=po.delivery_date if po else None,
+                received_qty=float(po_line.received_qty) if po_line else None,
+                balance_qty=(float(po_line.quantity) - float(po_line.received_qty)) if po_line else None,
             )
         )
     return rows

@@ -419,6 +419,61 @@ export async function getConsumptionSheet(token, costSheetId) {
   return handle(res);
 }
 
+// --- Part O: Vendors & Purchase Orders ---
+
+export async function listVendors(token) {
+  const res = await fetch(`${API_BASE}/vendors`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createVendor(token, payload) {
+  const res = await fetch(`${API_BASE}/vendors`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listPurchaseOrders(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/purchase-orders`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createPurchaseOrder(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/purchase-orders`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function issuePurchaseOrder(token, poId) {
+  const res = await fetch(`${API_BASE}/purchase-orders/${poId}/issue`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function cancelPurchaseOrder(token, poId) {
+  const res = await fetch(`${API_BASE}/purchase-orders/${poId}/cancel`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function receivePurchaseOrder(token, poId, payload) {
+  const res = await fetch(`${API_BASE}/purchase-orders/${poId}/receive`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addStructureTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/structures`, {
     method: "POST",

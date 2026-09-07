@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import PurchaseOrdersPanel from "./PurchaseOrdersPanel";
 import {
   addAccessoriesTakeoff,
   addAcrylicPuTakeoff,
@@ -1309,6 +1310,14 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
     }
   }
 
+  async function toggleConsumptionSheetRefresh() {
+    try {
+      setConsumptionRows(await getConsumptionSheet(token, costSheet.id));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   const totalAmount = lines.reduce((sum, l) => sum + l.amount, 0);
 
   if (loading) {
@@ -1429,17 +1438,27 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
                   <td className="text-right px-2 py-1.5">{r.order_qty}</td>
                   <td className="text-right px-2 py-1.5">{r.rate}</td>
                   <td className="text-right px-2 py-1.5">{r.amount.toLocaleString()}</td>
-                  <td className="px-2 py-1.5 text-gray-400" title="Needs Part O's Purchase Orders (not built yet)">—</td>
-                  <td className="px-2 py-1.5 text-gray-400" title="Needs Part O's Purchase Orders (not built yet)">—</td>
-                  <td className="px-2 py-1.5 text-gray-400" title="Needs Part O's Purchase Orders (not built yet)">—</td>
+                  <td className="px-2 py-1.5">{r.vendor ?? <span className="text-gray-400">—</span>}</td>
+                  <td className="px-2 py-1.5">{r.delivery_date ?? <span className="text-gray-400">—</span>}</td>
+                  <td className="px-2 py-1.5">
+                    {r.received_qty != null ? `${r.received_qty} (bal. ${r.balance_qty})` : <span className="text-gray-400">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <p className="text-[11px] text-gray-400 px-2 py-1.5 bg-gray-50 border-t border-gray-200">
-            Vendor / Delivery / Received columns are always blank -- there is no Purchase Order or delivery
-            tracking in the app yet (Part O).
+            Vendor / Delivery / Received reflect a real Purchase Order (Part O) once one is raised for that line --
+            blank until then.
           </p>
+          <div className="p-2">
+            <PurchaseOrdersPanel
+              token={token}
+              costSheetId={costSheet.id}
+              consumptionRows={consumptionRows}
+              onChanged={toggleConsumptionSheetRefresh}
+            />
+          </div>
         </div>
       )}
 

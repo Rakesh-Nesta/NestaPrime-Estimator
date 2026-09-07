@@ -14,6 +14,7 @@ from app.api import (
     pdf_documents,
     pricing,
     projects,
+    purchase_orders,
     rate_items,
     regional_multipliers,
     reports,
@@ -24,6 +25,7 @@ from app.api import (
     sports,
     structures,
     tender,
+    vendors,
 )
 
 app = FastAPI(title="NestaPrime Estimator API", version="0.1.0")
@@ -66,6 +68,8 @@ app.include_router(accessories.accessories_router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
 app.include_router(pdf_documents.pdf_documents_router)
+app.include_router(vendors.vendors_router)
+app.include_router(purchase_orders.purchase_orders_router)
 
 
 @app.get("/health")

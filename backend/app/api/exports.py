@@ -9,6 +9,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
 from app.api import schedule as schedule_api
+from app.api.documents import _po_lookup_for_cost_sheet
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
@@ -129,6 +130,7 @@ def export_consumption_sheet(
 ):
     cost_sheet = _get_cost_sheet_or_404(db, cost_sheet_id)
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    po_by_cost_sheet_line_id = _po_lookup_for_cost_sheet(db, cost_sheet_id)
 
     wb = Workbook()
     ws = wb.active
@@ -137,13 +139,15 @@ def export_consumption_sheet(
         ws,
         [
             "Category", "Item & spec", "Unit", "Theoretical qty", "Wastage %", "Order qty",
-            "Rate (internal)", "Amount (internal)", "Vendor", "Delivery date", "Received qty",
+            "Rate (internal)", "Amount (internal)", "Vendor", "PO No.", "Delivery date", "Received qty", "Balance",
         ],
     )
     for line in lines:
         row = ws.max_row + 1
         item_and_spec = line.item_name + (f" ({line.spec})" if line.spec else "")
         wastage = float(line.wastage_percent) if line.wastage_percent is not None else 0.0
+        procurement = po_by_cost_sheet_line_id.get(line.id)
+        po_line, po, vendor = procurement if procurement else (None, None, None)
         ws.append(
             [
                 line.category,
@@ -154,7 +158,11 @@ def export_consumption_sheet(
                 float(line.quantity),  # Order qty is the stored, authoritative value
                 float(line.rate),
                 None,  # Amount -- live formula below
-                None, None, None,  # Vendor / Delivery date / Received qty -- blank, filled in offline
+                vendor.name if vendor else None,
+                po.po_no if po else None,
+                po.delivery_date.date().isoformat() if po and po.delivery_date else None,
+                float(po_line.received_qty) if po_line else None,
+                (float(po_line.quantity) - float(po_line.received_qty)) if po_line else None,
             ]
         )
         ws.cell(row=row, column=4, value=f"=F{row}/(1+E{row}/100)")  # Theoretical = Order / (1 + wastage%)
@@ -162,8 +170,9 @@ def export_consumption_sheet(
 
     last_row = ws.max_row
     note_row = last_row + 2
-    ws.cell(row=note_row, column=1, value="Vendor / Delivery date / Received qty are left blank for manual "
-                                           "entry -- the app has no Purchase Order tracking yet (Part O).").font = Font(italic=True, size=9)
+    ws.cell(row=note_row, column=1, value="Vendor / PO No. / Delivery date / Received qty / Balance are filled in "
+                                           "once a Purchase Order (Part O) is raised for that line -- blank until "
+                                           "then, not fabricated.").font = Font(italic=True, size=9)
 
     return _xlsx_response(wb, f"{cost_sheet.document_no}-consumption-sheet.xlsx")
 

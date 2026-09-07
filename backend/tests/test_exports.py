@@ -165,9 +165,37 @@ def test_consumption_sheet_export_has_live_theoretical_and_amount_formulas(clien
     assert ws["D2"].value == "=F2/(1+E2/100)"
     assert ws["H2"].value == "=F2*G2"
     assert ws["E2"].value == 5.0  # steel line wastage %
-    assert ws["I2"].value is None  # Vendor -- blank
-    assert ws["J2"].value is None  # Delivery date -- blank
-    assert ws["K2"].value is None  # Received qty -- blank
+    assert ws["I2"].value is None  # Vendor -- blank, no PO raised yet
+    assert ws["J2"].value is None  # PO No. -- blank
+    assert ws["K2"].value is None  # Delivery date -- blank
+    assert ws["L2"].value is None  # Received qty -- blank
+    assert ws["M2"].value is None  # Balance -- blank
+
+
+def test_consumption_sheet_export_shows_real_po_data_once_raised(client, director_user):
+    """Part O: once a PO is raised for a line, the export reads it live --
+    not fabricated, not left permanently blank."""
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _cost_sheet_with_structure_line(client, headers)
+    line_id = client.get(f"/cost-sheets/{cost_sheet_id}/lines", headers=headers).json()[0]["id"]
+    vendor_id = client.post("/vendors", json={"name": "Steel Co"}, headers=headers).json()["id"]
+    client.post(
+        f"/cost-sheets/{cost_sheet_id}/purchase-orders",
+        json={
+            "vendor_id": vendor_id,
+            "lines": [{"cost_sheet_line_id": line_id, "quantity": 100, "rate": 70}],
+            "delivery_date": "2026-10-01",
+        },
+        headers=headers,
+    )
+
+    wb = _load_xlsx(client.get(f"/cost-sheets/{cost_sheet_id}/exports/consumption-sheet", headers=headers))
+    ws = wb.active
+    assert ws["I2"].value == "Steel Co"
+    assert ws["J2"].value.startswith("PO-")
+    assert ws["K2"].value == "2026-10-01"
+    assert ws["L2"].value == 0.0
+    assert ws["M2"].value == 100.0
 
 
 def test_rfq_export_has_only_item_spec_unit_qty(client, director_user):
