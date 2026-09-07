@@ -25,6 +25,89 @@ const TABS = [
   { key: "manual", label: "Manual line" },
 ];
 
+// ---------------------------------------------------------------------------
+// Recommendation-layer wiring: Sport Selection's D.2/E.4/F.1-F.2/H
+// recommendations (recommended_base/structure/flooring/lighting on each
+// ProjectSport) are prose, not the take-off calculators' strict enums, so
+// each mapper below only offers a one-click "Use recommendation" fill when
+// it can confidently parse a match -- otherwise it shows the recommendation
+// as a plain hint and leaves the field for the PM to set. G.5 (HVAC) and
+// D.3 (Drainage) never had a recommendation layer, so those two forms have
+// nothing to wire.
+// ---------------------------------------------------------------------------
+
+const SECTION_TEXT_TO_ENUM = {
+  "2.5 in x 2.5 in": "shs_2_5",
+  "3 in x 3 in": "shs_3",
+  "4 in x 4 in": "shs_4",
+  "5 in x 5 in": "shs_5",
+  "6 in x 6 in": "shs_6",
+  "2.5 in gi round": "round_2_5",
+  "100x50 rhs": "rhs_100_50",
+  "80x40 rhs": "rhs_80_40",
+};
+
+function mapStructureType(text) {
+  // "A" -> {type:"a"}; "C (tall variant) + D" -> {type:"c", tallVariant:true}
+  const m = /^([A-G])\b(\s*\(tall variant\))?/i.exec(text || "");
+  if (!m) return null;
+  return { type: m[1].toLowerCase(), tallVariant: !!m[2] };
+}
+
+function mapSection(text) {
+  return SECTION_TEXT_TO_ENUM[(text || "").trim().toLowerCase()] ?? null;
+}
+
+function parseLeadingNumber(text) {
+  const m = /(\d+(?:\.\d+)?)/.exec(text || "");
+  return m ? Number(m[1]) : null;
+}
+
+function mapBaseType(text) {
+  const t = (text || "").trim().toLowerCase();
+  if (t.startsWith("pcc")) return "pcc";
+  if (t.startsWith("wbm")) return "wbm";
+  if (t.startsWith("rcc")) return "rcc";
+  if (t.startsWith("asphalt")) return "asphalt";
+  return null;
+}
+
+function mapPileHeight(text) {
+  if (!/turf/i.test(text || "")) return null;
+  const m = /(\d+)(?:-(\d+))?\s*mm/i.exec(text || "");
+  if (!m) return null;
+  if (m[2]) return "50_60mm_fifa_quality_pro"; // e.g. "50-60 mm"
+  const table = { 30: "30mm", 40: "40mm", 50: "50mm_fifa_quality" };
+  return table[Number(m[1])] ?? null;
+}
+
+function parseFixtureSpec(spec) {
+  const w = /([\d,]+)\s*W/i.exec(spec || "");
+  const lm = /([\d,]+)\s*lm/i.exec(spec || "");
+  return {
+    wattage: w ? Number(w[1].replace(/,/g, "")) : null,
+    lumens: lm ? Number(lm[1].replace(/,/g, "")) : null,
+  };
+}
+
+function RecommendationBanner({ label, text, why, onUse, note }) {
+  if (!text) return null;
+  return (
+    <div className="bg-emerald-50 border border-emerald-100 rounded px-3 py-2 text-xs flex items-center justify-between gap-3">
+      <p className="text-emerald-800">
+        <span className="font-semibold">{label}:</span> {text}
+        {why && <span className="text-emerald-600"> — {why}</span>}
+        {note && <span className="text-emerald-500"> ({note})</span>}
+      </p>
+      {onUse && (
+        <button type="button" onClick={onUse} className="shrink-0 text-emerald-700 font-medium hover:underline">
+          Use recommendation
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, children, hint }) {
   return (
     <div>
@@ -140,6 +223,23 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const isRound = ROUND_SECTIONS.has(f.section);
 
+  const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
+  const rec = selectedProjectSport?.recommended_structure;
+  const recStructureType = rec && mapStructureType(rec.structure_type);
+  const recSection = rec && mapSection(rec.section);
+  const recHeight = rec && parseLeadingNumber(rec.height);
+  const recIsVendorQuoteOnly = recStructureType && ["e", "f"].includes(recStructureType.type);
+
+  function useRecommendation() {
+    setF((s) => ({
+      ...s,
+      structure_type: recStructureType.type,
+      tall_variant: recStructureType.tallVariant || s.tall_variant,
+      section: recSection || s.section,
+      height_ft: recHeight != null ? String(recHeight) : s.height_ft,
+    }));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError("");
@@ -174,6 +274,15 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      {rec && (
+        <RecommendationBanner
+          label="E.4 recommends"
+          text={`Type ${rec.structure_type}, ${rec.section}, height ${rec.height}`}
+          why={rec.why}
+          onUse={!recIsVendorQuoteOnly ? useRecommendation : undefined}
+          note={recIsVendorQuoteOnly ? "vendor-quote type, not usable in this calculator" : !recSection ? "section not recognised -- pick manually" : undefined}
+        />
+      )}
       <div className="grid grid-cols-3 gap-2">
         <Field label="Type">
           <SelectInput value={f.structure_type} onChange={set("structure_type")} options={["a", "b", "c", "d", "e", "f", "g"].map((v) => ({ value: v, label: `Type ${v.toUpperCase()}` }))} />
@@ -233,6 +342,19 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const isRcc = f.base_type === "rcc";
 
+  const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
+  const rec = selectedProjectSport?.recommended_base;
+  const recBaseType = rec && mapBaseType(rec.recommended);
+  const recThickness = rec && parseLeadingNumber(rec.recommended);
+
+  function useRecommendation() {
+    setF((s) => ({
+      ...s,
+      base_type: recBaseType,
+      thickness_in: recThickness != null ? String(recThickness) : s.thickness_in,
+    }));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError("");
@@ -258,6 +380,15 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      {rec && (
+        <RecommendationBanner
+          label="D.2 recommends"
+          text={rec.recommended + (rec.alternative ? ` (alt: ${rec.alternative})` : "")}
+          why={rec.why}
+          onUse={recBaseType ? useRecommendation : undefined}
+          note={!recBaseType ? "not a WBM/Asphalt/PCC/RCC base -- pick manually" : undefined}
+        />
+      )}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Base type">
           <SelectInput value={f.base_type} onChange={set("base_type")} options={["wbm", "asphalt", "pcc", "rcc"].map((v) => ({ value: v, label: v.toUpperCase() }))} />
@@ -369,6 +500,14 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   const [error, setError] = useState("");
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
+  const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
+  const rec = selectedProjectSport?.recommended_flooring;
+  const recPileHeight = rec && mapPileHeight(rec.selected);
+
+  function useRecommendation() {
+    setF((s) => ({ ...s, pile_height: recPileHeight }));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError("");
@@ -398,6 +537,15 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      {rec && (
+        <RecommendationBanner
+          label="F.1/F.2 recommends"
+          text={`${rec.selected} (${rec.selected_tier} tier)`}
+          why={rec.why}
+          onUse={recPileHeight ? useRecommendation : undefined}
+          note={!recPileHeight ? "not a turf flooring -- add via Manual line instead" : undefined}
+        />
+      )}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Build L (ft)" hint="blank = sport default"><NumberInput value={f.build_l_ft} onChange={set("build_l_ft")} /></Field>
         <Field label="Build W (ft)" hint="blank = sport default"><NumberInput value={f.build_w_ft} onChange={set("build_w_ft")} /></Field>
@@ -443,6 +591,21 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
   const [error, setError] = useState("");
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
+  const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
+  const rec = selectedProjectSport?.recommended_lighting;
+  const recFixture = rec && parseFixtureSpec(rec.fixture_spec);
+
+  function useRecommendation() {
+    setF((s) => ({
+      ...s,
+      lux: String(rec.lux_level),
+      lumens_per_fixture: recFixture.lumens != null ? String(recFixture.lumens) : s.lumens_per_fixture,
+      wattage_per_fixture: recFixture.wattage != null ? String(recFixture.wattage) : s.wattage_per_fixture,
+      uses_poles: rec.mounting_mode === "poles",
+      pole_count: rec.pole_count != null ? String(rec.pole_count) : s.pole_count,
+    }));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setError("");
@@ -477,6 +640,14 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      {rec && (
+        <RecommendationBanner
+          label="Part H recommends"
+          text={`${rec.fixtures} fixtures, ${rec.fixture_spec}, ${rec.mounting_mode}${rec.pole_count ? ` (${rec.pole_count} poles)` : ""}`}
+          why={rec.why}
+          onUse={useRecommendation}
+        />
+      )}
       <div className="grid grid-cols-2 gap-2">
         <Field label="Build L (ft)" hint="blank = sport default"><NumberInput value={f.build_l_ft} onChange={set("build_l_ft")} /></Field>
         <Field label="Build W (ft)" hint="blank = sport default"><NumberInput value={f.build_w_ft} onChange={set("build_w_ft")} /></Field>
