@@ -209,6 +209,37 @@ export async function confirmRateItem(token, rateItemId) {
   return handle(res);
 }
 
+export async function updateRateItem(token, rateItemId, payload) {
+  const res = await fetch(`${API_BASE}/rate-items/${rateItemId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateRateValue(token, rateItemId, payload) {
+  const res = await fetch(`${API_BASE}/rate-items/${rateItemId}/rate`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function getRateHistory(token, rateItemId) {
+  const res = await fetch(`${API_BASE}/rate-items/${rateItemId}/history`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function syncDraftLinesToMasterRate(token, rateItemId) {
+  const res = await fetch(`${API_BASE}/rate-items/${rateItemId}/sync-draft-lines`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 export async function listMarginPolicies(token) {
   const res = await fetch(`${API_BASE}/margin-policies`, { headers: authHeaders(token) });
   return handle(res);

@@ -66,6 +66,12 @@ class RateItem(Base):
         UUID(as_uuid=True), ForeignKey("labour_categories.id"), nullable=True
     )
 
+    # Part I / Q.1's commodity alert: "Director can set an index watch
+    # (steel Rs/kg, turf Rs/sqm)" -- implemented as a per-item flag rather
+    # than a separate index-master-data concept, since the blueprint names
+    # no fields for such a master beyond "which items are watched."
+    is_commodity_watched: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
