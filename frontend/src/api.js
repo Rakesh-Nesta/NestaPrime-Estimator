@@ -52,6 +52,30 @@ export async function createClient(token, payload) {
   return handle(res);
 }
 
+export async function listClientSignatories(token, clientId, includeInactive = false) {
+  const params = includeInactive ? "?include_inactive=true" : "";
+  const res = await fetch(`${API_BASE}/clients/${clientId}/signatories${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createClientSignatory(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/signatories`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateClientSignatory(token, clientId, signatoryId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/signatories/${signatoryId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function createProject(token, payload) {
   const res = await fetch(`${API_BASE}/projects`, {
     method: "POST",
@@ -627,12 +651,14 @@ export async function listAttachments(token, docType, docId, includeSuperseded =
   return handle(res);
 }
 
-export async function uploadAttachment(token, { docType, docId, tag, approvalStrength, file }) {
+export async function uploadAttachment(token, { docType, docId, tag, approvalStrength, signatoryName, signatoryDesignation, file }) {
   const formData = new FormData();
   formData.append("doc_type", docType);
   formData.append("doc_id", docId);
   formData.append("tag", tag);
   if (approvalStrength) formData.append("approval_strength", approvalStrength);
+  if (signatoryName) formData.append("signatory_name", signatoryName);
+  if (signatoryDesignation) formData.append("signatory_designation", signatoryDesignation);
   formData.append("file", file);
   const res = await fetch(`${API_BASE}/attachments`, {
     method: "POST",

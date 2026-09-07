@@ -6,6 +6,7 @@ from app.api import (
     athletics,
     attachments,
     auth,
+    client_signatories,
     clients,
     documents,
     exports,
@@ -44,6 +45,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(clients.router)
+app.include_router(client_signatories.client_signatories_router)
 app.include_router(projects.router)
 app.include_router(regional_multipliers.router)
 app.include_router(sports.sports_router)

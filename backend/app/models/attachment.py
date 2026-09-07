@@ -73,6 +73,14 @@ class Attachment(Base):
         Enum(ApprovalStrength, name="approval_strength"), nullable=True
     )
 
+    # Part O CLIENT_SIGNATORIES / M.3: optionally record who on the client
+    # side is the approver named in this evidence, so it can be matched
+    # against an active client_signatories row. Only meaningful on an
+    # approval_evidence-tagged attachment; nullable everywhere else since
+    # most attachments (photos, vendor quotes, etc.) have no approver.
+    signatory_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    signatory_designation: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     uploaded_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

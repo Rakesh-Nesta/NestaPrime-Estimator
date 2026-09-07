@@ -40,6 +40,8 @@ export default function AttachmentsPanel({ token, docType, docId }) {
   const [error, setError] = useState("");
   const [tag, setTag] = useState("approval_evidence");
   const [approvalStrength, setApprovalStrength] = useState("");
+  const [signatoryName, setSignatoryName] = useState("");
+  const [signatoryDesignation, setSignatoryDesignation] = useState("");
   const [file, setFile] = useState(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -74,9 +76,15 @@ export default function AttachmentsPanel({ token, docType, docId }) {
     if (!file) return;
     setUploading(true);
     try {
-      await uploadAttachment(token, { docType, docId, tag, approvalStrength: approvalStrength || undefined, file });
+      await uploadAttachment(token, {
+        docType, docId, tag, approvalStrength: approvalStrength || undefined,
+        signatoryName: signatoryName || undefined, signatoryDesignation: signatoryDesignation || undefined,
+        file,
+      });
       setFile(null);
       setFileInputKey((k) => k + 1);
+      setSignatoryName("");
+      setSignatoryDesignation("");
       await load();
     } catch (err) {
       setError(err.message);
@@ -139,6 +147,11 @@ export default function AttachmentsPanel({ token, docType, docId }) {
             <span className="text-gray-400">({formatBytes(a.original_size)})</span>
             <span>· {a.tag}</span>
             <StrengthBadge strength={a.approval_strength} />
+            {a.signatory_name && (
+              <span className="text-gray-500">
+                · signed by {a.signatory_name} ({a.signatory_designation})
+              </span>
+            )}
             <span>· v{a.version}</span>
             <span className="text-gray-400">· {new Date(a.uploaded_at).toLocaleString()}</span>
           </span>
@@ -198,6 +211,22 @@ export default function AttachmentsPanel({ token, docType, docId }) {
           <option value="informal">informal</option>
           <option value="formal">formal</option>
         </select>
+        {tag === "approval_evidence" && (
+          <>
+            <input
+              value={signatoryName}
+              onChange={(e) => setSignatoryName(e.target.value)}
+              placeholder="Signatory name (optional)"
+              className="rounded border border-gray-300 px-2 py-1 text-xs w-40"
+            />
+            <input
+              value={signatoryDesignation}
+              onChange={(e) => setSignatoryDesignation(e.target.value)}
+              placeholder="Designation (optional)"
+              className="rounded border border-gray-300 px-2 py-1 text-xs w-36"
+            />
+          </>
+        )}
         <input
           key={fileInputKey}
           type="file"
@@ -216,7 +245,8 @@ export default function AttachmentsPanel({ token, docType, docId }) {
       {tag === "approval_evidence" && (
         <p className="text-[11px] text-gray-400">
           Formal evidence is required before "Won" for Government/Tender clients or quotations ≥ Rs 25 L (M.3);
-          Informal is enough below that.
+          Informal is enough below that. Naming a signatory is optional, but if given it must match an active,
+          in-date entry in Client signatories (Part O) or the upload is rejected.
         </p>
       )}
     </div>

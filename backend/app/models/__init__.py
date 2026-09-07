@@ -1,5 +1,6 @@
 from app.models.attachment import Attachment, AttachmentTag, ApprovalStrength  # noqa: F401
 from app.models.client import Client, ClientType  # noqa: F401
+from app.models.client_signatory import ClientSignatory  # noqa: F401
 from app.models.document import (  # noqa: F401
     CostSheet,
     CostSheetLine,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AttachmentsPanel from "./AttachmentsPanel";
+import ClientSignatoriesPanel from "./ClientSignatoriesPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
 import {
   createCostSheet,
@@ -114,6 +115,8 @@ export default function Documents({ token, project, role, onBack }) {
         />
       ) : (
         <>
+          <ClientSignatoriesPanel token={token} clientId={project.client_id} />
+
           <CostSheetPanel
             token={token}
             project={project}
