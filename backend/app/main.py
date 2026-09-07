@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     accessories,
+    athletics,
     attachments,
     auth,
     clients,
@@ -65,6 +66,7 @@ app.include_router(flooring.flooring_router)
 app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
 app.include_router(accessories.accessories_router)
+app.include_router(athletics.athletics_router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
 app.include_router(pdf_documents.pdf_documents_router)

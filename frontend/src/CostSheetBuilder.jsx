@@ -3,6 +3,7 @@ import PurchaseOrdersPanel from "./PurchaseOrdersPanel";
 import {
   addAccessoriesTakeoff,
   addAcrylicPuTakeoff,
+  addAthleticsTakeoff,
   addBaseTakeoff,
   addCostSheetLine,
   addDrainageTakeoff,
@@ -32,6 +33,7 @@ const TABS = [
   { key: "lighting", label: "Lighting (H)" },
   { key: "hvac", label: "HVAC (G.5)" },
   { key: "accessories", label: "Accessories (I)" },
+  { key: "athletics", label: "Athletic track (G.3)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -1146,6 +1148,104 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
 }
 
 // ---------------------------------------------------------------------------
+// Athletic track (Part G.3)
+// ---------------------------------------------------------------------------
+
+function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [f, setF] = useState({
+    project_sport_id: "", lanes: "8", inner_radius_m: "36.5", straight_length_m: "84.39",
+    track_surface_rate_per_sqm: "", kerb_rate_per_m: "", drainage_rate_per_m: "",
+  });
+  const [fieldEvents, setFieldEvents] = useState([]);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  function addFieldEvent() {
+    setFieldEvents((events) => [...events, { event_name: "", rate: "" }]);
+  }
+  function updateFieldEvent(i, field, value) {
+    setFieldEvents((events) => events.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)));
+  }
+  function removeFieldEvent(i) {
+    setFieldEvents((events) => events.filter((_, idx) => idx !== i));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: f.project_sport_id,
+        lanes: Number(f.lanes),
+        inner_radius_m: num(f.inner_radius_m),
+        straight_length_m: num(f.straight_length_m),
+        track_surface_rate_per_sqm: num(f.track_surface_rate_per_sqm),
+        kerb_rate_per_m: num(f.kerb_rate_per_m),
+        drainage_rate_per_m: num(f.drainage_rate_per_m),
+        field_events: fieldEvents
+          .filter((ev) => ev.event_name && ev.rate)
+          .map((ev) => ({ event_name: ev.event_name, rate: Number(ev.rate) })),
+      };
+      const res = await addAthleticsTakeoff(token, costSheetId, payload);
+      setResult(res);
+      setFieldEvents([]);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      <div className="grid grid-cols-3 gap-2">
+        <Field label="Lanes"><NumberInput value={f.lanes} onChange={set("lanes")} min="1" required /></Field>
+        <Field label="Kerb radius (m)" hint="36.5 = World Athletics standard"><NumberInput value={f.inner_radius_m} onChange={set("inner_radius_m")} /></Field>
+        <Field label="Straight length (m)" hint="84.39 = World Athletics standard"><NumberInput value={f.straight_length_m} onChange={set("straight_length_m")} /></Field>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Field label="Track surface Rs/sqm"><NumberInput value={f.track_surface_rate_per_sqm} onChange={set("track_surface_rate_per_sqm")} required /></Field>
+        <Field label="Kerb Rs/m"><NumberInput value={f.kerb_rate_per_m} onChange={set("kerb_rate_per_m")} required /></Field>
+        <Field label="Drainage ring Rs/m"><NumberInput value={f.drainage_rate_per_m} onChange={set("drainage_rate_per_m")} required /></Field>
+      </div>
+
+      <div className="space-y-2 border-t border-gray-100 pt-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-600">Field events checklist (optional)</p>
+          <button type="button" onClick={addFieldEvent} className="text-xs text-blue-600 hover:underline">
+            + Add event
+          </button>
+        </div>
+        {fieldEvents.map((ev, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-7">
+              <TextInput
+                value={ev.event_name}
+                onChange={(v) => updateFieldEvent(i, "event_name", v)}
+                placeholder="e.g. Long jump pit, Shot put circle, Discus cage, High jump"
+              />
+            </div>
+            <div className="col-span-4">
+              <NumberInput value={ev.rate} onChange={(v) => updateFieldEvent(i, "rate", v)} placeholder="Rs (supply & install)" />
+            </div>
+            <button type="button" onClick={() => removeFieldEvent(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -1488,6 +1588,7 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "lighting" && <LightingForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "hvac" && <HvacForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "accessories" && <AccessoriesForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "athletics" && <AthleticsForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}
