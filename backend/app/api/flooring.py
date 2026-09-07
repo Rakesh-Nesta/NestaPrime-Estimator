@@ -143,6 +143,7 @@ def add_turf_takeoff(
             rate=payload.turf_rate_per_sqm,
             source=RateSource.MANUAL,
             labour_category_id=turf_category.id if turf_category else None,
+            wastage_percent=round(wastage_percent, 2),
         ),
         CostSheetLine(
             cost_sheet_id=cost_sheet_id,

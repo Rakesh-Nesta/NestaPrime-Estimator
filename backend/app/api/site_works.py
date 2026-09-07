@@ -124,6 +124,7 @@ def add_base_takeoff(
             rate=payload.material_rate_per_cum,
             source=RateSource.MANUAL,
             labour_category_id=civil_category.id if civil_category else None,
+            wastage_percent=round((CONCRETE_WASTAGE_MULTIPLIER - 1) * 100, 2),
         )
     ]
 

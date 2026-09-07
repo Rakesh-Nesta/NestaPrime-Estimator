@@ -308,6 +308,7 @@ def add_structure_takeoff(
             rate=round(steel_rate_effective, 2),
             source=RateSource.MANUAL,
             labour_category_id=ms_fab_category.id if ms_fab_category else None,
+            wastage_percent=STEEL_WASTAGE_PERCENT,
         ),
         CostSheetLine(
             cost_sheet_id=cost_sheet_id,
@@ -320,6 +321,7 @@ def add_structure_takeoff(
             rate=payload.netting_rate_per_sqm,
             source=RateSource.MANUAL,
             labour_category_id=netting_category.id if netting_category else None,
+            wastage_percent=NETTING_WASTAGE_PERCENT,
         ),
         CostSheetLine(
             cost_sheet_id=cost_sheet_id,

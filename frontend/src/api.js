@@ -409,6 +409,13 @@ export async function getLabourWarnings(token, costSheetId) {
   return handle(res);
 }
 
+export async function getConsumptionSheet(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/consumption-sheet`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 export async function addStructureTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/structures`, {
     method: "POST",

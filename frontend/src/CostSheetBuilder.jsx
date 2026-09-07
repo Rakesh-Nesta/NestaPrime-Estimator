@@ -8,6 +8,7 @@ import {
   addStructureTakeoff,
   addTurfTakeoff,
   deleteCostSheetLine,
+  getConsumptionSheet,
   getLabourWarnings,
   listCostSheetLines,
   listLabourCategories,
@@ -845,6 +846,8 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("structure");
+  const [consumptionRows, setConsumptionRows] = useState(null);
+  const [showConsumption, setShowConsumption] = useState(false);
 
   const sportsById = Object.fromEntries(sports.map((s) => [s.id, s]));
   const isDraft = costSheet.status === "draft";
@@ -901,6 +904,21 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
     try {
       const updated = await verifyCostSheet(token, costSheet.id);
       onCostSheetUpdated(updated);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function toggleConsumptionSheet() {
+    if (showConsumption) {
+      setShowConsumption(false);
+      return;
+    }
+    setError("");
+    try {
+      const rows = await getConsumptionSheet(token, costSheet.id);
+      setConsumptionRows(rows);
+      setShowConsumption(true);
     } catch (err) {
       setError(err.message);
     }
@@ -985,7 +1003,60 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
         >
           Verify Cost Sheet
         </button>
+        <button
+          onClick={toggleConsumptionSheet}
+          disabled={lines.length === 0}
+          className="bg-gray-100 text-gray-700 text-sm rounded px-4 py-2 hover:bg-gray-200 disabled:opacity-50"
+        >
+          {showConsumption ? "Hide" : "View"} Consumption Sheet (J.3)
+        </button>
       </div>
+
+      {showConsumption && (
+        <div className="border border-gray-200 rounded overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="text-left px-2 py-1.5">Category</th>
+                <th className="text-left px-2 py-1.5">Item &amp; spec</th>
+                <th className="text-right px-2 py-1.5">Unit</th>
+                <th className="text-right px-2 py-1.5">Theoretical qty</th>
+                <th className="text-right px-2 py-1.5">Wastage %</th>
+                <th className="text-right px-2 py-1.5">Order qty</th>
+                <th className="text-right px-2 py-1.5">Rate</th>
+                <th className="text-right px-2 py-1.5">Amount</th>
+                <th className="text-left px-2 py-1.5">Vendor</th>
+                <th className="text-left px-2 py-1.5">Delivery</th>
+                <th className="text-left px-2 py-1.5">Received</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {consumptionRows?.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-2 py-1.5">{r.category}</td>
+                  <td className="px-2 py-1.5">
+                    {r.item_name}
+                    {r.spec && <span className="text-gray-400"> ({r.spec})</span>}
+                  </td>
+                  <td className="text-right px-2 py-1.5">{r.unit}</td>
+                  <td className="text-right px-2 py-1.5">{r.theoretical_qty}</td>
+                  <td className="text-right px-2 py-1.5">{r.wastage_percent ?? "—"}</td>
+                  <td className="text-right px-2 py-1.5">{r.order_qty}</td>
+                  <td className="text-right px-2 py-1.5">{r.rate}</td>
+                  <td className="text-right px-2 py-1.5">{r.amount.toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-gray-400" title="Needs Part O's Purchase Orders (not built yet)">—</td>
+                  <td className="px-2 py-1.5 text-gray-400" title="Needs Part O's Purchase Orders (not built yet)">—</td>
+                  <td className="px-2 py-1.5 text-gray-400" title="Needs Part O's Purchase Orders (not built yet)">—</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[11px] text-gray-400 px-2 py-1.5 bg-gray-50 border-t border-gray-200">
+            Vendor / Delivery / Received columns are always blank -- there is no Purchase Order or delivery
+            tracking in the app yet (Part O).
+          </p>
+        </div>
+      )}
 
       {isDraft && (
         <div className="border-t border-gray-200 pt-4">

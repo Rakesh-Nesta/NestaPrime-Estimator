@@ -296,6 +296,7 @@ class CostSheetLineCreate(BaseModel):
     source: RateSource = RateSource.MANUAL
     city_of_quote: str | None = None
     labour_category_id: uuid.UUID | None = None
+    wastage_percent: float | None = Field(default=None, ge=0)
 
 
 class CostSheetLineOut(BaseModel):
@@ -314,6 +315,7 @@ class CostSheetLineOut(BaseModel):
     source: RateSource
     city_of_quote: str | None
     labour_category_id: uuid.UUID | None
+    wastage_percent: float | None
     created_at: datetime
 
 
@@ -334,6 +336,7 @@ def _line_to_out(line: CostSheetLine) -> CostSheetLineOut:
         source=line.source,
         city_of_quote=line.city_of_quote,
         labour_category_id=line.labour_category_id,
+        wastage_percent=float(line.wastage_percent) if line.wastage_percent is not None else None,
         created_at=line.created_at,
     )
 
@@ -545,6 +548,75 @@ def get_labour_warnings(
         if warning:
             warnings.append(warning)
     return warnings
+
+
+class ConsumptionSheetRowOut(BaseModel):
+    """J.3 Material Consumption Sheet columns. Vendor / delivery date /
+    received qty are always null -- there is no Purchase Order or delivery
+    tracking anywhere in the app yet (Part O's PURCHASE_ORDERS is a
+    separate, unbuilt entity), so this reports what's actually knowable
+    today rather than fabricating placeholder procurement data."""
+
+    id: uuid.UUID
+    category: str
+    item_name: str
+    spec: str | None
+    unit: str
+    theoretical_qty: float
+    wastage_percent: float | None
+    order_qty: float
+    rate: float
+    amount: float
+    vendor: None = None
+    delivery_date: None = None
+    received_qty: None = None
+    # J.3's example remark ("Galvanised, coastal") is a spec/finish note --
+    # already folded into item_name by the take-off engines that apply a
+    # finish (e.g. Structures' coastal galvanising) rather than tracked in
+    # a separate column, so there is nothing distinct to surface here yet.
+    remarks: None = None
+
+
+@cost_sheets_router.get(
+    "/cost-sheets/{cost_sheet_id}/consumption-sheet", response_model=list[ConsumptionSheetRowOut]
+)
+def get_consumption_sheet(
+    cost_sheet_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """J.3: 'auto-generated from all modules -- the procurement working
+    document.' A live computed view over this Cost Sheet's lines (J.3
+    doesn't ask for a frozen snapshot the way Part T's reports do), backing
+    out each line's theoretical (pre-wastage) quantity from its stored
+    order quantity and wastage_percent -- 0% wastage (theoretical == order)
+    for any line with none recorded, e.g. manual lines and exact-count
+    items like fixtures or catch pits."""
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+
+    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    rows = []
+    for line in lines:
+        order_qty = float(line.quantity)
+        wastage_percent = float(line.wastage_percent) if line.wastage_percent is not None else None
+        theoretical_qty = order_qty / (1 + wastage_percent / 100) if wastage_percent else order_qty
+        rows.append(
+            ConsumptionSheetRowOut(
+                id=line.id,
+                category=line.category,
+                item_name=line.item_name,
+                spec=line.spec,
+                unit=line.unit,
+                theoretical_qty=round(theoretical_qty, 3),
+                wastage_percent=wastage_percent,
+                order_qty=order_qty,
+                rate=float(line.rate),
+                amount=order_qty * float(line.rate),
+            )
+        )
+    return rows
 
 
 # --------------------------------------------------------------------------

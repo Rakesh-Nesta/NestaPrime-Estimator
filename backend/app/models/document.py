@@ -143,6 +143,14 @@ class CostSheetLine(Base):
         UUID(as_uuid=True), ForeignKey("labour_categories.id"), nullable=True
     )
 
+    # J.3: "Wastage %" -- the % already folded into `quantity` (the ordered
+    # qty) by whichever take-off engine created this line, e.g. 5% steel,
+    # 10% netting, the turf roll-layout algorithm's own computed %. Null
+    # for manual lines and any line with no wastage concept (a fixture
+    # count, a lump-sum item) -- the Consumption Sheet then shows
+    # theoretical qty == order qty for those, not a fabricated 0%.
+    wastage_percent: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
