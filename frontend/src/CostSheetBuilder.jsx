@@ -10,6 +10,7 @@ import {
   addHvacTakeoff,
   addLightingTakeoff,
   addLineMarkingTakeoff,
+  addPlayEquipmentTakeoff,
   addStructureTakeoff,
   addTurfTakeoff,
   addWoodenFlooringTakeoff,
@@ -34,6 +35,7 @@ const TABS = [
   { key: "hvac", label: "HVAC (G.5)" },
   { key: "accessories", label: "Accessories (I)" },
   { key: "athletics", label: "Athletic track (G.3)" },
+  { key: "play_equipment", label: "Play equipment (G.4)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -1246,6 +1248,108 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
 }
 
 // ---------------------------------------------------------------------------
+// Kids play equipment (Part G.4)
+// ---------------------------------------------------------------------------
+
+function emptyPlayEquipmentItem() {
+  return {
+    item_name: "", footprint_l_ft: "", footprint_w_ft: "", fall_zone_ft: "6",
+    equipment_height_m: "", equipment_rate: "", epdm_rate_per_sqm: "",
+  };
+}
+
+function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [projectSportId, setProjectSportId] = useState("");
+  const [items, setItems] = useState([emptyPlayEquipmentItem()]);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  function addItem() {
+    setItems((rows) => [...rows, emptyPlayEquipmentItem()]);
+  }
+  function updateItem(i, field, value) {
+    setItems((rows) => rows.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+  function removeItem(i) {
+    setItems((rows) => rows.filter((_, idx) => idx !== i));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: projectSportId,
+        items: items.map((row) => ({
+          item_name: row.item_name,
+          footprint_l_ft: Number(row.footprint_l_ft),
+          footprint_w_ft: Number(row.footprint_w_ft),
+          fall_zone_ft: num(row.fall_zone_ft) ?? 6,
+          equipment_height_m: num(row.equipment_height_m),
+          equipment_rate: Number(row.equipment_rate),
+          epdm_rate_per_sqm: Number(row.epdm_rate_per_sqm),
+        })),
+      };
+      const res = await addPlayEquipmentTakeoff(token, costSheetId, payload);
+      setResult(res);
+      setItems([emptyPlayEquipmentItem()]);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
+      <p className="text-[11px] text-gray-400">
+        Each item gets a supply &amp; install line plus an EPDM safety-surfacing line, sized to footprint + fall
+        zone on each side (default 6 ft, G.4). The IS 15650 note compares equipment height (if given) against the
+        40mm EPDM system's 1.5m rated CFH (F.2) -- informational only, not priced.
+      </p>
+
+      <div className="space-y-3">
+        {items.map((row, i) => (
+          <div key={i} className="border border-gray-200 rounded p-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <TextInput
+                value={row.item_name}
+                onChange={(v) => updateItem(i, "item_name", v)}
+                placeholder="e.g. Multi-play unit, Swings, Slide, See-saw, Climber, Spring rider"
+              />
+              {items.length > 1 && (
+                <button type="button" onClick={() => removeItem(i)} className="ml-2 text-xs text-red-600 hover:underline shrink-0">
+                  Remove
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <Field label="Footprint L (ft)"><NumberInput value={row.footprint_l_ft} onChange={(v) => updateItem(i, "footprint_l_ft", v)} required /></Field>
+              <Field label="Footprint W (ft)"><NumberInput value={row.footprint_w_ft} onChange={(v) => updateItem(i, "footprint_w_ft", v)} required /></Field>
+              <Field label="Fall zone (ft)" hint="6 = G.4 default"><NumberInput value={row.fall_zone_ft} onChange={(v) => updateItem(i, "fall_zone_ft", v)} /></Field>
+              <Field label="Height (m)" hint="optional, for IS 15650 note"><NumberInput value={row.equipment_height_m} onChange={(v) => updateItem(i, "equipment_height_m", v)} /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Equipment Rs (supply & install)"><NumberInput value={row.equipment_rate} onChange={(v) => updateItem(i, "equipment_rate", v)} required /></Field>
+              <Field label="EPDM Rs/sqm"><NumberInput value={row.epdm_rate_per_sqm} onChange={(v) => updateItem(i, "epdm_rate_per_sqm", v)} required /></Field>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={addItem} className="text-xs text-blue-600 hover:underline">
+        + Add another item
+      </button>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -1589,6 +1693,7 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "hvac" && <HvacForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "accessories" && <AccessoriesForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "athletics" && <AthleticsForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "play_equipment" && <PlayEquipmentForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}

@@ -13,6 +13,7 @@ from app.api import (
     hvac,
     lighting,
     pdf_documents,
+    play_equipment,
     pricing,
     projects,
     purchase_orders,
@@ -67,6 +68,7 @@ app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
 app.include_router(accessories.accessories_router)
 app.include_router(athletics.athletics_router)
+app.include_router(play_equipment.play_equipment_router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
 app.include_router(pdf_documents.pdf_documents_router)
