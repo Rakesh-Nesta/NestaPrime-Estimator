@@ -369,3 +369,96 @@ export async function releaseReport(token, reportId) {
   });
   return handle(res);
 }
+
+// --- Parts D/E/F/G.5/H/J.2: Cost Sheet take-off engines ---
+
+export async function listCostSheetLines(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lines`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function addCostSheetLine(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lines`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deleteCostSheetLine(token, costSheetId, lineId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lines/${lineId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}
+
+export async function recomputeCostSheet(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/recompute`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function getLabourWarnings(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/labour-warnings`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function addStructureTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/structures`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addBaseTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/base`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addDrainageTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/drainage`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addTurfTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/flooring/turf`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addLightingTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lighting`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addHvacTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/hvac`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}

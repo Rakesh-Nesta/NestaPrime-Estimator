@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import CostSheetBuilder from "./CostSheetBuilder";
 import {
   createCostSheet,
   createEstimate,
@@ -26,6 +27,7 @@ export default function Documents({ token, project, onBack }) {
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [builderCostSheet, setBuilderCostSheet] = useState(null);
 
   function load() {
     return Promise.all([
@@ -83,41 +85,65 @@ export default function Documents({ token, project, onBack }) {
         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
       </div>
 
-      <CostSheetPanel
-        token={token}
-        project={project}
-        costSheets={costSheets}
-        onAction={withErrorHandling}
-      />
+      {builderCostSheet ? (
+        <CostSheetBuilder
+          token={token}
+          costSheet={builderCostSheet}
+          projectSports={projectSports}
+          sports={sports}
+          onBack={() => {
+            setBuilderCostSheet(null);
+            load();
+          }}
+          onCostSheetUpdated={(updated) => {
+            setBuilderCostSheet(updated);
+            load();
+          }}
+        />
+      ) : (
+        <>
+          <CostSheetPanel
+            token={token}
+            project={project}
+            costSheets={costSheets}
+            onAction={withErrorHandling}
+            onBuild={setBuilderCostSheet}
+          />
 
-      <EstimatePanel
-        token={token}
-        project={project}
-        activeCostSheet={activeCostSheet}
-        projectSports={projectSports}
-        sportsById={sportsById}
-        estimates={estimates}
-        onAction={withErrorHandling}
-      />
+          <EstimatePanel
+            token={token}
+            project={project}
+            activeCostSheet={activeCostSheet}
+            projectSports={projectSports}
+            sportsById={sportsById}
+            estimates={estimates}
+            onAction={withErrorHandling}
+          />
 
-      <QuotationPanel
-        token={token}
-        project={project}
-        estimates={estimates}
-        quotations={quotations}
-        onAction={withErrorHandling}
-      />
+          <QuotationPanel
+            token={token}
+            project={project}
+            estimates={estimates}
+            quotations={quotations}
+            onAction={withErrorHandling}
+          />
+        </>
+      )}
     </div>
   );
 }
 
-function CostSheetPanel({ token, project, costSheets, onAction }) {
+function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
   const [costTotal, setCostTotal] = useState("");
   const active = costSheets.find((c) => c.status !== "superseded");
 
   const handleCreate = onAction(async () => {
     await createCostSheet(token, project.id, { cost_total: Number(costTotal) });
     setCostTotal("");
+  });
+  const handleCreateEmpty = onAction(async () => {
+    const created = await createCostSheet(token, project.id, {});
+    onBuild(created);
   });
   const handleVerify = onAction(async (id) => verifyCostSheet(token, id));
   const handleRevise = onAction(async (id) => {
@@ -134,11 +160,18 @@ function CostSheetPanel({ token, project, costSheets, onAction }) {
             {cs.document_no} · Rs {cs.cost_total.toLocaleString()} ·{" "}
             <StatusBadge status={cs.status} />
           </span>
-          {cs.status === "draft" && (
-            <button onClick={() => handleVerify(cs.id)} className="text-xs text-blue-600 hover:underline">
-              Verify
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {cs.status === "draft" && (
+              <>
+                <button onClick={() => onBuild(cs)} className="text-xs text-blue-600 hover:underline">
+                  Build from take-off
+                </button>
+                <button onClick={() => handleVerify(cs.id)} className="text-xs text-blue-600 hover:underline">
+                  Verify
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ))}
       <div className="flex items-center gap-2">
@@ -166,6 +199,14 @@ function CostSheetPanel({ token, project, costSheets, onAction }) {
           </button>
         )}
       </div>
+      {!active && (
+        <button
+          onClick={handleCreateEmpty}
+          className="w-full text-xs text-blue-600 hover:underline text-center py-1"
+        >
+          …or start an empty Cost Sheet and build it up from Structures/Base/Flooring/etc. take-offs
+        </button>
+      )}
     </div>
   );
 }
