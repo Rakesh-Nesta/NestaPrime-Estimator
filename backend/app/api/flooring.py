@@ -10,12 +10,24 @@ from app.api.documents import CostSheetLineOut, _line_to_out
 from app.api.site_works import _get_cost_sheet, _labour_category, _resolve_dimensions
 from app.core.auth import require_roles
 from app.db.session import get_db
-from app.models.document import CostSheetLine, WorkPackage
+from app.models.document import CostSheet, CostSheetLine, WorkPackage
 from app.models.rate_item import RateSource
+from app.models.sport import ProjectSport
 
 flooring_router = APIRouter(tags=["flooring"])
 
 COST_ROLES = ("pm", "director")
+
+
+def _get_project_sport(db: Session, cost_sheet: CostSheet, project_sport_id: uuid.UUID) -> ProjectSport:
+    project_sport = (
+        db.query(ProjectSport)
+        .filter(ProjectSport.id == project_sport_id, ProjectSport.project_id == cost_sheet.project_id)
+        .first()
+    )
+    if not project_sport:
+        raise HTTPException(status_code=404, detail="Sport selection not on this project")
+    return project_sport
 
 FT_TO_M = 0.3048
 ROLL_LENGTH_M = 25.0
@@ -101,11 +113,11 @@ def add_turf_takeoff(
 ):
     """F.5: roll-layout optimisation (evaluates every roll width x lay
     direction x cut-length choice, orders the minimum sqm) and infill kg
-    by pile height. Everything else in Part F -- indoor/outdoor flooring
-    other than turf, line-marking sets on their own -- has no comparable
-    formula and is better entered as a plain CostSheetLine (area x rate)
-    via the generic /cost-sheets/{id}/lines endpoint than reimplemented
-    here."""
+    by pile height. Wooden flooring (F.3), acrylic/PU surfacing (F.2/F.3)
+    and standalone line marking (F.6) each have their own take-off below;
+    anything else in Part F still has no comparable formula and is better
+    entered as a plain CostSheetLine (area x rate) via the generic
+    /cost-sheets/{id}/lines endpoint than reimplemented here."""
     cost_sheet = _get_cost_sheet(db, cost_sheet_id)
     L, W, project_sport = _resolve_dimensions(
         db, cost_sheet, payload.project_sport_id, payload.build_l_ft, payload.build_w_ft
@@ -209,5 +221,276 @@ def add_turf_takeoff(
             "sand_kg": round(build_area_sqm * sand_kg_per_sqm, 2),
             "rubber_kg": round(build_area_sqm * rubber_kg_per_sqm, 2),
         },
+        lines=[_line_to_out(line) for line in lines_to_create],
+    )
+
+
+# ---------------------------------------------------------------------------
+# F.3 Indoor wooden flooring layer system
+# ---------------------------------------------------------------------------
+
+
+class WoodenFlooringTakeoffRequest(BaseModel):
+    project_sport_id: uuid.UUID
+    build_l_ft: float | None = None
+    build_w_ft: float | None = None
+    hardwood_rate_per_sqft: float = Field(gt=0)
+    include_ply: bool = True
+    ply_rate_per_sqft: float | None = Field(default=None, gt=0)
+    include_battens: bool = True
+    battens_rate_per_sqft: float | None = Field(default=None, gt=0)
+    include_moisture_barrier: bool = True
+    moisture_barrier_rate_per_sqft: float | None = Field(default=None, gt=0)
+
+
+class WoodenFlooringTakeoffOut(BaseModel):
+    breakdown: dict
+    lines: list[CostSheetLineOut]
+
+
+@flooring_router.post(
+    "/cost-sheets/{cost_sheet_id}/flooring/wooden", response_model=WoodenFlooringTakeoffOut, status_code=201
+)
+def add_wooden_flooring_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: WoodenFlooringTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """F.3: 'hardwood 22 mm T&G -> 12 mm ply -> battens/cradles with
+    rubber pads (the sprung layer) -> moisture barrier (DPM)' -- the base
+    below that (PCC/RCC/compacted stone) is the existing Base (D.1)
+    take-off's job, run separately. Each layer covers the same footprint,
+    so one L x W input fans out into up to four correctly tagged lines
+    instead of the PM re-typing the same area four times (and forgetting
+    one, per the app's own founding pain point).
+
+    Only the hardwood line carries labour_category_id=wooden_flooring
+    with unit sqft, so it alone can pick up J.2's activity rate; the
+    supporting layers carry no labour_category_id and use the blended
+    fallback, so the one installation isn't billed the activity rate
+    four times over."""
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+    L, W, _project_sport = _resolve_dimensions(
+        db, cost_sheet, payload.project_sport_id, payload.build_l_ft, payload.build_w_ft
+    )
+    area_sqft = L * W
+
+    if payload.include_ply and payload.ply_rate_per_sqft is None:
+        raise HTTPException(status_code=422, detail="ply_rate_per_sqft is required when include_ply is true")
+    if payload.include_battens and payload.battens_rate_per_sqft is None:
+        raise HTTPException(status_code=422, detail="battens_rate_per_sqft is required when include_battens is true")
+    if payload.include_moisture_barrier and payload.moisture_barrier_rate_per_sqft is None:
+        raise HTTPException(
+            status_code=422, detail="moisture_barrier_rate_per_sqft is required when include_moisture_barrier is true"
+        )
+
+    wooden_category = _labour_category(db, "wooden_flooring")
+
+    lines_to_create = [
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Wooden flooring",
+            item_name="Hardwood 22mm T&G",
+            unit="sqft",
+            quantity=round(area_sqft, 2),
+            rate=payload.hardwood_rate_per_sqft,
+            source=RateSource.MANUAL,
+            labour_category_id=wooden_category.id if wooden_category else None,
+        )
+    ]
+    if payload.include_ply:
+        lines_to_create.append(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet_id,
+                project_sport_id=payload.project_sport_id,
+                work_package=WorkPackage.FLOORING,
+                category="Wooden flooring",
+                item_name="12mm plywood underlayer",
+                unit="sqft",
+                quantity=round(area_sqft, 2),
+                rate=payload.ply_rate_per_sqft,
+                source=RateSource.MANUAL,
+            )
+        )
+    if payload.include_battens:
+        lines_to_create.append(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet_id,
+                project_sport_id=payload.project_sport_id,
+                work_package=WorkPackage.FLOORING,
+                category="Wooden flooring",
+                item_name="Battens/cradles with rubber pads (sprung layer)",
+                unit="sqft",
+                quantity=round(area_sqft, 2),
+                rate=payload.battens_rate_per_sqft,
+                source=RateSource.MANUAL,
+            )
+        )
+    if payload.include_moisture_barrier:
+        lines_to_create.append(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet_id,
+                project_sport_id=payload.project_sport_id,
+                work_package=WorkPackage.FLOORING,
+                category="Wooden flooring",
+                item_name="Moisture barrier (DPM)",
+                unit="sqft",
+                quantity=round(area_sqft, 2),
+                rate=payload.moisture_barrier_rate_per_sqft,
+                source=RateSource.MANUAL,
+            )
+        )
+
+    for line in lines_to_create:
+        db.add(line)
+    db.commit()
+    for line in lines_to_create:
+        db.refresh(line)
+
+    return WoodenFlooringTakeoffOut(
+        breakdown={"area_sqft": round(area_sqft, 2), "layers": len(lines_to_create)},
+        lines=[_line_to_out(line) for line in lines_to_create],
+    )
+
+
+# ---------------------------------------------------------------------------
+# F.2/F.3 Acrylic / PU surfacing
+# ---------------------------------------------------------------------------
+
+
+class SurfaceType(str, Enum):
+    ACRYLIC = "acrylic"
+    PU = "pu"
+
+
+class AcrylicPuTakeoffRequest(BaseModel):
+    project_sport_id: uuid.UUID
+    build_l_ft: float | None = None
+    build_w_ft: float | None = None
+    surface_type: SurfaceType
+    coats: int = Field(default=1, ge=1)  # F.2: acrylic "5-8 coats"; PU is a single applied system, coats=1
+    rate_per_sqft_per_coat: float = Field(gt=0)
+
+
+class AcrylicPuTakeoffOut(BaseModel):
+    breakdown: dict
+    lines: list[CostSheetLineOut]
+
+
+@flooring_router.post(
+    "/cost-sheets/{cost_sheet_id}/flooring/acrylic-pu", response_model=AcrylicPuTakeoffOut, status_code=201
+)
+def add_acrylic_pu_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: AcrylicPuTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """F.2/F.3: acrylic is applied in multiple coats ('5-8 coats'), so
+    quantity is area_sqft x coats -- one extra coat is exactly one more
+    unit of labour and material, which J.2's 'Rs/sqft acrylic (per coat)'
+    activity rate is written to price directly. The sub-base under this
+    (asphalt/WBM/PCC) is the existing Base (D.1) take-off's job, run
+    separately."""
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+    L, W, _project_sport = _resolve_dimensions(
+        db, cost_sheet, payload.project_sport_id, payload.build_l_ft, payload.build_w_ft
+    )
+    area_sqft = L * W
+    quantity_sqft_coats = area_sqft * payload.coats
+
+    acrylic_pu_category = _labour_category(db, "acrylic_pu")
+    label = "Acrylic" if payload.surface_type == SurfaceType.ACRYLIC else "PU"
+
+    line = CostSheetLine(
+        cost_sheet_id=cost_sheet_id,
+        project_sport_id=payload.project_sport_id,
+        work_package=WorkPackage.FLOORING,
+        category="Acrylic/PU surfacing",
+        item_name=f"{label} surfacing ({payload.coats} coat{'s' if payload.coats != 1 else ''})",
+        unit="sqft",
+        quantity=round(quantity_sqft_coats, 2),
+        rate=payload.rate_per_sqft_per_coat,
+        source=RateSource.MANUAL,
+        labour_category_id=acrylic_pu_category.id if acrylic_pu_category else None,
+    )
+    db.add(line)
+    db.commit()
+    db.refresh(line)
+
+    return AcrylicPuTakeoffOut(
+        breakdown={"area_sqft": round(area_sqft, 2), "coats": payload.coats, "quantity_sqft_coats": round(quantity_sqft_coats, 2)},
+        lines=[_line_to_out(line)],
+    )
+
+
+# ---------------------------------------------------------------------------
+# F.6 Line-marking sets (standalone -- for any flooring type; turf's own
+# take-off keeps its inline single-set field for the common single-sport
+# case, this covers multipurpose courts with several named sets)
+# ---------------------------------------------------------------------------
+
+
+class LineMarkingStyle(str, Enum):
+    INLAID = "inlaid"  # turf
+    PAINTED = "painted"  # acrylic/hard courts
+
+
+class LineMarkingSetIn(BaseModel):
+    sport_label: str = Field(min_length=1)  # e.g. "Basketball (white)"
+    style: LineMarkingStyle
+    rate_per_set: float = Field(gt=0)
+
+
+class LineMarkingTakeoffRequest(BaseModel):
+    project_sport_id: uuid.UUID
+    sets: list[LineMarkingSetIn] = Field(min_length=1, max_length=4)  # F.6: "Multipurpose ... up to 4"
+
+
+class LineMarkingTakeoffOut(BaseModel):
+    breakdown: dict
+    lines: list[CostSheetLineOut]
+
+
+@flooring_router.post(
+    "/cost-sheets/{cost_sheet_id}/flooring/line-marking", response_model=LineMarkingTakeoffOut, status_code=201
+)
+def add_line_marking_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: LineMarkingTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """F.6: 'Multipurpose: up to 4 [sets] ... per sport' -- one set per
+    sport sharing a court, each independently priced and styled (inlaid
+    for turf, painted for acrylic/hard courts)."""
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+    _get_project_sport(db, cost_sheet, payload.project_sport_id)
+
+    lines_to_create = [
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Line marking",
+            item_name=f"{s.sport_label} line marking ({s.style.value})",
+            unit="set",
+            quantity=1,
+            rate=s.rate_per_set,
+            source=RateSource.MANUAL,
+        )
+        for s in payload.sets
+    ]
+    for line in lines_to_create:
+        db.add(line)
+    db.commit()
+    for line in lines_to_create:
+        db.refresh(line)
+
+    return LineMarkingTakeoffOut(
+        breakdown={"sets": len(lines_to_create)},
         lines=[_line_to_out(line) for line in lines_to_create],
     )

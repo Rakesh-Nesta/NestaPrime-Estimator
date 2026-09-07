@@ -106,19 +106,26 @@ SITE_ESTABLISHMENT_PERCENT_DEFAULT = 6.0  # D.4 "[confirm 4-8%]" -- midpoint
 # effort, not material value." Named activities, matched by the labour
 # category on the line AND the line's own unit -- an activity rate only
 # applies when a line's unit matches what that activity is priced in.
-# wooden_flooring, acrylic_pu and electrical have Settings keys below for
-# completeness (J.2 names all six) but no take-off engine yet produces a
-# line in their matching unit (sqft/sqft-per-coat/point), so they never
-# fire today -- a documented, honest gap, not a bug. Netting and pool_mep
-# have no activity-rate alternative in J.2's own table, so they always use
-# the category-% fallback, by design. None of these Settings carry a
-# numeric default -- J.2 gives no [confirm] figure for them, unlike the %
-# fallback table -- so every Cost Sheet uses the % fallback until the
-# Director actually configures a real rate in Master Settings.
+# electrical has a Settings key below for completeness (J.2 names all six)
+# but no take-off engine produces a line in its matching unit (point), so
+# it never fires today -- a documented, honest gap, not a bug. Netting and
+# pool_mep have no activity-rate alternative in J.2's own table, so they
+# always use the category-% fallback, by design. None of these Settings
+# carry a numeric default -- J.2 gives no [confirm] figure for them,
+# unlike the % fallback table -- so every Cost Sheet uses the % fallback
+# until the Director actually configures a real rate in Master Settings.
+# wooden_flooring and acrylic_pu (Part F.3/F.2) only fire on the single
+# "finished surface" line each of flooring.py's wooden/acrylic-PU
+# take-offs produces -- their supporting layers (ply, battens, moisture
+# barrier) carry no labour_category_id at all and use the blended
+# fallback, so one installation isn't charged the activity rate multiple
+# times over.
 ACTIVITY_RATE_RULES: list[tuple[str, str, str]] = [
     ("ms_fabrication_erection", "kg", "activity_rate_ms_per_kg"),
     ("civil_base_site_prep", "cum", "activity_rate_concrete_per_cum"),
     ("turf_laying", "sqm", "activity_rate_turf_laying_per_sqm"),
+    ("wooden_flooring", "sqft", "activity_rate_wooden_flooring_per_sqft"),
+    ("acrylic_pu", "sqft", "activity_rate_acrylic_pu_per_sqft"),
 ]
 J2_NAMED_ACTIVITY_CATEGORY_KEYS = {
     "ms_fabrication_erection",

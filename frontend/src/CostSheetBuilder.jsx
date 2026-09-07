@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import {
   addAccessoriesTakeoff,
+  addAcrylicPuTakeoff,
   addBaseTakeoff,
   addCostSheetLine,
   addDrainageTakeoff,
   addHvacTakeoff,
   addLightingTakeoff,
+  addLineMarkingTakeoff,
   addStructureTakeoff,
   addTurfTakeoff,
+  addWoodenFlooringTakeoff,
   deleteCostSheetLine,
   getConsumptionSheet,
   getLabourWarnings,
@@ -22,6 +25,9 @@ const TABS = [
   { key: "base", label: "Base (D.1)" },
   { key: "drainage", label: "Drainage (D.3)" },
   { key: "turf", label: "Turf (F.5)" },
+  { key: "wooden", label: "Wooden floor (F.3)" },
+  { key: "acrylic_pu", label: "Acrylic/PU (F.2)" },
+  { key: "line_marking", label: "Line marking (F.6)" },
   { key: "lighting", label: "Lighting (H)" },
   { key: "hvac", label: "HVAC (G.5)" },
   { key: "accessories", label: "Accessories (I)" },
@@ -599,6 +605,228 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Line-marking sets"><NumberInput value={f.line_marking_sets} onChange={set("line_marking_sets")} min="0" /></Field>
         <Field label="Line-marking Rs/set"><NumberInput value={f.line_marking_rate_per_set} onChange={set("line_marking_rate_per_set")} /></Field>
       </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Wooden flooring (Part F.3)
+// ---------------------------------------------------------------------------
+
+function WoodenFlooringForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [f, setF] = useState({
+    project_sport_id: "", build_l_ft: "", build_w_ft: "", hardwood_rate_per_sqft: "",
+    include_ply: true, ply_rate_per_sqft: "",
+    include_battens: true, battens_rate_per_sqft: "",
+    include_moisture_barrier: true, moisture_barrier_rate_per_sqft: "",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: f.project_sport_id,
+        build_l_ft: num(f.build_l_ft),
+        build_w_ft: num(f.build_w_ft),
+        hardwood_rate_per_sqft: num(f.hardwood_rate_per_sqft),
+        include_ply: f.include_ply,
+        ply_rate_per_sqft: f.include_ply ? num(f.ply_rate_per_sqft) : undefined,
+        include_battens: f.include_battens,
+        battens_rate_per_sqft: f.include_battens ? num(f.battens_rate_per_sqft) : undefined,
+        include_moisture_barrier: f.include_moisture_barrier,
+        moisture_barrier_rate_per_sqft: f.include_moisture_barrier ? num(f.moisture_barrier_rate_per_sqft) : undefined,
+      };
+      const res = await addWoodenFlooringTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Build L (ft)" hint="blank = sport default"><NumberInput value={f.build_l_ft} onChange={set("build_l_ft")} /></Field>
+        <Field label="Build W (ft)" hint="blank = sport default"><NumberInput value={f.build_w_ft} onChange={set("build_w_ft")} /></Field>
+      </div>
+      <Field label="Hardwood 22mm T&G Rs/sqft"><NumberInput value={f.hardwood_rate_per_sqft} onChange={set("hardwood_rate_per_sqft")} required /></Field>
+
+      <div className="grid grid-cols-2 gap-2 items-end">
+        <CheckboxField label="12mm plywood underlayer" checked={f.include_ply} onChange={set("include_ply")} />
+        {f.include_ply && <NumberInput value={f.ply_rate_per_sqft} onChange={set("ply_rate_per_sqft")} placeholder="Rs/sqft" />}
+      </div>
+      <div className="grid grid-cols-2 gap-2 items-end">
+        <CheckboxField label="Battens/cradles + rubber pads (sprung layer)" checked={f.include_battens} onChange={set("include_battens")} />
+        {f.include_battens && <NumberInput value={f.battens_rate_per_sqft} onChange={set("battens_rate_per_sqft")} placeholder="Rs/sqft" />}
+      </div>
+      <div className="grid grid-cols-2 gap-2 items-end">
+        <CheckboxField label="Moisture barrier (DPM)" checked={f.include_moisture_barrier} onChange={set("include_moisture_barrier")} />
+        {f.include_moisture_barrier && (
+          <NumberInput value={f.moisture_barrier_rate_per_sqft} onChange={set("moisture_barrier_rate_per_sqft")} placeholder="Rs/sqft" />
+        )}
+      </div>
+      <p className="text-[11px] text-gray-400">Base (PCC/RCC/compacted stone) below this is the separate Base (D.1) tab.</p>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Acrylic / PU surfacing (Part F.2/F.3)
+// ---------------------------------------------------------------------------
+
+function AcrylicPuForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [f, setF] = useState({
+    project_sport_id: "", build_l_ft: "", build_w_ft: "", surface_type: "acrylic", coats: "6", rate_per_sqft_per_coat: "",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: f.project_sport_id,
+        build_l_ft: num(f.build_l_ft),
+        build_w_ft: num(f.build_w_ft),
+        surface_type: f.surface_type,
+        coats: Number(f.coats),
+        rate_per_sqft_per_coat: num(f.rate_per_sqft_per_coat),
+      };
+      const res = await addAcrylicPuTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Build L (ft)" hint="blank = sport default"><NumberInput value={f.build_l_ft} onChange={set("build_l_ft")} /></Field>
+        <Field label="Build W (ft)" hint="blank = sport default"><NumberInput value={f.build_w_ft} onChange={set("build_w_ft")} /></Field>
+      </div>
+      <Field label="Surface type">
+        <SelectInput
+          value={f.surface_type}
+          onChange={set("surface_type")}
+          options={[
+            { value: "acrylic", label: "Acrylic (3-5mm, 5-8 coats)" },
+            { value: "pu", label: "PU (5-6mm, single system)" },
+          ]}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Coats" hint="PU is usually 1"><NumberInput value={f.coats} onChange={set("coats")} min="1" required /></Field>
+        <Field label="Rs/sqft per coat"><NumberInput value={f.rate_per_sqft_per_coat} onChange={set("rate_per_sqft_per_coat")} required /></Field>
+      </div>
+      <p className="text-[11px] text-gray-400">Sub-base (asphalt/WBM/PCC) below this is the separate Base (D.1) tab.</p>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Line marking (Part F.6, standalone multi-set)
+// ---------------------------------------------------------------------------
+
+function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [projectSportId, setProjectSportId] = useState("");
+  const [sets, setSets] = useState([{ sport_label: "", style: "painted", rate_per_set: "" }]);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  function addSet() {
+    if (sets.length >= 4) return; // F.6: "Multipurpose: up to 4"
+    setSets((s) => [...s, { sport_label: "", style: "painted", rate_per_set: "" }]);
+  }
+  function updateSet(i, field, value) {
+    setSets((s) => s.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+  function removeSet(i) {
+    setSets((s) => s.filter((_, idx) => idx !== i));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: projectSportId,
+        sets: sets.map((s) => ({ sport_label: s.sport_label, style: s.style, rate_per_set: Number(s.rate_per_set) })),
+      };
+      const res = await addLineMarkingTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-600">Sets (up to 4 -- e.g. basketball white, volleyball yellow)</p>
+          {sets.length < 4 && (
+            <button type="button" onClick={addSet} className="text-xs text-blue-600 hover:underline">
+              + Add set
+            </button>
+          )}
+        </div>
+        {sets.map((row, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-5">
+              <TextInput value={row.sport_label} onChange={(v) => updateSet(i, "sport_label", v)} placeholder="e.g. Basketball (white)" />
+            </div>
+            <div className="col-span-3">
+              <SelectInput
+                value={row.style}
+                onChange={(v) => updateSet(i, "style", v)}
+                options={[
+                  { value: "painted", label: "Painted (acrylic/hard)" },
+                  { value: "inlaid", label: "Inlaid (turf)" },
+                ]}
+              />
+            </div>
+            <div className="col-span-3">
+              <NumberInput value={row.rate_per_set} onChange={(v) => updateSet(i, "rate_per_set", v)} placeholder="Rs/set" />
+            </div>
+            {sets.length > 1 && (
+              <button type="button" onClick={() => removeSet(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
         Compute &amp; add to Cost Sheet
@@ -1235,6 +1463,9 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "base" && <BaseForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "drainage" && <DrainageForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "turf" && <TurfForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "wooden" && <WoodenFlooringForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "acrylic_pu" && <AcrylicPuForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "line_marking" && <LineMarkingForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "lighting" && <LightingForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "hvac" && <HvacForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "accessories" && <AccessoriesForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}

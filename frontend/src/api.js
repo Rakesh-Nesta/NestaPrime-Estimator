@@ -455,6 +455,33 @@ export async function addTurfTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function addWoodenFlooringTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/flooring/wooden`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addAcrylicPuTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/flooring/acrylic-pu`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addLineMarkingTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/flooring/line-marking`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addLightingTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lighting`, {
     method: "POST",
