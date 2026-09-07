@@ -7,6 +7,7 @@ import {
   addBaseTakeoff,
   addCostSheetLine,
   addDrainageTakeoff,
+  addGymTakeoff,
   addHvacTakeoff,
   addLightingTakeoff,
   addLineMarkingTakeoff,
@@ -36,6 +37,7 @@ const TABS = [
   { key: "accessories", label: "Accessories (I)" },
   { key: "athletics", label: "Athletic track (G.3)" },
   { key: "play_equipment", label: "Play equipment (G.4)" },
+  { key: "gym", label: "Gym (G.2)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -1350,6 +1352,156 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
 }
 
 // ---------------------------------------------------------------------------
+// Gym (Part G.2)
+// ---------------------------------------------------------------------------
+
+function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [projectSportId, setProjectSportId] = useState("");
+  const [zones, setZones] = useState([]);
+  const [equipment, setEquipment] = useState([]);
+  const [capacity, setCapacity] = useState("");
+  const [electricalPointRate, setElectricalPointRate] = useState("");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  function addZone() {
+    setZones((rows) => [...rows, { zone_name: "", area_sqft: "", flooring_rate_per_sqft: "" }]);
+  }
+  function updateZone(i, field, value) {
+    setZones((rows) => rows.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+  function removeZone(i) {
+    setZones((rows) => rows.filter((_, idx) => idx !== i));
+  }
+
+  function addEquipment() {
+    setEquipment((rows) => [...rows, { item_name: "", brand_tier: "", quantity: "", rate: "" }]);
+  }
+  function updateEquipment(i, field, value) {
+    setEquipment((rows) => rows.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+  function removeEquipment(i) {
+    setEquipment((rows) => rows.filter((_, idx) => idx !== i));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: projectSportId,
+        zones: zones
+          .filter((z) => z.zone_name && z.area_sqft && z.flooring_rate_per_sqft)
+          .map((z) => ({
+            zone_name: z.zone_name,
+            area_sqft: Number(z.area_sqft),
+            flooring_rate_per_sqft: Number(z.flooring_rate_per_sqft),
+          })),
+        equipment: equipment
+          .filter((eq) => eq.item_name && eq.quantity && eq.rate)
+          .map((eq) => ({
+            item_name: eq.item_name,
+            brand_tier: eq.brand_tier || undefined,
+            quantity: Number(eq.quantity),
+            rate: Number(eq.rate),
+          })),
+        capacity_users_per_hour: num(capacity),
+        electrical_point_rate: num(electricalPointRate),
+      };
+      const res = await addGymTakeoff(token, costSheetId, payload);
+      setResult(res);
+      setZones([]);
+      setEquipment([]);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
+      <p className="text-[11px] text-gray-400">
+        HVAC and acoustic treatment: use the HVAC (G.5) tab on this sport (gymnasium already has a 20% acoustic
+        default). Lighting: use the Lighting (H) tab at 300 lux (H's own gym figure). Mirrors, sound, reception,
+        lockers, showers: add via Manual line -- no formula is given for those.
+      </p>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-600">Zones (Area -&gt; flooring per zone)</p>
+          <button type="button" onClick={addZone} className="text-xs text-blue-600 hover:underline">
+            + Add zone
+          </button>
+        </div>
+        {zones.map((row, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-5">
+              <TextInput
+                value={row.zone_name}
+                onChange={(v) => updateZone(i, "zone_name", v)}
+                placeholder="e.g. Cardio, Strength, Free weights, Functional, Studio"
+              />
+            </div>
+            <div className="col-span-3">
+              <NumberInput value={row.area_sqft} onChange={(v) => updateZone(i, "area_sqft", v)} placeholder="Area sqft" />
+            </div>
+            <div className="col-span-3">
+              <NumberInput value={row.flooring_rate_per_sqft} onChange={(v) => updateZone(i, "flooring_rate_per_sqft", v)} placeholder="Rs/sqft" />
+            </div>
+            <button type="button" onClick={() => removeZone(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-2 border-t border-gray-100 pt-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-gray-600">Equipment (brand tier, qty, rate)</p>
+          <button type="button" onClick={addEquipment} className="text-xs text-blue-600 hover:underline">
+            + Add equipment
+          </button>
+        </div>
+        {equipment.map((row, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-4">
+              <TextInput value={row.item_name} onChange={(v) => updateEquipment(i, "item_name", v)} placeholder="Item name" />
+            </div>
+            <div className="col-span-3">
+              <TextInput value={row.brand_tier} onChange={(v) => updateEquipment(i, "brand_tier", v)} placeholder="Brand tier (optional)" />
+            </div>
+            <div className="col-span-2">
+              <NumberInput value={row.quantity} onChange={(v) => updateEquipment(i, "quantity", v)} placeholder="Qty" />
+            </div>
+            <div className="col-span-2">
+              <NumberInput value={row.rate} onChange={(v) => updateEquipment(i, "rate", v)} placeholder="Rs/unit" />
+            </div>
+            <button type="button" onClick={() => removeEquipment(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+              Remove
+            </button>
+          </div>
+        ))}
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Capacity (users/hour)" hint="recorded only -- no catalogue formula given to size equipment from it">
+            <NumberInput value={capacity} onChange={setCapacity} />
+          </Field>
+          <Field label="Electrical Rs/point" hint="1 point per machine, required if any equipment above">
+            <NumberInput value={electricalPointRate} onChange={setElectricalPointRate} />
+          </Field>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -1694,6 +1846,7 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "accessories" && <AccessoriesForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "athletics" && <AthleticsForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "play_equipment" && <PlayEquipmentForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "gym" && <GymForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}

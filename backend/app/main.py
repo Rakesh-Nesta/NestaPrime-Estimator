@@ -10,6 +10,7 @@ from app.api import (
     documents,
     exports,
     flooring,
+    gym,
     hvac,
     lighting,
     pdf_documents,
@@ -66,6 +67,7 @@ app.include_router(site_works.site_works_router)
 app.include_router(flooring.flooring_router)
 app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
+app.include_router(gym.gym_router)
 app.include_router(accessories.accessories_router)
 app.include_router(athletics.athletics_router)
 app.include_router(play_equipment.play_equipment_router)
