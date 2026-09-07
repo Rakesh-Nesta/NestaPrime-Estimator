@@ -2018,13 +2018,20 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
 // Main builder
 // ---------------------------------------------------------------------------
 
-export default function CostSheetBuilder({ token, costSheet, projectSports, sports, onBack, onCostSheetUpdated }) {
+// B.1 field #1: "Resurfacing hides Site Prep, Base, Structure; shows
+// Flooring + Line Marking + Accessories." Repair and Supply Only have no
+// auto-effect text of their own anywhere in the blueprint, so only
+// Resurfacing filters tabs here -- see ProjectType's own docstring
+// (backend/app/models/project.py) for why nothing is fabricated for them.
+const TABS_HIDDEN_FOR_RESURFACING = new Set(["structure", "base", "drainage"]);
+
+export default function CostSheetBuilder({ token, costSheet, projectType, projectSports, sports, onBack, onCostSheetUpdated }) {
   const [lines, setLines] = useState([]);
   const [labourCategories, setLabourCategories] = useState([]);
   const [warnings, setWarnings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("structure");
+  const [tab, setTab] = useState(() => (projectType === "resurfacing" ? "turf" : "structure"));
   const [consumptionRows, setConsumptionRows] = useState(null);
   const [showConsumption, setShowConsumption] = useState(false);
 
@@ -2257,8 +2264,14 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
 
       {isDraft && (
         <div className="border-t border-gray-200 pt-4">
+          {projectType === "resurfacing" && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1 mb-2">
+              Resurfacing project: Structures, Base and Drainage are hidden (B.1) -- Flooring, Line marking and
+              Accessories apply.
+            </p>
+          )}
           <div className="flex flex-wrap gap-1 mb-4">
-            {TABS.map((t) => (
+            {(projectType === "resurfacing" ? TABS.filter((t) => !TABS_HIDDEN_FOR_RESURFACING.has(t.key)) : TABS).map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}

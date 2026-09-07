@@ -21,6 +21,7 @@ from app.models.project import (  # noqa: F401
     Package,
     PowerAvailable,
     Project,
+    ProjectType,
     SiteAccess,
     SiteCondition,
     SoilType,

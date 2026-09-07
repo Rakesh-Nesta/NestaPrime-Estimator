@@ -103,6 +103,7 @@ export default function Documents({ token, project, role, onBack }) {
         <CostSheetBuilder
           token={token}
           costSheet={builderCostSheet}
+          projectType={project.project_type}
           projectSports={projectSports}
           sports={sports}
           onBack={() => {

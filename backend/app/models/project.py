@@ -9,6 +9,26 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
+class ProjectType(str, enum.Enum):  # B.1 field #1
+    """B.1's own auto-effect text: 'Resurfacing hides Site Prep, Base,
+    Structure; shows Flooring + Line Marking + Accessories. Supply only
+    = goods delivered without installation: no labour, no site prep.'
+    Repair has no auto-effect text of its own anywhere in the blueprint
+    -- it's named only as an enum option and grouped with Resurfacing
+    for M.2 rule 8's small-job fast-track threshold, so no scope-hiding
+    is implemented for it here (there's nothing to implement). K.1b/K.4
+    (the latest, authoritative pricing text) confirm GST and the pricing
+    engine itself are NOT project-type-dependent -- flat 18% GST applies
+    universally, and Supply Only is priced identically to New Build
+    ("same model as turnkey, not a separate goods-pricing format") --
+    so no separate pricing path exists for any project type."""
+
+    NEW_BUILD = "new_build"
+    RESURFACING = "resurfacing"
+    REPAIR = "repair"
+    SUPPLY_ONLY = "supply_only"
+
+
 class SiteCondition(str, enum.Enum):  # B.1 field #4
     LEVEL = "level"
     SLOPED = "sloped"
@@ -66,6 +86,12 @@ class Project(Base):
 
     client_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False
+    )
+
+    # #1 Project type -- see ProjectType's own docstring for what its
+    # auto-effects actually are (and aren't).
+    project_type: Mapped[ProjectType] = mapped_column(
+        Enum(ProjectType, name="project_type"), default=ProjectType.NEW_BUILD, nullable=False
     )
 
     # #2 City/district — free text so "Other" is always representable; known

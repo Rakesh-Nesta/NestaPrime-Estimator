@@ -48,6 +48,57 @@ def test_create_client_and_project_happy_path(client, director_user):
     assert body["tender_mode"] is False
 
 
+# ---------------------------------------------------------------------------
+# Project Type (B.1 field #1)
+# ---------------------------------------------------------------------------
+
+
+def test_project_type_defaults_to_new_build(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+
+    res = client.post("/projects", json={"client_id": client_id, **BASE_PROJECT_FIELDS}, headers=headers)
+    assert res.status_code == 201, res.text
+    assert res.json()["project_type"] == "new_build"
+
+
+def test_project_type_can_be_set_explicitly(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+
+    for project_type in ["new_build", "resurfacing", "repair", "supply_only"]:
+        res = client.post(
+            "/projects", json={"client_id": client_id, "project_type": project_type, **BASE_PROJECT_FIELDS},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+        assert res.json()["project_type"] == project_type
+
+
+def test_project_type_is_returned_on_get(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    create_res = client.post(
+        "/projects", json={"client_id": client_id, "project_type": "resurfacing", **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    project_id = create_res.json()["id"]
+
+    get_res = client.get(f"/projects/{project_id}", headers=headers)
+    assert get_res.status_code == 200
+    assert get_res.json()["project_type"] == "resurfacing"
+
+
+def test_unknown_project_type_is_rejected(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects", json={"client_id": client_id, "project_type": "demolition", **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
 def test_government_client_auto_sets_tender_mode(client, director_user):
     """B.2: Client = Government auto-switches Tender Mode on."""
     headers = _login(client, director_user)

@@ -13,6 +13,7 @@ from app.models.project import (
     Package,
     PowerAvailable,
     Project,
+    ProjectType,
     SiteAccess,
     SiteCondition,
     SoilType,
@@ -49,6 +50,7 @@ def _generate_project_no(db: Session) -> str:
 
 class ProjectCreate(BaseModel):
     client_id: uuid.UUID
+    project_type: ProjectType = ProjectType.NEW_BUILD
     city: str
     site_address: str | None = None
     site_state_code: str | None = None
@@ -70,6 +72,7 @@ class ProjectOut(BaseModel):
     id: uuid.UUID
     project_no: str
     client_id: uuid.UUID
+    project_type: ProjectType
     city: str
     site_address: str | None
     distance_km: float | None

@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { createClient, createProject, listClients, listRegionalMultipliers } from "./api";
 
+const PROJECT_TYPES = [
+  ["new_build", "New Build"],
+  ["resurfacing", "Resurfacing"],
+  ["repair", "Repair"],
+  ["supply_only", "Supply only"],
+];
+
 const CLIENT_TYPES = [
   ["school", "School"],
   ["college", "College"],
@@ -32,6 +39,7 @@ const POWER_OPTIONS = [["yes", "Yes"], ["no", "No"], ["partial", "Partial"]];
 const PACKAGES = [["budget", "Budget"], ["standard", "Standard"], ["premium", "Premium"]];
 
 const emptyForm = {
+  projectType: "new_build",
   clientMode: "new", // "new" | "existing"
   existingClientId: "",
   clientName: "",
@@ -86,6 +94,7 @@ export default function ProjectSetup({ token, onProjectCreated }) {
 
       const project = await createProject(token, {
         client_id: clientId,
+        project_type: form.projectType,
         city: form.city,
         site_address: form.siteAddress || null,
         distance_km: form.distanceKm ? Number(form.distanceKm) : null,
@@ -119,6 +128,10 @@ export default function ProjectSetup({ token, onProjectCreated }) {
         <p className="text-2xl font-mono mt-2 text-blue-700">{result.project_no}</p>
 
         <div className="mt-4 space-y-2 text-sm">
+          <p className="text-gray-600">
+            <span className="font-medium">Project type:</span>{" "}
+            {PROJECT_TYPES.find(([v]) => v === result.project_type)?.[1] ?? result.project_type}
+          </p>
           <Flag label="Tender Mode" active={result.tender_mode} onText="ON — Government client (B.2)" offText="Off" />
           <Flag
             label="Soil test"
@@ -165,6 +178,20 @@ export default function ProjectSetup({ token, onProjectCreated }) {
   return (
     <form onSubmit={handleSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-white shadow rounded-lg p-8 space-y-5">
       <h2 className="text-lg font-semibold text-gray-900">New Project — Setup</h2>
+
+      <Select label="Project type" value={form.projectType} onChange={(v) => set("projectType", v)} options={PROJECT_TYPES} />
+      {form.projectType === "resurfacing" && (
+        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+          Resurfacing hides Site Prep, Base and Structure in the Cost Sheet builder — only Flooring, Line marking
+          and Accessories apply (B.1).
+        </p>
+      )}
+      {form.projectType === "supply_only" && (
+        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+          Supply only: goods delivered without installation (no labour, no site prep). Priced the same as a
+          turnkey project — one blended rate including GST, not itemized per good (K.1b).
+        </p>
+      )}
 
       <fieldset className="space-y-3 border-t pt-4">
         <legend className="text-sm font-medium text-gray-700 -mt-7 bg-white pr-2">Client</legend>
