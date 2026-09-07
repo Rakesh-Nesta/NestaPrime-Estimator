@@ -13,6 +13,11 @@ export default function MasterSettings({ token, onBack }) {
   const [bulkPercent, setBulkPercent] = useState("");
   const [bulkReason, setBulkReason] = useState("");
 
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [newUnit, setNewUnit] = useState("");
+  const [newReason, setNewReason] = useState("");
+
   function load() {
     return listSettings(token).then(setSettings);
   }
@@ -33,6 +38,21 @@ export default function MasterSettings({ token, onBack }) {
     try {
       await createSettingVersion(token, { key: editKey, value: editValue, reason: editReason || null });
       setEditKey(null);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleCreateNew(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await createSettingVersion(token, { key: newKey, value: newValue, unit: newUnit || null, reason: newReason || null });
+      setNewKey("");
+      setNewValue("");
+      setNewUnit("");
+      setNewReason("");
       await load();
     } catch (err) {
       setError(err.message);
@@ -134,6 +154,59 @@ export default function MasterSettings({ token, onBack }) {
           ))}
         </div>
       </div>
+
+      <form onSubmit={handleCreateNew} className="bg-white shadow rounded-lg p-6 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">Add a new setting</h3>
+        <p className="text-xs text-gray-400">
+          Any key not yet listed above (e.g. warranty_years_school, payment_schedule_advance_percent_club,
+          company_pan, company_gstin, company_bank_name, company_registered_office_city) -- create it once here,
+          then edit it above like any other setting.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Key</label>
+            <input
+              type="text"
+              required
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Value</label>
+            <input
+              type="text"
+              required
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Unit (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. %, years"
+              value={newUnit}
+              onChange={(e) => setNewUnit(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Reason (optional)</label>
+            <input
+              type="text"
+              value={newReason}
+              onChange={(e) => setNewReason(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+        <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+          Create setting
+        </button>
+      </form>
 
       <form onSubmit={handleBulkUpdate} className="bg-white shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-gray-700">Bulk update (Q.2 rule 5)</h3>

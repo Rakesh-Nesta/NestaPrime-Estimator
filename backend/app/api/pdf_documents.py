@@ -26,9 +26,10 @@ from sqlalchemy.orm import Session
 
 from app.api.documents import DOCUMENT_ROLES
 from app.api.schedule import get_schedule
+from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
 from app.db.session import get_db
-from app.models.client import Client
+from app.models.client import Client, ClientType
 from app.models.document import Estimate, EstimateOption, Quotation, QuotationLine
 from app.models.project import Project
 from app.models.scope_item import ProjectScopeItem, ScopeItem
@@ -39,8 +40,10 @@ pdf_documents_router = APIRouter(tags=["pdf-documents"])
 
 # Appendix B, condensed to printable clauses -- this project's own
 # blueprint text, reproduced as the "starter T&C" it explicitly names
-# itself, not third-party content.
-STARTER_TERMS = [
+# itself, not third-party content. The jurisdiction clause's city is
+# built separately by _starter_terms() below (Q.1/Part O: COMPANY's
+# registered-office city is Director-configurable, not a fixed string).
+_STARTER_TERMS_FIXED = [
     "Validity: 30 days from the date of this quotation.",
     "Payment: as per the payment schedule below, tied to the delivery milestones.",
     "Delivery timeline: as per the schedule below, from advance receipt and site handover.",
@@ -58,9 +61,26 @@ STARTER_TERMS = [
     "delay; either may terminate after 90 continuous days.",
     "Taxes: GST at the rate applicable on the date of invoice; any statutory change after the "
     "quotation date is to the client's account. GST on advances is payable on receipt.",
-    "Jurisdiction: courts at NestaPrime's registered office city; disputes above Rs 25 L go to "
-    "arbitration under the Arbitration and Conciliation Act 1996 with a sole arbitrator.",
 ]
+
+
+def _starter_terms(db: Session) -> list[str]:
+    """Appendix B's jurisdiction clause names 'NestaPrime's registered
+    office city' -- Part O's COMPANY master carries that city as a real
+    field, not a fixed string, so it's substituted in here whenever a
+    Director has actually configured company_registered_office_city;
+    otherwise the clause falls back to the same generic wording Appendix
+    B itself uses, rather than fabricating a city."""
+    city = get_current_setting_value(db, "company_registered_office_city")
+    jurisdiction = (
+        f"Jurisdiction: courts at {city}; disputes above Rs 25 L go to arbitration under the "
+        "Arbitration and Conciliation Act 1996 with a sole arbitrator."
+        if city
+        else "Jurisdiction: courts at NestaPrime's registered office city; disputes above Rs 25 L go to "
+        "arbitration under the Arbitration and Conciliation Act 1996 with a sole arbitrator."
+    )
+    return [*_STARTER_TERMS_FIXED, jurisdiction]
+
 
 WARRANTY_TABLE = [
     ("Flooring / turf", "Manufacturer-backed"),
@@ -69,6 +89,57 @@ WARRANTY_TABLE = [
     ("Pool equipment", "Manufacturer-backed"),
     ("Gym equipment", "Manufacturer-backed"),
 ]
+
+# B.2's own worked example is the only warranty DURATION the blueprint
+# gives for any client type: "Client = School -> ... Warranty 5 yr."
+# Every other client type has no figure anywhere in the document, so
+# none is fabricated here -- _warranty_years returns None for them
+# until a Director actually configures warranty_years_<client_type>.
+WARRANTY_YEARS_DEFAULT: dict[ClientType, int] = {ClientType.SCHOOL: 5}
+
+
+def _warranty_years(db: Session, client_type: ClientType | None) -> int | None:
+    if client_type is None:
+        return None
+    value = get_current_setting_value(db, f"warranty_years_{client_type.value}")
+    if value is not None:
+        return int(float(value))
+    return WARRANTY_YEARS_DEFAULT.get(client_type)
+
+
+# Part O COMPANY master: "NestaPrime legal name, PAN, bank details, logo,
+# e-invoice applicable flag, turnover band." No admin UI/table is built
+# for this (it's a handful of Director-set values for a single-tenant
+# app, not a multi-row master), so each field is a plain Master Setting
+# -- Director sets it once via the generic /settings endpoint, same
+# mechanism every other Q.1 constant in this app already uses.
+_COMPANY_SETTING_FIELDS: list[tuple[str, str]] = [
+    ("company_legal_name", "Registered as"),
+    ("company_pan", "PAN"),
+    ("company_gstin", "GSTIN"),
+    ("company_bank_name", "Bank"),
+    ("company_bank_account_name", "Account name"),
+    ("company_bank_account_number", "Account no."),
+    ("company_bank_ifsc", "IFSC"),
+]
+_COMPANY_IDENTITY_KEYS = {"company_legal_name", "company_pan", "company_gstin"}
+_COMPANY_BANK_KEYS = {"company_bank_name", "company_bank_account_name", "company_bank_account_number", "company_bank_ifsc"}
+
+
+def _company_details_lines(db: Session, keys: set[str] | None = None) -> list[str]:
+    """R.0 checklist: 'Logo (SVG/PNG), company details, GSTIN, bank
+    details for PDF | High.' None of this was printed anywhere before --
+    not hardcoded wrong, simply absent. Blank/unconfigured fields are
+    skipped rather than printed as '[confirm]' noise; a Director who
+    hasn't set any of these yet sees the same PDF as before this change."""
+    lines = []
+    for key, label in _COMPANY_SETTING_FIELDS:
+        if keys is not None and key not in keys:
+            continue
+        value = get_current_setting_value(db, key)
+        if value:
+            lines.append(f"<b>{label}:</b> {value}")
+    return lines
 
 
 def _get_estimate(db: Session, estimate_id: uuid.UUID) -> Estimate:
@@ -183,6 +254,7 @@ def get_estimate_pdf(
             f"<b>Date:</b> {(estimate.sent_at or estimate.created_at).date().isoformat()}",
             styles["Normal"],
         ),
+        *[Paragraph(line, styles["Normal"]) for line in _company_details_lines(db, _COMPANY_IDENTITY_KEYS)],
         Spacer(1, 3 * mm),
         *_client_block(styles, client, project),
         Spacer(1, 5 * mm),
@@ -287,6 +359,7 @@ def get_quotation_pdf(
             f"<b>Date:</b> {(quotation.sent_at or quotation.created_at).date().isoformat()}",
             styles["Normal"],
         ),
+        *[Paragraph(line, styles["Normal"]) for line in _company_details_lines(db, _COMPANY_IDENTITY_KEYS)],
         Spacer(1, 3 * mm),
         *_client_block(styles, client, project),
         Spacer(1, 5 * mm),
@@ -363,9 +436,18 @@ def get_quotation_pdf(
         story.append(milestone_table)
         story.append(Spacer(1, 2 * mm))
 
+    bank_lines = _company_details_lines(db, _COMPANY_BANK_KEYS)
+    if bank_lines:
+        story.append(Paragraph("Payment to", styles["SectionHeading"]))
+        story.extend(Paragraph(line, styles["Normal"]) for line in bank_lines)
+
     story.append(Paragraph("Warranty", styles["SectionHeading"]))
-    warranty_rows = [["Item", "Basis"]] + [[item, basis] for item, basis in WARRANTY_TABLE]
-    warranty_table = Table(warranty_rows, colWidths=[80 * mm, 95 * mm])
+    warranty_years = _warranty_years(db, client.type if client else None)
+    duration_text = f"{warranty_years} year(s)" if warranty_years is not None else "Not yet configured (Q.1)"
+    warranty_rows = [["Item", "Basis", "Duration"]] + [
+        [item, basis, duration_text] for item, basis in WARRANTY_TABLE
+    ]
+    warranty_table = Table(warranty_rows, colWidths=[65 * mm, 70 * mm, 40 * mm])
     warranty_table.setStyle(_TABLE_GRID)
     story.append(warranty_table)
 
@@ -391,7 +473,7 @@ def get_quotation_pdf(
     story.extend(_exclusions_flow(styles, exclusions))
 
     story.append(Paragraph("Terms &amp; conditions", styles["SectionHeading"]))
-    story.extend(Paragraph("&bull; " + term, styles["Normal"]) for term in STARTER_TERMS)
+    story.extend(Paragraph("&bull; " + term, styles["Normal"]) for term in _starter_terms(db))
 
     validity_note = (
         f"Valid until {quotation.sent_at.date().isoformat()} (30 days from sending)."

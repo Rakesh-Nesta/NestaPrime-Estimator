@@ -10,6 +10,7 @@ from app.api.settings import get_current_setting_value
 from app.api.sports import _POOL_KEYS, _recommend_base, _recommend_flooring, _recommend_structure
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.client import Client
 from app.models.project import BuildingStatus, Project
 from app.models.sport import ProjectSport, Sport
 
@@ -29,6 +30,21 @@ HANDOVER_DAYS_DEFAULT = 2
 def _get_setting_int(db: Session, key: str, default: int) -> int:
     value = get_current_setting_value(db, key)
     return int(value) if value is not None else default
+
+
+def _get_setting_float(db: Session, key: str, default: float) -> float:
+    value = get_current_setting_value(db, key)
+    return float(value) if value is not None else default
+
+
+# N: "e.g. 40% advance, 40% on flooring completion, 20% handover" -- the
+# only concrete figures the blueprint gives, for any client type. Q.1
+# lists "Payment templates ... Per client type ... Director" as
+# configurable, but no client type besides this example ever gets a
+# different number in the document -- so every client type defaults to
+# this same 40/40/20 split until a Director actually configures a
+# different one for that specific client_type via Master Settings.
+PAYMENT_SCHEDULE_PERCENT_DEFAULT = {"advance": 40.0, "milestone": 40.0, "handover": 20.0}
 
 # N: curing days keyed to (base type, flooring type) -- both are text we
 # generate ourselves in D.2/F.1-F.2's own vocabulary, so keyword matching
@@ -120,6 +136,7 @@ def get_schedule(
         raise HTTPException(status_code=404, detail="Sport selection not found")
     sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
     project = db.query(Project).filter(Project.id == project_sport.project_id).first()
+    client = db.query(Client).filter(Client.id == project.client_id).first()
 
     start = start_date or date.today()
     resolved_mobilisation_days = (
@@ -215,15 +232,32 @@ def get_schedule(
     total_days = cursor
     total_weeks = math.ceil(total_days / 7)
 
-    # N: "e.g. 40% advance, 40% on flooring completion, 20% handover"
+    # N: "e.g. 40% advance, 40% on flooring completion, 20% handover" --
+    # Q.1: "Payment templates ... per client type ... Director"
+    # configurable. The milestone structure (three stages tied to this
+    # schedule's own mobilisation/flooring-completion/handover days) is
+    # fixed -- the blueprint gives no alternative milestone breakdown for
+    # any client type -- but each stage's percentage is looked up per the
+    # client's own type, defaulting to the blueprint's own 40/40/20 until
+    # a Director configures a different split for that client type.
+    client_type_key = client.type.value if client is not None else "unknown"
+    advance_percent = _get_setting_float(
+        db, f"payment_schedule_advance_percent_{client_type_key}", PAYMENT_SCHEDULE_PERCENT_DEFAULT["advance"]
+    )
+    milestone_percent = _get_setting_float(
+        db, f"payment_schedule_milestone_percent_{client_type_key}", PAYMENT_SCHEDULE_PERCENT_DEFAULT["milestone"]
+    )
+    handover_percent = _get_setting_float(
+        db, f"payment_schedule_handover_percent_{client_type_key}", PAYMENT_SCHEDULE_PERCENT_DEFAULT["handover"]
+    )
     payment_schedule = [
-        PaymentMilestone(name="Advance", percent=40.0, date=start),
+        PaymentMilestone(name="Advance", percent=advance_percent, date=start),
         PaymentMilestone(
             name="Flooring completion",
-            percent=40.0,
+            percent=milestone_percent,
             date=start + timedelta(days=flooring_complete_day or total_days),
         ),
-        PaymentMilestone(name="Handover", percent=20.0, date=start + timedelta(days=total_days)),
+        PaymentMilestone(name="Handover", percent=handover_percent, date=start + timedelta(days=total_days)),
     ]
 
     return ScheduleOut(
