@@ -5,6 +5,7 @@ from app.api import (
     auth,
     clients,
     documents,
+    exports,
     flooring,
     hvac,
     lighting,
@@ -58,6 +59,7 @@ app.include_router(site_works.site_works_router)
 app.include_router(flooring.flooring_router)
 app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
+app.include_router(exports.exports_router)
 
 
 @app.get("/health")

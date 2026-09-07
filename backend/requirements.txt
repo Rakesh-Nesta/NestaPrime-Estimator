@@ -10,3 +10,4 @@ passlib[argon2]>=1.7.4
 python-multipart>=0.0.20
 pytest>=8.3
 httpx>=0.28
+openpyxl>=3.1
