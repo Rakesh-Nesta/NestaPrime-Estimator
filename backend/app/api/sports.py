@@ -17,6 +17,9 @@ project_sports_router = APIRouter(prefix="/projects", tags=["project-sports"])
 
 READ_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 WRITE_ROLES = ("sales", "pm", "director")
+# Q.2 rule 6: "Master Settings screen is Director-only (PM read-only)."
+# The Sport master list (Part C) follows the same convention.
+MASTER_WRITE_ROLES = ("director",)
 
 # D.2 Base selection matrix — sport groups as given in the table (not every
 # one of the 30 sports is covered; uncovered combinations return None rather
@@ -459,16 +462,97 @@ class SportOut(BaseModel):
     min_clear_height_ft: float | None
     governing_body: str
     source_citation: str | None
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
 
 
 @sports_router.get("", response_model=list[SportOut])
 def list_sports(
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
-    return db.query(Sport).order_by(Sport.display_order).all()
+    query = db.query(Sport)
+    if not include_inactive:
+        query = query.filter(Sport.is_active.is_(True))
+    return query.order_by(Sport.display_order).all()
+
+
+class SportCreate(BaseModel):
+    key: str
+    display_order: int
+    name: str
+    category: SportCategory
+    playing_dims: str
+    build_dims: str
+    playing_l_ft: float | None = None
+    playing_w_ft: float | None = None
+    build_l_ft: float | None = None
+    build_w_ft: float | None = None
+    min_clear_height_ft: float | None = None
+    governing_body: str
+    source_citation: str | None = None
+
+
+class SportUpdate(BaseModel):
+    """key is deliberately not editable: every _recommend_* function above
+    (and every take-off module elsewhere in this app) matches on
+    sport.key, not sport.id -- renaming it would silently strand every
+    D.2/E.4/F.1-F.2/H recommendation and every existing sport-specific
+    take-off formula for that sport. Create a new sport instead of
+    renaming a key that recommendations depend on."""
+
+    display_order: int | None = None
+    name: str | None = None
+    category: SportCategory | None = None
+    playing_dims: str | None = None
+    build_dims: str | None = None
+    playing_l_ft: float | None = None
+    playing_w_ft: float | None = None
+    build_l_ft: float | None = None
+    build_w_ft: float | None = None
+    min_clear_height_ft: float | None = None
+    governing_body: str | None = None
+    source_citation: str | None = None
+    is_active: bool | None = None
+
+
+@sports_router.post("", response_model=SportOut, status_code=201)
+def create_sport(
+    payload: SportCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    """Part C Sport master admin. A newly created sport has no entry in
+    any of this file's _recommend_* tables (they're keyed by sport.key),
+    so it gets no Base/Structure/Flooring/Lighting recommendation --
+    exactly the same "uncovered combination returns None" behaviour an
+    existing, unlisted sport already gets, not an error."""
+    if db.query(Sport).filter(Sport.key == payload.key).first():
+        raise HTTPException(status_code=409, detail=f"A sport with key '{payload.key}' already exists")
+    sport = Sport(**payload.model_dump())
+    db.add(sport)
+    db.commit()
+    db.refresh(sport)
+    return sport
+
+
+@sports_router.patch("/{sport_id}", response_model=SportOut)
+def update_sport(
+    sport_id: uuid.UUID,
+    payload: SportUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    sport = db.query(Sport).filter(Sport.id == sport_id).first()
+    if not sport:
+        raise HTTPException(status_code=404, detail="Sport not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(sport, field, value)
+    db.commit()
+    db.refresh(sport)
+    return sport
 
 
 class ProjectSportCreate(BaseModel):

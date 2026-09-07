@@ -14,6 +14,8 @@ project_scope_items_router = APIRouter(prefix="/projects", tags=["project-scope-
 
 READ_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 WRITE_ROLES = ("sales", "pm", "director")
+# Q.2 rule 6: "Master Settings screen is Director-only (PM read-only)."
+MASTER_WRITE_ROLES = ("director",)
 
 
 class ScopeItemOut(BaseModel):
@@ -22,16 +24,71 @@ class ScopeItemOut(BaseModel):
     display_order: int
     group: ScopeItemGroup
     name: str
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
 
 
 @scope_items_router.get("", response_model=list[ScopeItemOut])
 def list_scope_items(
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
-    return db.query(ScopeItem).order_by(ScopeItem.display_order).all()
+    query = db.query(ScopeItem)
+    if not include_inactive:
+        query = query.filter(ScopeItem.is_active.is_(True))
+    return query.order_by(ScopeItem.display_order).all()
+
+
+class ScopeItemCreate(BaseModel):
+    key: str
+    display_order: int
+    group: ScopeItemGroup
+    name: str
+
+
+class ScopeItemUpdate(BaseModel):
+    """key is deliberately not editable -- nothing elsewhere currently
+    matches on a scope item's key, but keeping the same immutable-key
+    convention as Sport avoids introducing a silent-breakage risk later."""
+
+    display_order: int | None = None
+    group: ScopeItemGroup | None = None
+    name: str | None = None
+    is_active: bool | None = None
+
+
+@scope_items_router.post("", response_model=ScopeItemOut, status_code=201)
+def create_scope_item(
+    payload: ScopeItemCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    if db.query(ScopeItem).filter(ScopeItem.key == payload.key).first():
+        raise HTTPException(status_code=409, detail=f"A scope item with key '{payload.key}' already exists")
+    scope_item = ScopeItem(**payload.model_dump())
+    db.add(scope_item)
+    db.commit()
+    db.refresh(scope_item)
+    return scope_item
+
+
+@scope_items_router.patch("/{scope_item_id}", response_model=ScopeItemOut)
+def update_scope_item(
+    scope_item_id: uuid.UUID,
+    payload: ScopeItemUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    scope_item = db.query(ScopeItem).filter(ScopeItem.id == scope_item_id).first()
+    if not scope_item:
+        raise HTTPException(status_code=404, detail="Scope item not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(scope_item, field, value)
+    db.commit()
+    db.refresh(scope_item)
+    return scope_item
 
 
 class ProjectScopeItemCreate(BaseModel):

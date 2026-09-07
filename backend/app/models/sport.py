@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,8 +18,11 @@ class SportCategory(str, enum.Enum):
 class Sport(Base):
     """Part C — MASTER SPORT LIST (Module 1), 30 sports from C.1/C.2.
 
-    Reference data, seeded once (see app/seed_data.py) and read-only via
-    the API in Phase 1b — no admin UI to edit these yet."""
+    Seeded once (see app/seed_data.py); Director-only CRUD now exists at
+    POST/PATCH /sports (sports.py), closing the Phase 1b "no admin UI"
+    gap. is_active governs the Sport Selection screen's default listing
+    -- deactivating retires a sport without breaking existing
+    ProjectSport rows that reference it."""
 
     __tablename__ = "sports"
 
@@ -55,6 +58,8 @@ class Sport(Base):
     # Printed on the client PDF later (C.3: source_citation), e.g.
     # "BWF Statutes Sec 1.1, 2024".
     source_citation: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
 class ProjectSport(Base):

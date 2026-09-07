@@ -8,6 +8,7 @@ import RateSheet from "./RateSheet";
 import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
 import SportSelection from "./SportSelection";
+import SportsScopeAdmin from "./SportsScopeAdmin";
 import TenderMode from "./TenderMode";
 
 export default function App() {
@@ -21,7 +22,7 @@ export default function App() {
   const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
   const [preNavScreen, setPreNavScreen] = useState("sports");
 
-  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports"];
+  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin"];
 
   function goToTopLevel(target) {
     if (TOP_LEVEL_SCREENS.includes(screen)) {
@@ -63,6 +64,9 @@ export default function App() {
             <button onClick={() => goToTopLevel("settings")} className="text-sm text-blue-600 hover:underline">
               {screen === "settings" ? "Back to project" : "Master Settings"}
             </button>
+            <button onClick={() => goToTopLevel("sports_scope_admin")} className="text-sm text-blue-600 hover:underline">
+              {screen === "sports_scope_admin" ? "Back to project" : "Sports & Scope Admin"}
+            </button>
             <button onClick={() => goToTopLevel("reports")} className="text-sm text-blue-600 hover:underline">
               {screen === "reports" ? "Back to project" : "Reports"}
             </button>
@@ -79,6 +83,9 @@ export default function App() {
         )}
         {screen === "settings" && (
           <MasterSettings token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "sports_scope_admin" && (
+          <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "reports" && (
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />

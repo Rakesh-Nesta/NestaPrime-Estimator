@@ -90,8 +90,27 @@ export async function listRegionalMultipliers(token) {
   return handle(res);
 }
 
-export async function listSports(token) {
-  const res = await fetch(`${API_BASE}/sports`, { headers: authHeaders(token) });
+export async function listSports(token, includeInactive = false) {
+  const params = includeInactive ? "?include_inactive=true" : "";
+  const res = await fetch(`${API_BASE}/sports${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createSport(token, payload) {
+  const res = await fetch(`${API_BASE}/sports`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateSport(token, sportId, payload) {
+  const res = await fetch(`${API_BASE}/sports/${sportId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   return handle(res);
 }
 
@@ -117,8 +136,27 @@ export async function removeProjectSport(token, projectId, selectionId) {
   if (!res.ok && res.status !== 204) return handle(res);
 }
 
-export async function listScopeItems(token) {
-  const res = await fetch(`${API_BASE}/scope-items`, { headers: authHeaders(token) });
+export async function listScopeItems(token, includeInactive = false) {
+  const params = includeInactive ? "?include_inactive=true" : "";
+  const res = await fetch(`${API_BASE}/scope-items${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createScopeItem(token, payload) {
+  const res = await fetch(`${API_BASE}/scope-items`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateScopeItem(token, scopeItemId, payload) {
+  const res = await fetch(`${API_BASE}/scope-items/${scopeItemId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
   return handle(res);
 }
 

@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,8 +20,11 @@ class ScopeItemGroup(str, enum.Enum):
 
 class ScopeItem(Base):
     """Part I — Additional Scope Checklist (Module 10), 30 items across six
-    groups. Reference data, seeded once (see app/seed_data.py) and
-    read-only via the API in Phase 1b."""
+    groups. Seeded once (see app/seed_data.py); Director-only CRUD now
+    exists at POST/PATCH /scope-items (scope_items.py), closing the
+    Phase 1b "no admin UI" gap. is_active governs the Additional Scope
+    Checklist screen's default listing -- deactivating retires an item
+    without breaking existing ProjectScopeItem rows that reference it."""
 
     __tablename__ = "scope_items"
 
@@ -34,6 +37,7 @@ class ScopeItem(Base):
         Enum(ScopeItemGroup, name="scope_item_group"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 
 class ProjectScopeItem(Base):
