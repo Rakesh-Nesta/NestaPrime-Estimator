@@ -442,6 +442,20 @@ export async function bulkUpdateSettings(token, payload) {
   return handle(res);
 }
 
+export async function createOverride(token, payload) {
+  const res = await fetch(`${API_BASE}/overrides`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function getK1Constants(token, costSheetId) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/k1-constants`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 // --- Part T: Reporting & Extraction ---
 
 export async function listReports(token) {

@@ -20,8 +20,10 @@ import {
   addStructureTakeoff,
   addTurfTakeoff,
   addWoodenFlooringTakeoff,
+  createOverride,
   deleteCostSheetLine,
   getConsumptionSheet,
+  getK1Constants,
   getLabourWarnings,
   listCostSheetLines,
   listLabourCategories,
@@ -255,6 +257,137 @@ function BreakdownPanel({ result }) {
 
 function num(v) {
   return v === "" || v === undefined ? undefined : Number(v);
+}
+
+// ---------------------------------------------------------------------------
+// K.1 constants & overrides (Q.2 rule 2)
+// ---------------------------------------------------------------------------
+
+function OverridesPanel({ token, costSheetId }) {
+  const [constants, setConstants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const [editingKey, setEditingKey] = useState(null);
+  const [overrideValue, setOverrideValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedNotice, setSavedNotice] = useState("");
+
+  function load() {
+    return getK1Constants(token, costSheetId)
+      .then(setConstants)
+      .catch((err) => setError(err.message));
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, costSheetId]);
+
+  function startEdit(constant) {
+    setEditingKey(constant.key);
+    setOverrideValue(String(constant.effective_value));
+    setReason("");
+    setError("");
+  }
+
+  async function handleSave(constant) {
+    setError("");
+    setSavedNotice("");
+    setSaving(true);
+    try {
+      await createOverride(token, {
+        document_type: "cost_sheet",
+        document_id: costSheetId,
+        setting_key: constant.key,
+        master_value: String(constant.master_value),
+        override_value: overrideValue,
+        reason,
+      });
+      setEditingKey(null);
+      await load();
+      setSavedNotice("Saved -- click Recompute total above to apply it.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const overriddenCount = constants.filter((c) => c.is_overridden).length;
+
+  if (loading) return null;
+
+  return (
+    <div className="border border-gray-200 rounded p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold text-gray-600">K.1 constants &amp; overrides (Q.2 rule 2)</p>
+          <p className="text-[11px] text-gray-400">
+            An override changes this cost sheet only, with a reason -- the global Master Setting is untouched.
+          </p>
+        </div>
+        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-blue-600 hover:underline">
+          {expanded ? "Hide" : overriddenCount > 0 ? `${overriddenCount} overridden` : "Show"}
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {savedNotice && <p className="text-xs text-green-700">{savedNotice}</p>}
+
+      {expanded && (
+        <div className="space-y-1">
+          {constants.map((c) => (
+            <div key={c.key} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
+              {editingKey === c.key ? (
+                <>
+                  <span className="text-gray-600">{c.label} (master {c.master_value}%)</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={overrideValue}
+                      onChange={(e) => setOverrideValue(e.target.value)}
+                      className="w-20 rounded border border-gray-300 px-1 py-0.5"
+                    />
+                    <input
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="reason (required)"
+                      className="w-40 rounded border border-gray-300 px-1 py-0.5"
+                    />
+                    <button
+                      onClick={() => handleSave(c)}
+                      disabled={saving || !reason}
+                      className="text-green-700 hover:underline disabled:opacity-50 disabled:no-underline"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingKey(null)} className="text-gray-500 hover:underline">
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {c.label}: {c.effective_value}%
+                    {c.is_overridden && (
+                      <span className="text-amber-700"> (overridden from {c.master_value}% -- {c.override_reason})</span>
+                    )}
+                  </span>
+                  <button onClick={() => startEdit(c)} className="text-blue-600 hover:underline">
+                    Override
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2303,7 +2436,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, projec
           disabled={!isDraft || lines.length === 0}
           className="bg-gray-700 text-white text-sm rounded px-4 py-2 hover:bg-gray-800 disabled:opacity-50"
         >
-          Recompute total (K.1 steps 1-3, 6)
+          Recompute total (K.1 steps 1-6)
         </button>
         <button
           onClick={handleVerify}
@@ -2320,6 +2453,8 @@ export default function CostSheetBuilder({ token, costSheet, projectType, projec
           {showConsumption ? "Hide" : "View"} Consumption Sheet (J.3)
         </button>
       </div>
+
+      {isDraft && <OverridesPanel token={token} costSheetId={costSheet.id} />}
 
       {showConsumption && (
         <div className="border border-gray-200 rounded overflow-x-auto">

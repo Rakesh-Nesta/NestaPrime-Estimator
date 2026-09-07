@@ -29,7 +29,7 @@ from app.models.document import (
 from app.models.margin_policy import MarginPolicy
 from app.models.project import Package, Project
 from app.models.rate_item import LabourCategory, RateSource
-from app.models.setting import DocumentType
+from app.models.setting import DocumentType, Override
 from app.models.sport import ProjectSport
 
 # M.3: quotations at or above this value (or any Government/Tender deal)
@@ -147,6 +147,33 @@ J2_NAMED_ACTIVITY_CATEGORY_KEYS = {
 def _get_setting_float(db: Session, key: str, default: float) -> float:
     value = get_current_setting_value(db, key)
     return float(value) if value is not None else default
+
+
+def _current_override(db: Session, doc_type: DocumentType, doc_id: uuid.UUID, key: str) -> Override | None:
+    """Q.2 rule 2: 'An override changes only that document.' Multiple
+    Override rows can exist for the same (document, key) pair over time
+    (nothing here ever mutates or deletes one, matching this app's
+    write-once convention for approval-adjacent records) -- the most
+    recently created one is the currently-effective override."""
+    return (
+        db.query(Override)
+        .filter(Override.document_type == doc_type, Override.document_id == doc_id, Override.setting_key == key)
+        .order_by(Override.created_at.desc())
+        .first()
+    )
+
+
+def _get_effective_setting_float(
+    db: Session, doc_type: DocumentType, doc_id: uuid.UUID, key: str, default: float
+) -> float:
+    """Q.2 rule 2: a document-scoped Override takes precedence over the
+    global Master Setting, which itself takes precedence over the
+    Python fallback -- one extra, document-scoped tier ahead of
+    _get_setting_float's own two-tier precedence."""
+    override = _current_override(db, doc_type, doc_id, key)
+    if override is not None:
+        return float(override.override_value)
+    return _get_setting_float(db, key, default)
 
 
 def _get_setting_int(db: Session, key: str, default: int) -> int:
@@ -496,16 +523,19 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
         labour, _warning = _labour_amount_and_warning(db, line, material, blended_fallback_percent)
         package_base[line.work_package] = package_base.get(line.work_package, 0.0) + material + labour
 
-    site_establishment_percent = _get_setting_float(
-        db, "site_establishment_percent", SITE_ESTABLISHMENT_PERCENT_DEFAULT
+    site_establishment_percent = _get_effective_setting_float(
+        db, DocumentType.COST_SHEET, cost_sheet.id, "site_establishment_percent", SITE_ESTABLISHMENT_PERCENT_DEFAULT
     )
     warranty_reserve_percent = (
         0.0
         if (project is not None and project.tender_mode)
-        else _get_setting_float(db, "warranty_reserve_percent", WARRANTY_RESERVE_PERCENT_DEFAULT)
+        else _get_effective_setting_float(
+            db, DocumentType.COST_SHEET, cost_sheet.id, "warranty_reserve_percent", WARRANTY_RESERVE_PERCENT_DEFAULT
+        )
     )
-    company_overhead_percent = _get_setting_float(
-        db, "company_overhead_recovery_percent", COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT
+    company_overhead_percent = _get_effective_setting_float(
+        db, DocumentType.COST_SHEET, cost_sheet.id, "company_overhead_recovery_percent",
+        COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT,
     )
 
     cost_incl_contingency = 0.0
@@ -513,8 +543,9 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
         loaded = base * (1 + site_establishment_percent / 100)
         loaded *= 1 + warranty_reserve_percent / 100
         loaded *= 1 + company_overhead_percent / 100
-        contingency_percent = _get_setting_float(
-            db, f"contingency_{work_package.value}_percent", CONTINGENCY_PERCENT_DEFAULT[work_package]
+        contingency_percent = _get_effective_setting_float(
+            db, DocumentType.COST_SHEET, cost_sheet.id,
+            f"contingency_{work_package.value}_percent", CONTINGENCY_PERCENT_DEFAULT[work_package],
         )
         cost_incl_contingency += loaded * (1 + contingency_percent / 100)
     return cost_incl_contingency
@@ -601,6 +632,63 @@ def recompute_cost_sheet(
     db.commit()
     db.refresh(cost_sheet)
     return cost_sheet
+
+
+class K1ConstantOut(BaseModel):
+    key: str
+    label: str
+    master_value: float
+    effective_value: float
+    is_overridden: bool
+    override_reason: str | None
+    override_id: uuid.UUID | None
+
+
+@cost_sheets_router.get("/cost-sheets/{cost_sheet_id}/k1-constants", response_model=list[K1ConstantOut])
+def get_k1_constants(
+    cost_sheet_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """Q.2 rule 2: surfaces every K.1 percentage this cost sheet's own
+    /recompute actually reads, its current global Master Setting value
+    (or Python fallback if never configured), and whether a document-
+    scoped Override is currently in effect for it -- the read side of
+    the same precedence _get_effective_setting_float applies when
+    computing the total, so the UI never has to duplicate these
+    defaults itself."""
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
+
+    keys: list[tuple[str, str, float]] = [
+        ("site_establishment_percent", "Site establishment %", SITE_ESTABLISHMENT_PERCENT_DEFAULT),
+        ("company_overhead_recovery_percent", "Company overhead recovery %", COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT),
+    ]
+    if not (project is not None and project.tender_mode):
+        keys.append(("warranty_reserve_percent", "Warranty reserve %", WARRANTY_RESERVE_PERCENT_DEFAULT))
+    for work_package in WorkPackage:
+        keys.append((
+            f"contingency_{work_package.value}_percent",
+            f"Contingency -- {work_package.value}",
+            CONTINGENCY_PERCENT_DEFAULT[work_package],
+        ))
+
+    out: list[K1ConstantOut] = []
+    for key, label, default in keys:
+        master_value = _get_setting_float(db, key, default)
+        override = _current_override(db, DocumentType.COST_SHEET, cost_sheet.id, key)
+        out.append(K1ConstantOut(
+            key=key,
+            label=label,
+            master_value=master_value,
+            effective_value=float(override.override_value) if override else master_value,
+            is_overridden=override is not None,
+            override_reason=override.reason if override else None,
+            override_id=override.id if override else None,
+        ))
+    return out
 
 
 @cost_sheets_router.get("/cost-sheets/{cost_sheet_id}/labour-warnings", response_model=list[str])
