@@ -8,9 +8,11 @@ import {
   addCostSheetLine,
   addDrainageTakeoff,
   addGymTakeoff,
+  addHockeyIrrigationTakeoff,
   addHvacTakeoff,
   addLightingTakeoff,
   addLineMarkingTakeoff,
+  addNaturalGrassTakeoff,
   addPlayEquipmentTakeoff,
   addPoolTakeoff,
   addStructureTakeoff,
@@ -40,6 +42,8 @@ const TABS = [
   { key: "play_equipment", label: "Play equipment (G.4)" },
   { key: "gym", label: "Gym (G.2)" },
   { key: "pool", label: "Pool (G.1)" },
+  { key: "natural_grass", label: "Natural grass (F.4)" },
+  { key: "hockey_irrigation", label: "Hockey irrigation (F.4)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -1811,6 +1815,130 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 }
 
 // ---------------------------------------------------------------------------
+// Natural grass & irrigation (Part F.4)
+// ---------------------------------------------------------------------------
+
+function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [f, setF] = useState({
+    project_sport_id: "", topsoil_rate_per_cum: "", cover_type: "sod", cover_rate_per_sqm: "",
+    sprinkler_spacing_m: "12", sprinkler_rate_each: "", pump_rate: "", tank_rate: "",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: f.project_sport_id,
+        topsoil_rate_per_cum: Number(f.topsoil_rate_per_cum),
+        cover_type: f.cover_type,
+        cover_rate_per_sqm: Number(f.cover_rate_per_sqm),
+        sprinkler_spacing_m: num(f.sprinkler_spacing_m) ?? 12,
+        sprinkler_rate_each: Number(f.sprinkler_rate_each),
+        pump_rate: Number(f.pump_rate),
+        tank_rate: Number(f.tank_rate),
+      };
+      const res = await addNaturalGrassTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      <p className="text-[11px] text-gray-400">
+        F.4: topsoil (6in) + sand amendment, sod or seed cover, pop-up sprinklers on a 12m grid, plus a pump and a
+        10,000L tank (fixed size, not scaled by area). Monthly maintenance is a recurring cost, not priced here --
+        track it under AMC (Part I).
+      </p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Topsoil + sand Rs/cum"><NumberInput value={f.topsoil_rate_per_cum} onChange={set("topsoil_rate_per_cum")} required /></Field>
+        <Field label="Cover type">
+          <SelectInput
+            value={f.cover_type}
+            onChange={set("cover_type")}
+            options={[{ value: "sod", label: "Sod" }, { value: "seed", label: "Seed (6-8 week germination)" }]}
+          />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Cover Rs/sqm"><NumberInput value={f.cover_rate_per_sqm} onChange={set("cover_rate_per_sqm")} required /></Field>
+        <Field label="Sprinkler spacing (m)" hint="12 = F.4 default"><NumberInput value={f.sprinkler_spacing_m} onChange={set("sprinkler_spacing_m")} /></Field>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Field label="Sprinkler Rs/each"><NumberInput value={f.sprinkler_rate_each} onChange={set("sprinkler_rate_each")} required /></Field>
+        <Field label="Pump Rs (lump)"><NumberInput value={f.pump_rate} onChange={set("pump_rate")} required /></Field>
+        <Field label="10,000L tank Rs (lump)"><NumberInput value={f.tank_rate} onChange={set("tank_rate")} required /></Field>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [f, setF] = useState({
+    project_sport_id: "", cannon_count: "6", cannon_rate_each: "", pump_rate: "", tank_rate: "",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: f.project_sport_id,
+        cannon_count: num(f.cannon_count) ?? 6,
+        cannon_rate_each: Number(f.cannon_rate_each),
+        pump_rate: Number(f.pump_rate),
+        tank_rate: Number(f.tank_rate),
+      };
+      const res = await addHockeyIrrigationTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+      <p className="text-[11px] text-gray-400">
+        F.4: hockey water-based turf irrigation -- sprinkler cannons (x6 default), a pump, and a 50,000L tank
+        (fixed size). A separate, larger system from natural-grass irrigation, not a variant of it.
+      </p>
+
+      <div className="grid grid-cols-4 gap-2">
+        <Field label="Cannon count" hint="6 = F.4 default"><NumberInput value={f.cannon_count} onChange={set("cannon_count")} min="1" /></Field>
+        <Field label="Cannon Rs/each"><NumberInput value={f.cannon_rate_each} onChange={set("cannon_rate_each")} required /></Field>
+        <Field label="Pump Rs (lump)"><NumberInput value={f.pump_rate} onChange={set("pump_rate")} required /></Field>
+        <Field label="50,000L tank Rs (lump)"><NumberInput value={f.tank_rate} onChange={set("tank_rate")} required /></Field>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -2157,6 +2285,8 @@ export default function CostSheetBuilder({ token, costSheet, projectSports, spor
           {tab === "play_equipment" && <PlayEquipmentForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "gym" && <GymForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "pool" && <PoolForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "natural_grass" && <NaturalGrassForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "hockey_irrigation" && <HockeyIrrigationForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}

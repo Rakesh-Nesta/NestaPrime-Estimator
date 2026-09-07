@@ -494,3 +494,226 @@ def add_line_marking_takeoff(
         breakdown={"sets": len(lines_to_create)},
         lines=[_line_to_out(line) for line in lines_to_create],
     )
+
+
+# ---------------------------------------------------------------------------
+# F.4 Natural grass & irrigation
+# ---------------------------------------------------------------------------
+
+SPRINKLER_GRID_SPACING_M_DEFAULT = 12.0  # F.4: "pop-up sprinklers grid 12 m"
+HOCKEY_CANNON_COUNT_DEFAULT = 6  # F.4: "Hockey water-based turf: sprinkler cannons x6"
+NATURAL_GRASS_TOPSOIL_THICKNESS_IN = 6.0  # F.4: "Topsoil 6in + sand amendment"
+
+
+class NaturalGrassCoverType(str, Enum):
+    SOD = "sod"
+    SEED = "seed"  # F.4: "(or seed, 6-8 wks)"
+
+
+class NaturalGrassTakeoffRequest(BaseModel):
+    project_sport_id: uuid.UUID
+    build_l_ft: float | None = None
+    build_w_ft: float | None = None
+    topsoil_rate_per_cum: float = Field(gt=0)  # F.4: "Topsoil 6in + sand amendment" -- one combined line
+    cover_type: NaturalGrassCoverType = NaturalGrassCoverType.SOD
+    cover_rate_per_sqm: float = Field(gt=0)
+    sprinkler_spacing_m: float = Field(default=SPRINKLER_GRID_SPACING_M_DEFAULT, gt=0)
+    sprinkler_rate_each: float = Field(gt=0)
+    pump_rate: float = Field(gt=0)  # lump sum
+    tank_rate: float = Field(gt=0)  # F.4's own fixed spec: "10,000 L tank"
+
+
+class NaturalGrassTakeoffOut(BaseModel):
+    breakdown: dict
+    lines: list[CostSheetLineOut]
+
+
+@flooring_router.post(
+    "/cost-sheets/{cost_sheet_id}/flooring/natural-grass", response_model=NaturalGrassTakeoffOut, status_code=201
+)
+def add_natural_grass_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: NaturalGrassTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """F.4: 'Topsoil 6in + sand amendment -> sod (or seed, 6-8 wks) ->
+    pop-up sprinklers grid 12m -> pump + 10,000L tank -> monthly
+    maintenance note.' Sprinkler count follows the same spacing-grid
+    logic as every other grid take-off in this app (D.3's catch pits,
+    H's fixture count): one sprinkler per 12m x 12m cell, ceil'd per
+    axis. The 10,000L tank is F.4's own fixed spec for this system, not
+    scaled by area -- a single lump line, same as the pump. Monthly
+    maintenance is a recurring O&M cost, not a one-time Cost Sheet item,
+    so it's noted, not priced (AMC already has its own home in Part I's
+    scope checklist)."""
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+    L, W, _project_sport = _resolve_dimensions(
+        db, cost_sheet, payload.project_sport_id, payload.build_l_ft, payload.build_w_ft
+    )
+    L_m, W_m = L * FT_TO_M, W * FT_TO_M
+    area_sqm = L_m * W_m
+
+    topsoil_thickness_m = NATURAL_GRASS_TOPSOIL_THICKNESS_IN * 0.0254
+    topsoil_volume_cum = area_sqm * topsoil_thickness_m
+
+    sprinkler_count = math.ceil(L_m / payload.sprinkler_spacing_m) * math.ceil(W_m / payload.sprinkler_spacing_m)
+
+    cover_label = "Sod" if payload.cover_type == NaturalGrassCoverType.SOD else "Seed (6-8 week germination)"
+
+    lines_to_create = [
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Natural grass",
+            item_name=f"Topsoil ({NATURAL_GRASS_TOPSOIL_THICKNESS_IN:g}in) + sand amendment",
+            unit="cum",
+            quantity=round(topsoil_volume_cum, 3),
+            rate=payload.topsoil_rate_per_cum,
+            source=RateSource.MANUAL,
+        ),
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Natural grass",
+            item_name=cover_label,
+            unit="sqm",
+            quantity=round(area_sqm, 2),
+            rate=payload.cover_rate_per_sqm,
+            source=RateSource.MANUAL,
+        ),
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Irrigation",
+            item_name=f"Pop-up sprinklers @ {payload.sprinkler_spacing_m:g}m grid",
+            unit="nos",
+            quantity=sprinkler_count,
+            rate=payload.sprinkler_rate_each,
+            source=RateSource.MANUAL,
+        ),
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Irrigation",
+            item_name="Irrigation pump",
+            unit="set",
+            quantity=1,
+            rate=payload.pump_rate,
+            source=RateSource.MANUAL,
+        ),
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Irrigation",
+            item_name="Water tank (10,000 L)",
+            unit="set",
+            quantity=1,
+            rate=payload.tank_rate,
+            source=RateSource.MANUAL,
+        ),
+    ]
+
+    for line in lines_to_create:
+        db.add(line)
+    db.commit()
+    for line in lines_to_create:
+        db.refresh(line)
+
+    return NaturalGrassTakeoffOut(
+        breakdown={
+            "area_sqm": round(area_sqm, 2),
+            "topsoil_volume_cum": round(topsoil_volume_cum, 3),
+            "sprinkler_count": sprinkler_count,
+            "maintenance_note": (
+                "F.4: monthly maintenance (mowing, feeding) is a recurring cost, not priced on this "
+                "one-time Cost Sheet -- track it under AMC (Part I's maintenance scope group) instead."
+            ),
+        },
+        lines=[_line_to_out(line) for line in lines_to_create],
+    )
+
+
+class HockeyIrrigationTakeoffRequest(BaseModel):
+    project_sport_id: uuid.UUID
+    cannon_count: int = Field(default=HOCKEY_CANNON_COUNT_DEFAULT, gt=0)
+    cannon_rate_each: float = Field(gt=0)
+    pump_rate: float = Field(gt=0)
+    tank_rate: float = Field(gt=0)  # F.4's own fixed spec: "50,000L tank"
+
+
+class HockeyIrrigationTakeoffOut(BaseModel):
+    breakdown: dict
+    lines: list[CostSheetLineOut]
+
+
+@flooring_router.post(
+    "/cost-sheets/{cost_sheet_id}/flooring/hockey-irrigation",
+    response_model=HockeyIrrigationTakeoffOut,
+    status_code=201,
+)
+def add_hockey_irrigation_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: HockeyIrrigationTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """F.4: 'Hockey water-based turf: sprinkler cannons x6 + 50,000L tank
+    + pump.' This wets the synthetic FIH pitch for ball speed -- a
+    different, much larger system than natural grass irrigation, not a
+    variant of it, so it's its own endpoint rather than a branch on the
+    natural-grass one. cannon_count defaults to F.4's own '6' but stays
+    overridable, same as every other blueprint-given default in this app."""
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+
+    lines_to_create = [
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Irrigation",
+            item_name="Sprinkler cannon",
+            unit="nos",
+            quantity=payload.cannon_count,
+            rate=payload.cannon_rate_each,
+            source=RateSource.MANUAL,
+        ),
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Irrigation",
+            item_name="Irrigation pump",
+            unit="set",
+            quantity=1,
+            rate=payload.pump_rate,
+            source=RateSource.MANUAL,
+        ),
+        CostSheetLine(
+            cost_sheet_id=cost_sheet_id,
+            project_sport_id=payload.project_sport_id,
+            work_package=WorkPackage.FLOORING,
+            category="Irrigation",
+            item_name="Water tank (50,000 L)",
+            unit="set",
+            quantity=1,
+            rate=payload.tank_rate,
+            source=RateSource.MANUAL,
+        ),
+    ]
+
+    for line in lines_to_create:
+        db.add(line)
+    db.commit()
+    for line in lines_to_create:
+        db.refresh(line)
+
+    return HockeyIrrigationTakeoffOut(
+        breakdown={"cannon_count": payload.cannon_count},
+        lines=[_line_to_out(line) for line in lines_to_create],
+    )

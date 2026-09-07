@@ -600,6 +600,24 @@ export async function addPoolTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function addNaturalGrassTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/flooring/natural-grass`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function addHockeyIrrigationTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/flooring/hockey-irrigation`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 // --- Part M.3: Attachments & approval evidence ---
 
 export async function listAttachments(token, docType, docId, includeSuperseded = false) {
