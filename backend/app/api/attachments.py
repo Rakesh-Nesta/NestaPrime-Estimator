@@ -14,7 +14,7 @@ from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client_signatory import ClientSignatory
-from app.models.document import CostSheet, Estimate, Quotation
+from app.models.document import CostSheet, Estimate, EstimateOption, Quotation
 from app.models.price_request import PriceRequest
 from app.models.project import Project
 from app.models.setting import DocumentType
@@ -55,6 +55,7 @@ MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # M.3: "max 100 MB each"
 _DOC_TABLE = {
     DocumentType.COST_SHEET: CostSheet,
     DocumentType.ESTIMATE: Estimate,
+    DocumentType.ESTIMATE_OPTION: EstimateOption,
     DocumentType.QUOTATION: Quotation,
     DocumentType.WORK_ORDER: WorkOrder,
     DocumentType.TECHNICAL_BID_CHECKLIST_ITEM: TechnicalBidChecklistItem,
@@ -112,7 +113,16 @@ def _storage_dir(doc_type: DocumentType, doc_id: uuid.UUID) -> Path:
 
 def _resolve_client_id(db: Session, doc_type: DocumentType, doc_id: uuid.UUID) -> uuid.UUID | None:
     document = _get_document_or_404(db, doc_type, doc_id)
-    project = db.query(Project).filter(Project.id == document.project_id).first()
+    # EstimateOption (product images, M.6) has no project_id of its own --
+    # only its parent Estimate does. Nothing tags a product_image
+    # attachment approval_evidence in practice, but this keeps signatory
+    # matching from crashing if it ever is.
+    if doc_type == DocumentType.ESTIMATE_OPTION:
+        estimate = db.query(Estimate).filter(Estimate.id == document.estimate_id).first()
+        project_id = estimate.project_id if estimate else None
+    else:
+        project_id = document.project_id
+    project = db.query(Project).filter(Project.id == project_id).first()
     return project.client_id if project else None
 
 

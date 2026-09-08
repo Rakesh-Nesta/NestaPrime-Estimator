@@ -38,6 +38,11 @@ class DocumentType(str, enum.Enum):
     # Appendix C: "photos (min 4)" -- a Site Survey's own photos ride the
     # same generic Attachment system, tagged `photo`.
     SITE_SURVEY = "site_survey"
+    # M.6: "product options table (Budget/Standard/Premium with images)" --
+    # a product image belongs to one specific EstimateOption row (a
+    # sport+package combination), not the whole Estimate, so it needs its
+    # own doc_type rather than riding ESTIMATE's.
+    ESTIMATE_OPTION = "estimate_option"
 
 
 class Setting(Base):

@@ -531,6 +531,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   const [optionForm, setOptionForm] = useState({ project_sport_id: "", package: "standard", cost_for_option: "" });
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
+  const [openOptionAttachmentsFor, setOpenOptionAttachmentsFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const canWaive = role === "pm" || role === "director";
@@ -615,32 +616,43 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
           {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
           {openMessagesFor === est.id && <MessagesPanel token={token} docType="estimate" docId={est.id} />}
           {est.options.map((opt) => (
-            <div key={opt.id} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
-              <span>
-                {sportNameByProjectSportId[opt.project_sport_id] ?? opt.project_sport_id} ({opt.package}): Rs{" "}
-                {opt.price_low.toLocaleString()} - Rs {opt.price_high.toLocaleString()} incl. GST ·{" "}
-                <StatusBadge status={opt.client_status} />
-              </span>
-              <div className="flex items-center gap-1">
-                {canWaive && (
-                  <input
-                    type="text"
-                    placeholder="waiver reason (PM/Director)"
-                    value={waiverReasons[opt.id] || ""}
-                    onChange={(e) => setWaiverReasons((w) => ({ ...w, [opt.id]: e.target.value }))}
-                    className="text-xs border border-gray-300 rounded px-1 py-0.5 w-40"
-                  />
-                )}
-                <button
-                  onClick={() => handleClientStatus(est.id, opt.id, "approved", waiverReasons[opt.id])}
-                  className="text-green-700 hover:underline"
-                >
-                  Approve
-                </button>
-                <button onClick={() => handleClientStatus(est.id, opt.id, "rejected")} className="text-red-700 hover:underline">
-                  Reject
-                </button>
+            <div key={opt.id} className="space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
+                <span>
+                  {sportNameByProjectSportId[opt.project_sport_id] ?? opt.project_sport_id} ({opt.package}): Rs{" "}
+                  {opt.price_low.toLocaleString()} - Rs {opt.price_high.toLocaleString()} incl. GST ·{" "}
+                  <StatusBadge status={opt.client_status} />
+                </span>
+                <div className="flex items-center gap-1">
+                  {canWaive && (
+                    <input
+                      type="text"
+                      placeholder="waiver reason (PM/Director)"
+                      value={waiverReasons[opt.id] || ""}
+                      onChange={(e) => setWaiverReasons((w) => ({ ...w, [opt.id]: e.target.value }))}
+                      className="text-xs border border-gray-300 rounded px-1 py-0.5 w-40"
+                    />
+                  )}
+                  <button
+                    onClick={() => handleClientStatus(est.id, opt.id, "approved", waiverReasons[opt.id])}
+                    className="text-green-700 hover:underline"
+                  >
+                    Approve
+                  </button>
+                  <button onClick={() => handleClientStatus(est.id, opt.id, "rejected")} className="text-red-700 hover:underline">
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => setOpenOptionAttachmentsFor(openOptionAttachmentsFor === opt.id ? null : opt.id)}
+                    className="text-gray-500 hover:underline"
+                  >
+                    {openOptionAttachmentsFor === opt.id ? "Hide photo" : "Product photo"}
+                  </button>
+                </div>
               </div>
+              {openOptionAttachmentsFor === opt.id && (
+                <AttachmentsPanel token={token} docType="estimate_option" docId={opt.id} />
+              )}
             </div>
           ))}
         </div>

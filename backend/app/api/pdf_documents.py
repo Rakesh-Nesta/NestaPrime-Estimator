@@ -13,15 +13,18 @@ quotation_total, all already GST-inclusive, client-facing numbers.
 
 import io
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
 from app.api.documents import DOCUMENT_ROLES
@@ -29,10 +32,12 @@ from app.api.schedule import get_schedule
 from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.attachment import Attachment, AttachmentTag
 from app.models.client import Client, ClientType
 from app.models.document import Estimate, EstimateOption, Quotation, QuotationLine
 from app.models.project import Project
 from app.models.scope_item import ProjectScopeItem, ScopeItem
+from app.models.setting import DocumentType
 from app.models.sport import ProjectSport, Sport
 from app.pdf_utils import amount_in_words_inr, format_inr, round_to_nearest_10
 
@@ -161,6 +166,50 @@ def _get_estimate(db: Session, estimate_id: uuid.UUID) -> Estimate:
     return estimate
 
 
+def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float, max_height: float):
+    """M.6: 'product options table (Budget/Standard/Premium with images).'
+    The latest non-superseded product_image attachment on this specific
+    option (Attachment's own EstimateOption doc_type, separate from
+    Estimate's, since one image belongs to one sport+package row, not
+    the whole Estimate). Scaled to fit inside (max_width, max_height)
+    while preserving the original aspect ratio -- reportlab pulls Pillow
+    in as its own dependency, so no extra image library is needed. A
+    missing/corrupt file or no upload at all silently yields no image
+    rather than breaking PDF generation -- the row just has no picture."""
+    attachment = (
+        db.query(Attachment)
+        .filter(
+            Attachment.doc_type == DocumentType.ESTIMATE_OPTION,
+            Attachment.doc_id == option_id,
+            Attachment.tag == AttachmentTag.PRODUCT_IMAGE,
+            Attachment.superseded_by_id.is_(None),
+        )
+        .order_by(Attachment.uploaded_at.desc())
+        .first()
+    )
+    if attachment is None:
+        return ""
+    path = Path(attachment.storage_path)
+    if not path.exists():
+        return ""
+    try:
+        # ImageReader.getSize() only reads the header -- a truncated or
+        # otherwise corrupt file can still pass that and only fail later,
+        # inside reportlab's own build() when the pixel data is actually
+        # decoded (too late to degrade gracefully). Pillow's own .load()
+        # forces the full decode now, while it's still inside this
+        # try/except, so a bad file is caught here instead of crashing
+        # PDF generation for the whole document.
+        with PILImage.open(path) as pil_image:
+            pil_image.load()
+        reader = ImageReader(str(path))
+        original_width, original_height = reader.getSize()
+        scale = min(max_width / original_width, max_height / original_height)
+        return Image(str(path), width=original_width * scale, height=original_height * scale)
+    except Exception:
+        return ""
+
+
 def _get_quotation(db: Session, quotation_id: uuid.UUID) -> Quotation:
     quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
     if not quotation:
@@ -273,12 +322,14 @@ def get_estimate_pdf(
         Paragraph("Product options", styles["SectionHeading"]),
     ]
 
-    rows = [["Sport", "Package", "Playing dimensions", "Governing body", "Indicative price (GST-incl.)"]]
+    image_col_width, image_col_height = 24 * mm, 18 * mm
+    rows = [["Image", "Sport", "Package", "Playing dimensions", "Governing body", "Indicative price (GST-incl.)"]]
     for option in options:
         project_sport = db.query(ProjectSport).filter(ProjectSport.id == option.project_sport_id).first()
         sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
         rows.append(
             [
+                _product_image_flowable(db, option.id, image_col_width, image_col_height),
                 sport.name,
                 option.package.value.capitalize(),
                 f"{sport.playing_dims} ft" + (f"\n({sport.source_citation})" if sport.source_citation else ""),
@@ -286,7 +337,7 @@ def get_estimate_pdf(
                 f"{format_inr(float(option.price_low))} - {format_inr(float(option.price_high))}",
             ]
         )
-    table = Table(rows, colWidths=[35 * mm, 22 * mm, 45 * mm, 35 * mm, 45 * mm])
+    table = Table(rows, colWidths=[26 * mm, 30 * mm, 18 * mm, 38 * mm, 28 * mm, 40 * mm])
     table.setStyle(_TABLE_GRID)
     story.append(table)
 
