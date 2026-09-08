@@ -61,7 +61,7 @@ def create_message(
     any number of times per document (a re-send, a WhatsApp follow-up to
     an earlier email, etc.), independent of the document's own status-
     transition endpoints (POST .../send)."""
-    _require_doc_type_role(payload.doc_type, current_user)
+    _require_doc_type_role(db, payload.doc_type, current_user)
     _get_document_or_404(db, payload.doc_type, payload.doc_id)
 
     if payload.attachment_id is not None:
@@ -96,7 +96,7 @@ def list_messages(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
-    _require_doc_type_role(doc_type, current_user)
+    _require_doc_type_role(db, doc_type, current_user)
     return (
         db.query(Message)
         .filter(Message.doc_type == doc_type, Message.doc_id == doc_id)

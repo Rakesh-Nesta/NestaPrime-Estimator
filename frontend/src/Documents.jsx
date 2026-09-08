@@ -4,6 +4,7 @@ import ClientSignatoriesPanel from "./ClientSignatoriesPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
 import MessagesPanel from "./MessagesPanel";
 import {
+  addCostSheetLine,
   addWorkOrderPaymentEntry,
   approveSkipRequest,
   createCostSheet,
@@ -14,6 +15,7 @@ import {
   downloadEstimatePdfBlob,
   downloadQuotationPdfBlob,
   getWorkOrder,
+  listCostSheetLines,
   listCostSheets,
   listEstimates,
   listProjectSports,
@@ -30,6 +32,7 @@ import {
   reviseCostSheet,
   sendEstimate,
   sendQuotation,
+  updateCostSheetLine,
   updateEstimateOptionClientStatus,
   updateWorkOrderStatus,
   verifyCostSheet,
@@ -222,6 +225,110 @@ export default function Documents({ token, project, role, onBack }) {
   );
 }
 
+function RateBlindLinesPanel({ token, costSheetId, role, onChanged }) {
+  const [lines, setLines] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({ work_package: "civil", category: "", item_name: "", unit: "", quantity: "" });
+  const [rateDrafts, setRateDrafts] = useState({});
+  const isSales = role === "sales";
+
+  function load() {
+    return listCostSheetLines(token, costSheetId).then(setLines);
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load().catch((err) => setError(err.message)).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, costSheetId]);
+
+  async function handlePropose() {
+    setError("");
+    try {
+      await addCostSheetLine(token, costSheetId, { ...form, quantity: Number(form.quantity) });
+      setForm({ work_package: "civil", category: "", item_name: "", unit: "", quantity: "" });
+      await load();
+      if (onChanged) await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleSetRate(lineId) {
+    setError("");
+    try {
+      await updateCostSheetLine(token, costSheetId, lineId, { rate: Number(rateDrafts[lineId]) });
+      setRateDrafts((d) => ({ ...d, [lineId]: "" }));
+      await load();
+      if (onChanged) await onChanged();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  if (loading) return <p className="text-xs text-gray-400">Loading lines…</p>;
+
+  return (
+    <div className="border border-dashed border-gray-300 rounded p-3 space-y-2 bg-gray-50 text-xs">
+      <p className="font-semibold text-gray-600">
+        Cost Sheet lines (K.3 Rate-blind mode) {isSales && "-- rates are hidden from you by design"}
+      </p>
+      {error && <p className="text-red-600">{error}</p>}
+      {lines.map((l) => (
+        <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 bg-white rounded px-2 py-1 border border-gray-200">
+          <span>
+            {l.category} · {l.item_name} · {l.quantity} {l.unit}
+            {l.pending && <span className="text-amber-700"> · pending PM rate</span>}
+            {!isSales && !l.pending && <span className="text-gray-500"> · Rs {l.rate}/unit = Rs {l.amount.toLocaleString()}</span>}
+          </span>
+          {!isSales && l.pending && (
+            <div className="flex items-center gap-1">
+              <input
+                type="number" placeholder="Rate"
+                value={rateDrafts[l.id] || ""}
+                onChange={(e) => setRateDrafts((d) => ({ ...d, [l.id]: e.target.value }))}
+                className="border border-gray-300 rounded px-1 py-0.5 w-20"
+              />
+              <button onClick={() => handleSetRate(l.id)} disabled={!rateDrafts[l.id]} className="text-blue-600 hover:underline disabled:opacity-50">
+                Set rate
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {lines.length === 0 && <p className="text-gray-400">No lines proposed yet.</p>}
+
+      {isSales && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <select value={form.work_package} onChange={(e) => setForm((f) => ({ ...f, work_package: e.target.value }))} className="border border-gray-300 rounded px-2 py-1">
+            <option value="civil">Civil</option>
+            <option value="structure">Structure</option>
+            <option value="flooring">Flooring</option>
+            <option value="electrical">Electrical</option>
+            <option value="pool">Pool</option>
+            <option value="hvac">HVAC</option>
+            <option value="accessories">Accessories</option>
+            <option value="scope">Scope</option>
+            <option value="services">Services</option>
+          </select>
+          <input placeholder="Category" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className="border border-gray-300 rounded px-2 py-1 w-24" />
+          <input placeholder="Item" value={form.item_name} onChange={(e) => setForm((f) => ({ ...f, item_name: e.target.value }))} className="border border-gray-300 rounded px-2 py-1 flex-1 min-w-[120px]" />
+          <input placeholder="Unit" value={form.unit} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))} className="border border-gray-300 rounded px-2 py-1 w-16" />
+          <input type="number" placeholder="Qty" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} className="border border-gray-300 rounded px-2 py-1 w-20" />
+          <button
+            onClick={handlePropose}
+            disabled={!form.category || !form.item_name || !form.unit || !form.quantity}
+            className="bg-blue-600 text-white rounded px-3 py-1.5 hover:bg-blue-700 disabled:opacity-50"
+          >
+            Propose line
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CostSheetPanel({ token, project, role, costSheets, skipRequests, onAction, onBuild }) {
   const [costTotal, setCostTotal] = useState("");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
@@ -229,10 +336,12 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
   const [skipReason, setSkipReason] = useState("");
   const [approveCostTotal, setApproveCostTotal] = useState("");
   const [rejectFormFor, setRejectFormFor] = useState(null);
+  const [openLinesFor, setOpenLinesFor] = useState(null);
   const active = costSheets.find((c) => c.status !== "superseded");
   const pendingSkipRequest = skipRequests.find((r) => r.status === "pending");
   const canApproveSkip = role === "pm" || role === "director";
   const canReject = role === "pm" || role === "director";
+  const canSeeLines = role === "sales" || role === "pm" || role === "director";
 
   const handleCreate = onAction(async () => {
     await createCostSheet(token, project.id, { cost_total: Number(costTotal) });
@@ -267,12 +376,13 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
         <div key={cs.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-2">
           <div className="flex items-center justify-between">
             <span>
-              {cs.document_no} · Rs {cs.cost_total.toLocaleString()} ·{" "}
+              {cs.document_no}
+              {cs.cost_total != null && <> · Rs {cs.cost_total.toLocaleString()}</>} ·{" "}
               <StatusBadge status={cs.status} />
               {cs.auto_generated && <span className="text-amber-700 text-xs"> · skip-generated</span>}
             </span>
             <div className="flex items-center gap-3">
-              {(cs.status === "draft" || cs.status === "unverified") && (
+              {role !== "sales" && (cs.status === "draft" || cs.status === "unverified") && (
                 <>
                   <button onClick={() => onBuild(cs)} className="text-xs text-blue-600 hover:underline">
                     Build from take-off
@@ -302,6 +412,14 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
               >
                 {openMessagesFor === cs.id ? "Hide messages" : "Messages"}
               </button>
+              {canSeeLines && (cs.status === "draft" || cs.status === "unverified") && (
+                <button
+                  onClick={() => setOpenLinesFor(openLinesFor === cs.id ? null : cs.id)}
+                  className="text-xs text-gray-500 hover:underline"
+                >
+                  {openLinesFor === cs.id ? "Hide lines" : "Lines"}
+                </button>
+              )}
             </div>
           </div>
           {rejectFormFor === cs.id && (
@@ -312,34 +430,37 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
           )}
           {openAttachmentsFor === cs.id && <AttachmentsPanel token={token} docType="cost_sheet" docId={cs.id} />}
           {openMessagesFor === cs.id && <MessagesPanel token={token} docType="cost_sheet" docId={cs.id} />}
+          {openLinesFor === cs.id && <RateBlindLinesPanel token={token} costSheetId={cs.id} role={role} />}
         </div>
       ))}
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          placeholder="Cost incl. contingency (Rs)"
-          value={costTotal}
-          onChange={(e) => setCostTotal(e.target.value)}
-          className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
-        />
-        {active && active.status === "verified" ? (
-          <button
-            onClick={() => handleRevise(active.id)}
-            className="bg-blue-600 text-white text-xs rounded px-3 py-2 hover:bg-blue-700"
-          >
-            Revise (new R+1)
-          </button>
-        ) : (
-          <button
-            onClick={handleCreate}
-            disabled={!!active}
-            className="bg-blue-600 text-white text-xs rounded px-3 py-2 hover:bg-blue-700 disabled:opacity-50"
-          >
-            Create Cost Sheet
-          </button>
-        )}
-      </div>
-      {!active && (
+      {role !== "sales" && (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            placeholder="Cost incl. contingency (Rs)"
+            value={costTotal}
+            onChange={(e) => setCostTotal(e.target.value)}
+            className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+          />
+          {active && active.status === "verified" ? (
+            <button
+              onClick={() => handleRevise(active.id)}
+              className="bg-blue-600 text-white text-xs rounded px-3 py-2 hover:bg-blue-700"
+            >
+              Revise (new R+1)
+            </button>
+          ) : (
+            <button
+              onClick={handleCreate}
+              disabled={!!active}
+              className="bg-blue-600 text-white text-xs rounded px-3 py-2 hover:bg-blue-700 disabled:opacity-50"
+            >
+              Create Cost Sheet
+            </button>
+          )}
+        </div>
+      )}
+      {role !== "sales" && !active && (
         <button
           onClick={handleCreateEmpty}
           className="w-full text-xs text-blue-600 hover:underline text-center py-1"

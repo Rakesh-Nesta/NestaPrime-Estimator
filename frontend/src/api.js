@@ -629,6 +629,15 @@ export async function addCostSheetLine(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function updateCostSheetLine(token, costSheetId, lineId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lines/${lineId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function deleteCostSheetLine(token, costSheetId, lineId) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/lines/${lineId}`, {
     method: "DELETE",

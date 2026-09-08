@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.documents import _rate_blind_mode_on
 from app.config import settings
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -76,7 +77,18 @@ def _roles_for(doc_type: DocumentType) -> tuple[str, ...]:
     return COST_ROLES if doc_type in _COST_VISIBILITY_DOC_TYPES else DOCUMENT_ROLES
 
 
-def _require_doc_type_role(doc_type: DocumentType, current_user) -> None:
+def _require_doc_type_role(db: Session, doc_type: DocumentType, current_user) -> None:
+    """K.3 Rate-blind mode: 'Sales enters quantities and attaches vendor
+    quotes as images.' Files aren't the numeric cost/margin data K.3's
+    blanket API-stripping rule is about, so this only widens WHICH
+    document types Sales may attach to (Cost Sheet, gated on the mode
+    being on) -- it never exposes a rate or amount figure."""
+    if doc_type == DocumentType.COST_SHEET and current_user.role.value == "sales":
+        if not _rate_blind_mode_on(db):
+            raise HTTPException(
+                status_code=403, detail="Rate-blind mode is off -- Sales cannot attach files to a Cost Sheet"
+            )
+        return
     if current_user.role.value not in _roles_for(doc_type):
         raise HTTPException(
             status_code=403,
@@ -242,7 +254,7 @@ async def upload_attachment(
     hash, uploader, timestamp and IP.' signatory_name/signatory_designation
     are optional and, when given on an approval_evidence attachment, are
     checked against Part O CLIENT_SIGNATORIES (see _validate_signatory_if_given)."""
-    _require_doc_type_role(doc_type, current_user)
+    _require_doc_type_role(db, doc_type, current_user)
     _get_document_or_404(db, doc_type, doc_id)
     return await _store_upload(
         db, request, current_user, doc_type, doc_id, tag, approval_strength, file, version=1,
@@ -258,7 +270,7 @@ def list_attachments(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
-    _require_doc_type_role(doc_type, current_user)
+    _require_doc_type_role(db, doc_type, current_user)
     query = db.query(Attachment).filter(Attachment.doc_type == doc_type, Attachment.doc_id == doc_id)
     if not include_superseded:
         query = query.filter(Attachment.superseded_by_id.is_(None))
@@ -274,7 +286,7 @@ def download_attachment(
     attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    _require_doc_type_role(attachment.doc_type, current_user)
+    _require_doc_type_role(db, attachment.doc_type, current_user)
 
     path = Path(attachment.storage_path)
     if not path.exists():
@@ -300,7 +312,7 @@ async def supersede_attachment(
     old = db.query(Attachment).filter(Attachment.id == attachment_id).first()
     if not old:
         raise HTTPException(status_code=404, detail="Attachment not found")
-    _require_doc_type_role(old.doc_type, current_user)
+    _require_doc_type_role(db, old.doc_type, current_user)
     if old.superseded_by_id is not None:
         raise HTTPException(status_code=400, detail="This attachment has already been superseded")
 

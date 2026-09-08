@@ -114,7 +114,14 @@ class CostSheetLine(Base):
     applied at line level). rate_item_id is kept only for traceability back
     to where the rate came from. Manually entered for now; Parts D/E/F's
     take-off engine will populate these programmatically from real
-    quantities instead."""
+    quantities instead.
+
+    rate is nullable to support K.3's Rate-blind mode: 'Sales enters
+    quantities and attaches vendor quotes as images; PM enters rates.' A
+    line Sales proposes this way is created with rate=None ("pending")
+    until a PM/Director fills it in via PATCH; every place that sums
+    lines into a cost total treats a pending line as a hard block, never
+    as a silent zero."""
 
     __tablename__ = "cost_sheet_lines"
 
@@ -140,7 +147,7 @@ class CostSheetLine(Base):
     spec: Mapped[str | None] = mapped_column(String(300), nullable=True)
     unit: Mapped[str] = mapped_column(String(20), nullable=False)
     quantity: Mapped[float] = mapped_column(Numeric(14, 3), nullable=False)
-    rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    rate: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     source: Mapped[RateSource] = mapped_column(
         Enum(RateSource, name="rate_source"), default=RateSource.MANUAL, nullable=False
     )

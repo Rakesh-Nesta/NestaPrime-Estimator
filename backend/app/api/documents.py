@@ -228,6 +228,15 @@ def _get_setting_int(db: Session, key: str, default: int) -> int:
     return int(value) if value is not None else default
 
 
+def _rate_blind_mode_on(db: Session) -> bool:
+    """K.3 / Q.1 'Thresholds & modes': 'Rate-blind mode on/off ... Default
+    is off.' A global Director-set Master Setting (key rate_blind_mode,
+    "true"/"false") -- no dedicated table, same pattern as every other
+    Q.1 mode/threshold in this codebase."""
+    value = get_current_setting_value(db, "rate_blind_mode")
+    return value is not None and value.strip().lower() == "true"
+
+
 def _document_no(project_no: str, prefix: str, revision_major: int, revision_minor: int = 0) -> str:
     """M.2 rule 10: the CS-/EST-/NPQ- documents reuse the project's own
     YYMM-#### suffix, e.g. project P-2609-0018 -> CS-2609-0018-R1."""
@@ -263,7 +272,7 @@ class CostSheetOut(BaseModel):
     revision_major: int
     revision_minor: int
     status: CostSheetStatus
-    cost_total: float
+    cost_total: float | None  # stripped for Sales (K.3) when Rate-blind mode lets them see this at all
     auto_generated: bool
     verified_by_id: uuid.UUID | None
     verified_at: datetime | None
@@ -271,6 +280,13 @@ class CostSheetOut(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def _cost_sheet_to_out(cost_sheet: CostSheet, role: str) -> CostSheetOut:
+    out = CostSheetOut.model_validate(cost_sheet)
+    if role == "sales":
+        out.cost_total = None
+    return out
 
 
 @cost_sheets_router.post(
@@ -313,26 +329,33 @@ def create_cost_sheet(
 def list_cost_sheets(
     project_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*COST_ROLES)),
+    current_user=Depends(require_roles(*COST_ROLES, "sales")),
 ):
-    return (
+    """K.3 Rate-blind mode: Sales needs to find the project's active
+    Cost Sheet to propose lines against it -- gated the same way as
+    add/list-lines, and cost_total (a K.3-protected figure) is always
+    stripped for Sales regardless of the mode."""
+    _require_sales_rate_blind_or_403(db, current_user)
+    rows = (
         db.query(CostSheet)
         .filter(CostSheet.project_id == project_id)
         .order_by(CostSheet.revision_major.desc())
         .all()
     )
+    return [_cost_sheet_to_out(row, current_user.role.value) for row in rows]
 
 
 @cost_sheets_router.get("/cost-sheets/{cost_sheet_id}", response_model=CostSheetOut)
 def get_cost_sheet(
     cost_sheet_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*COST_ROLES)),
+    current_user=Depends(require_roles(*COST_ROLES, "sales")),
 ):
+    _require_sales_rate_blind_or_403(db, current_user)
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    return cost_sheet
+    return _cost_sheet_to_out(cost_sheet, current_user.role.value)
 
 
 @cost_sheets_router.post("/cost-sheets/{cost_sheet_id}/verify", response_model=CostSheetOut)
@@ -353,6 +376,19 @@ def verify_cost_sheet(
         raise HTTPException(
             status_code=400,
             detail="Cannot verify a cost sheet with no cost -- enter cost_total or add lines and /recompute",
+        )
+    pending_count = (
+        db.query(CostSheetLine)
+        .filter(CostSheetLine.cost_sheet_id == cost_sheet_id, CostSheetLine.rate.is_(None))
+        .count()
+    )
+    if pending_count:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{pending_count} line(s) are still awaiting a PM-entered rate (Rate-blind mode, K.3) -- "
+                "price them before verifying"
+            ),
         )
     if current_user.role.value != "director":
         missing = _categories_missing_activity_rate(db, cost_sheet_id)
@@ -486,7 +522,11 @@ class CostSheetLineCreate(BaseModel):
     spec: str | None = None
     unit: str
     quantity: float = Field(gt=0)
-    rate: float = Field(ge=0)
+    # Required for PM/Director; left None by a Sales-proposed line under
+    # Rate-blind mode (K.3) -- see add_cost_sheet_line's own role check,
+    # which enforces this rather than the schema (the requirement is
+    # role-dependent, not universal).
+    rate: float | None = Field(default=None, ge=0)
     source: RateSource = RateSource.MANUAL
     city_of_quote: str | None = None
     labour_category_id: uuid.UUID | None = None
@@ -504,8 +544,9 @@ class CostSheetLineOut(BaseModel):
     spec: str | None
     unit: str
     quantity: float
-    rate: float
-    amount: float  # quantity x rate, computed -- not a stored column
+    rate: float | None
+    amount: float | None  # quantity x rate, computed -- not a stored column
+    pending: bool  # rate is None -- awaiting a PM/Director-entered rate
     source: RateSource
     city_of_quote: str | None
     labour_category_id: uuid.UUID | None
@@ -514,6 +555,7 @@ class CostSheetLineOut(BaseModel):
 
 
 def _line_to_out(line: CostSheetLine) -> CostSheetLineOut:
+    rate = float(line.rate) if line.rate is not None else None
     return CostSheetLineOut(
         id=line.id,
         cost_sheet_id=line.cost_sheet_id,
@@ -525,14 +567,26 @@ def _line_to_out(line: CostSheetLine) -> CostSheetLineOut:
         spec=line.spec,
         unit=line.unit,
         quantity=float(line.quantity),
-        rate=float(line.rate),
-        amount=float(line.quantity) * float(line.rate),
+        rate=rate,
+        amount=float(line.quantity) * rate if rate is not None else None,
+        pending=rate is None,
         source=line.source,
         city_of_quote=line.city_of_quote,
         labour_category_id=line.labour_category_id,
         wastage_percent=float(line.wastage_percent) if line.wastage_percent is not None else None,
         created_at=line.created_at,
     )
+
+
+def _strip_rate_for_sales(out: CostSheetLineOut, role: str) -> CostSheetLineOut:
+    """K.3: 'these fields are removed at the API by role, not hidden in
+    the browser.' Applied only at the two Sales-reachable endpoints below
+    (add/list) -- every take-off engine's own _line_to_out() calls are
+    PM/Director-only endpoints with nothing to strip."""
+    if role == "sales":
+        out.rate = None
+        out.amount = None
+    return out
 
 
 def _activity_rate_for_line(db: Session, line: CostSheetLine, category_key: str | None) -> float | None:
@@ -623,6 +677,15 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet.id).all()
     if not lines:
         raise HTTPException(status_code=400, detail="Cannot recompute a cost sheet with no lines")
+    pending_count = sum(1 for line in lines if line.rate is None)
+    if pending_count:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{pending_count} line(s) are still awaiting a PM-entered rate (Rate-blind mode, K.3) -- "
+                "price them before recomputing"
+            ),
+        )
 
     project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
     tender_mode = project is not None and project.tender_mode
@@ -690,6 +753,15 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     return cost_incl_contingency
 
 
+def _require_sales_rate_blind_or_403(db: Session, current_user) -> None:
+    """K.3: default off -- a Sales user gets exactly today's 403 unless
+    the Director has switched Rate-blind mode on."""
+    if current_user.role.value == "sales" and not _rate_blind_mode_on(db):
+        raise HTTPException(
+            status_code=403, detail="Rate-blind mode is off -- Sales cannot add or view Cost Sheet lines"
+        )
+
+
 @cost_sheets_router.post(
     "/cost-sheets/{cost_sheet_id}/lines", response_model=CostSheetLineOut, status_code=201
 )
@@ -697,8 +769,17 @@ def add_cost_sheet_line(
     cost_sheet_id: uuid.UUID,
     payload: CostSheetLineCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*COST_ROLES)),
+    current_user=Depends(require_roles(*COST_ROLES, "sales")),
 ):
+    """K.3 Rate-blind mode: 'Sales enters quantities and attaches vendor
+    quotes as images; PM enters rates.' A Sales-submitted rate (or
+    rate_item_id -- Sales has no Rate Sheet visibility to reference one)
+    is always discarded, never trusted from the request body, matching
+    K.3's own 'removed at the API by role, not hidden in the browser.'
+    PM/Director must supply a rate as before -- Rate-blind mode never
+    relaxes anything for them, only opens a narrow Sales-side door."""
+    _require_sales_rate_blind_or_403(db, current_user)
+
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
@@ -714,21 +795,77 @@ def add_cost_sheet_line(
         if not project_sport:
             raise HTTPException(status_code=404, detail="Sport selection not on this project")
 
-    line = CostSheetLine(cost_sheet_id=cost_sheet_id, **payload.model_dump())
+    data = payload.model_dump()
+    if current_user.role.value == "sales":
+        data["rate"] = None
+        data["rate_item_id"] = None
+    elif data["rate"] is None:
+        raise HTTPException(status_code=422, detail="rate is required")
+
+    line = CostSheetLine(cost_sheet_id=cost_sheet_id, **data)
     db.add(line)
     db.commit()
     db.refresh(line)
-    return _line_to_out(line)
+    return _strip_rate_for_sales(_line_to_out(line), current_user.role.value)
 
 
 @cost_sheets_router.get("/cost-sheets/{cost_sheet_id}/lines", response_model=list[CostSheetLineOut])
 def list_cost_sheet_lines(
     cost_sheet_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES, "sales")),
+):
+    _require_sales_rate_blind_or_403(db, current_user)
+    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
+    return [_strip_rate_for_sales(_line_to_out(line), current_user.role.value) for line in lines]
+
+
+class CostSheetLineUpdate(BaseModel):
+    """Every field a PM/Director might correct -- primarily `rate`, to
+    price a Sales-proposed pending line (K.3 Rate-blind mode), but not
+    exclusively (a quantity/spec typo shouldn't need delete-and-recreate)."""
+
+    work_package: WorkPackage | None = None
+    category: str | None = None
+    item_name: str | None = None
+    spec: str | None = None
+    unit: str | None = None
+    quantity: float | None = Field(default=None, gt=0)
+    rate: float | None = Field(default=None, ge=0)
+    city_of_quote: str | None = None
+    labour_category_id: uuid.UUID | None = None
+    wastage_percent: float | None = Field(default=None, ge=0)
+
+
+@cost_sheets_router.patch("/cost-sheets/{cost_sheet_id}/lines/{line_id}", response_model=CostSheetLineOut)
+def update_cost_sheet_line(
+    cost_sheet_id: uuid.UUID,
+    line_id: uuid.UUID,
+    payload: CostSheetLineUpdate,
+    db: Session = Depends(get_db),
     current_user=Depends(require_roles(*COST_ROLES)),
 ):
-    lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
-    return [_line_to_out(line) for line in lines]
+    """PM/Director only -- Sales can propose a line (K.3) but never
+    prices one, in or out of Rate-blind mode."""
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
+        raise HTTPException(status_code=400, detail="Lines can only be edited on a Draft or Unverified cost sheet")
+
+    line = (
+        db.query(CostSheetLine)
+        .filter(CostSheetLine.id == line_id, CostSheetLine.cost_sheet_id == cost_sheet_id)
+        .first()
+    )
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(line, field, value)
+    db.commit()
+    db.refresh(line)
+    return _line_to_out(line)
 
 
 @cost_sheets_router.delete("/cost-sheets/{cost_sheet_id}/lines/{line_id}", status_code=204)
