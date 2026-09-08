@@ -88,6 +88,20 @@ def get_tender_details(
     return row
 
 
+def compute_bg_cost(
+    bg_amount: float, bank_charge_percent_pa: float, contract_weeks: float, dlp_months: int
+) -> tuple[int, float]:
+    """L: 'BG cost = BG amount x bank charge [1-2% p.a.] x (contract months
+    + DLP months) / 12 where contract months = ceil(schedule weeks / 4.33)
+    ... never shown as a separate line to the client.' Shared by the
+    standalone /tender/performance-bg-cost calculator below and the real
+    K.1 step 4A cost-sheet line (POST /cost-sheets/{id}/tender-overheads
+    in overheads.py) so both use the exact same formula."""
+    contract_months = math.ceil(contract_weeks / 4.33)
+    bg_cost = bg_amount * (bank_charge_percent_pa / 100) * (contract_months + dlp_months) / 12
+    return contract_months, bg_cost
+
+
 class PerformanceBgCostRequest(BaseModel):
     bg_amount: float = Field(gt=0)
     bank_charge_percent_pa: float = Field(gt=0)
@@ -105,17 +119,13 @@ def performance_bg_cost(
     payload: PerformanceBgCostRequest,
     current_user=Depends(require_roles(*ROLES)),
 ):
-    """L: 'BG cost = BG amount x bank charge [1-2% p.a.] x (contract months
-    + DLP months) / 12 where contract months = ceil(schedule weeks / 4.33)
-    ... never shown as a separate line to the client' -- it feeds K.1 step
-    4A once a real cost buildup exists to add it into; here it's a
-    standalone calculator, same pattern as the Part K pricing calculator."""
-    contract_months = math.ceil(payload.contract_weeks / 4.33)
-    bg_cost = (
-        payload.bg_amount
-        * (payload.bank_charge_percent_pa / 100)
-        * (contract_months + payload.dlp_months)
-        / 12
+    """Standalone calculator for the same formula K.1 step 4A now applies
+    for real via POST /cost-sheets/{id}/tender-overheads -- kept for
+    PM/Director to sanity-check a figure before committing it as a line,
+    same pattern as the Part K pricing calculator alongside the real
+    pricing engine."""
+    contract_months, bg_cost = compute_bg_cost(
+        payload.bg_amount, payload.bank_charge_percent_pa, payload.contract_weeks, payload.dlp_months
     )
     return PerformanceBgCostOut(contract_months=contract_months, bg_cost=bg_cost)
 

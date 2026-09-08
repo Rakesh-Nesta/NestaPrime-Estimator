@@ -639,6 +639,15 @@ export async function addDesignApprovalsTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function addTenderOverheadsTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/tender-overheads`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addDrainageTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/drainage`, {
     method: "POST",

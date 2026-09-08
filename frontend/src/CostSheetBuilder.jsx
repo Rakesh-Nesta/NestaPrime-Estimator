@@ -18,6 +18,7 @@ import {
   addPlayEquipmentTakeoff,
   addPoolTakeoff,
   addStructureTakeoff,
+  addTenderOverheadsTakeoff,
   addTurfTakeoff,
   addWoodenFlooringTakeoff,
   createOverride,
@@ -50,6 +51,7 @@ const TABS = [
   { key: "hockey_irrigation", label: "Hockey irrigation (F.4)" },
   { key: "freight_crane", label: "Freight & crane (K.1 step 3)" },
   { key: "design_approvals", label: "Design & approvals (K.1 step 4)" },
+  { key: "tender_overheads", label: "Tender overheads (K.1 step 4A)" },
   { key: "manual", label: "Manual line" },
 ];
 
@@ -2187,6 +2189,74 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
 }
 
 // ---------------------------------------------------------------------------
+// Tender overheads (K.1 step 4A, Tender Mode only)
+// ---------------------------------------------------------------------------
+
+function TenderOverheadsForm({ token, costSheetId, onAdded }) {
+  const [f, setF] = useState({
+    tender_fee: "", bg_amount: "", bank_charge_percent_pa: "", contract_weeks: "", dlp_months: "",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        tender_fee: f.tender_fee ? Number(f.tender_fee) : undefined,
+        bg_amount: f.bg_amount ? Number(f.bg_amount) : undefined,
+        bank_charge_percent_pa: f.bank_charge_percent_pa ? Number(f.bank_charge_percent_pa) : undefined,
+        contract_weeks: f.contract_weeks ? Number(f.contract_weeks) : undefined,
+        dlp_months: f.dlp_months ? Number(f.dlp_months) : undefined,
+      };
+      const res = await addTenderOverheadsTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-[11px] text-gray-400">
+        Part L / K.1 step 4A: DLP reserve % and BOCW cess % (only above Rs 10 L) already apply automatically on
+        recompute for Tender Mode projects. Tender fee and performance-BG cost have no formula that can run from
+        existing take-off data, so both are entered here as actual amounts, same as CAR/workmen's-comp above. BG
+        cost uses L's own formula: BG amount x bank charge % p.a. x (contract months + DLP months) / 12, where
+        contract months = ceil(schedule weeks / 4.33).
+      </p>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Tender fee (optional)</p>
+        <Field label="Fee (Rs)"><NumberInput value={f.tender_fee} onChange={set("tender_fee")} /></Field>
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Performance BG cost (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="BG amount (Rs)"><NumberInput value={f.bg_amount} onChange={set("bg_amount")} /></Field>
+          <Field label="Bank charge % p.a."><NumberInput value={f.bank_charge_percent_pa} onChange={set("bank_charge_percent_pa")} /></Field>
+          <Field label="Contract weeks"><NumberInput value={f.contract_weeks} onChange={set("contract_weeks")} /></Field>
+          <Field label="DLP months"><NumberInput value={f.dlp_months} onChange={set("dlp_months")} /></Field>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      {result?.bg_contract_months != null && (
+        <p className="text-xs text-gray-500">Contract months (ceil): {result.bg_contract_months}</p>
+      )}
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Manual line (generic /lines endpoint)
 // ---------------------------------------------------------------------------
 
@@ -2273,7 +2343,7 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
 // (backend/app/models/project.py) for why nothing is fabricated for them.
 const TABS_HIDDEN_FOR_RESURFACING = new Set(["structure", "base", "drainage"]);
 
-export default function CostSheetBuilder({ token, costSheet, projectType, projectSports, sports, onBack, onCostSheetUpdated }) {
+export default function CostSheetBuilder({ token, costSheet, projectType, tenderMode, projectSports, sports, onBack, onCostSheetUpdated }) {
   const [lines, setLines] = useState([]);
   const [labourCategories, setLabourCategories] = useState([]);
   const [warnings, setWarnings] = useState([]);
@@ -2521,7 +2591,9 @@ export default function CostSheetBuilder({ token, costSheet, projectType, projec
             </p>
           )}
           <div className="flex flex-wrap gap-1 mb-4">
-            {(projectType === "resurfacing" ? TABS.filter((t) => !TABS_HIDDEN_FOR_RESURFACING.has(t.key)) : TABS).map((t) => (
+            {(projectType === "resurfacing" ? TABS.filter((t) => !TABS_HIDDEN_FOR_RESURFACING.has(t.key)) : TABS)
+              .filter((t) => t.key !== "tender_overheads" || tenderMode)
+              .map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -2552,6 +2624,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, projec
           {tab === "hockey_irrigation" && <HockeyIrrigationForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "freight_crane" && <FreightCraneForm token={token} costSheetId={costSheet.id} onAdded={refresh} />}
           {tab === "design_approvals" && <DesignApprovalsForm token={token} costSheetId={costSheet.id} onAdded={refresh} />}
+          {tab === "tender_overheads" && <TenderOverheadsForm token={token} costSheetId={costSheet.id} onAdded={refresh} />}
           {tab === "manual" && (
             <ManualLineForm
               token={token}

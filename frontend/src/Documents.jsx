@@ -104,6 +104,7 @@ export default function Documents({ token, project, role, onBack }) {
           token={token}
           costSheet={builderCostSheet}
           projectType={project.project_type}
+          tenderMode={project.tender_mode}
           projectSports={projectSports}
           sports={sports}
           onBack={() => {

@@ -337,9 +337,11 @@ def test_full_chain_recomputed_cost_sheet_flows_into_a_real_quotation(client, di
     # site establishment defaults to 6%, overhead recovery 10% applies by
     # default, services contingency defaults to 0%, and this is a
     # Government client -- tender_mode is auto-on, so K.1 4B's warranty
-    # reserve is correctly skipped (mutually exclusive with 4A's Tender
-    # Mode DLP reserve) -- so cost_total == material x 1.22 x 1.06 x 1.10.
-    assert round(recomputed["cost_total"], 2) == round(850000 * 1.22 * 1.06 * 1.10, 2)
+    # reserve is correctly skipped in favour of 4A's own DLP reserve 1%
+    # (mutually exclusive, never both); the pre-cess subtotal here also
+    # exceeds Part L's Rs 10 L BOCW cess threshold, so that 1% applies too
+    # -- so cost_total == material x 1.22 x 1.06 x 1.01 (DLP) x 1.10 x 1.01 (cess).
+    assert round(recomputed["cost_total"], 2) == round(850000 * 1.22 * 1.06 * 1.01 * 1.10 * 1.01, 2)
 
     verify_res = client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
     assert verify_res.status_code == 200
@@ -357,4 +359,4 @@ def test_full_chain_recomputed_cost_sheet_flows_into_a_real_quotation(client, di
         },
         headers=headers,
     ).json()
-    assert estimate["options"][0]["cost_for_option"] == round(850000 * 1.22 * 1.06 * 1.10, 2)
+    assert estimate["options"][0]["cost_for_option"] == round(850000 * 1.22 * 1.06 * 1.01 * 1.10 * 1.01, 2)

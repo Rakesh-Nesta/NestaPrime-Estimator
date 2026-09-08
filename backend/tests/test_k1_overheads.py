@@ -277,18 +277,24 @@ def test_warranty_reserve_applies_by_default_for_private_clients(client, directo
     assert round(res.json()["cost_total"], 2) == 10258.36
 
 
-def test_warranty_reserve_is_skipped_for_tender_mode_projects(client, director_user):
+def test_warranty_reserve_is_replaced_by_dlp_reserve_for_tender_mode_projects(client, director_user):
     """K.1 4A/4B: the Tender Mode DLP reserve and the private-client
-    warranty reserve are mutually exclusive -- since 4A itself isn't
-    built, a Government (tender_mode) project gets neither right now,
-    which this test locks in as the honest, documented behaviour."""
+    warranty reserve are mutually exclusive -- a Government (tender_mode)
+    project gets 4A's DLP reserve (1% by default) instead of 4B's warranty
+    reserve, never both. Both default to 1%, so the final total happens to
+    match test_warranty_reserve_applies_by_default_for_private_clients --
+    that's a coincidence of the shared default, not proof the mechanism is
+    a no-op (see test_dlp_reserve_percent_is_a_live_master_setting in
+    test_tender_overheads.py, which changes the rate and shows the total
+    move)."""
     headers = _director_headers(client, director_user)
     _, cost_sheet_id = _draft_cost_sheet(client, headers, client_type="government")
     _add_structure_line(client, headers, cost_sheet_id)
 
     res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
-    # No warranty reserve factor: 8296 * 1.06 * 1.10 (overhead) * 1.05 (contingency)
-    expected = 8296 * 1.06 * 1.10 * 1.05
+    # DLP reserve 1% instead of warranty reserve 1%, no BOCW cess (subtotal
+    # well under the Rs 10 L threshold): 8296 * 1.06 * 1.01 (DLP) * 1.10 (overhead) * 1.05 (contingency)
+    expected = 8296 * 1.06 * 1.01 * 1.10 * 1.05
     assert round(res.json()["cost_total"], 2) == round(expected, 2)
 
 

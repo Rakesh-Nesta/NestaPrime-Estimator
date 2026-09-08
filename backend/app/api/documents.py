@@ -106,6 +106,14 @@ SITE_ESTABLISHMENT_PERCENT_DEFAULT = 6.0  # D.4 "[confirm 4-8%]" -- midpoint
 # K.1 step 4B: "Warranty reserve 1% (private clients; Appendix B)" --
 # mutually exclusive with step 4A's Tender Mode DLP reserve (never both).
 WARRANTY_RESERVE_PERCENT_DEFAULT = 1.0
+# K.1 step 4A (Tender Mode only): "DLP reserve 1% (replaces the 1%
+# warranty reserve of Appendix B -- never both)."
+DLP_RESERVE_PERCENT_DEFAULT = 1.0
+# Part L "Statutory": "BOCW cess 1% on works > Rs 10 L ... flow into K.1
+# step 4A." Tender Mode only, and only once the pre-cess subtotal (across
+# every work package) exceeds this threshold.
+BOCW_CESS_PERCENT_DEFAULT = 1.0
+BOCW_CESS_THRESHOLD_RS_DEFAULT = 1_000_000.0  # "Rs 10 L"
 # K.1 step 5A: "Company overhead recovery [confirm 10%] of step 5."
 COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT = 10.0
 
@@ -485,32 +493,36 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     PM-entered CostSheetLine rows via POST .../freight-crane, so they flow
     through steps 1-2 like any other line rather than needing a separate
     term here), 4 (design & approvals -- likewise PM-entered lines via
-    POST .../design-approvals), 4B (warranty reserve %, private/non-Tender
-    projects only), 5A (company overhead recovery % of step 5) and 6
-    (contingency grouped by work_package).
+    POST .../design-approvals), 4A (Tender Mode only: DLP reserve % + BOCW
+    cess % above the Rs 10 L threshold; BG cost and tender fee are
+    PM-entered lines via POST .../tender-overheads, same pattern as
+    freight/crane), 4B (warranty reserve %, private/non-Tender projects
+    only -- mutually exclusive with 4A's DLP reserve, per K.1's own text),
+    5A (company overhead recovery % of step 5) and 6 (contingency grouped
+    by work_package).
 
-    Step 4A (Tender Mode's own overheads -- BG cost, DLP reserve, BOCW
-    cess, tender fee) is deliberately NOT applied: Tender Mode is a
-    separate, larger, not-yet-integrated feature (Part L). A tender_mode
-    project therefore gets neither 4A's DLP reserve nor 4B's warranty
-    reserve right now (K.1's own text makes the two mutually exclusive)
-    -- an honest reflection of that gap, not a miscalculation.
-
-    Site establishment, warranty reserve and company overhead recovery are
-    each "a flat % of a running subtotal" globally (K.1 steps 3/4B/5A),
-    but since a percentage of a sum equals the sum of that percentage
-    applied to each addend, multiplying each work_package's own subtotal
-    by every one of these flat factors before that package's own
-    contingency is mathematically identical to computing one global
-    amount at each step and allocating it back out proportionally -- so
-    they're all folded into the same per-package loop without a separate
-    allocation pass, in the same order the blueprint lists them (3, 4B,
-    5A) ahead of contingency (6)."""
+    Site establishment, warranty/DLP reserve and company overhead recovery
+    are each "a flat % of a running subtotal" globally (K.1 steps 3/4B or
+    4A/5A), but since a percentage of a sum equals the sum of that
+    percentage applied to each addend, multiplying each work_package's own
+    subtotal by every one of these flat factors before that package's own
+    contingency is mathematically identical to computing one global amount
+    at each step and allocating it back out proportionally -- so they're
+    all folded into the same per-package loop without a separate
+    allocation pass, in the same order the blueprint lists them (3, 4B/4A,
+    5A) ahead of contingency (6). BOCW cess breaks that trick on its own,
+    though: Part L's 10 L threshold applies to the WHOLE project's pre-cess
+    subtotal, not to each work_package independently, so the loop runs in
+    two passes -- the first computes each package's pre-cess subtotal (and
+    their sum, to test the threshold once), the second applies the
+    resulting cess percentage (0% or the configured rate, same for every
+    package once decided) ahead of that package's own contingency."""
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet.id).all()
     if not lines:
         raise HTTPException(status_code=400, detail="Cannot recompute a cost sheet with no lines")
 
     project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
+    tender_mode = project is not None and project.tender_mode
 
     blended_fallback = db.query(LabourCategory).filter(LabourCategory.key == "blended_fallback").first()
     blended_fallback_percent = (
@@ -528,21 +540,45 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     )
     warranty_reserve_percent = (
         0.0
-        if (project is not None and project.tender_mode)
+        if tender_mode
         else _get_effective_setting_float(
             db, DocumentType.COST_SHEET, cost_sheet.id, "warranty_reserve_percent", WARRANTY_RESERVE_PERCENT_DEFAULT
         )
+    )
+    dlp_reserve_percent = (
+        _get_effective_setting_float(
+            db, DocumentType.COST_SHEET, cost_sheet.id, "dlp_reserve_percent", DLP_RESERVE_PERCENT_DEFAULT
+        )
+        if tender_mode
+        else 0.0
     )
     company_overhead_percent = _get_effective_setting_float(
         db, DocumentType.COST_SHEET, cost_sheet.id, "company_overhead_recovery_percent",
         COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT,
     )
 
-    cost_incl_contingency = 0.0
+    pre_cess_by_package: dict[WorkPackage, float] = {}
+    pre_cess_total = 0.0
     for work_package, base in package_base.items():
         loaded = base * (1 + site_establishment_percent / 100)
         loaded *= 1 + warranty_reserve_percent / 100
+        loaded *= 1 + dlp_reserve_percent / 100
         loaded *= 1 + company_overhead_percent / 100
+        pre_cess_by_package[work_package] = loaded
+        pre_cess_total += loaded
+
+    bocw_cess_threshold_rs = _get_setting_float(db, "bocw_cess_threshold_rs", BOCW_CESS_THRESHOLD_RS_DEFAULT)
+    bocw_cess_percent = (
+        _get_effective_setting_float(
+            db, DocumentType.COST_SHEET, cost_sheet.id, "bocw_cess_percent", BOCW_CESS_PERCENT_DEFAULT
+        )
+        if (tender_mode and pre_cess_total > bocw_cess_threshold_rs)
+        else 0.0
+    )
+
+    cost_incl_contingency = 0.0
+    for work_package, loaded in pre_cess_by_package.items():
+        loaded *= 1 + bocw_cess_percent / 100
         contingency_percent = _get_effective_setting_float(
             db, DocumentType.COST_SHEET, cost_sheet.id,
             f"contingency_{work_package.value}_percent", CONTINGENCY_PERCENT_DEFAULT[work_package],
@@ -666,7 +702,10 @@ def get_k1_constants(
         ("site_establishment_percent", "Site establishment %", SITE_ESTABLISHMENT_PERCENT_DEFAULT),
         ("company_overhead_recovery_percent", "Company overhead recovery %", COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT),
     ]
-    if not (project is not None and project.tender_mode):
+    if project is not None and project.tender_mode:
+        keys.append(("dlp_reserve_percent", "DLP reserve % (Tender Mode)", DLP_RESERVE_PERCENT_DEFAULT))
+        keys.append(("bocw_cess_percent", "BOCW cess % (Tender Mode, works > Rs 10 L)", BOCW_CESS_PERCENT_DEFAULT))
+    else:
         keys.append(("warranty_reserve_percent", "Warranty reserve %", WARRANTY_RESERVE_PERCENT_DEFAULT))
     for work_package in WorkPackage:
         keys.append((

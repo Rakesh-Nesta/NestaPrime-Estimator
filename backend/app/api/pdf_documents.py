@@ -64,13 +64,25 @@ _STARTER_TERMS_FIXED = [
 ]
 
 
-def _starter_terms(db: Session) -> list[str]:
+def _starter_terms(db: Session, tender_mode: bool = False) -> list[str]:
     """Appendix B's jurisdiction clause names 'NestaPrime's registered
     office city' -- Part O's COMPANY master carries that city as a real
     field, not a fixed string, so it's substituted in here whenever a
     Director has actually configured company_registered_office_city;
     otherwise the clause falls back to the same generic wording Appendix
-    B itself uses, rather than fabricating a city."""
+    B itself uses, rather than fabricating a city. K.1 4A/4B are mutually
+    exclusive (never both), so a Tender Mode document's own internally-
+    held reserve is the DLP reserve, not the private-client warranty
+    reserve -- the fixed warranty clause's last sentence is swapped
+    accordingly rather than printing a reserve that was never actually
+    held for this document."""
+    terms = list(_STARTER_TERMS_FIXED)
+    if tender_mode:
+        terms[3] = terms[3].replace(
+            "A warranty reserve of 1% of the contract value is held internally.",
+            "A DLP (defect-liability period) reserve of 1% of the contract value is held internally "
+            "(Tender Mode; Part L).",
+        )
     city = get_current_setting_value(db, "company_registered_office_city")
     jurisdiction = (
         f"Jurisdiction: courts at {city}; disputes above Rs 25 L go to arbitration under the "
@@ -79,7 +91,7 @@ def _starter_terms(db: Session) -> list[str]:
         else "Jurisdiction: courts at NestaPrime's registered office city; disputes above Rs 25 L go to "
         "arbitration under the Arbitration and Conciliation Act 1996 with a sole arbitrator."
     )
-    return [*_STARTER_TERMS_FIXED, jurisdiction]
+    return [*terms, jurisdiction]
 
 
 WARRANTY_TABLE = [
@@ -350,9 +362,10 @@ def get_quotation_pdf(
         )
 
     styles = _styles()
+    doc_title = "FINANCIAL BID (Tender Mode)" if project.tender_mode else "FORMAL QUOTATION"
     story: list = [
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
-        Paragraph("FORMAL QUOTATION", styles["DocTitle"]),
+        Paragraph(doc_title, styles["DocTitle"]),
         Spacer(1, 4 * mm),
         Paragraph(
             f"<b>Quotation No.:</b> {quotation.document_no} &nbsp;&nbsp; "
@@ -363,24 +376,59 @@ def get_quotation_pdf(
         Spacer(1, 3 * mm),
         *_client_block(styles, client, project),
         Spacer(1, 5 * mm),
-        Paragraph("Particulars", styles["SectionHeading"]),
     ]
 
-    rows = [["Description", "Area / unit", "Rate basis", "Amount (ex-GST)"]]
-    for row in sport_rows:
-        sport, project_sport, option = row["sport"], row["project_sport"], row["option"]
-        rows.append(
-            [
-                f"{sport.name} ({option.package.value.capitalize()})",
-                f"{sport.playing_dims} ft, {project_sport.number_of_courts} court"
-                + ("s" if project_sport.number_of_courts != 1 else ""),
-                "Lump sum, turnkey",
-                format_inr(row["ex_gst"]),
-            ]
-        )
-    table = Table(rows, colWidths=[55 * mm, 45 * mm, 35 * mm, 40 * mm])
-    table.setStyle(_TABLE_GRID)
-    story.append(table)
+    if project.tender_mode:
+        # Part L: "BOQ-style itemised schedule (item no., description,
+        # unit, qty, rate, amount) instead of packages; DSR/SOR reference
+        # column." M.4a: this IS the NPQ Quotation record with a BOQ
+        # export applied, not a separate document type -- and K.1 step 9's
+        # "discount distributed proportionally into item rates (BOQ rule)"
+        # is already what row["ex_gst"] does (it apportions
+        # selling_after_discount, i.e. post-discount, by cost share), so
+        # no separate discount line is needed here, same as the private-
+        # client table below never carries one either. This app has no
+        # granular per-item take-off exposed client-side (K.3 keeps the
+        # cost-side CostSheetLine rows internal), so each sport/package is
+        # one BOQ line at qty 1 -- an honest lump-sum-per-item BOQ, not a
+        # fully granular material-level one. There is no DSR/SOR code
+        # system in this app, so that column is printed blank for every
+        # item rather than fabricated.
+        story.append(Paragraph("Bill of Quantities (BOQ)", styles["SectionHeading"]))
+        rows = [["Item", "Description", "DSR/SOR ref.", "Unit", "Qty", "Rate (ex-GST)", "Amount (ex-GST)"]]
+        for idx, row in enumerate(sport_rows, start=1):
+            sport, option = row["sport"], row["option"]
+            rows.append(
+                [
+                    str(idx),
+                    f"{sport.name} ({option.package.value.capitalize()})",
+                    "--",
+                    "Lot",
+                    "1",
+                    format_inr(row["ex_gst"]),
+                    format_inr(row["ex_gst"]),
+                ]
+            )
+        table = Table(rows, colWidths=[10 * mm, 45 * mm, 20 * mm, 15 * mm, 12 * mm, 32 * mm, 32 * mm])
+        table.setStyle(_TABLE_GRID)
+        story.append(table)
+    else:
+        story.append(Paragraph("Particulars", styles["SectionHeading"]))
+        rows = [["Description", "Area / unit", "Rate basis", "Amount (ex-GST)"]]
+        for row in sport_rows:
+            sport, project_sport, option = row["sport"], row["project_sport"], row["option"]
+            rows.append(
+                [
+                    f"{sport.name} ({option.package.value.capitalize()})",
+                    f"{sport.playing_dims} ft, {project_sport.number_of_courts} court"
+                    + ("s" if project_sport.number_of_courts != 1 else ""),
+                    "Lump sum, turnkey",
+                    format_inr(row["ex_gst"]),
+                ]
+            )
+        table = Table(rows, colWidths=[55 * mm, 45 * mm, 35 * mm, 40 * mm])
+        table.setStyle(_TABLE_GRID)
+        story.append(table)
 
     total_rounded = round_to_nearest_10(float(quotation.quotation_total))
     totals_rows = [
@@ -473,7 +521,7 @@ def get_quotation_pdf(
     story.extend(_exclusions_flow(styles, exclusions))
 
     story.append(Paragraph("Terms &amp; conditions", styles["SectionHeading"]))
-    story.extend(Paragraph("&bull; " + term, styles["Normal"]) for term in _starter_terms(db))
+    story.extend(Paragraph("&bull; " + term, styles["Normal"]) for term in _starter_terms(db, project.tender_mode))
 
     validity_note = (
         f"Valid until {quotation.sent_at.date().isoformat()} (30 days from sending)."

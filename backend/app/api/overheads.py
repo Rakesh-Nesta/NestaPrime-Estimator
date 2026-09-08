@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.documents import CostSheetLineOut, _line_to_out
 from app.api.site_works import _get_cost_sheet
+from app.api.tender import compute_bg_cost
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.document import CostSheetLine, WorkPackage
@@ -197,3 +198,109 @@ def add_design_approvals_takeoff(
         db.refresh(line)
 
     return DesignApprovalsTakeoffOut(lines=[_line_to_out(line) for line in lines_to_create])
+
+
+# ---------------------------------------------------------------------------
+# K.1 step 4A: "+ Tender overheads (Tender Mode only): BG cost, DLP reserve
+# 1% ... BOCW cess 1%, tender fee." DLP reserve % and BOCW cess % are flat
+# percentages folded into _compute_cost_sheet_total (documents.py) like
+# site establishment/warranty reserve/overhead recovery. BG cost and
+# tender fee have no formula that can run automatically from existing
+# take-off data (BG cost needs a PM-entered BG amount and bank charge; the
+# tender fee is whatever the tender document states) -- both are
+# PM-entered actual-amount lines here, same pattern as freight/crane and
+# CAR/workmen's-comp above. Never shown as a separate line to the client
+# (Part L) is already satisfied: these become ordinary CostSheetLine rows,
+# and K.3 keeps the whole cost sheet server-side/PM-Director-only.
+# ---------------------------------------------------------------------------
+
+
+class TenderOverheadsTakeoffRequest(BaseModel):
+    tender_fee: float | None = Field(default=None, gt=0)
+    bg_amount: float | None = Field(default=None, gt=0)
+    bank_charge_percent_pa: float | None = Field(default=None, gt=0)
+    contract_weeks: float | None = Field(default=None, gt=0)
+    dlp_months: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _at_least_one(self):
+        bg_fields = (self.bg_amount, self.bank_charge_percent_pa, self.contract_weeks, self.dlp_months)
+        has_bg = any(v is not None for v in bg_fields)
+        if has_bg and not all(v is not None for v in bg_fields):
+            raise ValueError(
+                "bg_amount, bank_charge_percent_pa, contract_weeks and dlp_months must all be given "
+                "together for a performance-BG cost line"
+            )
+        if self.tender_fee is None and not has_bg:
+            raise ValueError(
+                "Provide at least tender_fee or the BG cost inputs "
+                "(bg_amount, bank_charge_percent_pa, contract_weeks, dlp_months)"
+            )
+        return self
+
+
+class TenderOverheadsTakeoffOut(BaseModel):
+    bg_contract_months: int | None = None
+    lines: list[CostSheetLineOut]
+
+
+@overheads_router.post(
+    "/cost-sheets/{cost_sheet_id}/tender-overheads", response_model=TenderOverheadsTakeoffOut, status_code=201
+)
+def add_tender_overheads_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: TenderOverheadsTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+    project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
+    if not (project is not None and project.tender_mode):
+        raise HTTPException(
+            status_code=400,
+            detail="Tender overheads only apply to Tender Mode (Government client) projects (Part L)",
+        )
+
+    lines_to_create: list[CostSheetLine] = []
+    bg_contract_months: int | None = None
+
+    if payload.tender_fee is not None:
+        lines_to_create.append(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet_id,
+                work_package=WorkPackage.SERVICES,
+                category="Tender overheads",
+                item_name="Tender fee",
+                unit="set",
+                quantity=1,
+                rate=payload.tender_fee,
+                source=RateSource.MANUAL,
+            )
+        )
+
+    if payload.bg_amount is not None:
+        bg_contract_months, bg_cost = compute_bg_cost(
+            payload.bg_amount, payload.bank_charge_percent_pa, payload.contract_weeks, payload.dlp_months
+        )
+        lines_to_create.append(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet_id,
+                work_package=WorkPackage.SERVICES,
+                category="Tender overheads",
+                item_name="Performance BG cost",
+                unit="set",
+                quantity=1,
+                rate=bg_cost,
+                source=RateSource.MANUAL,
+            )
+        )
+
+    for line in lines_to_create:
+        db.add(line)
+    db.commit()
+    for line in lines_to_create:
+        db.refresh(line)
+
+    return TenderOverheadsTakeoffOut(
+        bg_contract_months=bg_contract_months, lines=[_line_to_out(line) for line in lines_to_create]
+    )
