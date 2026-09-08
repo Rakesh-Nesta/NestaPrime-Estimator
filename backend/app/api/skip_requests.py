@@ -1,10 +1,11 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.api.documents import DOCUMENT_ROLES, _document_no
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -116,6 +117,7 @@ class SkipRequestApprove(BaseModel):
 def approve_skip_request(
     skip_request_id: uuid.UUID,
     payload: SkipRequestApprove,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*APPROVE_ROLES)),
 ):
@@ -152,6 +154,14 @@ def approve_skip_request(
     skip_request.approved_by_id = current_user.id
     skip_request.resulting_cost_sheet_id = cost_sheet.id
     skip_request.decided_at = datetime.now(UTC)
+
+    # M.5 names "skips" as an audit log category.
+    write_audit_log_entry(
+        db, current_user, "skip_request", skip_request.id, "status",
+        old_value=SkipRequestStatus.PENDING.value, new_value=SkipRequestStatus.APPROVED.value,
+        reason=skip_request.reason, request=request,
+    )
+
     db.commit()
     db.refresh(skip_request)
     return skip_request

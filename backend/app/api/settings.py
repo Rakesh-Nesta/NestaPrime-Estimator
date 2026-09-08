@@ -1,10 +1,11 @@
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.setting import DocumentType, Override, Setting, SettingScope
@@ -113,11 +114,13 @@ class SettingCreate(BaseModel):
 @settings_router.post("", response_model=SettingOut, status_code=201)
 def create_setting_version(
     payload: SettingCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*WRITE_ROLES)),
 ):
     """Q.2 rule 1: 'editing' a Master Setting is really creating a new
     version, effective from a given date -- Director only."""
+    old_value = get_current_setting_value(db, payload.key, payload.scope_value)
     setting = Setting(
         key=payload.key,
         scope=payload.scope,
@@ -129,6 +132,14 @@ def create_setting_version(
         reason=payload.reason,
     )
     db.add(setting)
+    db.flush()
+
+    # Q.2 rule 7: "Settings changes are in the audit log (M.5)."
+    write_audit_log_entry(
+        db, current_user, "setting", setting.id, payload.key,
+        old_value=old_value, new_value=payload.value, reason=payload.reason, request=request,
+    )
+
     db.commit()
     db.refresh(setting)
     return setting
@@ -144,6 +155,7 @@ class BulkUpdateRequest(BaseModel):
 @settings_router.post("/bulk-update", response_model=list[SettingOut])
 def bulk_update_settings(
     payload: BulkUpdateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*WRITE_ROLES)),
 ):
@@ -188,7 +200,14 @@ def bulk_update_settings(
             reason=payload.reason,
         )
         db.add(new_setting)
+        db.flush()
         new_versions.append(new_setting)
+
+        # Q.2 rule 7: "Settings changes are in the audit log (M.5)."
+        write_audit_log_entry(
+            db, current_user, "setting", new_setting.id, row.key,
+            old_value=row.value, new_value=new_setting.value, reason=payload.reason, request=request,
+        )
 
     db.commit()
     for v in new_versions:

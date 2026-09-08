@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
+import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
 import Documents from "./Documents";
 import MasterSettings from "./MasterSettings";
@@ -23,7 +24,7 @@ export default function App() {
   const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
   const [preNavScreen, setPreNavScreen] = useState("sports");
 
-  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin"];
+  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log"];
 
   function goToTopLevel(target) {
     if (TOP_LEVEL_SCREENS.includes(screen)) {
@@ -74,6 +75,11 @@ export default function App() {
             <button onClick={() => goToTopLevel("reports")} className="text-sm text-blue-600 hover:underline">
               {screen === "reports" ? "Back to project" : "Reports"}
             </button>
+            {user.role === "director" && (
+              <button onClick={() => goToTopLevel("audit_log")} className="text-sm text-blue-600 hover:underline">
+                {screen === "audit_log" ? "Back to project" : "Audit Log"}
+              </button>
+            )}
             <p className="text-sm text-gray-500">
               {user.name} · <span className="font-medium">{user.role}</span>
             </p>
@@ -90,6 +96,9 @@ export default function App() {
         )}
         {screen === "sports_scope_admin" && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "audit_log" && user.role === "director" && (
+          <AuditLogView token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "clients_admin" && (
           <ClientsAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />

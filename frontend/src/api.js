@@ -938,6 +938,28 @@ export async function downloadQuotationPdfBlob(token, quotationId) {
   return res.blob();
 }
 
+export async function listAuditLog(token, { documentType, documentId } = {}) {
+  const params = new URLSearchParams();
+  if (documentType) params.set("document_type", documentType);
+  if (documentId) params.set("document_id", documentId);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/audit-log${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function downloadAuditLogCsvBlob(token, { documentType, documentId } = {}) {
+  const params = new URLSearchParams();
+  if (documentType) params.set("document_type", documentType);
+  if (documentId) params.set("document_id", documentId);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/audit-log/export${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 export async function supersedeAttachment(token, attachmentId, { tag, approvalStrength, file }) {
   const formData = new FormData();
   if (tag) formData.append("tag", tag);

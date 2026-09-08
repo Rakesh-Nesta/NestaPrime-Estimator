@@ -1,10 +1,11 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.api.pricing import compute_pricing, cost_weighted_floor_and_target, effective_floor_and_target
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
@@ -61,11 +62,14 @@ def _enforce_approval_evidence(
     current_user,
     waive_evidence_reason: str | None,
     require_formal: bool = False,
+    request: Request | None = None,
 ) -> None:
     """M.3: 'A stage cannot move to its approved status without at least
     one attachment tagged approval_evidence unless PM/Director waives it
     (logged).' Government/Tender and quotations >= Rs 25L require Formal
-    evidence specifically (M.3)."""
+    evidence specifically (M.3). M.5 names "waivers" as one of the audit
+    log's four covered categories -- logged here, the one place every
+    waiver in the app actually happens."""
     if _has_evidence(db, doc_type, doc_id, require_formal=require_formal):
         return
     if not waive_evidence_reason:
@@ -76,6 +80,11 @@ def _enforce_approval_evidence(
         )
     if current_user.role.value not in ("pm", "director"):
         raise HTTPException(status_code=403, detail="Only PM/Director may waive approval evidence (M.4)")
+
+    write_audit_log_entry(
+        db, current_user, doc_type.value, doc_id, "approval_evidence_waiver",
+        old_value=None, new_value="waived", reason=waive_evidence_reason, request=request,
+    )
 
 cost_sheets_router = APIRouter(tags=["cost-sheets"])
 estimates_router = APIRouter(tags=["estimates"])
@@ -1119,13 +1128,14 @@ def update_option_client_status(
     estimate_id: uuid.UUID,
     option_id: uuid.UUID,
     payload: EstimateOptionStatusUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
     """M.4: 'record Client approved / demand / rejected' -- Sales included.
     M.3: an option can't move to Client approved without an
     approval_evidence attachment on the Estimate, unless PM/Director waives
-    it."""
+    it. M.5 names "approvals" as an audit log category -- logged below."""
     option = (
         db.query(EstimateOption)
         .filter(EstimateOption.id == option_id, EstimateOption.estimate_id == estimate_id)
@@ -1136,11 +1146,16 @@ def update_option_client_status(
 
     if payload.client_status == EstimateOptionClientStatus.APPROVED:
         _enforce_approval_evidence(
-            db, DocumentType.ESTIMATE, estimate_id, current_user, payload.waive_evidence_reason
+            db, DocumentType.ESTIMATE, estimate_id, current_user, payload.waive_evidence_reason, request=request
         )
 
+    old_status = option.client_status
     option.client_status = payload.client_status
     option.client_demand_note = payload.client_demand_note
+    write_audit_log_entry(
+        db, current_user, "estimate_option", option.id, "client_status",
+        old_value=old_status.value, new_value=payload.client_status.value, request=request,
+    )
     db.commit()
     db.refresh(option)
     out = EstimateOptionOut.model_validate(option)
@@ -1210,6 +1225,7 @@ def _quotation_to_out(quotation: Quotation, role: str) -> QuotationOut:
 def create_quotation(
     project_id: uuid.UUID,
     payload: QuotationCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
@@ -1285,6 +1301,15 @@ def create_quotation(
     db.flush()
     for option in included_options:
         db.add(QuotationLine(quotation_id=quotation.id, estimate_option_id=option.id))
+
+    if payload.discount_value:
+        # M.5 names "discounts" as an audit log category.
+        write_audit_log_entry(
+            db, current_user, "quotation", quotation.id, "discount_value",
+            old_value=0, new_value=payload.discount_value,
+            reason=f"discount_type={payload.discount_type}", request=request,
+        )
+
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(quotation, current_user.role.value)
@@ -1315,6 +1340,7 @@ def get_quotation(
 @quotations_router.post("/quotations/{quotation_id}/release", response_model=QuotationOut)
 def release_quotation(
     quotation_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*COST_ROLES)),
 ):
@@ -1339,6 +1365,21 @@ def release_quotation(
         raise HTTPException(
             status_code=403,
             detail="Below-floor discount or unverified cost basis requires Director release",
+        )
+
+    if needs_director:
+        # M.5 names "discounts" as an audit log category; a below-floor
+        # release is exactly the case where a discount pushed margin past
+        # the point that needs Director sign-off (K.1 step 10 / K.2).
+        why = []
+        if quotation.below_floor:
+            why.append("below_floor")
+        if quotation.cost_basis_unverified:
+            why.append("cost_basis_unverified")
+        write_audit_log_entry(
+            db, current_user, "quotation", quotation.id, "status",
+            old_value=quotation.status.value, new_value=QuotationStatus.RELEASED.value,
+            reason=f"Director release required: {', '.join(why)}", request=request,
         )
 
     quotation.status = QuotationStatus.RELEASED
@@ -1380,6 +1421,7 @@ class WonLostRequest(BaseModel):
 def mark_quotation_won(
     quotation_id: uuid.UUID,
     payload: WonLostRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
@@ -1399,7 +1441,7 @@ def mark_quotation_won(
     require_formal = project.tender_mode or float(quotation.quotation_total) >= FORMAL_EVIDENCE_REQUIRED_ABOVE_RS
     _enforce_approval_evidence(
         db, DocumentType.QUOTATION, quotation_id, current_user, payload.waive_evidence_reason,
-        require_formal=require_formal,
+        require_formal=require_formal, request=request,
     )
 
     quotation.status = QuotationStatus.WON

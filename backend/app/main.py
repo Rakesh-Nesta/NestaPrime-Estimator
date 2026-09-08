@@ -5,6 +5,7 @@ from app.api import (
     accessories,
     athletics,
     attachments,
+    audit_log,
     auth,
     client_signatories,
     clients,
@@ -83,6 +84,7 @@ app.include_router(play_equipment.play_equipment_router)
 app.include_router(overheads.overheads_router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
+app.include_router(audit_log.audit_log_router)
 app.include_router(messages.messages_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
