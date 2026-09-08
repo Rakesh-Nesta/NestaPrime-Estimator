@@ -4,16 +4,20 @@ import ClientSignatoriesPanel from "./ClientSignatoriesPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
 import MessagesPanel from "./MessagesPanel";
 import {
+  addWorkOrderPaymentEntry,
   createCostSheet,
   createEstimate,
   createQuotation,
+  createWorkOrder,
   downloadEstimatePdfBlob,
   downloadQuotationPdfBlob,
+  getWorkOrder,
   listCostSheets,
   listEstimates,
   listProjectSports,
   listQuotations,
   listSports,
+  listWorkOrderPaymentEntries,
   markQuotationLost,
   markQuotationWon,
   releaseQuotation,
@@ -21,6 +25,7 @@ import {
   sendEstimate,
   sendQuotation,
   updateEstimateOptionClientStatus,
+  updateWorkOrderStatus,
   verifyCostSheet,
 } from "./api";
 
@@ -512,6 +517,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
           </div>
           {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
           {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}
+          {q.status === "won" && role !== "sales" && <WorkOrderPanel token={token} quotationId={q.id} />}
         </div>
       ))}
 
@@ -548,6 +554,165 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
         <p className="text-xs text-gray-400">
           Requires at least one Client-approved or demand-received estimate option (M.2 rule 2).
         </p>
+      )}
+    </div>
+  );
+}
+
+const WORK_ORDER_NEXT_STATUS = { awarded: "in_progress", in_progress: "completed" };
+const WORK_ORDER_STATUS_LABEL = { awarded: "Awarded", in_progress: "In progress", completed: "Completed" };
+
+function WorkOrderPanel({ token, quotationId }) {
+  const [workOrder, setWorkOrder] = useState(null);
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [entryForm, setEntryForm] = useState({ milestone_name: "", amount_received: "", received_date: "", notes: "" });
+
+  function load() {
+    return getWorkOrder(token, quotationId).then((wo) => {
+      setWorkOrder(wo);
+      return wo ? listWorkOrderPaymentEntries(token, wo.id) : [];
+    });
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load()
+      .then(setEntries)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, quotationId]);
+
+  async function refresh() {
+    setError("");
+    try {
+      setEntries(await load());
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleCreate() {
+    setError("");
+    try {
+      await createWorkOrder(token, quotationId);
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleAdvanceStatus() {
+    setError("");
+    try {
+      await updateWorkOrderStatus(token, workOrder.id, WORK_ORDER_NEXT_STATUS[workOrder.status]);
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleAddEntry(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await addWorkOrderPaymentEntry(token, workOrder.id, {
+        milestone_name: entryForm.milestone_name,
+        amount_received: Number(entryForm.amount_received),
+        received_date: entryForm.received_date,
+        notes: entryForm.notes || null,
+      });
+      setEntryForm({ milestone_name: "", amount_received: "", received_date: "", notes: "" });
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  if (loading) {
+    return <p className="text-xs text-gray-400">Loading work order…</p>;
+  }
+
+  return (
+    <div className="border-t border-gray-200 pt-2 mt-1 space-y-2">
+      <p className="text-xs font-semibold text-gray-600">Work Order &amp; Actuals (M.1 stage 4)</p>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {!workOrder ? (
+        <button onClick={handleCreate} className="bg-green-600 text-white text-xs rounded px-3 py-1.5 hover:bg-green-700">
+          Create Work Order
+        </button>
+      ) : (
+        <div className="space-y-2 text-xs">
+          <div className="flex items-center gap-2">
+            <StatusBadge status={workOrder.status} />
+            <span className="text-gray-400">
+              Awarded {new Date(workOrder.awarded_at).toLocaleDateString()}
+            </span>
+            {WORK_ORDER_NEXT_STATUS[workOrder.status] && (
+              <button onClick={handleAdvanceStatus} className="text-blue-600 hover:underline">
+                Move to {WORK_ORDER_STATUS_LABEL[WORK_ORDER_NEXT_STATUS[workOrder.status]]}
+              </button>
+            )}
+            <button onClick={() => setShowAttachments((s) => !s)} className="text-gray-500 hover:underline">
+              {showAttachments ? "Hide work order document" : "Work order document"}
+            </button>
+          </div>
+          {showAttachments && <AttachmentsPanel token={token} docType="work_order" docId={workOrder.id} />}
+
+          <div className="space-y-1">
+            <p className="font-semibold text-gray-600">
+              Payment reconciliation (not a blueprint RA-bill schema -- a lightweight milestone/amount/date log)
+            </p>
+            {entries.length === 0 && <p className="text-gray-400">No payments recorded yet.</p>}
+            {entries.map((e) => (
+              <div key={e.id} className="flex items-center justify-between border border-gray-100 rounded px-2 py-1">
+                <span>
+                  {e.milestone_name} · {e.received_date} {e.notes && `· ${e.notes}`}
+                </span>
+                <span className="font-medium">Rs {e.amount_received.toLocaleString()}</span>
+              </div>
+            ))}
+            <form onSubmit={handleAddEntry} className="flex flex-wrap items-center gap-1">
+              <input
+                type="text"
+                placeholder="Milestone"
+                value={entryForm.milestone_name}
+                onChange={(e) => setEntryForm((f) => ({ ...f, milestone_name: e.target.value }))}
+                className="border border-gray-300 rounded px-1.5 py-1 w-28"
+                required
+              />
+              <input
+                type="number"
+                placeholder="Amount"
+                value={entryForm.amount_received}
+                onChange={(e) => setEntryForm((f) => ({ ...f, amount_received: e.target.value }))}
+                className="border border-gray-300 rounded px-1.5 py-1 w-24"
+                required
+              />
+              <input
+                type="date"
+                value={entryForm.received_date}
+                onChange={(e) => setEntryForm((f) => ({ ...f, received_date: e.target.value }))}
+                className="border border-gray-300 rounded px-1.5 py-1"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Notes (optional)"
+                value={entryForm.notes}
+                onChange={(e) => setEntryForm((f) => ({ ...f, notes: e.target.value }))}
+                className="border border-gray-300 rounded px-1.5 py-1 w-32"
+              />
+              <button type="submit" className="bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700">
+                Add
+              </button>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -33,6 +33,7 @@ from app.api import (
     structures,
     tender,
     vendors,
+    work_orders,
 )
 
 app = FastAPI(title="NestaPrime Estimator API", version="0.1.0")
@@ -85,6 +86,7 @@ app.include_router(messages.messages_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
 app.include_router(purchase_orders.purchase_orders_router)
+app.include_router(work_orders.work_orders_router)
 
 
 @app.get("/health")

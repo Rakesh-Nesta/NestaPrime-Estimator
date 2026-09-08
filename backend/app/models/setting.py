@@ -21,6 +21,12 @@ class DocumentType(str, enum.Enum):
     COST_SHEET = "cost_sheet"
     ESTIMATE = "estimate"
     QUOTATION = "quotation"
+    # Part O: "WORK_ORDERS ... client work order attachment" -- Attachment
+    # previously couldn't reference a Work Order (no backing entity
+    # existed); now that app.models.work_order.WorkOrder does, this closes
+    # that gap. Not used for Override/K1-constants scoping (no K.1
+    # percentage lives at the work-order level), only for Attachment.
+    WORK_ORDER = "work_order"
 
 
 class Setting(Base):

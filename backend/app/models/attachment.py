@@ -45,8 +45,8 @@ class Attachment(Base):
     """Part O ATTACHMENTS / M.3. 'Every attachment is stored write-once (no
     overwrite, no delete -- only supersede) with its SHA-256 hash,
     uploader, timestamp and IP.' doc_type/doc_id is a polymorphic reference
-    (Cost Sheet, Estimate or Quotation -- Actuals/Work Order has no backing
-    entity yet, so it isn't a valid doc_type here). Image auto-compression
+    (Cost Sheet, Estimate, Quotation or Work Order -- Actuals has no
+    backing entity yet, so it isn't a valid doc_type here). Image auto-compression
     to a <=5MB preview (M.3) is a documented gap -- it needs an image
     library (e.g. Pillow) this project doesn't otherwise depend on; every
     file is stored and served at its original size for now."""

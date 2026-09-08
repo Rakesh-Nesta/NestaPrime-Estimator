@@ -16,13 +16,15 @@ from app.models.client_signatory import ClientSignatory
 from app.models.document import CostSheet, Estimate, Quotation
 from app.models.project import Project
 from app.models.setting import DocumentType
+from app.models.work_order import WorkOrder
 
 attachments_router = APIRouter(prefix="/attachments", tags=["attachments"])
 
 # M.3's stages: Cost Sheet stays behind the same cost-visibility gate as
 # every other cost-sheet endpoint; Estimate/Quotation attachments follow
 # the document-editing roles (M.4's own "create cost sheet / estimate /
-# quotation" row).
+# quotation" row). Work Order follows M.1 stage 4's own role column
+# (PM/Director only -- no Sales row, unlike Estimate/Quotation).
 COST_ROLES = ("pm", "director")
 DOCUMENT_ROLES = ("sales", "pm", "director")
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # M.3: "max 100 MB each"
@@ -31,11 +33,12 @@ _DOC_TABLE = {
     DocumentType.COST_SHEET: CostSheet,
     DocumentType.ESTIMATE: Estimate,
     DocumentType.QUOTATION: Quotation,
+    DocumentType.WORK_ORDER: WorkOrder,
 }
 
 
 def _roles_for(doc_type: DocumentType) -> tuple[str, ...]:
-    return COST_ROLES if doc_type == DocumentType.COST_SHEET else DOCUMENT_ROLES
+    return COST_ROLES if doc_type in (DocumentType.COST_SHEET, DocumentType.WORK_ORDER) else DOCUMENT_ROLES
 
 
 def _require_doc_type_role(doc_type: DocumentType, current_user) -> None:

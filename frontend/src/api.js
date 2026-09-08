@@ -426,6 +426,43 @@ export async function markQuotationLost(token, quotationId, reason) {
   return handle(res);
 }
 
+export async function getWorkOrder(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/work-order`, { headers: authHeaders(token) });
+  if (res.status === 404) return null;
+  return handle(res);
+}
+
+export async function createWorkOrder(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/work-order`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function updateWorkOrderStatus(token, workOrderId, status) {
+  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return handle(res);
+}
+
+export async function listWorkOrderPaymentEntries(token, workOrderId) {
+  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}/payment-entries`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function addWorkOrderPaymentEntry(token, workOrderId, payload) {
+  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}/payment-entries`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function getSchedule(token, projectSportId, startDate) {
   const params = startDate ? `?start_date=${startDate}` : "";
   const res = await fetch(`${API_BASE}/schedule/project-sports/${projectSportId}${params}`, {
