@@ -319,6 +319,13 @@ def test_full_chain_recomputed_cost_sheet_flows_into_a_real_quotation(client, di
     project_sport_id = _add_project_sport(client, headers, project_id)
 
     _, cost_sheet_id = _empty_draft_cost_sheet(client, headers, project_id=project_id)
+    # E.5: a Government client auto-adds its own "Structural engineer
+    # design & sign-off" line (a separate work_package with its own
+    # contingency %) -- removed here so this test can isolate the single
+    # "services" line's own K.1 formula chain, which is what it actually
+    # verifies.
+    for line in client.get(f"/cost-sheets/{cost_sheet_id}/lines", headers=headers).json():
+        client.delete(f"/cost-sheets/{cost_sheet_id}/lines/{line['id']}", headers=headers)
     client.post(
         f"/cost-sheets/{cost_sheet_id}/lines",
         json={

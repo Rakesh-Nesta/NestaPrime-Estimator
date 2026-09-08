@@ -60,6 +60,12 @@ def _setup(client, headers):
     project_id = _create_project(client, headers, client_id)
     project_sport_id = _add_project_sport(client, headers, project_id)
     cost_sheet_id = client.post(f"/projects/{project_id}/cost-sheets", json={}, headers=headers).json()["id"]
+    # E.5: Mumbai is a coastal city, so the Cost Sheet auto-adds its own
+    # "Structural engineer design & sign-off" line -- removed here so
+    # these tests can assert an exact line count for what they add
+    # themselves.
+    for line in client.get(f"/cost-sheets/{cost_sheet_id}/lines", headers=headers).json():
+        client.delete(f"/cost-sheets/{cost_sheet_id}/lines/{line['id']}", headers=headers)
     return project_id, project_sport_id, cost_sheet_id
 
 

@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 from app.api.audit_log import write_audit_log_entry
 from app.api.pricing import compute_pricing, cost_weighted_floor_and_target, effective_floor_and_target
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
+from app.api.sports import (
+    STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT,
+    STRUCTURAL_SIGNOFF_TIER_PEB_PADEL_POOL,
+    STRUCTURAL_SIGNOFF_TIER_SIMPLE,
+    project_structural_signoff_tier,
+)
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
@@ -37,6 +43,20 @@ from app.models.sport import ProjectSport
 # M.3: quotations at or above this value (or any Government/Tender deal)
 # require Formal evidence before Won, not just Informal.
 FORMAL_EVIDENCE_REQUIRED_ABOVE_RS = 2_500_000.0  # "[confirm]"
+
+# E.5 / Q.1 / Appendix D: "Structural engineer design & sign-off fee | by
+# complexity tier | Rs 15k / 35k / 50k+ by tier". Master Setting keys,
+# Director-editable like every other [confirm] default in this codebase.
+STRUCTURAL_SIGNOFF_FEE_SETTING_KEYS = {
+    STRUCTURAL_SIGNOFF_TIER_SIMPLE: "structural_signoff_fee_simple_rs",
+    STRUCTURAL_SIGNOFF_TIER_PEB_PADEL_POOL: "structural_signoff_fee_peb_padel_pool_rs",
+    STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT: "structural_signoff_fee_multicourt_government_rs",
+}
+STRUCTURAL_SIGNOFF_FEE_DEFAULT_RS = {
+    STRUCTURAL_SIGNOFF_TIER_SIMPLE: 15_000.0,
+    STRUCTURAL_SIGNOFF_TIER_PEB_PADEL_POOL: 35_000.0,
+    STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT: 50_000.0,
+}
 
 
 class RejectReasonCategory(str, enum.Enum):
@@ -228,6 +248,10 @@ def _get_setting_int(db: Session, key: str, default: int) -> int:
     return int(value) if value is not None else default
 
 
+def _structural_signoff_fee(db: Session, tier: str) -> float:
+    return _get_setting_float(db, STRUCTURAL_SIGNOFF_FEE_SETTING_KEYS[tier], STRUCTURAL_SIGNOFF_FEE_DEFAULT_RS[tier])
+
+
 def _rate_blind_mode_on(db: Session) -> bool:
     """K.3 / Q.1 'Thresholds & modes': 'Rate-blind mode on/off ... Default
     is off.' A global Director-set Master Setting (key rate_blind_mode,
@@ -322,6 +346,28 @@ def create_cost_sheet(
     db.add(cost_sheet)
     db.commit()
     db.refresh(cost_sheet)
+
+    # E.5: "... mandatory and auto-added as a scope line ... so the Cost
+    # Sheet never carries it at zero." Only on initial creation -- a
+    # /revise'd cost sheet already drops every other line too (that
+    # endpoint's own documented gap), so this one line wouldn't be
+    # special-cased back in without being inconsistent with the rest.
+    tier = project_structural_signoff_tier(db, project)
+    if tier is not None:
+        db.add(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet.id,
+                work_package=WorkPackage.STRUCTURE,
+                category="Structural engineering",
+                item_name="Structural engineer design & sign-off",
+                unit="lot",
+                quantity=1,
+                rate=_structural_signoff_fee(db, tier),
+                source=RateSource.MANUAL,
+            )
+        )
+        db.commit()
+
     return cost_sheet
 
 

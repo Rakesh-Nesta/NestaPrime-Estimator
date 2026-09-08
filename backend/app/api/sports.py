@@ -223,6 +223,55 @@ def _structural_signoff_reasons(
     return reasons
 
 
+# E.5 / Q.1: the three priced tiers for the auto-added "Structural
+# engineer design & sign-off" scope line -- imported by documents.py's
+# create_cost_sheet, which is the actual point the line gets added.
+STRUCTURAL_SIGNOFF_TIER_SIMPLE = "simple"
+STRUCTURAL_SIGNOFF_TIER_PEB_PADEL_POOL = "peb_padel_pool"
+STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT = "multicourt_government"
+
+
+def project_structural_signoff_tier(db: Session, project: Project) -> str | None:
+    """E.5: '... mandatory and auto-added as a scope line when any of
+    these apply ...' aggregated across every sport on the project (a
+    Cost Sheet is project-wide, not per-sport) into the one of the
+    three [confirm] fee tiers this line is priced from: 'Rs 15,000
+    simple net structure . Rs 35,000 PEB / Padel / pool . Rs 50,000+
+    multi-court or government.' Returns None when no project_sport (or
+    project-level condition) triggers the sign-off requirement at all.
+    Ties are broken toward the higher tier -- e.g. a government PEB
+    project gets the multi-court/government tier, never the lower
+    PEB/Padel/pool one -- so the auto-priced default never
+    under-estimates the engineer's fee."""
+    project_sports = db.query(ProjectSport).filter(ProjectSport.project_id == project.id).all()
+    if not project_sports:
+        return None
+
+    regional = _get_regional_multiplier(db, project.city)
+    any_required = False
+    any_peb_padel_pool = False
+    for project_sport in project_sports:
+        sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
+        if sport is None:
+            continue
+        if _structural_signoff_reasons(sport, project_sport.building_status, project, regional):
+            any_required = True
+        if (
+            project_sport.building_status == BuildingStatus.NEW_PEB_BUILDING
+            or sport.key in _POOL_KEYS
+            or sport.key == "padel"
+        ):
+            any_peb_padel_pool = True
+
+    if not any_required:
+        return None
+    if project.tender_mode or project.number_of_courts > 1:
+        return STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT
+    if any_peb_padel_pool:
+        return STRUCTURAL_SIGNOFF_TIER_PEB_PADEL_POOL
+    return STRUCTURAL_SIGNOFF_TIER_SIMPLE
+
+
 class FlooringRecommendation(BaseModel):
     primary: str
     secondary: str | None

@@ -60,6 +60,11 @@ def _setup(client, headers, sport_key="box_cricket"):
     project_id = _create_project(client, headers, client_id)
     project_sport_id = _add_project_sport(client, headers, project_id, sport_key=sport_key)
     cost_sheet_id = client.post(f"/projects/{project_id}/cost-sheets", json={}, headers=headers).json()["id"]
+    # E.5: the default city may auto-add a "Structural engineer design &
+    # sign-off" line -- removed so these tests see only the structure
+    # take-off lines they add themselves.
+    for line in client.get(f"/cost-sheets/{cost_sheet_id}/lines", headers=headers).json():
+        client.delete(f"/cost-sheets/{cost_sheet_id}/lines/{line['id']}", headers=headers)
     return project_id, project_sport_id, cost_sheet_id
 
 

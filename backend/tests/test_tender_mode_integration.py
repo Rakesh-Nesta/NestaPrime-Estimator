@@ -62,7 +62,14 @@ def _add_project_sport(client, headers, project_id, sport_key="badminton"):
 def _empty_draft_cost_sheet(client, headers, project_id):
     res = client.post(f"/projects/{project_id}/cost-sheets", json={}, headers=headers)
     assert res.status_code == 201, res.text
-    return res.json()["id"]
+    cost_sheet_id = res.json()["id"]
+    # E.5: every project in this file is a Government client (tender_mode
+    # auto-on), which always auto-adds a "Structural engineer design &
+    # sign-off" line -- removed so these formula-precision tests see only
+    # the lines they add themselves.
+    for line in client.get(f"/cost-sheets/{cost_sheet_id}/lines", headers=headers).json():
+        client.delete(f"/cost-sheets/{cost_sheet_id}/lines/{line['id']}", headers=headers)
+    return cost_sheet_id
 
 
 def _upload_evidence(client, headers, doc_type, doc_id, strength="informal"):
