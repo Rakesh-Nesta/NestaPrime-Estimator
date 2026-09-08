@@ -1,7 +1,7 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, DateTime, Numeric, String
+from sqlalchemy import Boolean, Date, DateTime, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,5 +35,22 @@ class Vendor(Base):
     rcm_applicable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     payment_terms: Mapped[str | None] = mapped_column(String(200), nullable=True)
     reliability_score: Mapped[float | None] = mapped_column(Numeric(4, 1), nullable=True)
+
+    # M.7.2 rule 5 (DPDP Act 2023, WhatsApp policy): "each contact carries
+    # whatsapp_opt_in, email_opt_in and consent_date; WhatsApp business
+    # messages are sent only to opted-in numbers." No separate CONTACTS
+    # table exists for vendors (Vendor is a flat single-contact record, as
+    # it already was before M.7.3) so these live directly on Vendor.
+    # `phone` doubles as the WhatsApp number -- the blueprint's CONTACTS
+    # entity has a dedicated whatsapp_number field, but this app has never
+    # modelled a vendor having two different numbers, and adding one here
+    # would be new scope M.7.3 doesn't itself require. WhatsApp defaults
+    # to opted-out (Meta's own policy requires affirmative opt-in);
+    # ordinary business email is opt-out by nature, not opt-in, so
+    # email_opt_in defaults True and is only ever flipped False by a
+    # recorded opt-out.
+    whatsapp_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_opt_in: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    consent_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)

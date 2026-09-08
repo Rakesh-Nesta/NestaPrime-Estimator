@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client_signatory import ClientSignatory
 from app.models.document import CostSheet, Estimate, Quotation
+from app.models.price_request import PriceRequest
 from app.models.project import Project
 from app.models.setting import DocumentType
 from app.models.technical_bid_checklist import TechnicalBidChecklistItem
@@ -28,6 +29,12 @@ attachments_router = APIRouter(prefix="/attachments", tags=["attachments"])
 # Part L / M.1 stage 4's own PM/Director-only access -- no Sales row.
 COST_ROLES = ("pm", "director")
 DOCUMENT_ROLES = ("sales", "pm", "director")
+# M.7.5: "Send RFQ / PO / price-update request to vendor" and "Confirm a
+# vendor reply as a rate proposal" are both Procurement/PM/Director, not
+# Sales -- Price Request attachments (a vendor's quotation PDF/photo,
+# tagged vendor_quote) follow that same set rather than either fixed
+# tuple above.
+PRICE_REQUEST_ROLES = ("pm", "director", "procurement")
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # M.3: "max 100 MB each"
 
 _DOC_TABLE = {
@@ -36,6 +43,7 @@ _DOC_TABLE = {
     DocumentType.QUOTATION: Quotation,
     DocumentType.WORK_ORDER: WorkOrder,
     DocumentType.TECHNICAL_BID_CHECKLIST_ITEM: TechnicalBidChecklistItem,
+    DocumentType.PRICE_REQUEST: PriceRequest,
 }
 
 _COST_VISIBILITY_DOC_TYPES = (
@@ -46,6 +54,8 @@ _COST_VISIBILITY_DOC_TYPES = (
 
 
 def _roles_for(doc_type: DocumentType) -> tuple[str, ...]:
+    if doc_type == DocumentType.PRICE_REQUEST:
+        return PRICE_REQUEST_ROLES
     return COST_ROLES if doc_type in _COST_VISIBILITY_DOC_TYPES else DOCUMENT_ROLES
 
 

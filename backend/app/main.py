@@ -20,6 +20,7 @@ from app.api import (
     pdf_documents,
     play_equipment,
     pool,
+    price_requests,
     pricing,
     projects,
     purchase_orders,
@@ -88,6 +89,7 @@ app.include_router(audit_log.audit_log_router)
 app.include_router(messages.messages_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
+app.include_router(price_requests.price_requests_router)
 app.include_router(purchase_orders.purchase_orders_router)
 app.include_router(work_orders.work_orders_router)
 app.include_router(skip_requests.skip_requests_router)

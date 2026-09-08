@@ -667,6 +667,15 @@ export async function createVendor(token, payload) {
   return handle(res);
 }
 
+export async function updateVendor(token, vendorId, payload) {
+  const res = await fetch(`${API_BASE}/vendors/${vendorId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function listPurchaseOrders(token, costSheetId) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/purchase-orders`, { headers: authHeaders(token) });
   return handle(res);
@@ -699,6 +708,63 @@ export async function cancelPurchaseOrder(token, poId) {
 
 export async function receivePurchaseOrder(token, poId, payload) {
   const res = await fetch(`${API_BASE}/purchase-orders/${poId}/receive`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+// --- M.7.3: Vendor price-update requests ---
+
+export async function listPriceRequests(token, { status, overdueOnly } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (overdueOnly) params.set("overdue_only", "true");
+  const res = await fetch(`${API_BASE}/price-requests?${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function getPriceRequest(token, priceRequestId) {
+  const res = await fetch(`${API_BASE}/price-requests/${priceRequestId}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createPriceRequest(token, payload) {
+  const res = await fetch(`${API_BASE}/price-requests`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function closePriceRequest(token, priceRequestId) {
+  const res = await fetch(`${API_BASE}/price-requests/${priceRequestId}/close`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function listVendorReplies(token, priceRequestId, itemId) {
+  const res = await fetch(`${API_BASE}/price-requests/${priceRequestId}/items/${itemId}/replies`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function createVendorReply(token, priceRequestId, itemId, payload) {
+  const res = await fetch(`${API_BASE}/price-requests/${priceRequestId}/items/${itemId}/replies`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function useVendorReply(token, replyId, payload) {
+  const res = await fetch(`${API_BASE}/vendor-replies/${replyId}/use`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),

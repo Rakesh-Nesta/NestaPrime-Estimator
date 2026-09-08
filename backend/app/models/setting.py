@@ -31,6 +31,10 @@ class DocumentType(str, enum.Enum):
     # turnover, past work certificates, ISO)" -- each checklist item can
     # carry a supporting document via the same generic Attachment system.
     TECHNICAL_BID_CHECKLIST_ITEM = "technical_bid_checklist_item"
+    # M.7.3: "Attachments (vendor quotation PDF/photo) are stored as
+    # vendor_quote attachments with hash" -- lets a vendor's price-update
+    # reply carry a supporting file via the same generic Attachment system.
+    PRICE_REQUEST = "price_request"
 
 
 class Setting(Base):

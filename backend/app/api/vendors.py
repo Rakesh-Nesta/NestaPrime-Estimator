@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -26,6 +27,9 @@ class VendorCreate(BaseModel):
     rcm_applicable: bool = False
     payment_terms: str | None = None
     reliability_score: float | None = None
+    whatsapp_opt_in: bool = False
+    email_opt_in: bool = True
+    consent_date: date | None = None
 
 
 class VendorUpdate(BaseModel):
@@ -39,6 +43,9 @@ class VendorUpdate(BaseModel):
     rcm_applicable: bool | None = None
     payment_terms: str | None = None
     reliability_score: float | None = None
+    whatsapp_opt_in: bool | None = None
+    email_opt_in: bool | None = None
+    consent_date: date | None = None
 
 
 class VendorOut(BaseModel):
@@ -53,6 +60,9 @@ class VendorOut(BaseModel):
     rcm_applicable: bool
     payment_terms: str | None
     reliability_score: float | None
+    whatsapp_opt_in: bool
+    email_opt_in: bool
+    consent_date: date | None
 
     model_config = ConfigDict(from_attributes=True)
 

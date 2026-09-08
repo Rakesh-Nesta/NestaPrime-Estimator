@@ -70,6 +70,7 @@ export default function AuditLogView({ token, onBack }) {
             <option value="estimate_option">Estimate option (approvals)</option>
             <option value="quotation">Quotation (discounts/releases)</option>
             <option value="skip_request">Skip request</option>
+            <option value="price_request">Vendor price request</option>
             <option value="setting">Master Setting</option>
           </select>
           <button
