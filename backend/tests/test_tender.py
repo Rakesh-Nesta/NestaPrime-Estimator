@@ -125,7 +125,40 @@ def test_net_receivable_deducts_retention_from_quotation_total(client, director_
     )
     body = res.json()
     assert body["retention_amount"] == 59000.0
+    assert body["gst_tds_amount"] == 0.0
     assert body["net_receivable"] == 1121000.0
+
+
+def test_net_receivable_also_deducts_gst_tds_when_given(client, director_user):
+    """Part L 'Statutory': 'GST-TDS 2% by government/PSU payer' -- built
+    as a receipt-side deduction despite the blueprint's own K.1b section
+    (v5.1.9) having explicitly retired GST-TDS logic, per an explicit,
+    informed decision to override that retirement note. Computed on the
+    ex-GST value: 1,180,000 / 1.18 = 1,000,000 ex-GST; 2% of that = 20,000."""
+    headers = _login(client, director_user)
+    res = client.post(
+        "/tender/net-receivable",
+        json={"quotation_total": 1180000, "retention_percent": 5, "gst_tds_percent": 2},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["retention_amount"] == 59000.0
+    assert body["gst_tds_amount"] == 20000.0
+    assert body["net_receivable"] == 1101000.0
+
+
+def test_net_receivable_gst_tds_uses_the_live_gst_rate_setting(client, director_user):
+    headers = _login(client, director_user)
+    client.post("/settings", json={"key": "gst_rate_percent", "value": "12", "reason": "test setup"}, headers=headers)
+
+    res = client.post(
+        "/tender/net-receivable",
+        json={"quotation_total": 1120000, "retention_percent": 5, "gst_tds_percent": 2},
+        headers=headers,
+    )
+    # 1,120,000 / 1.12 = 1,000,000 ex-GST; 2% = 20,000.
+    assert round(res.json()["gst_tds_amount"], 2) == 20000.0
 
 
 def test_tender_endpoints_require_auth(client):

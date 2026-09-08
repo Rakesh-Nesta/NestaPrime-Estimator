@@ -568,7 +568,7 @@ function WorkOrderPanel({ token, quotationId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
-  const [entryForm, setEntryForm] = useState({ milestone_name: "", amount_received: "", received_date: "", notes: "" });
+  const [entryForm, setEntryForm] = useState({ milestone_name: "", amount_received: "", received_date: "", gst_tds_amount: "", notes: "" });
 
   function load() {
     return getWorkOrder(token, quotationId).then((wo) => {
@@ -623,9 +623,10 @@ function WorkOrderPanel({ token, quotationId }) {
         milestone_name: entryForm.milestone_name,
         amount_received: Number(entryForm.amount_received),
         received_date: entryForm.received_date,
+        gst_tds_amount: entryForm.gst_tds_amount ? Number(entryForm.gst_tds_amount) : null,
         notes: entryForm.notes || null,
       });
-      setEntryForm({ milestone_name: "", amount_received: "", received_date: "", notes: "" });
+      setEntryForm({ milestone_name: "", amount_received: "", received_date: "", gst_tds_amount: "", notes: "" });
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -672,6 +673,7 @@ function WorkOrderPanel({ token, quotationId }) {
               <div key={e.id} className="flex items-center justify-between border border-gray-100 rounded px-2 py-1">
                 <span>
                   {e.milestone_name} · {e.received_date} {e.notes && `· ${e.notes}`}
+                  {e.gst_tds_amount != null && ` · GST-TDS Rs ${e.gst_tds_amount.toLocaleString()}`}
                 </span>
                 <span className="font-medium">Rs {e.amount_received.toLocaleString()}</span>
               </div>
@@ -699,6 +701,13 @@ function WorkOrderPanel({ token, quotationId }) {
                 onChange={(e) => setEntryForm((f) => ({ ...f, received_date: e.target.value }))}
                 className="border border-gray-300 rounded px-1.5 py-1"
                 required
+              />
+              <input
+                type="number"
+                placeholder="GST-TDS (optional)"
+                value={entryForm.gst_tds_amount}
+                onChange={(e) => setEntryForm((f) => ({ ...f, gst_tds_amount: e.target.value }))}
+                className="border border-gray-300 rounded px-1.5 py-1 w-32"
               />
               <input
                 type="text"

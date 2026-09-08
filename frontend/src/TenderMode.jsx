@@ -37,7 +37,7 @@ export default function TenderMode({ token, project, onBack }) {
   const [bgForm, setBgForm] = useState({ bg_amount: "", bank_charge_percent_pa: "1.5", contract_weeks: "", dlp_months: "12" });
   const [bgResult, setBgResult] = useState(null);
 
-  const [receivableForm, setReceivableForm] = useState({ quotation_total: "", retention_percent: "5" });
+  const [receivableForm, setReceivableForm] = useState({ quotation_total: "", retention_percent: "5", gst_tds_percent: "" });
   const [receivableResult, setReceivableResult] = useState(null);
 
   const [checklist, setChecklist] = useState([]);
@@ -107,6 +107,7 @@ export default function TenderMode({ token, project, onBack }) {
       const res = await netReceivable(token, {
         quotation_total: Number(receivableForm.quotation_total),
         retention_percent: Number(receivableForm.retention_percent),
+        gst_tds_percent: receivableForm.gst_tds_percent ? Number(receivableForm.gst_tds_percent) : undefined,
       });
       setReceivableResult(res);
     } catch (err) {
@@ -232,9 +233,15 @@ export default function TenderMode({ token, project, onBack }) {
 
       <form onSubmit={handleReceivableCalc} className="bg-white shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-gray-700">Net receivable calculator</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <p className="text-[11px] text-gray-400">
+          GST-TDS is optional and internal-only -- never shown to the client or on any Quotation/BOQ document. The
+          blueprint's own K.1b section (v5.1.9) formally retired GST-TDS logic; this field exists per an explicit
+          decision to track it anyway as a receipt-side deduction.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
           <Num label="Quotation total (Rs)" value={receivableForm.quotation_total} onChange={(v) => setReceivableForm((f) => ({ ...f, quotation_total: v }))} required />
           <Num label="Retention %" value={receivableForm.retention_percent} onChange={(v) => setReceivableForm((f) => ({ ...f, retention_percent: v }))} required />
+          <Num label="GST-TDS % (optional)" value={receivableForm.gst_tds_percent} onChange={(v) => setReceivableForm((f) => ({ ...f, gst_tds_percent: v }))} />
         </div>
         <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
           Calculate
@@ -242,6 +249,9 @@ export default function TenderMode({ token, project, onBack }) {
         {receivableResult && (
           <div className="text-sm space-y-1 mt-2">
             <Row label="Retention amount" value={`Rs ${receivableResult.retention_amount.toLocaleString()}`} />
+            {receivableResult.gst_tds_amount > 0 && (
+              <Row label="GST-TDS amount" value={`Rs ${receivableResult.gst_tds_amount.toLocaleString()}`} />
+            )}
             <Row label="Net receivable" value={`Rs ${receivableResult.net_receivable.toLocaleString()}`} bold />
           </div>
         )}

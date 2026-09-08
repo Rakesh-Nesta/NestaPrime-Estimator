@@ -271,6 +271,27 @@ def test_add_and_list_payment_entries(client, director_user):
     assert len(entries) == 2
     assert [e["milestone_name"] for e in entries] == ["Advance", "Flooring completion"]
     assert entries[1]["notes"] == "cheque #4521"
+    assert entries[0]["gst_tds_amount"] is None
+
+
+def test_payment_entry_can_record_gst_tds_withheld(client, director_user):
+    """Part L 'Statutory': 'GST-TDS 2% by government/PSU payer' -- the
+    actual amount THIS payment's TDS certificate showed withheld,
+    recorded alongside the amount actually received."""
+    headers = _director_headers(client, director_user)
+    _, quotation_id = _won_quotation(client, headers)
+    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+
+    res = client.post(
+        f"/work-orders/{work_order['id']}/payment-entries",
+        json={
+            "milestone_name": "Advance", "amount_received": 340000,
+            "received_date": "2026-09-10", "gst_tds_amount": 5762.71,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["gst_tds_amount"] == 5762.71
 
 
 def test_payment_entry_amount_must_be_positive(client, director_user):

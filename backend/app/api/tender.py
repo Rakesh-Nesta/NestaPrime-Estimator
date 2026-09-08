@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.settings import get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.project import Project
@@ -220,23 +221,47 @@ def performance_bg_cost(
 class NetReceivableRequest(BaseModel):
     quotation_total: float = Field(gt=0)
     retention_percent: float = Field(gt=0)
+    # Part L "Statutory": "GST-TDS 2% by government/PSU payer." The
+    # blueprint's own normative K.1b section (v5.1.9) explicitly retired
+    # GST-TDS logic ("TDS deduction by the client ... happens outside
+    # this app") -- built anyway per an explicit, informed decision to
+    # override that retirement note. Modelled as a receipt-side deduction
+    # the government/PSU payer withholds (like real GST TDS under CGST
+    # Act Section 51: 2% of the taxable/ex-GST value, not the GST-
+    # inclusive total), for NestaPrime's own net-cash-received visibility
+    # only -- never computed, shown, or gated on anywhere in the client-
+    # facing Quotation/BOQ PDF.
+    gst_tds_percent: float | None = Field(default=None, ge=0)
 
 
 class NetReceivableOut(BaseModel):
     retention_amount: float
+    gst_tds_amount: float
     net_receivable: float
 
 
 @tender_calc_router.post("/net-receivable", response_model=NetReceivableOut)
 def net_receivable(
     payload: NetReceivableRequest,
+    db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ROLES)),
 ):
     """L: 'Security deposit / retention: 5-10% [confirm] withheld -> shown
     in net receivable.' Composable with Part K's /pricing/quote output
-    (quotation_total)."""
+    (quotation_total). GST-TDS (optional; see NetReceivableRequest) is
+    computed on the ex-GST value -- quotation_total already carries K.1's
+    flat 18% (K.1b), so ex_gst = quotation_total / (1 + gst_rate/100) --
+    and deducted alongside retention."""
     retention_amount = payload.quotation_total * payload.retention_percent / 100
+
+    gst_tds_amount = 0.0
+    if payload.gst_tds_percent:
+        gst_rate_percent = get_gst_rate_percent(db)
+        ex_gst_value = payload.quotation_total / (1 + gst_rate_percent / 100)
+        gst_tds_amount = ex_gst_value * payload.gst_tds_percent / 100
+
     return NetReceivableOut(
         retention_amount=retention_amount,
-        net_receivable=payload.quotation_total - retention_amount,
+        gst_tds_amount=gst_tds_amount,
+        net_receivable=payload.quotation_total - retention_amount - gst_tds_amount,
     )

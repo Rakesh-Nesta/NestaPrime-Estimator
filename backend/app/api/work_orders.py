@@ -112,6 +112,13 @@ class WorkOrderPaymentEntryCreate(BaseModel):
     milestone_name: str = Field(min_length=1, max_length=200)
     amount_received: float = Field(gt=0)
     received_date: date
+    # Part L "Statutory": "GST-TDS 2% by government/PSU payer" -- the
+    # actual amount THIS payment's TDS certificate shows was withheld,
+    # PM/Director-entered like every other figure here, not app-computed
+    # (see WorkOrderPaymentEntry's own docstring for the retirement-
+    # override rationale). Optional: most private-client work orders have
+    # none.
+    gst_tds_amount: float | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=500)
 
 
@@ -121,6 +128,7 @@ class WorkOrderPaymentEntryOut(BaseModel):
     milestone_name: str
     amount_received: float
     received_date: date
+    gst_tds_amount: float | None
     notes: str | None
     created_by_id: uuid.UUID
     created_at: datetime

@@ -60,7 +60,20 @@ class WorkOrderPaymentEntry(Base):
     entry, not as a system computing tax.' This model is exactly that
     reconciliation entry, scoped to a Work Order rather than inventing
     RA-bill-specific fields (GST, retention-per-bill, numbering) nothing
-    in the blueprint supports."""
+    in the blueprint supports.
+
+    gst_tds_amount is the one deliberate exception: Part L's 'Statutory'
+    row also names 'GST-TDS 2% by government/PSU payer', which the
+    blueprint's own normative K.1b section (v5.1.9) explicitly retired
+    ('TDS deduction by the client ... happens outside this app') --
+    included here anyway per an explicit, informed decision to override
+    that retirement note. It stays consistent with the BILLING note's
+    'not a system computing tax': this field records the ACTUAL amount
+    the government/PSU payer withheld on THIS payment (per their TDS
+    certificate), entered by PM/Director, not a value the app computes
+    or enforces -- the /tender/net-receivable calculator is a separate,
+    optional what-if estimate, same pattern as the BG-cost calculator
+    alongside the real PM-entered CostSheetLine figure."""
 
     __tablename__ = "work_order_payment_entries"
 
@@ -73,6 +86,7 @@ class WorkOrderPaymentEntry(Base):
     milestone_name: Mapped[str] = mapped_column(String(200), nullable=False)
     amount_received: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     received_date: Mapped[date] = mapped_column(nullable=False)
+    gst_tds_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
