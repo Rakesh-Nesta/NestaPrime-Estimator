@@ -23,6 +23,7 @@ import {
   listWorkOrderPaymentEntries,
   markQuotationLost,
   markQuotationWon,
+  rebaseEstimate,
   rejectCostSheet,
   rejectQuotation,
   releaseQuotation,
@@ -439,6 +440,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
     setOptionForm({ project_sport_id: "", package: "standard", cost_for_option: "" });
   });
   const handleSend = onAction(async (id) => sendEstimate(token, id));
+  const handleRebase = onAction(async (id) => rebaseEstimate(token, id));
   const handleClientStatus = onAction(async (estimateId, optionId, client_status, waiveEvidenceReason) =>
     updateEstimateOptionClientStatus(token, estimateId, optionId, {
       client_status,
@@ -457,8 +459,16 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
             <span>
               {est.document_no} · <StatusBadge status={est.status} /> · client:{" "}
               <StatusBadge status={est.client_status} />
+              {est.cost_basis_rebase_required && (
+                <span className="text-red-700 text-xs"> · cost basis changed — rebase required</span>
+              )}
             </span>
             <div className="flex items-center gap-3">
+              {est.cost_basis_rebase_required && (
+                <button onClick={() => handleRebase(est.id)} className="text-xs text-red-600 hover:underline">
+                  Rebase
+                </button>
+              )}
               {est.status === "draft" && (
                 <button onClick={() => handleSend(est.id)} className="text-xs text-blue-600 hover:underline">
                   Send
@@ -629,6 +639,9 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
             <span>
               {q.document_no} · <StatusBadge status={q.status} />
               {q.below_floor && <span className="text-amber-700"> · below floor</span>}
+              {q.cost_basis_rebase_required && (
+                <span className="text-red-700"> · cost basis changed — rebase the Estimate</span>
+              )}
             </span>
             <span className="font-semibold">Rs {q.quotation_total.toLocaleString()}</span>
           </div>

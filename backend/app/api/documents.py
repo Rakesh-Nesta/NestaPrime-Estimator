@@ -1005,6 +1005,7 @@ class EstimateOut(BaseModel):
     created_by_id: uuid.UUID
     created_at: datetime
     options: list[EstimateOptionOut]
+    cost_basis_rebase_required: bool = False  # derived, M.2 rule 4
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1022,7 +1023,20 @@ def _derived_client_status(options: list[EstimateOption]) -> str:
     return "pending"
 
 
-def _estimate_to_out(estimate: Estimate, options: list[EstimateOption], role: str) -> EstimateOut:
+def _cost_sheet_superseded(db: Session, cost_sheet_id: uuid.UUID) -> bool:
+    """M.2 rule 4: 'Any edit to a Verified Cost Sheet creates CS-R(n+1)
+    in Draft ...; every Estimate/Quotation chained to the old revision
+    is flagged \"cost basis changed -- rebase required\".' Computed on
+    read (like RateItemOut.is_stale) rather than a stored flag that
+    would need separate mutation logic kept in sync with every place a
+    Cost Sheet can be revised -- a chained document is stale precisely
+    when, and for as long as, the Cost Sheet row it still points at has
+    been superseded by a newer revision."""
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    return cost_sheet is not None and cost_sheet.status == CostSheetStatus.SUPERSEDED
+
+
+def _estimate_to_out(db: Session, estimate: Estimate, options: list[EstimateOption], role: str) -> EstimateOut:
     option_outs = []
     for o in options:
         out = EstimateOptionOut.model_validate(o)
@@ -1043,6 +1057,7 @@ def _estimate_to_out(estimate: Estimate, options: list[EstimateOption], role: st
         created_by_id=estimate.created_by_id,
         created_at=estimate.created_at,
         options=option_outs,
+        cost_basis_rebase_required=_cost_sheet_superseded(db, estimate.cost_sheet_id),
     )
 
 
@@ -1132,7 +1147,7 @@ def create_estimate(
     db.commit()
     for o in options:
         db.refresh(o)
-    return _estimate_to_out(estimate, options, current_user.role.value)
+    return _estimate_to_out(db, estimate, options, current_user.role.value)
 
 
 @estimates_router.get("/projects/{project_id}/estimates", response_model=list[EstimateOut])
@@ -1145,7 +1160,7 @@ def list_estimates(
     out = []
     for e in estimates:
         options = db.query(EstimateOption).filter(EstimateOption.estimate_id == e.id).all()
-        out.append(_estimate_to_out(e, options, current_user.role.value))
+        out.append(_estimate_to_out(db, e, options, current_user.role.value))
     return out
 
 
@@ -1159,7 +1174,7 @@ def get_estimate(
     if not estimate:
         raise HTTPException(status_code=404, detail="Estimate not found")
     options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
-    return _estimate_to_out(estimate, options, current_user.role.value)
+    return _estimate_to_out(db, estimate, options, current_user.role.value)
 
 
 @estimates_router.post("/estimates/{estimate_id}/send", response_model=EstimateOut)
@@ -1174,6 +1189,11 @@ def send_estimate(
         raise HTTPException(status_code=404, detail="Estimate not found")
     if estimate.status != EstimateStatus.DRAFT:
         raise HTTPException(status_code=400, detail=f"Cannot send an estimate in {estimate.status.value} status")
+    if _cost_sheet_superseded(db, estimate.cost_sheet_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Cost basis changed -- rebase required before this Estimate can be sent (M.2 rule 4)",
+        )
 
     validity_days = _get_setting_int(db, "estimate_validity_days", ESTIMATE_VALIDITY_DAYS_DEFAULT)
     estimate.status = EstimateStatus.SENT
@@ -1182,7 +1202,57 @@ def send_estimate(
     db.commit()
     options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
     db.refresh(estimate)
-    return _estimate_to_out(estimate, options, current_user.role.value)
+    return _estimate_to_out(db, estimate, options, current_user.role.value)
+
+
+@estimates_router.post("/estimates/{estimate_id}/rebase", response_model=EstimateOut)
+def rebase_estimate(
+    estimate_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """M.2 rule 4: '... cannot be Released or Sent until rebased to the
+    new verified revision.' Re-points this Estimate at the project's
+    current Verified Cost Sheet. Every Quotation built on this Estimate
+    is chained through estimate_id, not its own cost_sheet_id, so
+    rebasing the Estimate clears cost_basis_rebase_required for the
+    whole chain -- no separate Quotation-level rebase action exists.
+    Known gap, matching /cost-sheets/{id}/revise's own admitted one:
+    this does not re-run pricing -- EstimateOption.cost_for_option and
+    price_low/price_high keep whatever was computed against the old
+    Cost Sheet; rebasing only re-establishes a valid cost-basis link."""
+    estimate = db.query(Estimate).filter(Estimate.id == estimate_id).first()
+    if not estimate:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    if not _cost_sheet_superseded(db, estimate.cost_sheet_id):
+        raise HTTPException(status_code=400, detail="This Estimate's cost basis has not changed -- nothing to rebase")
+
+    new_cost_sheet = (
+        db.query(CostSheet)
+        .filter(CostSheet.project_id == estimate.project_id, CostSheet.status == CostSheetStatus.VERIFIED)
+        .order_by(CostSheet.revision_major.desc())
+        .first()
+    )
+    if not new_cost_sheet:
+        raise HTTPException(
+            status_code=400,
+            detail="The project's new Cost Sheet revision is not yet Verified -- verify it before rebasing",
+        )
+
+    old_cost_sheet_id = estimate.cost_sheet_id
+    estimate.cost_sheet_id = new_cost_sheet.id
+
+    write_audit_log_entry(
+        db, current_user, "estimate", estimate.id, "cost_sheet_id",
+        old_value=str(old_cost_sheet_id), new_value=str(new_cost_sheet.id),
+        reason=f"Rebased to {new_cost_sheet.document_no}", request=request,
+    )
+
+    db.commit()
+    db.refresh(estimate)
+    options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
+    return _estimate_to_out(db, estimate, options, current_user.role.value)
 
 
 class EstimateOptionStatusUpdate(BaseModel):
@@ -1274,11 +1344,12 @@ class QuotationOut(BaseModel):
     won_lost_reason: str | None
     created_by_id: uuid.UUID
     created_at: datetime
+    cost_basis_rebase_required: bool = False  # derived, M.2 rule 4
 
     model_config = ConfigDict(from_attributes=True)
 
 
-def _quotation_to_out(quotation: Quotation, role: str) -> QuotationOut:
+def _quotation_to_out(db: Session, quotation: Quotation, role: str) -> QuotationOut:
     out = QuotationOut.model_validate(quotation)
     if role == "sales":
         out.cost_total = None
@@ -1286,6 +1357,8 @@ def _quotation_to_out(quotation: Quotation, role: str) -> QuotationOut:
         out.floor_margin_percent = None
         out.margin_percent = None
         out.below_floor = None
+    estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
+    out.cost_basis_rebase_required = estimate is not None and _cost_sheet_superseded(db, estimate.cost_sheet_id)
     return out
 
 
@@ -1382,7 +1455,7 @@ def create_quotation(
 
     db.commit()
     db.refresh(quotation)
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)
 
 
 @quotations_router.get("/projects/{project_id}/quotations", response_model=list[QuotationOut])
@@ -1392,7 +1465,7 @@ def list_quotations(
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
     quotations = db.query(Quotation).filter(Quotation.project_id == project_id).all()
-    return [_quotation_to_out(q, current_user.role.value) for q in quotations]
+    return [_quotation_to_out(db, q, current_user.role.value) for q in quotations]
 
 
 @quotations_router.get("/quotations/{quotation_id}", response_model=QuotationOut)
@@ -1404,7 +1477,7 @@ def get_quotation(
     quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)
 
 
 @quotations_router.post("/quotations/{quotation_id}/release", response_model=QuotationOut)
@@ -1421,6 +1494,12 @@ def release_quotation(
         raise HTTPException(status_code=404, detail="Quotation not found")
     if quotation.status != QuotationStatus.DRAFT:
         raise HTTPException(status_code=400, detail=f"Cannot release a quotation in {quotation.status.value} status")
+    estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
+    if estimate is not None and _cost_sheet_superseded(db, estimate.cost_sheet_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Cost basis changed -- rebase the Estimate before this Quotation can be released (M.2 rule 4)",
+        )
 
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -1457,7 +1536,7 @@ def release_quotation(
     quotation.released_at = datetime.now(UTC)
     db.commit()
     db.refresh(quotation)
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)
 
 
 @quotations_router.post("/quotations/{quotation_id}/reject", response_model=QuotationOut)
@@ -1496,7 +1575,7 @@ def reject_quotation(
 
     db.commit()
     db.refresh(quotation)
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)
 
 
 @quotations_router.post("/quotations/{quotation_id}/send", response_model=QuotationOut)
@@ -1511,6 +1590,12 @@ def send_quotation(
         raise HTTPException(status_code=404, detail="Quotation not found")
     if quotation.status != QuotationStatus.RELEASED:
         raise HTTPException(status_code=400, detail="Only a Released quotation can be sent")
+    estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
+    if estimate is not None and _cost_sheet_superseded(db, estimate.cost_sheet_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Cost basis changed -- rebase the Estimate before this Quotation can be sent (M.2 rule 4)",
+        )
 
     validity_days = _get_setting_int(db, "quotation_validity_days", QUOTATION_VALIDITY_DAYS_DEFAULT)
     quotation.status = QuotationStatus.SENT
@@ -1518,7 +1603,7 @@ def send_quotation(
     quotation.expires_at = quotation.sent_at + timedelta(days=validity_days)
     db.commit()
     db.refresh(quotation)
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)
 
 
 class WonLostRequest(BaseModel):
@@ -1557,7 +1642,7 @@ def mark_quotation_won(
     quotation.won_lost_reason = payload.reason
     db.commit()
     db.refresh(quotation)
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)
 
 
 @quotations_router.post("/quotations/{quotation_id}/mark-lost", response_model=QuotationOut)
@@ -1577,4 +1662,4 @@ def mark_quotation_lost(
     quotation.won_lost_reason = payload.reason
     db.commit()
     db.refresh(quotation)
-    return _quotation_to_out(quotation, current_user.role.value)
+    return _quotation_to_out(db, quotation, current_user.role.value)

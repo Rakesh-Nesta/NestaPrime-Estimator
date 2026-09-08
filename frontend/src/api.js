@@ -423,6 +423,14 @@ export async function sendEstimate(token, estimateId) {
   return handle(res);
 }
 
+export async function rebaseEstimate(token, estimateId) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/rebase`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 export async function updateEstimateOptionClientStatus(token, estimateId, optionId, payload) {
   const res = await fetch(`${API_BASE}/estimates/${estimateId}/options/${optionId}/client-status`, {
     method: "PATCH",
