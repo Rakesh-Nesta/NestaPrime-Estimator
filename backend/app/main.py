@@ -29,6 +29,7 @@ from app.api import (
     scope_items,
     settings,
     site_works,
+    skip_requests,
     sports,
     structures,
     tender,
@@ -87,6 +88,7 @@ app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
 app.include_router(purchase_orders.purchase_orders_router)
 app.include_router(work_orders.work_orders_router)
+app.include_router(skip_requests.skip_requests_router)
 
 
 @app.get("/health")

@@ -36,6 +36,11 @@ from app.models.sport import ProjectSport
 # require Formal evidence before Won, not just Informal.
 FORMAL_EVIDENCE_REQUIRED_ABOVE_RS = 2_500_000.0  # "[confirm]"
 
+# M.1: an Unverified (skip-generated, M.2 rule 3) cost sheet "behaves as
+# Draft for editing" -- every place that gates an edit/recompute action on
+# Draft status accepts either.
+_EDITABLE_COST_SHEET_STATUSES = (CostSheetStatus.DRAFT, CostSheetStatus.UNVERIFIED)
+
 
 def _has_evidence(db: Session, doc_type: DocumentType, doc_id: uuid.UUID, require_formal: bool = False) -> bool:
     query = db.query(Attachment).filter(
@@ -225,6 +230,7 @@ class CostSheetOut(BaseModel):
     revision_minor: int
     status: CostSheetStatus
     cost_total: float
+    auto_generated: bool
     verified_by_id: uuid.UUID | None
     verified_at: datetime | None
     created_by_id: uuid.UUID
@@ -301,11 +307,13 @@ def verify_cost_sheet(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*COST_ROLES)),
 ):
-    """M.1: 'Draft -> Verified' by PM or Director."""
+    """M.1: 'Draft -> Verified' by PM or Director -- an Unverified
+    (skip-generated) cost sheet can also be verified this way once real
+    figures replace the PM's original ballpark (M.2 rule 3)."""
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    if cost_sheet.status != CostSheetStatus.DRAFT:
+    if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
         raise HTTPException(status_code=400, detail=f"Cannot verify a cost sheet in {cost_sheet.status.value} status")
     if cost_sheet.cost_total <= 0:
         raise HTTPException(
@@ -323,9 +331,25 @@ def verify_cost_sheet(
                 ),
             )
 
+    was_unverified = cost_sheet.status == CostSheetStatus.UNVERIFIED
     cost_sheet.status = CostSheetStatus.VERIFIED
     cost_sheet.verified_by_id = current_user.id
     cost_sheet.verified_at = datetime.now(UTC)
+
+    if was_unverified:
+        # M.1: "resting on an Unverified Cost Sheet ... cannot be marked
+        # Won until the Cost Sheet is verified" -- the gate tracks the
+        # cost sheet's real status, so a Quotation already built on this
+        # Unverified sheet becomes released/won-eligible the normal way
+        # once it's verified, rather than being permanently stuck.
+        estimate_ids = [
+            row[0] for row in db.query(Estimate.id).filter(Estimate.cost_sheet_id == cost_sheet_id).all()
+        ]
+        if estimate_ids:
+            db.query(Quotation).filter(Quotation.estimate_id.in_(estimate_ids)).update(
+                {Quotation.cost_basis_unverified: False}, synchronize_session=False
+            )
+
     db.commit()
     db.refresh(cost_sheet)
     return cost_sheet
@@ -599,8 +623,8 @@ def add_cost_sheet_line(
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    if cost_sheet.status != CostSheetStatus.DRAFT:
-        raise HTTPException(status_code=400, detail="Lines can only be added to a Draft cost sheet")
+    if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
+        raise HTTPException(status_code=400, detail="Lines can only be added to a Draft or Unverified cost sheet")
 
     if payload.project_sport_id is not None:
         project_sport = (
@@ -638,8 +662,8 @@ def delete_cost_sheet_line(
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    if cost_sheet.status != CostSheetStatus.DRAFT:
-        raise HTTPException(status_code=400, detail="Lines can only be removed from a Draft cost sheet")
+    if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
+        raise HTTPException(status_code=400, detail="Lines can only be removed from a Draft or Unverified cost sheet")
 
     line = (
         db.query(CostSheetLine)
@@ -661,8 +685,8 @@ def recompute_cost_sheet(
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    if cost_sheet.status != CostSheetStatus.DRAFT:
-        raise HTTPException(status_code=400, detail="Only a Draft cost sheet can be recomputed")
+    if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
+        raise HTTPException(status_code=400, detail="Only a Draft or Unverified cost sheet can be recomputed")
 
     cost_sheet.cost_total = _compute_cost_sheet_total(db, cost_sheet)
     db.commit()
@@ -957,19 +981,26 @@ def create_estimate(
     current_user=Depends(require_roles(*COST_ROLES)),
 ):
     """M.2 rule 1: 'An Estimate cannot be created until its Cost Sheet is
-    Verified.'"""
+    Verified' -- exception: 'when a stage is skipped under rule 3, the
+    auto-generated Cost Sheet is Unverified, which permits creation of
+    the next stage' -- so Unverified counts too, with the consequence
+    (Director-only Quotation release, cost_basis_unverified) carried
+    downstream from there rather than blocked here."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     cost_sheet = (
         db.query(CostSheet)
-        .filter(CostSheet.project_id == project_id, CostSheet.status == CostSheetStatus.VERIFIED)
+        .filter(
+            CostSheet.project_id == project_id,
+            CostSheet.status.in_((CostSheetStatus.VERIFIED, CostSheetStatus.UNVERIFIED)),
+        )
         .order_by(CostSheet.revision_major.desc())
         .first()
     )
     if not cost_sheet:
-        raise HTTPException(status_code=400, detail="Project has no Verified cost sheet")
+        raise HTTPException(status_code=400, detail="Project has no Verified (or skip-generated Unverified) cost sheet")
 
     client = db.query(Client).filter(Client.id == project.client_id).first()
     if client.blacklist_flag:

@@ -52,12 +52,17 @@ def _resolve_dimensions(
     return L, W, project_sport
 
 
+_EDITABLE_COST_SHEET_STATUSES = (CostSheetStatus.DRAFT, CostSheetStatus.UNVERIFIED)
+
+
 def _get_cost_sheet(db: Session, cost_sheet_id: uuid.UUID) -> CostSheet:
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    if cost_sheet.status != CostSheetStatus.DRAFT:
-        raise HTTPException(status_code=400, detail="Lines can only be added to a Draft cost sheet")
+    if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
+        # M.1: an Unverified (skip-generated) cost sheet "behaves as Draft
+        # for editing" -- lines can be added to either.
+        raise HTTPException(status_code=400, detail="Lines can only be added to a Draft or Unverified cost sheet")
     return cost_sheet
 
 

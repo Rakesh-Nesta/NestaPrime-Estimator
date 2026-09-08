@@ -352,6 +352,29 @@ export async function createCostSheet(token, projectId, payload) {
   return handle(res);
 }
 
+export async function listSkipRequests(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/skip-requests`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createSkipRequest(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/skip-requests`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function approveSkipRequest(token, skipRequestId, payload) {
+  const res = await fetch(`${API_BASE}/skip-requests/${skipRequestId}/approve`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function verifyCostSheet(token, costSheetId) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/verify`, {
     method: "POST",

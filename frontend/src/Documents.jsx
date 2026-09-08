@@ -5,9 +5,11 @@ import CostSheetBuilder from "./CostSheetBuilder";
 import MessagesPanel from "./MessagesPanel";
 import {
   addWorkOrderPaymentEntry,
+  approveSkipRequest,
   createCostSheet,
   createEstimate,
   createQuotation,
+  createSkipRequest,
   createWorkOrder,
   downloadEstimatePdfBlob,
   downloadQuotationPdfBlob,
@@ -16,6 +18,7 @@ import {
   listEstimates,
   listProjectSports,
   listQuotations,
+  listSkipRequests,
   listSports,
   listWorkOrderPaymentEntries,
   markQuotationLost,
@@ -44,6 +47,7 @@ export default function Documents({ token, project, role, onBack }) {
   const [costSheets, setCostSheets] = useState([]);
   const [estimates, setEstimates] = useState([]);
   const [quotations, setQuotations] = useState([]);
+  const [skipRequests, setSkipRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [builderCostSheet, setBuilderCostSheet] = useState(null);
@@ -55,12 +59,14 @@ export default function Documents({ token, project, role, onBack }) {
       listCostSheets(token, project.id).catch(() => []),
       listEstimates(token, project.id).catch(() => []),
       listQuotations(token, project.id).catch(() => []),
-    ]).then(([ps, s, cs, est, quo]) => {
+      listSkipRequests(token, project.id).catch(() => []),
+    ]).then(([ps, s, cs, est, quo, skip]) => {
       setProjectSports(ps);
       setSports(s);
       setCostSheets(cs);
       setEstimates(est);
       setQuotations(quo);
+      setSkipRequests(skip);
     });
   }
 
@@ -128,7 +134,9 @@ export default function Documents({ token, project, role, onBack }) {
           <CostSheetPanel
             token={token}
             project={project}
+            role={role}
             costSheets={costSheets}
+            skipRequests={skipRequests}
             onAction={withErrorHandling}
             onBuild={setBuilderCostSheet}
           />
@@ -158,11 +166,15 @@ export default function Documents({ token, project, role, onBack }) {
   );
 }
 
-function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
+function CostSheetPanel({ token, project, role, costSheets, skipRequests, onAction, onBuild }) {
   const [costTotal, setCostTotal] = useState("");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
+  const [skipReason, setSkipReason] = useState("");
+  const [approveCostTotal, setApproveCostTotal] = useState("");
   const active = costSheets.find((c) => c.status !== "superseded");
+  const pendingSkipRequest = skipRequests.find((r) => r.status === "pending");
+  const canApproveSkip = role === "pm" || role === "director";
 
   const handleCreate = onAction(async () => {
     await createCostSheet(token, project.id, { cost_total: Number(costTotal) });
@@ -177,6 +189,14 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
     await reviseCostSheet(token, id, { cost_total: Number(costTotal) });
     setCostTotal("");
   });
+  const handleRequestSkip = onAction(async () => {
+    await createSkipRequest(token, project.id, { stage_skipped: "cost_sheet", reason: skipReason });
+    setSkipReason("");
+  });
+  const handleApproveSkip = onAction(async (id) => {
+    await approveSkipRequest(token, id, { cost_total: Number(approveCostTotal) });
+    setApproveCostTotal("");
+  });
 
   return (
     <div className="bg-white shadow rounded-lg p-6 space-y-3">
@@ -187,9 +207,10 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
             <span>
               {cs.document_no} · Rs {cs.cost_total.toLocaleString()} ·{" "}
               <StatusBadge status={cs.status} />
+              {cs.auto_generated && <span className="text-amber-700 text-xs"> · skip-generated</span>}
             </span>
             <div className="flex items-center gap-3">
-              {cs.status === "draft" && (
+              {(cs.status === "draft" || cs.status === "unverified") && (
                 <>
                   <button onClick={() => onBuild(cs)} className="text-xs text-blue-600 hover:underline">
                     Build from take-off
@@ -249,6 +270,61 @@ function CostSheetPanel({ token, project, costSheets, onAction, onBuild }) {
         >
           …or start an empty Cost Sheet and build it up from Structures/Base/Flooring/etc. take-offs
         </button>
+      )}
+
+      {!active && !pendingSkipRequest && (
+        <div className="border-t border-gray-200 pt-3 space-y-2">
+          <p className="text-xs font-semibold text-gray-600">
+            Or: request to skip this stage (M.2 rule 3)
+          </p>
+          <p className="text-[11px] text-gray-400">
+            "Sales cannot skip alone" -- a PM or Director must approve before the Estimate stage can be created
+            on an auto-generated (Unverified) Cost Sheet.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Reason (e.g. client wants a quotation directly)"
+              value={skipReason}
+              onChange={(e) => setSkipReason(e.target.value)}
+              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+            <button
+              onClick={handleRequestSkip}
+              disabled={!skipReason}
+              className="bg-gray-600 text-white text-xs rounded px-3 py-2 hover:bg-gray-700 disabled:opacity-50"
+            >
+              Request skip
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingSkipRequest && (
+        <div className="border-t border-amber-200 bg-amber-50 rounded p-3 space-y-2 text-sm">
+          <p className="font-semibold text-amber-800">Skip request pending</p>
+          <p className="text-xs text-gray-600">"{pendingSkipRequest.reason}"</p>
+          {canApproveSkip ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder="Ballpark cost total (Rs)"
+                value={approveCostTotal}
+                onChange={(e) => setApproveCostTotal(e.target.value)}
+                className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+              <button
+                onClick={() => handleApproveSkip(pendingSkipRequest.id)}
+                disabled={!approveCostTotal}
+                className="bg-green-600 text-white text-xs rounded px-3 py-2 hover:bg-green-700 disabled:opacity-50"
+              >
+                Approve &amp; auto-generate
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">Waiting for PM or Director approval.</p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -364,8 +440,14 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
         </div>
       ))}
 
-      {activeCostSheet?.status === "verified" ? (
+      {activeCostSheet?.status === "verified" || activeCostSheet?.status === "unverified" ? (
         <div className="space-y-2">
+          {activeCostSheet?.status === "unverified" && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1">
+              This Cost Sheet is Unverified (skip-generated, M.2 rule 3) -- the resulting Quotation will need
+              Director release and can't be marked Won until it's Verified.
+            </p>
+          )}
           <select
             value={optionForm.project_sport_id}
             onChange={(e) => setOptionForm((f) => ({ ...f, project_sport_id: e.target.value }))}
