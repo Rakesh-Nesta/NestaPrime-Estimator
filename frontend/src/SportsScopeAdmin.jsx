@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import {
   createScopeItem,
   createSport,
+  deleteSportMarginPolicy,
   listScopeItems,
+  listSportMarginPolicies,
   listSports,
   updateScopeItem,
   updateSport,
+  upsertSportMarginPolicy,
 } from "./api";
 
 const SPORT_CATEGORIES = ["indoor", "outdoor"];
@@ -30,17 +33,21 @@ function num(v) {
 }
 
 export default function SportsScopeAdmin({ token, onBack }) {
-  const [tab, setTab] = useState("sports"); // "sports" | "scope"
+  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins"
   const [sports, setSports] = useState([]);
   const [scopeItems, setScopeItems] = useState([]);
+  const [sportMarginPolicies, setSportMarginPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function load() {
-    return Promise.all([listSports(token, true), listScopeItems(token, true)]).then(([s, i]) => {
-      setSports(s);
-      setScopeItems(i);
-    });
+    return Promise.all([listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token)]).then(
+      ([s, i, m]) => {
+        setSports(s);
+        setScopeItems(i);
+        setSportMarginPolicies(m);
+      }
+    );
   }
 
   useEffect(() => {
@@ -98,11 +105,25 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Scope items ({scopeItems.length})
           </button>
+          <button
+            onClick={() => setTab("margins")}
+            className={`text-sm rounded px-3 py-1 ${tab === "margins" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Margin floor overrides ({sportMarginPolicies.length})
+          </button>
         </div>
       </div>
 
       {tab === "sports" && <SportsTab token={token} sports={sports} onAction={withErrorHandling} />}
       {tab === "scope" && <ScopeItemsTab token={token} scopeItems={scopeItems} onAction={withErrorHandling} />}
+      {tab === "margins" && (
+        <MarginFloorsTab
+          token={token}
+          sports={sports}
+          sportMarginPolicies={sportMarginPolicies}
+          onAction={withErrorHandling}
+        />
+      )}
     </div>
   );
 }
@@ -425,6 +446,84 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
           + Add scope item
         </button>
       )}
+    </div>
+  );
+}
+
+function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
+  const [editingSportId, setEditingSportId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+
+  const bySportId = Object.fromEntries(sportMarginPolicies.map((p) => [p.sport_id, p]));
+
+  function startEdit(sport) {
+    setEditingSportId(sport.id);
+    setEditValue(bySportId[sport.id] ? String(bySportId[sport.id].floor_margin_percent) : "");
+  }
+
+  const handleSave = onAction(async (sportId) => {
+    await upsertSportMarginPolicy(token, sportId, { floor_margin_percent: Number(editValue) });
+    setEditingSportId(null);
+  });
+
+  const handleRemove = onAction(async (sportId) => deleteSportMarginPolicy(token, sportId));
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-gray-400">
+        K.2: "A sport-type floor (e.g. Pool 15%, PEB 14%) replaces the client floor for that sport when the
+        Director has defined one." A sport with no override here simply uses its project's client-type floor.
+        A multi-sport Quotation blends each included sport's own effective floor as a cost-weighted average.
+      </p>
+      {sports.map((s) => {
+        const override = bySportId[s.id];
+        return editingSportId === s.id ? (
+          <div key={s.id} className="flex items-center gap-2 text-sm border border-blue-300 bg-blue-50 rounded px-3 py-2">
+            <span className="flex-1">
+              <span className="font-medium">{s.name}</span>{" "}
+              <span className="text-gray-400 text-xs">({s.key})</span>
+            </span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="99.99"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <span className="text-xs text-gray-400">%</span>
+            <button onClick={() => handleSave(s.id)} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+              Save
+            </button>
+            <button onClick={() => setEditingSportId(null)} className="text-xs text-gray-500 hover:underline">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div key={s.id} className="flex items-center justify-between gap-2 text-sm border border-gray-200 rounded px-3 py-2">
+            <span>
+              <span className="font-medium">{s.name}</span>{" "}
+              <span className="text-gray-400 text-xs">({s.key})</span>
+              {override ? (
+                <span className="ml-2 text-blue-700 font-medium">{override.floor_margin_percent}% floor override</span>
+              ) : (
+                <span className="ml-2 text-gray-400">uses client-type floor</span>
+              )}
+            </span>
+            <div className="flex items-center gap-3">
+              <button onClick={() => startEdit(s)} className="text-blue-600 hover:underline text-xs">
+                {override ? "Edit" : "Set override"}
+              </button>
+              {override && (
+                <button onClick={() => handleRemove(s.id)} className="text-gray-500 hover:underline text-xs">
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

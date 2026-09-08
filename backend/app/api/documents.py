@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.api.pricing import _target_margin_percent, compute_pricing
+from app.api.pricing import compute_pricing, cost_weighted_floor_and_target, effective_floor_and_target
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -934,7 +934,6 @@ def create_estimate(
 
     client = db.query(Client).filter(Client.id == project.client_id).first()
     policy = _get_margin_policy(db, client.type)
-    target = _target_margin_percent(db, policy)
     gst_rate_percent = get_gst_rate_percent(db)
     price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
 
@@ -959,6 +958,11 @@ def create_estimate(
                 status_code=404, detail=f"Sport selection {option_payload.project_sport_id} not on this project"
             )
 
+        # K.2 / M.1: each option is priced at ITS OWN target margin -- a
+        # sport-type floor override (Director-set) replaces the client
+        # floor only for that sport, so options for different sports in
+        # the same Estimate can carry different targets.
+        _, target = effective_floor_and_target(db, policy, project_sport.sport_id)
         selling_ex_gst = option_payload.cost_for_option / (1 - target / 100)
         selling_incl_gst = selling_ex_gst * (1 + gst_rate_percent / 100)
         option = EstimateOption(
@@ -1170,8 +1174,19 @@ def create_quotation(
     client = db.query(Client).filter(Client.id == project.client_id).first()
     policy = _get_margin_policy(db, client.type)
 
-    cost_total = sum(float(o.cost_for_option) for o in included_options)
-    pricing = compute_pricing(db, cost_total, policy, payload.discount_type, payload.discount_value)
+    # K.2: "Multi-sport project: floor = cost-weighted average of the
+    # applicable floors" -- each included option contributes its own
+    # effective (sport-override-or-client) floor, weighted by its own cost.
+    cost_and_sport_ids = [
+        (
+            float(o.cost_for_option),
+            db.query(ProjectSport).filter(ProjectSport.id == o.project_sport_id).first().sport_id,
+        )
+        for o in included_options
+    ]
+    cost_total = sum(cost for cost, _ in cost_and_sport_ids)
+    floor, target = cost_weighted_floor_and_target(db, policy, cost_and_sport_ids)
+    pricing = compute_pricing(db, cost_total, floor, target, payload.discount_type, payload.discount_value)
 
     quotation = Quotation(
         project_id=project_id,

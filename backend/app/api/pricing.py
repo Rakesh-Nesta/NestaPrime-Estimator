@@ -8,14 +8,18 @@ from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import ClientType
-from app.models.margin_policy import MarginPolicy
+from app.models.margin_policy import MarginPolicy, SportMarginPolicy
 
 margin_policies_router = APIRouter(prefix="/margin-policies", tags=["margin-policies"])
+sport_margin_policies_router = APIRouter(prefix="/sport-margin-policies", tags=["margin-policies"])
 pricing_router = APIRouter(prefix="/pricing", tags=["pricing"])
 
 # K.3: cost, contingency, markup and margin are never visible to Sales or
 # Procurement — enforced here at the API, same as rate-items.
 READ_ROLES = ("pm", "director")
+# K.2's sport-type floor override is Director-set ("... when the Director
+# has defined one"), matching the Master Settings Q.1 write permission.
+WRITE_ROLES = ("director",)
 
 # Fallbacks used only when Part Q's Master Settings has no row yet for the
 # key (e.g. a fresh test DB) -- see get_gst_rate_percent /
@@ -25,15 +29,61 @@ COMPETITIVE_SEGMENT_POINTS_DEFAULT = 3.0
 NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT = 5.0
 
 
-def _target_margin_percent(db: Session, policy: MarginPolicy) -> float:
-    """K.2: 'target = floor + (competitive_segment ? 3 : 5) points.'"""
+def _competitive_gap_points(db: Session, policy: MarginPolicy) -> float:
+    """K.2: the +3 (competitive) or +5 (non-competitive) point gap. This
+    flag is client-type-scoped only (no sport-level equivalent exists in
+    the blueprint), so a sport floor override still uses the CLIENT's own
+    gap -- only the floor itself is replaced."""
     if policy.competitive_segment:
         gap_str = get_current_setting_value(db, "competitive_segment_gap_points")
-        gap = float(gap_str) if gap_str is not None else COMPETITIVE_SEGMENT_POINTS_DEFAULT
-    else:
-        gap_str = get_current_setting_value(db, "non_competitive_segment_gap_points")
-        gap = float(gap_str) if gap_str is not None else NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT
-    return float(policy.floor_margin_percent) + gap
+        return float(gap_str) if gap_str is not None else COMPETITIVE_SEGMENT_POINTS_DEFAULT
+    gap_str = get_current_setting_value(db, "non_competitive_segment_gap_points")
+    return float(gap_str) if gap_str is not None else NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT
+
+
+def _target_margin_percent(db: Session, policy: MarginPolicy) -> float:
+    """K.2: 'target = floor + (competitive_segment ? 3 : 5) points.'"""
+    return float(policy.floor_margin_percent) + _competitive_gap_points(db, policy)
+
+
+def get_sport_margin_policy(db: Session, sport_id) -> SportMarginPolicy | None:
+    return db.query(SportMarginPolicy).filter(SportMarginPolicy.sport_id == sport_id).first()
+
+
+def effective_floor_and_target(
+    db: Session, client_policy: MarginPolicy, sport_id=None
+) -> tuple[float, float]:
+    """K.2: 'A sport-type floor ... replaces the client floor for that
+    sport when the Director has defined one.' Falls back to the client
+    floor when no sport override exists. Target is always re-derived from
+    whichever floor applies, using the client's own competitive_segment
+    gap (see _competitive_gap_points)."""
+    floor = float(client_policy.floor_margin_percent)
+    if sport_id is not None:
+        sport_policy = get_sport_margin_policy(db, sport_id)
+        if sport_policy:
+            floor = float(sport_policy.floor_margin_percent)
+    target = floor + _competitive_gap_points(db, client_policy)
+    return floor, target
+
+
+def cost_weighted_floor_and_target(
+    db: Session, client_policy: MarginPolicy, cost_and_sport_ids: list[tuple[float, "uuid.UUID | None"]]
+) -> tuple[float, float]:
+    """K.2: 'Multi-sport project: floor = cost-weighted average of the
+    applicable floors.' Each (cost, sport_id) pair contributes its own
+    effective floor (sport override or client floor), weighted by its
+    own cost share; target is then re-derived from that blended floor."""
+    total_cost = sum(cost for cost, _ in cost_and_sport_ids)
+    if total_cost <= 0:
+        floor, target = effective_floor_and_target(db, client_policy, None)
+        return floor, target
+    weighted_floor = sum(
+        cost * effective_floor_and_target(db, client_policy, sport_id)[0]
+        for cost, sport_id in cost_and_sport_ids
+    ) / total_cost
+    target = weighted_floor + _competitive_gap_points(db, client_policy)
+    return weighted_floor, target
 
 
 class MarginPolicyOut(BaseModel):
@@ -61,6 +111,66 @@ def list_margin_policies(
     return [_policy_to_out(db, p) for p in policies]
 
 
+class SportMarginPolicyOut(BaseModel):
+    id: uuid.UUID
+    sport_id: uuid.UUID
+    floor_margin_percent: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SportMarginPolicyUpsert(BaseModel):
+    floor_margin_percent: float = Field(ge=0, lt=100)
+
+
+@sport_margin_policies_router.get("", response_model=list[SportMarginPolicyOut])
+def list_sport_margin_policies(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    return db.query(SportMarginPolicy).all()
+
+
+@sport_margin_policies_router.put("/{sport_id}", response_model=SportMarginPolicyOut, status_code=200)
+def upsert_sport_margin_policy(
+    sport_id: uuid.UUID,
+    payload: SportMarginPolicyUpsert,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """K.2: Director-defined sport-type floor override -- 'replaces the
+    client floor for that sport when the Director has defined one.'"""
+    from app.models.sport import Sport
+
+    sport = db.query(Sport).filter(Sport.id == sport_id).first()
+    if not sport:
+        raise HTTPException(status_code=404, detail="Sport not found")
+
+    policy = get_sport_margin_policy(db, sport_id)
+    if policy:
+        policy.floor_margin_percent = payload.floor_margin_percent
+    else:
+        policy = SportMarginPolicy(sport_id=sport_id, floor_margin_percent=payload.floor_margin_percent)
+        db.add(policy)
+    db.commit()
+    db.refresh(policy)
+    return policy
+
+
+@sport_margin_policies_router.delete("/{sport_id}", status_code=204)
+def delete_sport_margin_policy(
+    sport_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """Removes the override -- the sport reverts to its client-type floor."""
+    policy = get_sport_margin_policy(db, sport_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="No margin override for this sport")
+    db.delete(policy)
+    db.commit()
+
+
 class PricingResult(BaseModel):
     cost: float
     floor_margin_percent: float
@@ -79,14 +189,17 @@ class PricingResult(BaseModel):
 def compute_pricing(
     db: Session,
     cost: float,
-    policy: MarginPolicy,
+    floor: float,
+    target: float,
     discount_type: str | None,
     discount_value: float,
 ) -> PricingResult:
     """K.1 steps 7-12 + K.2/K.4, shared by /pricing/quote and the document
-    state machine (Estimate options, Quotations) so both price identically."""
-    floor = float(policy.floor_margin_percent)
-    target = _target_margin_percent(db, policy)
+    state machine (Estimate options, Quotations) so both price identically.
+    Callers resolve floor/target beforehand -- via effective_floor_and_target
+    (single sport) or cost_weighted_floor_and_target (multi-sport) -- since
+    K.2's sport-type override means the applicable floor is not always the
+    client-type policy's own floor."""
     if target >= 100:
         raise HTTPException(status_code=400, detail="Target margin must be below 100%")
 
@@ -130,6 +243,7 @@ def compute_pricing(
 class PricingQuoteRequest(BaseModel):
     cost_incl_contingency: float = Field(gt=0)
     client_type: ClientType
+    sport_id: uuid.UUID | None = None  # K.2 sport-type floor override, if the Director has set one
     discount_type: str | None = None  # "percent" | "amount" | None
     discount_value: float = Field(default=0.0, ge=0)
 
@@ -163,8 +277,9 @@ def price_quote(
     if not policy:
         raise HTTPException(status_code=404, detail="No margin policy for this client type")
 
+    floor, target = effective_floor_and_target(db, policy, payload.sport_id)
     result = compute_pricing(
-        db, payload.cost_incl_contingency, policy, payload.discount_type, payload.discount_value
+        db, payload.cost_incl_contingency, floor, target, payload.discount_type, payload.discount_value
     )
     return PricingQuoteOut(
         cost_incl_contingency=result.cost,

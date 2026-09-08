@@ -245,6 +245,28 @@ export async function listMarginPolicies(token) {
   return handle(res);
 }
 
+export async function listSportMarginPolicies(token) {
+  const res = await fetch(`${API_BASE}/sport-margin-policies`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function upsertSportMarginPolicy(token, sportId, payload) {
+  const res = await fetch(`${API_BASE}/sport-margin-policies/${sportId}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deleteSportMarginPolicy(token, sportId) {
+  const res = await fetch(`${API_BASE}/sport-margin-policies/${sportId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}
+
 export async function priceQuote(token, payload) {
   const res = await fetch(`${API_BASE}/pricing/quote`, {
     method: "POST",
