@@ -1,5 +1,21 @@
 import { useEffect, useState } from "react";
-import { createTenderDetails, getTenderDetails, netReceivable, performanceBgCost } from "./api";
+import AttachmentsPanel from "./AttachmentsPanel";
+import {
+  createTenderDetails,
+  getTechnicalBidChecklist,
+  getTenderDetails,
+  netReceivable,
+  performanceBgCost,
+  updateTechnicalBidChecklistItem,
+} from "./api";
+
+const CHECKLIST_LABELS = {
+  gst: "GST",
+  pan: "PAN",
+  turnover: "Turnover",
+  past_work_certificates: "Past work certificates",
+  iso: "ISO",
+};
 
 const emptyForm = {
   emd_amount: "",
@@ -24,11 +40,27 @@ export default function TenderMode({ token, project, onBack }) {
   const [receivableForm, setReceivableForm] = useState({ quotation_total: "", retention_percent: "5" });
   const [receivableResult, setReceivableResult] = useState(null);
 
+  const [checklist, setChecklist] = useState([]);
+  const [openChecklistDoc, setOpenChecklistDoc] = useState(null);
+
   useEffect(() => {
     getTenderDetails(token, project.id)
       .then(setDetails)
       .finally(() => setLoading(false));
+    if (project.tender_mode) {
+      getTechnicalBidChecklist(token, project.id).then(setChecklist).catch(() => {});
+    }
   }, [token, project.id]);
+
+  async function handleToggleChecklistItem(key, confirmed) {
+    setError("");
+    try {
+      const updated = await updateTechnicalBidChecklistItem(token, project.id, key, confirmed);
+      setChecklist((items) => items.map((i) => (i.key === key ? updated : i)));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -144,6 +176,40 @@ export default function TenderMode({ token, project, onBack }) {
           </button>
         </form>
       )}
+
+      <div className="bg-white shadow rounded-lg p-6 space-y-2">
+        <h3 className="text-sm font-semibold text-gray-700">Technical bid checklist</h3>
+        <p className="text-xs text-gray-400">
+          Part L: "Technical bid checklist (GST, PAN, turnover, past work certificates, ISO)" -- the blueprint's
+          complete item list. These are NestaPrime's own bidder-eligibility documents, not the client's.
+        </p>
+        {checklist.map((item) => (
+          <div key={item.key} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={item.confirmed}
+                  onChange={(e) => handleToggleChecklistItem(item.key, e.target.checked)}
+                />
+                <span>{CHECKLIST_LABELS[item.key]}</span>
+              </label>
+              <div className="flex items-center gap-2 text-xs">
+                {item.confirmed && <span className="text-green-700">confirmed</span>}
+                <button
+                  onClick={() => setOpenChecklistDoc(openChecklistDoc === item.id ? null : item.id)}
+                  className="text-blue-600 hover:underline"
+                >
+                  {openChecklistDoc === item.id ? "Hide document" : "Document"}
+                </button>
+              </div>
+            </div>
+            {openChecklistDoc === item.id && (
+              <AttachmentsPanel token={token} docType="technical_bid_checklist_item" docId={item.id} />
+            )}
+          </div>
+        ))}
+      </div>
 
       <form onSubmit={handleBgCalc} className="bg-white shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-gray-700">Performance BG cost calculator</h3>

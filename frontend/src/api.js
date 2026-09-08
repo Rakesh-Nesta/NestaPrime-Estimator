@@ -293,6 +293,22 @@ export async function createTenderDetails(token, projectId, payload) {
   return handle(res);
 }
 
+export async function getTechnicalBidChecklist(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/technical-bid-checklist`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function updateTechnicalBidChecklistItem(token, projectId, key, confirmed) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/technical-bid-checklist/${key}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmed }),
+  });
+  return handle(res);
+}
+
 export async function performanceBgCost(token, payload) {
   const res = await fetch(`${API_BASE}/tender/performance-bg-cost`, {
     method: "POST",

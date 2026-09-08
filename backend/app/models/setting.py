@@ -27,6 +27,10 @@ class DocumentType(str, enum.Enum):
     # that gap. Not used for Override/K1-constants scoping (no K.1
     # percentage lives at the work-order level), only for Attachment.
     WORK_ORDER = "work_order"
+    # Part L "Documents" row: "Technical bid checklist (GST, PAN,
+    # turnover, past work certificates, ISO)" -- each checklist item can
+    # carry a supporting document via the same generic Attachment system.
+    TECHNICAL_BID_CHECKLIST_ITEM = "technical_bid_checklist_item"
 
 
 class Setting(Base):

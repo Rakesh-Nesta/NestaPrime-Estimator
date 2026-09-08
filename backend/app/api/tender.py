@@ -1,6 +1,6 @@
 import math
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.project import Project
+from app.models.technical_bid_checklist import TechnicalBidChecklistItem, TechnicalBidChecklistKey
 from app.models.tender_details import TenderDetails
 
 tender_details_router = APIRouter(prefix="/projects", tags=["tender-details"])
@@ -86,6 +87,92 @@ def get_tender_details(
     if not row:
         raise HTTPException(status_code=404, detail="Tender details not found for this project")
     return row
+
+
+class TechnicalBidChecklistItemOut(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    key: TechnicalBidChecklistKey
+    confirmed: bool
+    confirmed_at: datetime | None
+    confirmed_by_id: uuid.UUID | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+def _get_or_seed_checklist(db: Session, project_id: uuid.UUID) -> list[TechnicalBidChecklistItem]:
+    """Part L 'Documents' row: 'Technical bid checklist (GST, PAN,
+    turnover, past work certificates, ISO).' Five fixed items, lazily
+    created the first time this project's checklist is read -- the
+    blueprint describes no separate creation step, so a plain project-
+    scoped GET is the least-invented place to seed them."""
+    existing = {
+        item.key: item
+        for item in db.query(TechnicalBidChecklistItem).filter(TechnicalBidChecklistItem.project_id == project_id).all()
+    }
+    for key in TechnicalBidChecklistKey:
+        if key not in existing:
+            item = TechnicalBidChecklistItem(project_id=project_id, key=key)
+            db.add(item)
+            existing[key] = item
+    db.commit()
+    return [existing[key] for key in TechnicalBidChecklistKey]
+
+
+@tender_details_router.get(
+    "/{project_id}/technical-bid-checklist", response_model=list[TechnicalBidChecklistItemOut]
+)
+def get_technical_bid_checklist(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ROLES)),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.tender_mode:
+        raise HTTPException(
+            status_code=400,
+            detail="The technical bid checklist only applies to Tender Mode (Government client) projects (Part L)",
+        )
+    return _get_or_seed_checklist(db, project_id)
+
+
+class TechnicalBidChecklistItemUpdate(BaseModel):
+    confirmed: bool
+
+
+@tender_details_router.patch(
+    "/{project_id}/technical-bid-checklist/{key}", response_model=TechnicalBidChecklistItemOut
+)
+def update_technical_bid_checklist_item(
+    project_id: uuid.UUID,
+    key: TechnicalBidChecklistKey,
+    payload: TechnicalBidChecklistItemUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ROLES)),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.tender_mode:
+        raise HTTPException(
+            status_code=400,
+            detail="The technical bid checklist only applies to Tender Mode (Government client) projects (Part L)",
+        )
+    _get_or_seed_checklist(db, project_id)
+
+    item = (
+        db.query(TechnicalBidChecklistItem)
+        .filter(TechnicalBidChecklistItem.project_id == project_id, TechnicalBidChecklistItem.key == key)
+        .first()
+    )
+    item.confirmed = payload.confirmed
+    item.confirmed_at = datetime.now(UTC) if payload.confirmed else None
+    item.confirmed_by_id = current_user.id if payload.confirmed else None
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def compute_bg_cost(

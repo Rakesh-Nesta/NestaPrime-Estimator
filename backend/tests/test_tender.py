@@ -135,6 +135,150 @@ def test_tender_endpoints_require_auth(client):
     }).status_code == 401
 
 
+# ---------------------------------------------------------------------------
+# Technical bid checklist (Part L "Documents" row: GST, PAN, turnover,
+# past work certificates, ISO -- the complete, verbatim item list)
+# ---------------------------------------------------------------------------
+
+
+def test_technical_bid_checklist_rejected_for_non_tender_project(client, director_user):
+    headers = _login(client, director_user)
+    school_client_id = _create_client(client, headers, client_type="school")
+    project_id = _create_project(client, headers, school_client_id)
+
+    res = client.get(f"/projects/{project_id}/technical-bid-checklist", headers=headers)
+    assert res.status_code == 400
+
+
+def test_technical_bid_checklist_lazily_seeds_the_five_named_items(client, director_user):
+    headers = _login(client, director_user)
+    gov_client_id = _create_client(client, headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, headers, gov_client_id)
+
+    res = client.get(f"/projects/{project_id}/technical-bid-checklist", headers=headers)
+    assert res.status_code == 200, res.text
+    items = res.json()
+    keys = {i["key"] for i in items}
+    assert keys == {"gst", "pan", "turnover", "past_work_certificates", "iso"}
+    assert all(i["confirmed"] is False for i in items)
+    assert all(i["confirmed_at"] is None for i in items)
+
+
+def test_technical_bid_checklist_get_does_not_duplicate_rows_on_repeat_calls(client, director_user):
+    headers = _login(client, director_user)
+    gov_client_id = _create_client(client, headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, headers, gov_client_id)
+
+    client.get(f"/projects/{project_id}/technical-bid-checklist", headers=headers)
+    res = client.get(f"/projects/{project_id}/technical-bid-checklist", headers=headers)
+    assert len(res.json()) == 5
+
+
+def test_can_confirm_and_unconfirm_a_checklist_item(client, director_user):
+    headers = _login(client, director_user)
+    gov_client_id = _create_client(client, headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, headers, gov_client_id)
+
+    confirm_res = client.patch(
+        f"/projects/{project_id}/technical-bid-checklist/gst", json={"confirmed": True}, headers=headers
+    )
+    assert confirm_res.status_code == 200, confirm_res.text
+    body = confirm_res.json()
+    assert body["confirmed"] is True
+    assert body["confirmed_at"] is not None
+    assert body["confirmed_by_id"] is not None
+
+    unconfirm_res = client.patch(
+        f"/projects/{project_id}/technical-bid-checklist/gst", json={"confirmed": False}, headers=headers
+    )
+    assert unconfirm_res.status_code == 200
+    assert unconfirm_res.json()["confirmed"] is False
+    assert unconfirm_res.json()["confirmed_at"] is None
+    assert unconfirm_res.json()["confirmed_by_id"] is None
+
+
+def test_confirming_one_checklist_item_does_not_affect_others(client, director_user):
+    headers = _login(client, director_user)
+    gov_client_id = _create_client(client, headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, headers, gov_client_id)
+
+    client.patch(f"/projects/{project_id}/technical-bid-checklist/pan", json={"confirmed": True}, headers=headers)
+
+    items = client.get(f"/projects/{project_id}/technical-bid-checklist", headers=headers).json()
+    by_key = {i["key"]: i for i in items}
+    assert by_key["pan"]["confirmed"] is True
+    assert by_key["gst"]["confirmed"] is False
+    assert by_key["iso"]["confirmed"] is False
+
+
+def test_technical_bid_checklist_update_rejected_for_non_tender_project(client, director_user):
+    headers = _login(client, director_user)
+    school_client_id = _create_client(client, headers, client_type="school")
+    project_id = _create_project(client, headers, school_client_id)
+
+    res = client.patch(
+        f"/projects/{project_id}/technical-bid-checklist/gst", json={"confirmed": True}, headers=headers
+    )
+    assert res.status_code == 400
+
+
+def test_sales_cannot_access_technical_bid_checklist(client, db_session):
+    from app.core.security import hash_password
+    from app.models.user import User, UserRole
+
+    director_user = User(
+        name="Test Director2", email="director2@test.local", hashed_password=hash_password("TestPass!1"),
+        role=UserRole.DIRECTOR,
+    )
+    db_session.add(director_user)
+    db_session.commit()
+    director_headers = {
+        "Authorization": f"Bearer {client.post('/auth/login', data={'username': 'director2@test.local', 'password': 'TestPass!1'}).json()['access_token']}"
+    }
+    gov_client_id = _create_client(client, director_headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, director_headers, gov_client_id)
+
+    sales_user = User(
+        name="Test Sales", email="sales_checklist@test.local", hashed_password=hash_password("TestPass!1"),
+        role=UserRole.SALES,
+    )
+    db_session.add(sales_user)
+    db_session.commit()
+    sales_headers = {
+        "Authorization": f"Bearer {client.post('/auth/login', data={'username': 'sales_checklist@test.local', 'password': 'TestPass!1'}).json()['access_token']}"
+    }
+
+    assert client.get(f"/projects/{project_id}/technical-bid-checklist", headers=sales_headers).status_code == 403
+    assert client.patch(
+        f"/projects/{project_id}/technical-bid-checklist/gst", json={"confirmed": True}, headers=sales_headers
+    ).status_code == 403
+
+
+def test_technical_bid_checklist_item_document_can_be_attached(client, director_user):
+    import io
+
+    headers = _login(client, director_user)
+    gov_client_id = _create_client(client, headers, client_type="government", name="Municipal Corp")
+    project_id = _create_project(client, headers, gov_client_id)
+    items = client.get(f"/projects/{project_id}/technical-bid-checklist", headers=headers).json()
+    gst_item_id = next(i["id"] for i in items if i["key"] == "gst")
+
+    res = client.post(
+        "/attachments",
+        data={"doc_type": "technical_bid_checklist_item", "doc_id": gst_item_id, "tag": "reference"},
+        files={"file": ("gst_certificate.pdf", io.BytesIO(b"%PDF-1.4 fake gst certificate"), "application/pdf")},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["doc_type"] == "technical_bid_checklist_item"
+
+    listed = client.get(
+        "/attachments", params={"doc_type": "technical_bid_checklist_item", "doc_id": gst_item_id}, headers=headers
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
 def test_sales_cannot_access_tender_endpoints(client, db_session):
     """Tender Mode is money-adjacent (EMD, retention, BG %) -- PM/Director
     only, same restriction as Part K's commercial layer."""
