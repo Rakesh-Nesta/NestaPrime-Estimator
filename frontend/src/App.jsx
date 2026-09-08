@@ -10,6 +10,7 @@ import ProjectSetup from "./ProjectSetup";
 import RateSheet from "./RateSheet";
 import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
+import SiteSurvey from "./SiteSurvey";
 import SportSelection from "./SportSelection";
 import SportsScopeAdmin from "./SportsScopeAdmin";
 import TenderMode from "./TenderMode";
@@ -136,6 +137,15 @@ export default function App() {
             onBack={() => setScreen("sports")}
             onNext={() => setScreen("tender")}
             onDocuments={() => setScreen("documents")}
+            onSiteSurvey={() => setScreen("site_survey")}
+          />
+        )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "site_survey" && (
+          <SiteSurvey
+            token={accessToken}
+            project={activeProject}
+            role={user.role}
+            onBack={() => setScreen("scope")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "tender" && (

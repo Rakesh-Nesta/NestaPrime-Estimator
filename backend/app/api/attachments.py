@@ -17,6 +17,7 @@ from app.models.document import CostSheet, Estimate, Quotation
 from app.models.price_request import PriceRequest
 from app.models.project import Project
 from app.models.setting import DocumentType
+from app.models.site_survey import SiteSurvey
 from app.models.technical_bid_checklist import TechnicalBidChecklistItem
 from app.models.work_order import WorkOrder
 
@@ -35,6 +36,19 @@ DOCUMENT_ROLES = ("sales", "pm", "director")
 # tagged vendor_quote) follow that same set rather than either fixed
 # tuple above.
 PRICE_REQUEST_ROLES = ("pm", "director", "procurement")
+# A.3: "Site Engineer: Site survey form, actuals entry" / "sees: Survey,
+# actuals, drawings" -- the Site Engineer's own attachments (Appendix C's
+# "photos (min 4)"), plus PM/Director oversight. No Sales/Procurement row
+# in A.3 for this duty.
+SITE_SURVEY_ROLES = ("site_engineer", "pm", "director")
+# The router-level Depends() below is deliberately a coarse "is this an
+# authenticated business role at all" gate covering every role any
+# doc_type ever grants access to (everyone except CA/Tax, who has no
+# reason to touch any of these document types -- A.3). The real,
+# per-doc_type enforcement is _require_doc_type_role()/_roles_for()
+# below, called inside each endpoint body -- Sales passing this outer
+# gate still gets rejected by that inner check on e.g. a cost_sheet.
+ALL_ATTACHMENT_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # M.3: "max 100 MB each"
 
 _DOC_TABLE = {
@@ -44,6 +58,7 @@ _DOC_TABLE = {
     DocumentType.WORK_ORDER: WorkOrder,
     DocumentType.TECHNICAL_BID_CHECKLIST_ITEM: TechnicalBidChecklistItem,
     DocumentType.PRICE_REQUEST: PriceRequest,
+    DocumentType.SITE_SURVEY: SiteSurvey,
 }
 
 _COST_VISIBILITY_DOC_TYPES = (
@@ -56,6 +71,8 @@ _COST_VISIBILITY_DOC_TYPES = (
 def _roles_for(doc_type: DocumentType) -> tuple[str, ...]:
     if doc_type == DocumentType.PRICE_REQUEST:
         return PRICE_REQUEST_ROLES
+    if doc_type == DocumentType.SITE_SURVEY:
+        return SITE_SURVEY_ROLES
     return COST_ROLES if doc_type in _COST_VISIBILITY_DOC_TYPES else DOCUMENT_ROLES
 
 
@@ -219,7 +236,7 @@ async def upload_attachment(
     signatory_designation: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+    current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
     """M.3: 'Every attachment is stored write-once ... with its SHA-256
     hash, uploader, timestamp and IP.' signatory_name/signatory_designation
@@ -239,7 +256,7 @@ def list_attachments(
     doc_id: uuid.UUID,
     include_superseded: bool = False,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+    current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
     _require_doc_type_role(doc_type, current_user)
     query = db.query(Attachment).filter(Attachment.doc_type == doc_type, Attachment.doc_id == doc_id)
@@ -252,7 +269,7 @@ def list_attachments(
 def download_attachment(
     attachment_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+    current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
     attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
     if not attachment:
@@ -275,7 +292,7 @@ async def supersede_attachment(
     signatory_designation: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+    current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
     """M.3: '...no overwrite, no delete -- only supersede.' The old row is
     never mutated; a new row is inserted and the old one's

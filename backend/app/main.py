@@ -30,6 +30,7 @@ from app.api import (
     schedule,
     scope_items,
     settings,
+    site_surveys,
     site_works,
     skip_requests,
     sports,
@@ -90,6 +91,7 @@ app.include_router(messages.messages_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
 app.include_router(price_requests.price_requests_router)
+app.include_router(site_surveys.site_surveys_router)
 app.include_router(purchase_orders.purchase_orders_router)
 app.include_router(work_orders.work_orders_router)
 app.include_router(skip_requests.skip_requests_router)

@@ -35,6 +35,9 @@ class DocumentType(str, enum.Enum):
     # vendor_quote attachments with hash" -- lets a vendor's price-update
     # reply carry a supporting file via the same generic Attachment system.
     PRICE_REQUEST = "price_request"
+    # Appendix C: "photos (min 4)" -- a Site Survey's own photos ride the
+    # same generic Attachment system, tagged `photo`.
+    SITE_SURVEY = "site_survey"
 
 
 class Setting(Base):

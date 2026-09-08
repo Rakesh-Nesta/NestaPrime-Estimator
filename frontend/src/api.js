@@ -943,6 +943,39 @@ export async function addHockeyIrrigationTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+// --- Appendix C: Site Survey Form ---
+
+export async function listSiteSurveys(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/site-surveys`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createSiteSurvey(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/site-surveys`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateSiteSurvey(token, siteSurveyId, payload) {
+  const res = await fetch(`${API_BASE}/site-surveys/${siteSurveyId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function completeSiteSurvey(token, siteSurveyId) {
+  const res = await fetch(`${API_BASE}/site-surveys/${siteSurveyId}/complete`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 // --- Part M.3: Attachments & approval evidence ---
 
 export async function listAttachments(token, docType, docId, includeSuperseded = false) {
