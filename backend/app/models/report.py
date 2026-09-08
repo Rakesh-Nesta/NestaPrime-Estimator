@@ -12,6 +12,10 @@ from app.db.base import Base
 class ReportType(str, enum.Enum):
     PIPELINE = "pipeline"
     MARGIN = "margin"
+    # Q.2 rule 2: "The Director sees a monthly 'override report' (which
+    # settings are overridden most often -> candidates for a master
+    # update)." Director-only, unlike Margin's PM/Director.
+    OVERRIDE_SUMMARY = "override_summary"
 
 
 class ReportStatus(str, enum.Enum):

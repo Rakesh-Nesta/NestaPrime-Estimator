@@ -21,6 +21,7 @@ export default function Reports({ token, role, onBack }) {
   const [periodTo, setPeriodTo] = useState(todayIso());
 
   const canSeeMargin = role === "pm" || role === "director";
+  const canSeeOverrideSummary = role === "director";
 
   function load() {
     return listReports(token).then(setReports);
@@ -85,6 +86,7 @@ export default function Reports({ token, role, onBack }) {
             >
               <option value="pipeline">Quotation Pipeline</option>
               {canSeeMargin && <option value="margin">Margin Performance</option>}
+              {canSeeOverrideSummary && <option value="override_summary">Override Summary (monthly)</option>}
             </select>
           </div>
           <div>
@@ -121,7 +123,7 @@ export default function Reports({ token, role, onBack }) {
             <div key={r.id} className="border border-gray-200 rounded px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-medium capitalize">{r.report_type}</span>{" "}
+                  <span className="font-medium capitalize">{r.report_type.replace(/_/g, " ")}</span>{" "}
                   <span className="text-gray-500">
                     {r.period_from} → {r.period_to}
                   </span>{" "}

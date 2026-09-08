@@ -11,6 +11,7 @@ from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.document import Estimate, EstimateOption, Quotation, QuotationLine
 from app.models.report import Report, ReportStatus, ReportType
+from app.models.setting import Override
 from app.models.sport import ProjectSport, Sport
 from app.models.user import User
 
@@ -19,9 +20,12 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 # T.2 rule 3: "role gate matches the underlying data, not a new permission."
 # Pipeline carries quotation totals Sales already sees on the documents
 # themselves; Margin carries cost/margin, which K.3 restricts to PM/Director.
+# Override Summary is narrower still -- Q.2 rule 2 names only the Director
+# ("The Director sees a monthly 'override report'"), not PM.
 VISIBLE_ROLES = {
     ReportType.PIPELINE: ("sales", "pm", "director"),
     ReportType.MARGIN: ("pm", "director"),
+    ReportType.OVERRIDE_SUMMARY: ("director",),
 }
 ALL_REPORT_ROLES = ("sales", "pm", "director")
 
@@ -165,9 +169,53 @@ def _build_margin_content(db: Session, period_from: date, period_to: date) -> di
     }
 
 
+def _build_override_summary_content(db: Session, period_from: date, period_to: date) -> dict:
+    """Q.2 rule 2: 'The Director sees a monthly "override report" (which
+    settings are overridden most often -> candidates for a master
+    update).' Every Override row created in the period, grouped by
+    setting_key and ranked by how often it was overridden -- the most-
+    overridden setting first, since that is the one most worth promoting
+    to a new master value. most_common_override_value is exactly that
+    candidate: whichever override_value was chosen most often for that
+    setting in the period."""
+    overrides = db.query(Override).all()
+    in_period = [o for o in overrides if _in_period(o.created_at, period_from, period_to)]
+
+    by_key: dict[str, dict] = {}
+    for o in in_period:
+        bucket = by_key.setdefault(
+            o.setting_key, {"count": 0, "value_counts": {}, "document_types": set()}
+        )
+        bucket["count"] += 1
+        bucket["value_counts"][o.override_value] = bucket["value_counts"].get(o.override_value, 0) + 1
+        bucket["document_types"].add(o.document_type.value)
+
+    rows = []
+    for setting_key, bucket in by_key.items():
+        most_common_value = max(bucket["value_counts"].items(), key=lambda kv: kv[1])[0]
+        rows.append(
+            {
+                "setting_key": setting_key,
+                "override_count": bucket["count"],
+                "value_breakdown": bucket["value_counts"],
+                "most_common_override_value": most_common_value,
+                "document_types": sorted(bucket["document_types"]),
+            }
+        )
+    rows.sort(key=lambda r: r["override_count"], reverse=True)
+
+    return {
+        "period_from": period_from.isoformat(),
+        "period_to": period_to.isoformat(),
+        "total_overrides": len(in_period),
+        "rows": rows,
+    }
+
+
 SOURCE_TABLES = {
     ReportType.PIPELINE: "ESTIMATES, QUOTATIONS",
     ReportType.MARGIN: "COST_SHEETS, QUOTATIONS, OVERRIDES",
+    ReportType.OVERRIDE_SUMMARY: "OVERRIDES",
 }
 
 
@@ -213,9 +261,12 @@ def generate_report(
     if payload.report_type == ReportType.PIPELINE:
         content = _build_pipeline_content(db, payload.period_from, payload.period_to)
         status_ = ReportStatus.RELEASED  # T.2 rule 4: nothing to gate, open to Sales already
-    else:
+    elif payload.report_type == ReportType.MARGIN:
         content = _build_margin_content(db, payload.period_from, payload.period_to)
         status_ = ReportStatus.DRAFT  # T.2 rule 4: Director must release Director/CA-only content
+    else:
+        content = _build_override_summary_content(db, payload.period_from, payload.period_to)
+        status_ = ReportStatus.DRAFT  # same governance-content gate as Margin
 
     report = Report(
         report_type=payload.report_type,
