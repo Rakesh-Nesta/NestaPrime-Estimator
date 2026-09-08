@@ -22,6 +22,11 @@ class ClientCreate(BaseModel):
     pan: str | None = None
 
 
+class ClientFlagsUpdate(BaseModel):
+    overdue_flag: bool | None = None
+    blacklist_flag: bool | None = None
+
+
 class ClientOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -68,4 +73,28 @@ def get_client(
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+    return client
+
+
+@router.patch("/{client_id}", response_model=ClientOut)
+def update_client_flags(
+    client_id: uuid.UUID,
+    payload: ClientFlagsUpdate,
+    db: Session = Depends(get_db),
+    # Part O: "overdue_flag (blocks new Quotation release until Director
+    # clears), blacklist_flag (blocks new Estimates)" -- Director-only,
+    # since only a Director is named as able to set or clear either.
+    current_user=Depends(require_roles("director")),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    if payload.overdue_flag is not None:
+        client.overdue_flag = payload.overdue_flag
+    if payload.blacklist_flag is not None:
+        client.blacklist_flag = payload.blacklist_flag
+
+    db.commit()
+    db.refresh(client)
     return client

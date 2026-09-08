@@ -972,6 +972,10 @@ def create_estimate(
         raise HTTPException(status_code=400, detail="Project has no Verified cost sheet")
 
     client = db.query(Client).filter(Client.id == project.client_id).first()
+    if client.blacklist_flag:
+        raise HTTPException(
+            status_code=400, detail="This client is blacklisted (Part O) -- new Estimates are blocked"
+        )
     policy = _get_margin_policy(db, client.type)
     gst_rate_percent = get_gst_rate_percent(db)
     price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
@@ -1290,6 +1294,14 @@ def release_quotation(
         raise HTTPException(status_code=404, detail="Quotation not found")
     if quotation.status != QuotationStatus.DRAFT:
         raise HTTPException(status_code=400, detail=f"Cannot release a quotation in {quotation.status.value} status")
+
+    project = db.query(Project).filter(Project.id == quotation.project_id).first()
+    client = db.query(Client).filter(Client.id == project.client_id).first()
+    if client.overdue_flag:
+        raise HTTPException(
+            status_code=400,
+            detail="This client is overdue (Part O) -- Quotation release is blocked until a Director clears it",
+        )
 
     needs_director = quotation.below_floor or quotation.cost_basis_unverified
     if needs_director and current_user.role.value != "director":

@@ -52,6 +52,15 @@ export async function createClient(token, payload) {
   return handle(res);
 }
 
+export async function updateClientFlags(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function listClientSignatories(token, clientId, includeInactive = false) {
   const params = includeInactive ? "?include_inactive=true" : "";
   const res = await fetch(`${API_BASE}/clients/${clientId}/signatories${params}`, { headers: authHeaders(token) });

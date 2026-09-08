@@ -1,0 +1,83 @@
+import { useEffect, useState } from "react";
+import { listClients, updateClientFlags } from "./api";
+
+export default function ClientsAdmin({ token, onBack }) {
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  function load() {
+    return listClients(token).then(setClients);
+  }
+
+  useEffect(() => {
+    load()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function toggleFlag(clientId, field, value) {
+    setError("");
+    try {
+      await updateClientFlags(token, clientId, { [field]: value });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  if (loading) {
+    return <p className="text-center text-gray-500 mt-10">Loading clients…</p>;
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Clients</h2>
+          {onBack && (
+            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+              &larr; Back
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mt-1">
+          Part O: "overdue_flag (blocks new Quotation release until Director clears), blacklist_flag (blocks new
+          Estimates)." Director-only.
+        </p>
+        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+      </div>
+
+      <div className="bg-white shadow rounded-lg p-6 space-y-2">
+        {clients.map((c) => (
+          <div key={c.id} className="flex items-center justify-between border border-gray-200 rounded px-3 py-2 text-sm">
+            <span>
+              <span className="font-medium">{c.name}</span>{" "}
+              <span className="text-xs text-gray-400">({c.type})</span>
+            </span>
+            <div className="flex items-center gap-4 text-xs">
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={c.overdue_flag}
+                  onChange={(e) => toggleFlag(c.id, "overdue_flag", e.target.checked)}
+                />
+                Overdue
+              </label>
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={c.blacklist_flag}
+                  onChange={(e) => toggleFlag(c.id, "blacklist_flag", e.target.checked)}
+                />
+                Blacklisted
+              </label>
+            </div>
+          </div>
+        ))}
+        {clients.length === 0 && <p className="text-sm text-gray-400">No clients yet.</p>}
+      </div>
+    </div>
+  );
+}

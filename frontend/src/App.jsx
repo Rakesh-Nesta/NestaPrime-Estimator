@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getCurrentUser, login } from "./api";
+import ClientsAdmin from "./ClientsAdmin";
 import Documents from "./Documents";
 import MasterSettings from "./MasterSettings";
 import PricingCalculator from "./PricingCalculator";
@@ -22,7 +23,7 @@ export default function App() {
   const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
   const [preNavScreen, setPreNavScreen] = useState("sports");
 
-  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin"];
+  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin"];
 
   function goToTopLevel(target) {
     if (TOP_LEVEL_SCREENS.includes(screen)) {
@@ -67,6 +68,9 @@ export default function App() {
             <button onClick={() => goToTopLevel("sports_scope_admin")} className="text-sm text-blue-600 hover:underline">
               {screen === "sports_scope_admin" ? "Back to project" : "Sports & Scope Admin"}
             </button>
+            <button onClick={() => goToTopLevel("clients_admin")} className="text-sm text-blue-600 hover:underline">
+              {screen === "clients_admin" ? "Back to project" : "Clients"}
+            </button>
             <button onClick={() => goToTopLevel("reports")} className="text-sm text-blue-600 hover:underline">
               {screen === "reports" ? "Back to project" : "Reports"}
             </button>
@@ -86,6 +90,9 @@ export default function App() {
         )}
         {screen === "sports_scope_admin" && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "clients_admin" && (
+          <ClientsAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "reports" && (
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
