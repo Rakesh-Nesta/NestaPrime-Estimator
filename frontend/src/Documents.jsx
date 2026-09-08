@@ -23,6 +23,8 @@ import {
   listWorkOrderPaymentEntries,
   markQuotationLost,
   markQuotationWon,
+  rejectCostSheet,
+  rejectQuotation,
   releaseQuotation,
   reviseCostSheet,
   sendEstimate,
@@ -39,6 +41,59 @@ function downloadBlobAsFile(blob, filename) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// M.3: "Every approval step has a Reject -> Rework path with a reason
+// category ... and a note; the document returns to Draft."
+const REJECT_REASON_CATEGORIES = [
+  { value: "wrong_quantities", label: "Wrong quantities" },
+  { value: "rate_not_confirmed", label: "Rate not confirmed" },
+  { value: "margin", label: "Margin" },
+  { value: "scope_unclear", label: "Scope unclear" },
+  { value: "evidence_missing", label: "Evidence missing" },
+  { value: "other", label: "Other" },
+];
+
+function RejectForm({ onSubmit, onCancel }) {
+  const [reasonCategory, setReasonCategory] = useState(REJECT_REASON_CATEGORIES[0].value);
+  const [note, setNote] = useState("");
+
+  return (
+    <div className="border border-red-200 bg-red-50 rounded p-2 space-y-2 text-xs">
+      <div className="flex items-center gap-2">
+        <select
+          value={reasonCategory}
+          onChange={(e) => setReasonCategory(e.target.value)}
+          className="rounded border border-gray-300 px-2 py-1"
+        >
+          {REJECT_REASON_CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          placeholder="Note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className="flex-1 rounded border border-gray-300 px-2 py-1"
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => onSubmit(reasonCategory, note)}
+          disabled={!note.trim()}
+          className="bg-red-600 text-white rounded px-2 py-1 hover:bg-red-700 disabled:opacity-50"
+        >
+          Confirm reject
+        </button>
+        <button onClick={onCancel} className="text-gray-500 hover:underline">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function Documents({ token, project, role, onBack }) {
@@ -172,9 +227,11 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [skipReason, setSkipReason] = useState("");
   const [approveCostTotal, setApproveCostTotal] = useState("");
+  const [rejectFormFor, setRejectFormFor] = useState(null);
   const active = costSheets.find((c) => c.status !== "superseded");
   const pendingSkipRequest = skipRequests.find((r) => r.status === "pending");
   const canApproveSkip = role === "pm" || role === "director";
+  const canReject = role === "pm" || role === "director";
 
   const handleCreate = onAction(async () => {
     await createCostSheet(token, project.id, { cost_total: Number(costTotal) });
@@ -185,6 +242,10 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
     onBuild(created);
   });
   const handleVerify = onAction(async (id) => verifyCostSheet(token, id));
+  const handleReject = onAction(async (id, reasonCategory, note) => {
+    await rejectCostSheet(token, id, { reason_category: reasonCategory, note });
+    setRejectFormFor(null);
+  });
   const handleRevise = onAction(async (id) => {
     await reviseCostSheet(token, id, { cost_total: Number(costTotal) });
     setCostTotal("");
@@ -220,6 +281,14 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
                   </button>
                 </>
               )}
+              {canReject && (cs.status === "verified" || cs.status === "unverified") && (
+                <button
+                  onClick={() => setRejectFormFor(rejectFormFor === cs.id ? null : cs.id)}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  Reject
+                </button>
+              )}
               <button
                 onClick={() => setOpenAttachmentsFor(openAttachmentsFor === cs.id ? null : cs.id)}
                 className="text-xs text-gray-500 hover:underline"
@@ -234,6 +303,12 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
               </button>
             </div>
           </div>
+          {rejectFormFor === cs.id && (
+            <RejectForm
+              onSubmit={(reasonCategory, note) => handleReject(cs.id, reasonCategory, note)}
+              onCancel={() => setRejectFormFor(null)}
+            />
+          )}
           {openAttachmentsFor === cs.id && <AttachmentsPanel token={token} docType="cost_sheet" docId={cs.id} />}
           {openMessagesFor === cs.id && <MessagesPanel token={token} docType="cost_sheet" docId={cs.id} />}
         </div>
@@ -500,7 +575,9 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
+  const [rejectFormFor, setRejectFormFor] = useState(null);
   const canWaive = role === "pm" || role === "director";
+  const canReject = role === "pm" || role === "director";
 
   async function handleDownloadPdf(quotation) {
     setPdfError("");
@@ -536,6 +613,10 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
     markQuotationWon(token, id, { reason: "Client accepted", waiveEvidenceReason })
   );
   const handleLost = onAction(async (id) => markQuotationLost(token, id, "Client declined"));
+  const handleReject = onAction(async (id, reasonCategory, note) => {
+    await rejectQuotation(token, id, { reason_category: reasonCategory, note });
+    setRejectFormFor(null);
+  });
 
   return (
     <div className="bg-white shadow rounded-lg p-6 space-y-3">
@@ -584,6 +665,14 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
                 </button>
               </>
             )}
+            {canReject && (q.status === "released" || q.status === "sent") && (
+              <button
+                onClick={() => setRejectFormFor(rejectFormFor === q.id ? null : q.id)}
+                className="text-red-600 hover:underline"
+              >
+                Reject
+              </button>
+            )}
             <button
               onClick={() => setOpenAttachmentsFor(openAttachmentsFor === q.id ? null : q.id)}
               className="text-gray-500 hover:underline"
@@ -597,6 +686,12 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
               {openMessagesFor === q.id ? "Hide messages" : "Messages"}
             </button>
           </div>
+          {rejectFormFor === q.id && (
+            <RejectForm
+              onSubmit={(reasonCategory, note) => handleReject(q.id, reasonCategory, note)}
+              onCancel={() => setRejectFormFor(null)}
+            />
+          )}
           {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
           {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}
           {q.status === "won" && role !== "sales" && <WorkOrderPanel token={token} quotationId={q.id} />}

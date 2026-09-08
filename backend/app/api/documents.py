@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
@@ -36,6 +37,30 @@ from app.models.sport import ProjectSport
 # M.3: quotations at or above this value (or any Government/Tender deal)
 # require Formal evidence before Won, not just Informal.
 FORMAL_EVIDENCE_REQUIRED_ABOVE_RS = 2_500_000.0  # "[confirm]"
+
+
+class RejectReasonCategory(str, enum.Enum):
+    """M.3: 'Every approval step has a Reject -> Rework path with a
+    reason category (wrong quantities / rate not confirmed / margin /
+    scope unclear / evidence missing / other) and a note; the document
+    returns to Draft.' The complete, verbatim category list -- shared by
+    the Cost Sheet and Quotation reject endpoints below, the two places
+    in this app with an actual 'approved state -> Draft' transition to
+    revert (Estimate/EstimateOption have no Draft-returning approval gate
+    of their own: EstimateOption.client_status already has its own
+    client-facing 'rejected' concept, a different mechanism)."""
+
+    WRONG_QUANTITIES = "wrong_quantities"
+    RATE_NOT_CONFIRMED = "rate_not_confirmed"
+    MARGIN = "margin"
+    SCOPE_UNCLEAR = "scope_unclear"
+    EVIDENCE_MISSING = "evidence_missing"
+    OTHER = "other"
+
+
+class RejectRequest(BaseModel):
+    reason_category: RejectReasonCategory
+    note: str = Field(min_length=1, max_length=500)
 
 # M.1: an Unverified (skip-generated, M.2 rule 3) cost sheet "behaves as
 # Draft for editing" -- every place that gates an edit/recompute action on
@@ -358,6 +383,51 @@ def verify_cost_sheet(
             db.query(Quotation).filter(Quotation.estimate_id.in_(estimate_ids)).update(
                 {Quotation.cost_basis_unverified: False}, synchronize_session=False
             )
+
+    db.commit()
+    db.refresh(cost_sheet)
+    return cost_sheet
+
+
+@cost_sheets_router.post("/cost-sheets/{cost_sheet_id}/reject", response_model=CostSheetOut)
+def reject_cost_sheet(
+    cost_sheet_id: uuid.UUID,
+    payload: RejectRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """M.3: 'Every approval step has a Reject -> Rework path ... the
+    document returns to Draft.' A later reviewer (e.g. Director checking
+    the numbers before a Quotation goes out) can send an already-Verified
+    or skip-generated-Unverified Cost Sheet back for rework."""
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found")
+    if cost_sheet.status not in (CostSheetStatus.VERIFIED, CostSheetStatus.UNVERIFIED):
+        raise HTTPException(
+            status_code=400, detail=f"Cannot reject a cost sheet in {cost_sheet.status.value} status"
+        )
+
+    old_status = cost_sheet.status
+    cost_sheet.status = CostSheetStatus.DRAFT
+    cost_sheet.verified_by_id = None
+    cost_sheet.verified_at = None
+
+    # Mirrors verify_cost_sheet's own symmetric update: any Quotation
+    # already resting on this Cost Sheet (via its Estimate) no longer has
+    # a Verified cost basis once this reject takes effect.
+    estimate_ids = [row[0] for row in db.query(Estimate.id).filter(Estimate.cost_sheet_id == cost_sheet_id).all()]
+    if estimate_ids:
+        db.query(Quotation).filter(Quotation.estimate_id.in_(estimate_ids)).update(
+            {Quotation.cost_basis_unverified: True}, synchronize_session=False
+        )
+
+    write_audit_log_entry(
+        db, current_user, "cost_sheet", cost_sheet.id, "status",
+        old_value=old_status.value, new_value=CostSheetStatus.DRAFT.value,
+        reason=f"{payload.reason_category.value}: {payload.note}", request=request,
+    )
 
     db.commit()
     db.refresh(cost_sheet)
@@ -1385,6 +1455,45 @@ def release_quotation(
     quotation.status = QuotationStatus.RELEASED
     quotation.released_by_id = current_user.id
     quotation.released_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(quotation)
+    return _quotation_to_out(quotation, current_user.role.value)
+
+
+@quotations_router.post("/quotations/{quotation_id}/reject", response_model=QuotationOut)
+def reject_quotation(
+    quotation_id: uuid.UUID,
+    payload: RejectRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """M.3: 'Every approval step has a Reject -> Rework path ... the
+    document returns to Draft.' A Released or Sent Quotation -- not yet
+    Won/Lost/Expired -- can be sent back for rework (e.g. a Director spot
+    check finds the margin or scope wrong before/after it reaches the
+    client)."""
+    quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    if quotation.status not in (QuotationStatus.RELEASED, QuotationStatus.SENT):
+        raise HTTPException(
+            status_code=400, detail=f"Cannot reject a quotation in {quotation.status.value} status"
+        )
+
+    old_status = quotation.status
+    quotation.status = QuotationStatus.DRAFT
+    quotation.released_by_id = None
+    quotation.released_at = None
+    quotation.sent_at = None
+    quotation.expires_at = None
+
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "status",
+        old_value=old_status.value, new_value=QuotationStatus.DRAFT.value,
+        reason=f"{payload.reason_category.value}: {payload.note}", request=request,
+    )
+
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(quotation, current_user.role.value)

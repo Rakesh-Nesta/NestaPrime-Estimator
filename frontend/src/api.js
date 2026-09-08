@@ -383,6 +383,15 @@ export async function verifyCostSheet(token, costSheetId) {
   return handle(res);
 }
 
+export async function rejectCostSheet(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/reject`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function reviseCostSheet(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/revise`, {
     method: "POST",
@@ -441,6 +450,15 @@ export async function releaseQuotation(token, quotationId) {
   const res = await fetch(`${API_BASE}/quotations/${quotationId}/release`, {
     method: "POST",
     headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function rejectQuotation(token, quotationId, payload) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/reject`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   return handle(res);
 }
