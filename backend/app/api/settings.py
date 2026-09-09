@@ -1,7 +1,8 @@
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,7 @@ from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.setting import DocumentType, Override, Setting, SettingScope
 from app.models.user import User
+from app.xlsx_utils import xlsx_header_row, xlsx_response
 
 settings_router = APIRouter(prefix="/settings", tags=["settings"])
 overrides_router = APIRouter(prefix="/overrides", tags=["overrides"])
@@ -65,6 +67,27 @@ def get_internal_email_domains(db: Session) -> set[str]:
     }
 
 
+def _current_settings(db: Session, key_prefix: str | None = None) -> list[Setting]:
+    """One row per (key, scope_value): its currently-effective version.
+    Shared by the GET list, bulk %, and Excel export endpoints (Q.2 rule 6)."""
+    today = date.today()
+    query = db.query(Setting).filter(Setting.effective_from <= today)
+    if key_prefix is not None:
+        query = query.filter(Setting.key.like(f"{key_prefix}%"))
+    all_rows = query.order_by(
+        Setting.key, Setting.scope_value, Setting.effective_from.desc(), Setting.created_at.desc()
+    ).all()
+    seen: set[tuple[str, str | None]] = set()
+    current: list[Setting] = []
+    for row in all_rows:
+        identity = (row.key, row.scope_value)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        current.append(row)
+    return current
+
+
 class SettingOut(BaseModel):
     id: uuid.UUID
     key: str
@@ -85,23 +108,7 @@ def list_current_settings(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
-    """One row per (key, scope_value): its currently-effective version."""
-    today = date.today()
-    all_rows = (
-        db.query(Setting)
-        .filter(Setting.effective_from <= today)
-        .order_by(Setting.key, Setting.scope_value, Setting.effective_from.desc(), Setting.created_at.desc())
-        .all()
-    )
-    seen: set[tuple[str, str | None]] = set()
-    current: list[Setting] = []
-    for row in all_rows:
-        identity = (row.key, row.scope_value)
-        if identity in seen:
-            continue
-        seen.add(identity)
-        current.append(row)
-    return current
+    return _current_settings(db)
 
 
 @settings_router.get("/{key}/history", response_model=list[SettingOut])
@@ -184,21 +191,7 @@ def bulk_update_settings(
     (e.g. "steel +6%") with one action and an effective date.' A
     'category' here is every setting whose key starts with key_prefix;
     each gets its own new version, same effective_from and reason."""
-    today = date.today()
-    all_rows = (
-        db.query(Setting)
-        .filter(Setting.key.like(f"{payload.key_prefix}%"), Setting.effective_from <= today)
-        .order_by(Setting.key, Setting.scope_value, Setting.effective_from.desc(), Setting.created_at.desc())
-        .all()
-    )
-    seen: set[tuple[str, str | None]] = set()
-    current: list[Setting] = []
-    for row in all_rows:
-        identity = (row.key, row.scope_value)
-        if identity in seen:
-            continue
-        seen.add(identity)
-        current.append(row)
+    current = _current_settings(db, key_prefix=payload.key_prefix)
 
     if not current:
         raise HTTPException(status_code=404, detail=f"No settings found with key prefix '{payload.key_prefix}'")
@@ -234,6 +227,140 @@ def bulk_update_settings(
     for v in new_versions:
         db.refresh(v)
     return new_versions
+
+
+# --------------------------------------------------------------------------
+# Excel export/import (Q.2 rule 6: "Master Settings screen is Director-only
+# (PM read-only), exportable to Excel and importable back, so NestaPrime
+# can maintain its rate card in Excel if preferred and upload it.")
+# --------------------------------------------------------------------------
+
+_XLSX_COLUMNS = ["Key", "Scope", "Scope value", "Value", "Unit", "Effective from", "Reason"]
+_IMPORT_DEFAULT_REASON = "Bulk Excel import"
+
+
+@settings_router.get("/export")
+def export_settings(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    """One row per currently-effective setting -- the exact same set
+    GET /settings returns, as a downloadable workbook. Re-uploading this
+    file unchanged via POST /settings/import creates nothing (see that
+    endpoint), so export-then-reimport is always safe to run."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Master Settings"
+    xlsx_header_row(ws, _XLSX_COLUMNS)
+    for row in _current_settings(db):
+        ws.append([row.key, row.scope.value, row.scope_value, row.value, row.unit, row.effective_from.isoformat(), row.reason])
+    return xlsx_response(wb, "master-settings.xlsx")
+
+
+class SettingImportRowError(BaseModel):
+    row: int
+    detail: str
+
+
+class SettingImportResult(BaseModel):
+    created: list[SettingOut]
+    unchanged: int
+    errors: list[SettingImportRowError]
+
+
+def _parse_import_effective_from(raw) -> date:
+    if raw is None or raw == "":
+        return date.today()
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    return date.fromisoformat(str(raw).strip())
+
+
+@settings_router.post("/import", response_model=SettingImportResult)
+def import_settings(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """Q.2 rule 6's 'importable back.' Expects the same columns
+    export_settings() produces (Key, Scope, Scope value, Value, Unit,
+    Effective from, Reason) in that order on the first worksheet, header
+    row first. Each data row becomes a new Setting VERSION (Q.2 rule 1 --
+    never a mutation) unless its Value is identical to what's already
+    currently effective for that (key, scope_value), in which case it's
+    counted as unchanged and skipped -- so re-exporting and reimporting
+    the same file is a safe no-op, and only the rows a Director actually
+    edited in Excel produce new versions. One bad row (unknown scope, an
+    unparseable date, a missing key/value) is recorded as a per-row error
+    and does not stop the rest of the file from importing."""
+    try:
+        wb = load_workbook(file.file, data_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not read this file as an Excel workbook: {exc}")
+    ws = wb.active
+
+    valid_scopes = {s.value for s in SettingScope}
+    created: list[Setting] = []
+    unchanged = 0
+    errors: list[SettingImportRowError] = []
+
+    for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if row is None or all(cell in (None, "") for cell in row):
+            continue  # blank row -- e.g. Excel's own trailing rows
+        key_cell, scope_cell, scope_value_cell, value_cell, unit_cell, effective_from_cell, reason_cell = (
+            list(row) + [None] * (len(_XLSX_COLUMNS) - len(row))
+        )[: len(_XLSX_COLUMNS)]
+
+        try:
+            key = str(key_cell).strip() if key_cell not in (None, "") else ""
+            if not key:
+                raise ValueError("Key is required")
+            value = str(value_cell).strip() if value_cell not in (None, "") else ""
+            if not value:
+                raise ValueError("Value is required")
+            scope_raw = str(scope_cell).strip().lower() if scope_cell not in (None, "") else SettingScope.GLOBAL.value
+            if scope_raw not in valid_scopes:
+                raise ValueError(f"Unknown scope '{scope_raw}' -- must be one of {sorted(valid_scopes)}")
+            scope_value = str(scope_value_cell).strip() if scope_value_cell not in (None, "") else None
+            unit = str(unit_cell).strip() if unit_cell not in (None, "") else None
+            effective_from = _parse_import_effective_from(effective_from_cell)
+            reason = str(reason_cell).strip() if reason_cell not in (None, "") else _IMPORT_DEFAULT_REASON
+        except (ValueError, TypeError) as exc:
+            errors.append(SettingImportRowError(row=row_number, detail=str(exc)))
+            continue
+
+        old_value = get_current_setting_value(db, key, scope_value)
+        if old_value == value:
+            unchanged += 1
+            continue
+
+        setting = Setting(
+            key=key,
+            scope=SettingScope(scope_raw),
+            scope_value=scope_value,
+            value=value,
+            unit=unit,
+            effective_from=effective_from,
+            changed_by_id=current_user.id,
+            reason=reason,
+        )
+        db.add(setting)
+        db.flush()
+        write_audit_log_entry(
+            db, current_user, "setting", setting.id, key,
+            old_value=old_value, new_value=value, reason=reason, request=request,
+        )
+        created.append(setting)
+
+    db.commit()
+    for s in created:
+        db.refresh(s)
+    return SettingImportResult(
+        created=[SettingOut.model_validate(s) for s in created], unchanged=unchanged, errors=errors
+    )
 
 
 # --------------------------------------------------------------------------

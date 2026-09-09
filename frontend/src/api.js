@@ -650,6 +650,26 @@ export async function bulkUpdateSettings(token, payload) {
   return handle(res);
 }
 
+export async function exportSettingsBlob(token) {
+  const res = await fetch(`${API_BASE}/settings/export`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function importSettingsExcel(token, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/settings/import`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  return handle(res);
+}
+
 export async function createOverride(token, payload) {
   const res = await fetch(`${API_BASE}/overrides`, {
     method: "POST",

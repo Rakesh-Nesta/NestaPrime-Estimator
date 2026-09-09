@@ -3,10 +3,21 @@ import {
   bulkUpdateSettings,
   createSettingVersion,
   downloadCompanyLogoBlob,
+  exportSettingsBlob,
   getCompanyLogoMeta,
+  importSettingsExcel,
   listSettings,
   uploadCompanyLogo,
 } from "./api";
+
+function downloadBlobAsFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function MasterSettings({ token, onBack }) {
   const [settings, setSettings] = useState([]);
@@ -29,6 +40,9 @@ export default function MasterSettings({ token, onBack }) {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState(null);
   const [logoError, setLogoError] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const [importResult, setImportResult] = useState(null);
+  const [importingExcel, setImportingExcel] = useState(false);
 
   function load() {
     return listSettings(token).then(setSettings);
@@ -62,6 +76,34 @@ export default function MasterSettings({ token, onBack }) {
       setLogoError(err.message);
     } finally {
       setUploadingLogo(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleExportExcel() {
+    setError("");
+    try {
+      const blob = await exportSettingsBlob(token);
+      downloadBlobAsFile(blob, "master-settings.xlsx");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleImportExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setImportResult(null);
+    setImportingExcel(true);
+    try {
+      const result = await importSettingsExcel(token, file);
+      setImportResult(result);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportingExcel(false);
       e.target.value = "";
     }
   }
@@ -169,6 +211,56 @@ export default function MasterSettings({ token, onBack }) {
             {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
           </div>
         </div>
+      </div>
+
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-1">Excel export / import</h3>
+        <p className="text-xs text-gray-400 mb-3">
+          Q.2 rule 6: "exportable to Excel and importable back, so NestaPrime can maintain its rate card in Excel if
+          preferred." Re-importing an unchanged file is a safe no-op -- only rows whose Value actually differs from
+          what's currently effective create a new version.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            className="text-xs bg-gray-100 text-gray-700 rounded px-3 py-1.5 hover:bg-gray-200"
+          >
+            Export to Excel
+          </button>
+          <label className="text-xs bg-blue-600 text-white rounded px-3 py-1.5 cursor-pointer hover:bg-blue-700">
+            {importingExcel ? "Importing…" : "Import from Excel"}
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={handleImportExcel}
+              className="hidden"
+              disabled={importingExcel}
+            />
+          </label>
+        </div>
+        {importResult && (
+          <div className="mt-3 text-xs bg-gray-50 border border-gray-200 rounded p-3">
+            <p className="text-gray-700">
+              <span className="font-medium">{importResult.created.length}</span> new version(s) created,{" "}
+              <span className="font-medium">{importResult.unchanged}</span> row(s) unchanged (skipped)
+              {importResult.errors.length > 0 && (
+                <>
+                  , <span className="font-medium text-red-600">{importResult.errors.length}</span> row error(s)
+                </>
+              )}
+              .
+            </p>
+            {importResult.errors.length > 0 && (
+              <ul className="mt-1 list-disc list-inside text-red-600">
+                {importResult.errors.map((e) => (
+                  <li key={e.row}>
+                    Row {e.row}: {e.detail}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white shadow rounded-lg p-6">

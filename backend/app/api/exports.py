@@ -1,11 +1,8 @@
-import io
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
 from sqlalchemy.orm import Session
 
 from app.api import schedule as schedule_api
@@ -23,6 +20,8 @@ from app.models.document import (
 )
 from app.models.project import Project
 from app.models.sport import ProjectSport, Sport
+from app.xlsx_utils import xlsx_header_row as _header_row
+from app.xlsx_utils import xlsx_response as _xlsx_response
 
 exports_router = APIRouter(tags=["exports"])
 
@@ -36,25 +35,6 @@ RFQ_ROLES = ("pm", "director", "procurement")
 # Billing Handoff carries no cost/margin (K.3-safe by construction), so
 # Sales -- who creates and sends the Quotation -- can use it too.
 HANDOFF_ROLES = ("sales", "pm", "director")
-
-
-def _xlsx_response(wb: Workbook, filename: str) -> StreamingResponse:
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-def _header_row(ws, headers: list[str]) -> None:
-    ws.append(headers)
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
-    for i, header in enumerate(headers, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = max(12, len(header) + 2)
 
 
 def _get_cost_sheet_or_404(db: Session, cost_sheet_id: uuid.UUID) -> CostSheet:
