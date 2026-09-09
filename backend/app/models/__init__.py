@@ -1,3 +1,4 @@
+from app.models.accessory_catalog_item import AccessoryCatalogItem  # noqa: F401
 from app.models.attachment import Attachment, AttachmentTag, ApprovalStrength  # noqa: F401
 from app.models.client import Client, ClientType  # noqa: F401
 from app.models.client_signatory import ClientSignatory  # noqa: F401

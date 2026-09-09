@@ -1001,6 +1001,33 @@ export async function addAccessoriesTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function listAccessoryCatalog(token, sportId, includeInactive = false) {
+  const params = new URLSearchParams();
+  if (sportId) params.set("sport_id", sportId);
+  if (includeInactive) params.set("include_inactive", "true");
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/accessory-catalog${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createAccessoryCatalogItem(token, payload) {
+  const res = await fetch(`${API_BASE}/accessory-catalog`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateAccessoryCatalogItem(token, itemId, payload) {
+  const res = await fetch(`${API_BASE}/accessory-catalog/${itemId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addAthleticsTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/athletics`, {
     method: "POST",

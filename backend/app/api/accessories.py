@@ -1,54 +1,29 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.documents import CostSheetLineOut, _line_to_out
 from app.api.site_works import _get_cost_sheet
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.accessory_catalog_item import AccessoryCatalogItem
 from app.models.document import CostSheetLine, WorkPackage
 from app.models.rate_item import RateSource
 from app.models.sport import ProjectSport, Sport
 
 accessories_router = APIRouter(tags=["accessories"])
+accessory_catalog_router = APIRouter(prefix="/accessory-catalog", tags=["accessory-catalog"])
 
 COST_ROLES = ("pm", "director")
-
-# Part I / Module 9: "Accessories (auto per sport): goals, nets, posts,
-# scoreboards, stumps, umpire chairs, lane ropes, starting blocks, glass
-# doors (padel), padel nets, pickleball nets, archery targets." The
-# blueprint names the item *types* but gives no per-sport quantity table,
-# so this catalog is this implementation's own working default: one row
-# per (item_name, unit, quantity per court/lane) for sports where the
-# equipment is near-universal. Optional extras (scoreboard, umpire chair)
-# are deliberately left out of the fixed catalog since they aren't always
-# wanted -- they go through custom_items below, same as any sport with no
-# catalog entry at all. Swimming pool and gym/play equipment are out of
-# scope (Parts G.1/G.2/G.4 aren't built), so lane ropes and gym/play
-# equipment are not catalogued either.
-ACCESSORY_CATALOG: dict[str, list[tuple[str, str, float]]] = {
-    "badminton": [("Badminton net + post set", "set", 1)],
-    "table_tennis": [("Table tennis net + post set", "set", 1)],
-    "basketball_indoor": [("Basketball goal (backboard + ring)", "nos", 2)],
-    "basketball_outdoor": [("Basketball goal (backboard + ring)", "nos", 2)],
-    "volleyball_indoor": [("Volleyball net + post set", "set", 1)],
-    "volleyball_outdoor": [("Volleyball net + post set", "set", 1)],
-    "beach_volleyball": [("Volleyball net + post set", "set", 1)],
-    "indoor_cricket_nets": [("Cricket stumps set (2 ends)", "set", 1)],
-    "cricket_practice_nets": [("Cricket stumps set (2 ends)", "set", 1)],
-    "box_cricket": [("Cricket stumps set (2 ends)", "set", 1)],
-    "football_11": [("Football goal with net", "nos", 2)],
-    "football_7": [("Football goal with net", "nos", 2)],
-    "football_5_futsal": [("Football goal with net", "nos", 2)],
-    "tennis": [("Tennis net + post set", "set", 1)],
-    "padel": [("Padel glass wall/door panel set", "set", 1), ("Padel net", "nos", 1)],
-    "pickleball": [("Pickleball net + post set", "set", 1)],
-    "hockey_turf": [("Hockey goal with net", "nos", 2)],
-    "athletic_track_400m": [("Starting block", "nos", 8)],  # seed name is "400 m, 8 lane"
-    "archery_range": [("Archery target (butt/boss)", "nos", 1)],
-}
+# The catalog itself carries no Rs figures (item + quantity only, no
+# rate) -- K.3's cost-visibility gate doesn't apply, so read access is
+# as broad as ScopeItem's own (whoever might build a Cost Sheet or just
+# needs to see what a sport's accessories normally are).
+CATALOG_READ_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
+# Q.2 rule 6 precedent: "Master Settings screen is Director-only."
+CATALOG_WRITE_ROLES = ("director",)
 
 
 class CustomAccessoryLine(BaseModel):
@@ -101,36 +76,40 @@ def add_accessories_takeoff(
     project_sport = _get_project_sport(db, cost_sheet, payload.project_sport_id)
     sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
 
-    catalog_items = ACCESSORY_CATALOG.get(sport.key, [])
+    catalog_items = (
+        db.query(AccessoryCatalogItem)
+        .filter(AccessoryCatalogItem.sport_id == sport.id, AccessoryCatalogItem.is_active.is_(True))
+        .all()
+    )
     if not catalog_items and not payload.custom_items:
         raise HTTPException(
             status_code=422,
             detail=f"No accessories catalog for {sport.name} -- specify custom_items",
         )
 
-    missing_rates = [name for name, _unit, _qty in catalog_items if name not in payload.rates]
+    missing_rates = [item.item_name for item in catalog_items if item.item_name not in payload.rates]
     if missing_rates:
         raise HTTPException(status_code=422, detail=f"Missing rate for: {', '.join(missing_rates)}")
 
     lines_to_create: list[CostSheetLine] = []
     applied = []
-    for item_name, unit, qty_per_court in catalog_items:
-        quantity = qty_per_court * project_sport.number_of_courts
-        rate = payload.rates[item_name]
+    for item in catalog_items:
+        quantity = float(item.quantity_per_court) * project_sport.number_of_courts
+        rate = payload.rates[item.item_name]
         lines_to_create.append(
             CostSheetLine(
                 cost_sheet_id=cost_sheet_id,
                 project_sport_id=payload.project_sport_id,
                 work_package=WorkPackage.ACCESSORIES,
                 category="Accessories",
-                item_name=item_name,
-                unit=unit,
+                item_name=item.item_name,
+                unit=item.unit,
                 quantity=quantity,
                 rate=rate,
                 source=RateSource.MANUAL,
             )
         )
-        applied.append({"item_name": item_name, "unit": unit, "quantity": quantity, "rate": rate})
+        applied.append({"item_name": item.item_name, "unit": item.unit, "quantity": quantity, "rate": rate})
 
     for custom in payload.custom_items:
         lines_to_create.append(
@@ -161,3 +140,89 @@ def add_accessories_takeoff(
         },
         lines=[_line_to_out(line) for line in lines_to_create],
     )
+
+
+# --------------------------------------------------------------------------
+# Accessory catalog master (Part I / Module 9) -- Director-editable,
+# replacing the former hardcoded ACCESSORY_CATALOG Python dict (the
+# audit's "hardcoded technical catalogues" finding).
+# --------------------------------------------------------------------------
+
+
+class AccessoryCatalogItemOut(BaseModel):
+    id: uuid.UUID
+    sport_id: uuid.UUID
+    item_name: str
+    unit: str
+    quantity_per_court: float
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@accessory_catalog_router.get("", response_model=list[AccessoryCatalogItemOut])
+def list_accessory_catalog(
+    sport_id: uuid.UUID | None = None,
+    include_inactive: bool = False,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*CATALOG_READ_ROLES)),
+):
+    query = db.query(AccessoryCatalogItem)
+    if sport_id is not None:
+        query = query.filter(AccessoryCatalogItem.sport_id == sport_id)
+    if not include_inactive:
+        query = query.filter(AccessoryCatalogItem.is_active.is_(True))
+    return query.order_by(AccessoryCatalogItem.sport_id, AccessoryCatalogItem.item_name).all()
+
+
+class AccessoryCatalogItemCreate(BaseModel):
+    sport_id: uuid.UUID
+    item_name: str = Field(min_length=1)
+    unit: str = Field(min_length=1)
+    quantity_per_court: float = Field(gt=0)
+
+
+class AccessoryCatalogItemUpdate(BaseModel):
+    item_name: str | None = None
+    unit: str | None = None
+    quantity_per_court: float | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+@accessory_catalog_router.post("", response_model=AccessoryCatalogItemOut, status_code=201)
+def create_accessory_catalog_item(
+    payload: AccessoryCatalogItemCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*CATALOG_WRITE_ROLES)),
+):
+    if not db.query(Sport).filter(Sport.id == payload.sport_id).first():
+        raise HTTPException(status_code=404, detail="Sport not found")
+    if (
+        db.query(AccessoryCatalogItem)
+        .filter(AccessoryCatalogItem.sport_id == payload.sport_id, AccessoryCatalogItem.item_name == payload.item_name)
+        .first()
+    ):
+        raise HTTPException(status_code=409, detail=f"'{payload.item_name}' already exists for this sport")
+
+    item = AccessoryCatalogItem(**payload.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@accessory_catalog_router.patch("/{item_id}", response_model=AccessoryCatalogItemOut)
+def update_accessory_catalog_item(
+    item_id: uuid.UUID,
+    payload: AccessoryCatalogItemUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*CATALOG_WRITE_ROLES)),
+):
+    item = db.query(AccessoryCatalogItem).filter(AccessoryCatalogItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Accessory catalog item not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    db.commit()
+    db.refresh(item)
+    return item

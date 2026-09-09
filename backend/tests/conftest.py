@@ -7,6 +7,7 @@ from app.config import settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models.accessory_catalog_item import AccessoryCatalogItem
 from app.models.user import User, UserRole
 from app.models.margin_policy import MarginPolicy
 from app.models.rate_item import LabourCategory
@@ -15,6 +16,7 @@ from app.models.scope_item import ScopeItem
 from app.models.sport import Sport
 from app.core.security import hash_password
 from app.seed_data import (
+    ACCESSORY_CATALOG_SEED,
     LABOUR_CATEGORIES_SEED,
     MARGIN_POLICY_SEED,
     REGIONAL_MULTIPLIER_SEED,
@@ -50,25 +52,36 @@ def db_session():
                     is_confirmed=confirmed,
                 )
             )
+        sport_id_by_key: dict[str, object] = {}
         for (
             key, order, name, category, playing, build,
             playing_l, playing_w, build_l, build_w,
             min_height, body,
         ) in SPORTS_SEED:
+            sport = Sport(
+                key=key,
+                display_order=order,
+                name=name,
+                category=category,
+                playing_dims=playing,
+                build_dims=build,
+                playing_l_ft=playing_l,
+                playing_w_ft=playing_w,
+                build_l_ft=build_l,
+                build_w_ft=build_w,
+                min_clear_height_ft=min_height,
+                governing_body=body,
+            )
+            session.add(sport)
+            session.flush()  # need sport.id for ACCESSORY_CATALOG_SEED below
+            sport_id_by_key[key] = sport.id
+        for sport_key, item_name, unit, quantity_per_court in ACCESSORY_CATALOG_SEED:
             session.add(
-                Sport(
-                    key=key,
-                    display_order=order,
-                    name=name,
-                    category=category,
-                    playing_dims=playing,
-                    build_dims=build,
-                    playing_l_ft=playing_l,
-                    playing_w_ft=playing_w,
-                    build_l_ft=build_l,
-                    build_w_ft=build_w,
-                    min_clear_height_ft=min_height,
-                    governing_body=body,
+                AccessoryCatalogItem(
+                    sport_id=sport_id_by_key[sport_key],
+                    item_name=item_name,
+                    unit=unit,
+                    quantity_per_court=quantity_per_court,
                 )
             )
         for key, order, group, name in SCOPE_ITEMS_SEED:

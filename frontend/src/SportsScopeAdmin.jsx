@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import {
+  createAccessoryCatalogItem,
   createHub,
   createScopeItem,
   createSport,
   deleteSportMarginPolicy,
+  listAccessoryCatalog,
   listHubs,
   listPackageContents,
   listScopeItems,
   listSportMarginPolicies,
   listSports,
+  updateAccessoryCatalogItem,
   updateHub,
   updateScopeItem,
   updateSport,
@@ -22,6 +25,10 @@ const PACKAGE_TIERS = ["budget", "standard", "premium"];
 
 function emptyPackageContentForm() {
   return { flooring_description: "", structure_description: "", lighting_description: "", scope_description: "", warranty_years: "" };
+}
+
+function emptyAccessoryItemForm() {
+  return { item_name: "", unit: "nos", quantity_per_court: "1" };
 }
 
 function emptySportForm() {
@@ -47,25 +54,27 @@ function num(v) {
 }
 
 export default function SportsScopeAdmin({ token, onBack }) {
-  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins" | "packages" | "hubs"
+  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins" | "packages" | "hubs" | "accessories"
   const [sports, setSports] = useState([]);
   const [scopeItems, setScopeItems] = useState([]);
   const [sportMarginPolicies, setSportMarginPolicies] = useState([]);
   const [packageContents, setPackageContents] = useState([]);
   const [hubs, setHubs] = useState([]);
+  const [accessoryCatalog, setAccessoryCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function load() {
     return Promise.all([
       listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token),
-      listPackageContents(token), listHubs(token, true),
-    ]).then(([s, i, m, p, h]) => {
+      listPackageContents(token), listHubs(token, true), listAccessoryCatalog(token, undefined, true),
+    ]).then(([s, i, m, p, h, a]) => {
       setSports(s);
       setScopeItems(i);
       setSportMarginPolicies(m);
       setPackageContents(p);
       setHubs(h);
+      setAccessoryCatalog(a);
     });
   }
 
@@ -142,6 +151,12 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Hubs ({hubs.length})
           </button>
+          <button
+            onClick={() => setTab("accessories")}
+            className={`text-sm rounded px-3 py-1 ${tab === "accessories" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Accessory catalog ({accessoryCatalog.length})
+          </button>
         </div>
       </div>
 
@@ -159,6 +174,9 @@ export default function SportsScopeAdmin({ token, onBack }) {
         <PackageContentsTab token={token} sports={sports} packageContents={packageContents} onAction={withErrorHandling} />
       )}
       {tab === "hubs" && <HubsTab token={token} hubs={hubs} onAction={withErrorHandling} />}
+      {tab === "accessories" && (
+        <AccessoryCatalogTab token={token} sports={sports} accessoryCatalog={accessoryCatalog} onAction={withErrorHandling} />
+      )}
     </div>
   );
 }
@@ -556,6 +574,146 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
                 </button>
               )}
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
+  const [addingForSportId, setAddingForSportId] = useState(null);
+  const [addForm, setAddForm] = useState(emptyAccessoryItemForm());
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+  const bySportId = {};
+  for (const item of accessoryCatalog) {
+    (bySportId[item.sport_id] ??= []).push(item);
+  }
+
+  const handleCreate = onAction(async (sportId) => {
+    await createAccessoryCatalogItem(token, {
+      sport_id: sportId,
+      item_name: addForm.item_name,
+      unit: addForm.unit,
+      quantity_per_court: Number(addForm.quantity_per_court),
+    });
+    setAddForm(emptyAccessoryItemForm());
+    setAddingForSportId(null);
+  });
+
+  function startEdit(item) {
+    setEditingId(item.id);
+    setEditForm({ item_name: item.item_name, unit: item.unit, quantity_per_court: String(item.quantity_per_court) });
+  }
+
+  const handleSaveEdit = onAction(async () => {
+    await updateAccessoryCatalogItem(token, editingId, {
+      item_name: editForm.item_name,
+      unit: editForm.unit,
+      quantity_per_court: Number(editForm.quantity_per_court),
+    });
+    setEditingId(null);
+  });
+
+  const toggleActive = onAction(async (item) => updateAccessoryCatalogItem(token, item.id, { is_active: !item.is_active }));
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-gray-400 -mt-1 mb-2">
+        Part I / Module 9: which accessory (and how many per court/lane) is auto-added for a sport's take-off --
+        formerly a hardcoded Python/JS dict, now Director-editable here. A sport with no rows below still works via
+        the "custom items" fallback on the Cost Sheet's Accessories form.
+      </p>
+      {sports.map((sport) => {
+        const items = bySportId[sport.id] ?? [];
+        return (
+          <div key={sport.id} className="border border-gray-200 rounded p-3 space-y-2">
+            <p className="text-sm font-medium">
+              {sport.name} <span className="text-gray-400 text-xs font-normal">({sport.key})</span>
+            </p>
+            {items.length === 0 && <p className="text-xs text-gray-400">No catalog items yet.</p>}
+            {items.map((item) =>
+              editingId === item.id ? (
+                <div key={item.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2">
+                    <LabeledInput label="Item name" value={editForm.item_name} onChange={(v) => setEditForm((f) => ({ ...f, item_name: v }))} />
+                    <LabeledInput label="Unit" value={editForm.unit} onChange={(v) => setEditForm((f) => ({ ...f, unit: v }))} />
+                    <LabeledInput
+                      label="Qty per court"
+                      type="number"
+                      value={editForm.quantity_per_court}
+                      onChange={(v) => setEditForm((f) => ({ ...f, quantity_per_court: v }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                      Save
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between gap-2 text-sm border rounded px-3 py-1.5 ${
+                    item.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+                  }`}
+                >
+                  <span>
+                    {item.item_name} <span className="text-gray-400 text-xs">({item.quantity_per_court} {item.unit}/court)</span>
+                    {!item.is_active && <span className="text-gray-400"> · inactive</span>}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => startEdit(item)} className="text-blue-600 hover:underline text-xs">
+                      Edit
+                    </button>
+                    <button onClick={() => toggleActive(item)} className="text-gray-500 hover:underline text-xs">
+                      {item.is_active ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+
+            {addingForSportId === sport.id ? (
+              <div className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+                <div className="grid grid-cols-3 gap-2">
+                  <LabeledInput label="Item name" value={addForm.item_name} onChange={(v) => setAddForm((f) => ({ ...f, item_name: v }))} />
+                  <LabeledInput label="Unit" value={addForm.unit} onChange={(v) => setAddForm((f) => ({ ...f, unit: v }))} />
+                  <LabeledInput
+                    label="Qty per court"
+                    type="number"
+                    value={addForm.quantity_per_court}
+                    onChange={(v) => setAddForm((f) => ({ ...f, quantity_per_court: v }))}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleCreate(sport.id)}
+                    className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700"
+                  >
+                    Add item
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAddingForSportId(null);
+                      setAddForm(emptyAccessoryItemForm());
+                    }}
+                    className="text-xs text-gray-500 hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setAddingForSportId(sport.id)} className="text-xs text-blue-600 hover:underline">
+                + Add item
+              </button>
+            )}
           </div>
         );
       })}

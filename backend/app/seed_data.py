@@ -134,6 +134,33 @@ SCOPE_ITEMS_SEED = [
     ("amc", 30, "maintenance", "AMC (turf brushing, infill top-up, acrylic re-coat 5-7 yr)"),
 ]
 
+# Part I / Module 9 — accessories.py's own former ACCESSORY_CATALOG dict,
+# now this app's working default for the Director-editable
+# AccessoryCatalogItem table (the audit's "hardcoded technical
+# catalogues" finding). (sport_key, item_name, unit, quantity_per_court)
+ACCESSORY_CATALOG_SEED = [
+    ("badminton", "Badminton net + post set", "set", 1),
+    ("table_tennis", "Table tennis net + post set", "set", 1),
+    ("basketball_indoor", "Basketball goal (backboard + ring)", "nos", 2),
+    ("basketball_outdoor", "Basketball goal (backboard + ring)", "nos", 2),
+    ("volleyball_indoor", "Volleyball net + post set", "set", 1),
+    ("volleyball_outdoor", "Volleyball net + post set", "set", 1),
+    ("beach_volleyball", "Volleyball net + post set", "set", 1),
+    ("indoor_cricket_nets", "Cricket stumps set (2 ends)", "set", 1),
+    ("cricket_practice_nets", "Cricket stumps set (2 ends)", "set", 1),
+    ("box_cricket", "Cricket stumps set (2 ends)", "set", 1),
+    ("football_11", "Football goal with net", "nos", 2),
+    ("football_7", "Football goal with net", "nos", 2),
+    ("football_5_futsal", "Football goal with net", "nos", 2),
+    ("tennis", "Tennis net + post set", "set", 1),
+    ("padel", "Padel glass wall/door panel set", "set", 1),
+    ("padel", "Padel net", "nos", 1),
+    ("pickleball", "Pickleball net + post set", "set", 1),
+    ("hockey_turf", "Hockey goal with net", "nos", 2),
+    ("athletic_track_400m", "Starting block", "nos", 8),
+    ("archery_range", "Archery target (butt/boss)", "nos", 1),
+]
+
 # J.2 — Labour category fallback %, used only when a rate item has no
 # activity rate card of its own.
 # (key, name, default_percent)

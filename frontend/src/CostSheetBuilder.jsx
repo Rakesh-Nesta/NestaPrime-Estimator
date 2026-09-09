@@ -26,6 +26,7 @@ import {
   getConsumptionSheet,
   getK1Constants,
   getLabourWarnings,
+  listAccessoryCatalog,
   listCostSheetLines,
   listLabourCategories,
   recomputeCostSheet,
@@ -54,35 +55,6 @@ const TABS = [
   { key: "tender_overheads", label: "Tender overheads (K.1 step 4A)" },
   { key: "manual", label: "Manual line" },
 ];
-
-// Mirrors the backend's ACCESSORY_CATALOG (app/api/accessories.py) --
-// purely to render one rate input per known item; the backend stays the
-// source of truth and rejects the request if a rate is missing, so a
-// stale/incomplete list here only means a plainer form, not a silent gap.
-const ACCESSORY_CATALOG = {
-  badminton: [["Badminton net + post set", "set", 1]],
-  table_tennis: [["Table tennis net + post set", "set", 1]],
-  basketball_indoor: [["Basketball goal (backboard + ring)", "nos", 2]],
-  basketball_outdoor: [["Basketball goal (backboard + ring)", "nos", 2]],
-  volleyball_indoor: [["Volleyball net + post set", "set", 1]],
-  volleyball_outdoor: [["Volleyball net + post set", "set", 1]],
-  beach_volleyball: [["Volleyball net + post set", "set", 1]],
-  indoor_cricket_nets: [["Cricket stumps set (2 ends)", "set", 1]],
-  cricket_practice_nets: [["Cricket stumps set (2 ends)", "set", 1]],
-  box_cricket: [["Cricket stumps set (2 ends)", "set", 1]],
-  football_11: [["Football goal with net", "nos", 2]],
-  football_7: [["Football goal with net", "nos", 2]],
-  football_5_futsal: [["Football goal with net", "nos", 2]],
-  tennis: [["Tennis net + post set", "set", 1]],
-  padel: [
-    ["Padel glass wall/door panel set", "set", 1],
-    ["Padel net", "nos", 1],
-  ],
-  pickleball: [["Pickleball net + post set", "set", 1]],
-  hockey_turf: [["Hockey goal with net", "nos", 2]],
-  athletic_track_400m: [["Starting block", "nos", 8]],
-  archery_range: [["Archery target (butt/boss)", "nos", 1]],
-};
 
 // ---------------------------------------------------------------------------
 // Recommendation-layer wiring: Sport Selection's D.2/E.4/F.1-F.2/H
@@ -1180,10 +1152,20 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
   const [customItems, setCustomItems] = useState([]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [catalogItems, setCatalogItems] = useState([]);
 
   const selectedProjectSport = projectSports.find((ps) => ps.id === projectSportId);
   const sport = selectedProjectSport ? sportsById[selectedProjectSport.sport_id] : null;
-  const catalogItems = sport ? ACCESSORY_CATALOG[sport.key] ?? [] : [];
+
+  useEffect(() => {
+    if (!sport) {
+      setCatalogItems([]);
+      return;
+    }
+    listAccessoryCatalog(token, sport.id)
+      .then((rows) => setCatalogItems(rows.map((r) => [r.item_name, r.unit, r.quantity_per_court])))
+      .catch(() => setCatalogItems([]));
+  }, [token, sport?.id]);
 
   function addCustomItem() {
     setCustomItems((items) => [...items, { item_name: "", unit: "nos", quantity: "1", rate: "" }]);
