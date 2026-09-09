@@ -14,6 +14,7 @@ from app.models.document import (  # noqa: F401
     QuotationStatus,
     WorkPackage,
 )
+from app.models.hub import Hub  # noqa: F401
 from app.models.margin_policy import MarginPolicy  # noqa: F401
 from app.models.message import Message, MessageChannel, MessageStatus  # noqa: F401
 from app.models.package_content import PackageContent  # noqa: F401

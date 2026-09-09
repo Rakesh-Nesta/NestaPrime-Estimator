@@ -101,8 +101,12 @@ class Project(Base):
     site_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     site_state_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
-    # #3 Distance from nearest NestaPrime hub (km). Phase 1 = PM enters this
-    # manually (M.4a item 5) — PIN-code lookup is a Phase 7 integration.
+    # #4 Distance from nearest NestaPrime hub (km). hub_id records WHICH
+    # hub (Part O HUBS) the PM measured from; distance_km is still the
+    # manual km entry itself (M.4a item 5) — PIN-code lookup is a Phase 7
+    # integration. hub_id is nullable so existing/older projects and any
+    # site with no NestaPrime hub nearby remain representable.
+    hub_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("hubs.id"), nullable=True)
     distance_km: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
 
     site_condition: Mapped[SiteCondition] = mapped_column(

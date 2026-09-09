@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createClient, createProject, listClients, listRegionalMultipliers } from "./api";
+import { createClient, createProject, listClients, listHubs, listRegionalMultipliers } from "./api";
 
 const PROJECT_TYPES = [
   ["new_build", "New Build"],
@@ -46,6 +46,7 @@ const emptyForm = {
   clientType: "school",
   city: "Mumbai",
   siteAddress: "",
+  hubId: "",
   distanceKm: "",
   siteCondition: "level",
   soilType: "normal",
@@ -64,6 +65,7 @@ export default function ProjectSetup({ token, onProjectCreated }) {
   const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
   const [multipliers, setMultipliers] = useState([]);
+  const [hubs, setHubs] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
@@ -71,6 +73,7 @@ export default function ProjectSetup({ token, onProjectCreated }) {
   useEffect(() => {
     listClients(token).then(setClients).catch(() => {});
     listRegionalMultipliers(token).then(setMultipliers).catch(() => {});
+    listHubs(token).then(setHubs).catch(() => {});
   }, [token]);
 
   function set(field, value) {
@@ -97,6 +100,7 @@ export default function ProjectSetup({ token, onProjectCreated }) {
         project_type: form.projectType,
         city: form.city,
         site_address: form.siteAddress || null,
+        hub_id: form.hubId || null,
         distance_km: form.distanceKm ? Number(form.distanceKm) : null,
         site_condition: form.siteCondition,
         soil_type: form.soilType,
@@ -237,7 +241,19 @@ export default function ProjectSetup({ token, onProjectCreated }) {
           </p>
         )}
         <Text label="Site address" value={form.siteAddress} onChange={(v) => set("siteAddress", v)} />
-        <NumberField label="Distance from hub (km)" value={form.distanceKm} onChange={(v) => set("distanceKm", v)} />
+        <Select
+          label="Nearest NestaPrime hub"
+          value={form.hubId}
+          onChange={(v) => set("hubId", v)}
+          options={hubs.map((h) => [h.id, `${h.name} (${h.city}, ${h.state_code})`])}
+          placeholder={hubs.length ? "Select a hub…" : "No hubs configured yet (Q.1)"}
+        />
+        <NumberField
+          label="Distance from hub (km)"
+          value={form.distanceKm}
+          onChange={(v) => set("distanceKm", v)}
+          hint="Phase 1: manual entry from the selected hub -- PIN-code lookup is a later integration"
+        />
         <Select label="Site condition" value={form.siteCondition} onChange={(v) => set("siteCondition", v)} options={SITE_CONDITIONS} />
         <Select label="Soil type" value={form.soilType} onChange={(v) => set("soilType", v)} options={SOIL_TYPES} />
         <Select label="Building status" value={form.buildingStatus} onChange={(v) => set("buildingStatus", v)} options={BUILDING_STATUSES} />

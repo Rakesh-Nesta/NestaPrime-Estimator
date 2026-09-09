@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client, ClientType
+from app.models.hub import Hub
 from app.models.project import (
     BuildingStatus,
     Package,
@@ -54,6 +55,7 @@ class ProjectCreate(BaseModel):
     city: str
     site_address: str | None = None
     site_state_code: str | None = None
+    hub_id: uuid.UUID | None = None
     distance_km: float | None = None
     site_condition: SiteCondition
     soil_type: SoilType
@@ -75,6 +77,7 @@ class ProjectOut(BaseModel):
     project_type: ProjectType
     city: str
     site_address: str | None
+    hub_id: uuid.UUID | None
     distance_km: float | None
     site_condition: SiteCondition
     soil_type: SoilType
@@ -123,6 +126,9 @@ def create_project(
     client = db.query(Client).filter(Client.id == payload.client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+
+    if payload.hub_id is not None and not db.query(Hub).filter(Hub.id == payload.hub_id).first():
+        raise HTTPException(status_code=404, detail="Hub not found")
 
     if (
         payload.existing_building_clear_height_ft is not None

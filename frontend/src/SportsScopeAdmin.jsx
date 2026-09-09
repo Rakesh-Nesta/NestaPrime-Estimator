@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import {
+  createHub,
   createScopeItem,
   createSport,
   deleteSportMarginPolicy,
+  listHubs,
   listPackageContents,
   listScopeItems,
   listSportMarginPolicies,
   listSports,
+  updateHub,
   updateScopeItem,
   updateSport,
   upsertPackageContent,
@@ -33,6 +36,10 @@ function emptyScopeItemForm() {
   return { key: "", display_order: "", group: "civil", name: "" };
 }
 
+function emptyHubForm() {
+  return { name: "", city: "", state_code: "" };
+}
+
 function num(v) {
   if (v === "" || v === null || v === undefined) return null;
   const n = Number(v);
@@ -40,22 +47,25 @@ function num(v) {
 }
 
 export default function SportsScopeAdmin({ token, onBack }) {
-  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins" | "packages"
+  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins" | "packages" | "hubs"
   const [sports, setSports] = useState([]);
   const [scopeItems, setScopeItems] = useState([]);
   const [sportMarginPolicies, setSportMarginPolicies] = useState([]);
   const [packageContents, setPackageContents] = useState([]);
+  const [hubs, setHubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function load() {
     return Promise.all([
-      listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token), listPackageContents(token),
-    ]).then(([s, i, m, p]) => {
+      listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token),
+      listPackageContents(token), listHubs(token, true),
+    ]).then(([s, i, m, p, h]) => {
       setSports(s);
       setScopeItems(i);
       setSportMarginPolicies(m);
       setPackageContents(p);
+      setHubs(h);
     });
   }
 
@@ -126,6 +136,12 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Package content ({packageContents.length})
           </button>
+          <button
+            onClick={() => setTab("hubs")}
+            className={`text-sm rounded px-3 py-1 ${tab === "hubs" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Hubs ({hubs.length})
+          </button>
         </div>
       </div>
 
@@ -142,6 +158,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
       {tab === "packages" && (
         <PackageContentsTab token={token} sports={sports} packageContents={packageContents} onAction={withErrorHandling} />
       )}
+      {tab === "hubs" && <HubsTab token={token} hubs={hubs} onAction={withErrorHandling} />}
     </div>
   );
 }
@@ -542,6 +559,115 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function HubsTab({ token, hubs, onAction }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyHubForm());
+
+  const handleCreate = onAction(async (e) => {
+    e.preventDefault();
+    await createHub(token, createForm);
+    setCreateForm(emptyHubForm());
+    setCreating(false);
+  });
+
+  function startEdit(hub) {
+    setEditingId(hub.id);
+    setEditForm({ ...hub });
+  }
+
+  const handleSaveEdit = onAction(async () => {
+    await updateHub(token, editingId, { name: editForm.name, city: editForm.city, state_code: editForm.state_code });
+    setEditingId(null);
+  });
+
+  const toggleActive = onAction(async (hub) => updateHub(token, hub.id, { is_active: !hub.is_active }));
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-gray-400 -mt-1 mb-2">
+        Part O HUBS / B.1 field #4: NestaPrime's own dispatch/depot locations -- the PM picks one when setting up a
+        project and enters the km distance from it (Phase 1 is manual km; PIN-code auto-lookup is a Phase 7
+        integration).
+      </p>
+      {hubs.map((h) =>
+        editingId === h.id ? (
+          <div key={h.id} className="border border-blue-300 rounded p-3 space-y-2 text-sm bg-blue-50">
+            <div className="grid grid-cols-3 gap-2">
+              <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
+              <LabeledInput label="City" value={editForm.city} onChange={(v) => setEditForm((f) => ({ ...f, city: v }))} />
+              <LabeledInput
+                label="State code"
+                value={editForm.state_code}
+                onChange={(v) => setEditForm((f) => ({ ...f, state_code: v }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                Save
+              </button>
+              <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            key={h.id}
+            className={`flex flex-wrap items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
+              h.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+            }`}
+          >
+            <span>
+              <span className="font-medium">{h.name}</span>{" "}
+              <span className="text-gray-400 text-xs">
+                ({h.city}, {h.state_code})
+              </span>
+              {!h.is_active && <span className="text-gray-400"> · inactive</span>}
+            </span>
+            <div className="flex items-center gap-3">
+              <button onClick={() => startEdit(h)} className="text-blue-600 hover:underline text-xs">
+                Edit
+              </button>
+              <button onClick={() => toggleActive(h)} className="text-gray-500 hover:underline text-xs">
+                {h.is_active ? "Deactivate" : "Reactivate"}
+              </button>
+            </div>
+          </div>
+        )
+      )}
+
+      {creating ? (
+        <form onSubmit={handleCreate} className="border border-green-300 rounded p-3 space-y-2 text-sm bg-green-50">
+          <div className="grid grid-cols-3 gap-2">
+            <LabeledInput label="Name" value={createForm.name} onChange={(v) => setCreateForm((f) => ({ ...f, name: v }))} required />
+            <LabeledInput label="City" value={createForm.city} onChange={(v) => setCreateForm((f) => ({ ...f, city: v }))} required />
+            <LabeledInput
+              label="State code"
+              value={createForm.state_code}
+              onChange={(v) => setCreateForm((f) => ({ ...f, state_code: v }))}
+              required
+            />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
+              Add hub
+            </button>
+            <button type="button" onClick={() => setCreating(false)} className="text-xs text-gray-500 hover:underline">
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button onClick={() => setCreating(true)} className="text-sm text-blue-600 hover:underline">
+          + Add hub
+        </button>
+      )}
     </div>
   );
 }

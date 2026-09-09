@@ -13,6 +13,7 @@ from app.api import (
     exports,
     flooring,
     gym,
+    hubs,
     hvac,
     lighting,
     messages,
@@ -55,6 +56,7 @@ app.include_router(auth.router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)
 app.include_router(projects.router)
+app.include_router(hubs.router)
 app.include_router(regional_multipliers.router)
 app.include_router(sports.sports_router)
 app.include_router(sports.project_sports_router)

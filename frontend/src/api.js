@@ -187,6 +187,30 @@ export async function updateScopeItem(token, scopeItemId, payload) {
   return handle(res);
 }
 
+export async function listHubs(token, includeInactive = false) {
+  const params = includeInactive ? "?include_inactive=true" : "";
+  const res = await fetch(`${API_BASE}/hubs${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createHub(token, payload) {
+  const res = await fetch(`${API_BASE}/hubs`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateHub(token, hubId, payload) {
+  const res = await fetch(`${API_BASE}/hubs/${hubId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function listProjectScopeItems(token, projectId) {
   const res = await fetch(`${API_BASE}/projects/${projectId}/scope-items`, { headers: authHeaders(token) });
   return handle(res);
