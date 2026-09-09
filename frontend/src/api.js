@@ -76,6 +76,11 @@ export async function listClientSignatories(token, clientId, includeInactive = f
   return handle(res);
 }
 
+export async function getClientTypeDefaults(token, clientType) {
+  const res = await fetch(`${API_BASE}/clients/type-defaults/${clientType}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 export async function createClientSignatory(token, clientId, payload) {
   const res = await fetch(`${API_BASE}/clients/${clientId}/signatories`, {
     method: "POST",

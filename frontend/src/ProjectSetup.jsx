@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createClient, createProject, listClients, listHubs, listRegionalMultipliers } from "./api";
+import { createClient, createProject, getClientTypeDefaults, listClients, listHubs, listRegionalMultipliers } from "./api";
 
 const PROJECT_TYPES = [
   ["new_build", "New Build"],
@@ -44,6 +44,7 @@ const emptyForm = {
   existingClientId: "",
   clientName: "",
   clientType: "school",
+  paymentTerms: "",
   city: "Mumbai",
   siteAddress: "",
   hubId: "",
@@ -84,6 +85,36 @@ export default function ProjectSetup({ token, onProjectCreated }) {
   const isExistingBuilding = form.buildingStatus === "existing_building";
   const isGovernment = form.clientMode === "new" && form.clientType === "government";
 
+  const selectedExistingClient = clients.find((c) => c.id === form.existingClientId);
+  const effectiveClientType = form.clientMode === "new" ? form.clientType : selectedExistingClient?.type;
+
+  // B.2: "Client = School -> Package Standard . Payment 40/40/20" -- both
+  // prefilled here as a starting suggestion whenever the effective client
+  // type changes; Sales can still type over either before submitting.
+  const [typeDefaults, setTypeDefaults] = useState(null);
+  useEffect(() => {
+    if (!effectiveClientType) {
+      setTypeDefaults(null);
+      return;
+    }
+    let cancelled = false;
+    getClientTypeDefaults(token, effectiveClientType)
+      .then((d) => {
+        if (cancelled) return;
+        setTypeDefaults(d);
+        setForm((f) => ({
+          ...f,
+          package: d.package || f.package,
+          paymentTerms: f.clientMode === "new" && d.payment_terms ? d.payment_terms : f.paymentTerms,
+        }));
+      })
+      .catch(() => setTypeDefaults(null));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, effectiveClientType]);
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -91,7 +122,11 @@ export default function ProjectSetup({ token, onProjectCreated }) {
     try {
       let clientId = form.existingClientId;
       if (form.clientMode === "new") {
-        const client = await createClient(token, { name: form.clientName, type: form.clientType });
+        const client = await createClient(token, {
+          name: form.clientName,
+          type: form.clientType,
+          payment_terms: form.paymentTerms || null,
+        });
         clientId = client.id;
       }
 
@@ -219,6 +254,23 @@ export default function ProjectSetup({ token, onProjectCreated }) {
                 Tender Mode will switch on automatically for this project (B.2).
               </p>
             )}
+            <Text
+              label="Payment terms"
+              value={form.paymentTerms}
+              onChange={(v) => set("paymentTerms", v)}
+            />
+            {typeDefaults?.package || typeDefaults?.payment_terms ? (
+              <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                B.2 recommends{typeDefaults.package && ` package ${typeDefaults.package}`}
+                {typeDefaults.package && typeDefaults.payment_terms && " and"}
+                {typeDefaults.payment_terms && ` payment terms ${typeDefaults.payment_terms}`} for this client
+                type -- both prefilled below, editable.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400">
+                No B.2 default package/payment terms configured for this client type yet -- pick a package below.
+              </p>
+            )}
           </>
         ) : (
           <Select
@@ -277,6 +329,12 @@ export default function ProjectSetup({ token, onProjectCreated }) {
         <NumberField label="Number of courts" value={form.numberOfCourts} onChange={(v) => set("numberOfCourts", v)} min={1} />
         <Select label="Unit system" value={form.unitSystem} onChange={(v) => set("unitSystem", v)} options={[["feet", "Feet"], ["metres", "Metres"]]} />
         <Select label="Package" value={form.package} onChange={(v) => set("package", v)} options={PACKAGES} />
+        {form.clientMode === "existing" && typeDefaults?.package && (
+          <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+            B.2 recommends package {typeDefaults.package} for {selectedExistingClient?.type} clients -- prefilled
+            above, editable.
+          </p>
+        )}
         <NumberField
           label="Safe bearing capacity (kN/sqm)"
           value={form.safeBearingCapacity}

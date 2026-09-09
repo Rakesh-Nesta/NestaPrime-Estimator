@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.clients import _default_package
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client, ClientType
@@ -65,7 +66,9 @@ class ProjectCreate(BaseModel):
     water_available: bool
     number_of_courts: int = 1
     unit_system: UnitSystem = UnitSystem.FEET
-    package: Package
+    # B.2: left blank, this resolves from the client's type default
+    # (_default_package) at creation time -- explicit still wins.
+    package: Package | None = None
     safe_bearing_capacity: float | None = None
     existing_building_clear_height_ft: float | None = None
 
@@ -139,12 +142,27 @@ def create_project(
             detail="existing_building_clear_height_ft only applies when building_status is existing_building",
         )
 
+    # B.2: "Client = School -> Package Standard" -- resolved from the
+    # client's type when not given explicitly; not every client type has
+    # a configured default, so an unresolved one asks for an explicit
+    # choice rather than silently picking something the blueprint never
+    # specified for that type.
+    package = payload.package
+    if package is None:
+        package = _default_package(db, client.type)
+        if package is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No default package configured for client type '{client.type.value}' -- specify package",
+            )
+
     project = Project(
         project_no=_generate_project_no(db),
         # B.2: Client = Government auto-switches Tender Mode on — not a
         # user-settable field, derived here at creation time.
         tender_mode=(client.type == ClientType.GOVERNMENT),
-        **payload.model_dump(),
+        package=package,
+        **payload.model_dump(exclude={"package"}),
     )
     db.add(project)
     db.commit()
