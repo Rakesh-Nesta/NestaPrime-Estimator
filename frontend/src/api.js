@@ -1127,6 +1127,33 @@ export async function downloadAttachmentBlob(token, attachmentId) {
   return res.blob();
 }
 
+export async function getCompanyLogoMeta(token) {
+  const res = await fetch(`${API_BASE}/company/logo/meta`, { headers: authHeaders(token) });
+  if (res.status === 404) return null;
+  return handle(res);
+}
+
+export async function downloadCompanyLogoBlob(token) {
+  const res = await fetch(`${API_BASE}/company/logo`, { headers: authHeaders(token) });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Download failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function uploadCompanyLogo(token, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/company/logo`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  return handle(res);
+}
+
 // --- Part M.6: client-facing Estimate / Quotation PDFs ---
 
 export async function downloadEstimatePdfBlob(token, estimateId) {

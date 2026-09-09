@@ -9,6 +9,7 @@ from app.api import (
     auth,
     client_signatories,
     clients,
+    company,
     documents,
     exports,
     flooring,
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)
+app.include_router(company.router)
 app.include_router(projects.router)
 app.include_router(hubs.router)
 app.include_router(regional_multipliers.router)

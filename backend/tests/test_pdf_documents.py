@@ -207,6 +207,41 @@ def test_estimate_pdf_shows_fallback_when_package_content_not_configured(client,
     assert "Package content not yet configured" in text
 
 
+def test_estimate_pdf_renders_with_a_png_company_logo_configured(client, director_user):
+    """R.0: 'Logo (SVG/PNG) ... for PDF.' A configured PNG logo must
+    actually embed without breaking PDF generation."""
+    import base64
+
+    png_1x1 = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    )
+    headers = _director_headers(client, director_user)
+    upload_res = client.post("/company/logo", files={"file": ("logo.png", png_1x1, "image/png")}, headers=headers)
+    assert upload_res.status_code == 201, upload_res.text
+
+    _, estimate = _draft_estimate(client, headers)
+    res = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    assert res.content[:4] == b"%PDF"
+
+
+def test_estimate_pdf_falls_back_to_text_header_with_an_svg_logo_configured(client, director_user):
+    """reportlab/Pillow can't rasterise SVG (_company_logo_flowable's own
+    docstring) -- an SVG-configured logo must not break PDF generation,
+    it just doesn't get embedded."""
+    headers = _director_headers(client, director_user)
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"></svg>'
+    upload_res = client.post("/company/logo", files={"file": ("logo.svg", svg, "image/svg+xml")}, headers=headers)
+    assert upload_res.status_code == 201, upload_res.text
+
+    _, estimate = _draft_estimate(client, headers)
+    res = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    assert res.content[:4] == b"%PDF"
+    text = _pdf_text(res)
+    assert "NESTAPRIME SPORTS INFRASTRUCTURE" in text
+
+
 # ---------------------------------------------------------------------------
 # Quotation PDF
 # ---------------------------------------------------------------------------

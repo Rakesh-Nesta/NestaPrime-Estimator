@@ -27,6 +27,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
+from app.api.company import get_current_company_logo
 from app.api.documents import DOCUMENT_ROLES
 from app.api.schedule import get_schedule
 from app.api.settings import get_current_setting_value
@@ -212,6 +213,32 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         return ""
 
 
+def _company_logo_flowable(db: Session, max_width: float, max_height: float):
+    """R.0: 'Logo (SVG/PNG) ... for PDF.' Only a PNG logo can actually be
+    embedded here -- reportlab's Image flowable (and the Pillow decode
+    it relies on, same as _product_image_flowable above) has no native
+    SVG rasteriser, and this app carries no separate SVG-to-raster
+    dependency. An uploaded SVG logo still downloads fine from
+    GET /company/logo for on-screen use; the PDF header just falls back
+    to the plain text company name for that format, same as when no
+    logo has been uploaded at all -- never a broken/blank image."""
+    logo = get_current_company_logo(db)
+    if logo is None or logo.content_type != "image/png":
+        return None
+    path = Path(logo.storage_path)
+    if not path.exists():
+        return None
+    try:
+        with PILImage.open(path) as pil_image:
+            pil_image.load()
+        reader = ImageReader(str(path))
+        original_width, original_height = reader.getSize()
+        scale = min(max_width / original_width, max_height / original_height)
+        return Image(str(path), width=original_width * scale, height=original_height * scale)
+    except Exception:
+        return None
+
+
 _DEVIATION_COLOR = {"green": "green", "amber": "#b45309", "red": "red"}
 
 
@@ -369,7 +396,9 @@ def get_estimate_pdf(
     inclusions, exclusions = _inclusions_and_exclusions(db, project.id)
 
     styles = _styles()
+    logo = _company_logo_flowable(db, 45 * mm, 18 * mm)
     story: list = [
+        *([logo, Spacer(1, 2 * mm)] if logo else []),
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
         Paragraph("ESTIMATE", styles["DocTitle"]),
         Spacer(1, 4 * mm),
@@ -496,7 +525,9 @@ def get_quotation_pdf(
 
     styles = _styles()
     doc_title = "FINANCIAL BID (Tender Mode)" if project.tender_mode else "FORMAL QUOTATION"
+    logo = _company_logo_flowable(db, 45 * mm, 18 * mm)
     story: list = [
+        *([logo, Spacer(1, 2 * mm)] if logo else []),
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
         Paragraph(doc_title, styles["DocTitle"]),
         Spacer(1, 4 * mm),

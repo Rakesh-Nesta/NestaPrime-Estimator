@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { bulkUpdateSettings, createSettingVersion, listSettings } from "./api";
+import {
+  bulkUpdateSettings,
+  createSettingVersion,
+  downloadCompanyLogoBlob,
+  getCompanyLogoMeta,
+  listSettings,
+  uploadCompanyLogo,
+} from "./api";
 
 export default function MasterSettings({ token, onBack }) {
   const [settings, setSettings] = useState([]);
@@ -18,13 +25,46 @@ export default function MasterSettings({ token, onBack }) {
   const [newUnit, setNewUnit] = useState("");
   const [newReason, setNewReason] = useState("");
 
+  const [logoMeta, setLogoMeta] = useState(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState(null);
+  const [logoError, setLogoError] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
   function load() {
     return listSettings(token).then(setSettings);
   }
 
+  function loadLogo() {
+    return Promise.all([getCompanyLogoMeta(token), downloadCompanyLogoBlob(token)]).then(([meta, blob]) => {
+      setLogoMeta(meta);
+      setLogoPreviewUrl((old) => {
+        if (old) URL.revokeObjectURL(old);
+        return blob ? URL.createObjectURL(blob) : null;
+      });
+    });
+  }
+
   useEffect(() => {
     load().finally(() => setLoading(false));
+    loadLogo().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoError("");
+    setUploadingLogo(true);
+    try {
+      await uploadCompanyLogo(token, file);
+      await loadLogo();
+    } catch (err) {
+      setLogoError(err.message);
+    } finally {
+      setUploadingLogo(false);
+      e.target.value = "";
+    }
+  }
 
   function startEdit(setting) {
     setEditKey(setting.key);
@@ -97,6 +137,38 @@ export default function MasterSettings({ token, onBack }) {
           alters a document that already froze the old value. Director-only; PM is read-only.
         </p>
         {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+      </div>
+
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-1">Company logo</h3>
+        <p className="text-xs text-gray-400 mb-3">
+          Part O COMPANY.logo / R.0: "Logo (SVG/PNG) ... for PDF." Printed on every Estimate and Quotation PDF
+          header (PNG only -- SVG downloads fine but can't be embedded in the PDF itself). Director-only.
+        </p>
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 border border-gray-200 rounded flex items-center justify-center bg-gray-50 overflow-hidden">
+            {logoPreviewUrl ? (
+              <img src={logoPreviewUrl} alt="Company logo" className="max-w-full max-h-full object-contain" />
+            ) : (
+              <span className="text-[10px] text-gray-400 text-center px-1">No logo uploaded</span>
+            )}
+          </div>
+          <div className="text-sm">
+            {logoMeta && (
+              <p className="text-gray-600">
+                {logoMeta.original_filename}{" "}
+                <span className="text-xs text-gray-400">
+                  ({logoMeta.content_type}, uploaded {new Date(logoMeta.uploaded_at).toLocaleDateString()})
+                </span>
+              </p>
+            )}
+            <label className="inline-block mt-1 text-xs bg-blue-600 text-white rounded px-3 py-1.5 cursor-pointer hover:bg-blue-700">
+              {uploadingLogo ? "Uploading…" : logoMeta ? "Replace logo" : "Upload logo"}
+              <input type="file" accept="image/png,image/svg+xml" onChange={handleLogoUpload} className="hidden" disabled={uploadingLogo} />
+            </label>
+            {logoError && <p className="text-xs text-red-600 mt-1">{logoError}</p>}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white shadow rounded-lg p-6">
