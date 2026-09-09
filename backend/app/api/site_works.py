@@ -3,7 +3,7 @@ import uuid
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.documents import CostSheetLineOut, _line_to_out
@@ -163,6 +163,138 @@ def add_base_takeoff(
             "volume_cum": round(volume_cum, 3),
             "steel_kg": round(steel_kg, 2) if steel_kg is not None else None,
         },
+        lines=[_line_to_out(line) for line in lines_to_create],
+    )
+
+
+# --------------------------------------------------------------------------
+# D.4 Site preparation & establishment (Module 3): "Cut/fill volume from
+# slope %, levelling, roller compaction. Rock breaking (rocky), dewatering
+# (water-logged), sand/CNS layer (black cotton). Debris removal,
+# anti-termite (indoor)." Project already carries the advisory flags
+# (rock_breaking_required/dewatering_required/sand_cns_layer_required,
+# projects.py's own _to_out) -- what was missing is a way to turn "this is
+# needed" into an actual priced CostSheetLine. Sand/CNS is a real
+# quantity (area x layer thickness) with its own material spec, closer to
+# D.1's base take-off in shape than to these five -- it stays a documented
+# gap here, not silently folded in as a sixth line kind.
+#
+# None of cut/fill volume, rock volume, dewatering duration or debris
+# volume is derivable from any input this build actually captures (no
+# slope %, rock survey, water-table depth or excavation volume field
+# exists anywhere in B.1/D.4) -- same honesty as freight/crane's own
+# "trips is a PM judgment call, not a computed figure" above. Only
+# anti-termite has a derivable quantity (treated area = the sport's own
+# build footprint), so it alone defaults its quantity from the sport
+# selection when one is given; every other line is a PM-entered
+# quantity + rate, same shape as freight/crane and tender overheads.
+# --------------------------------------------------------------------------
+
+
+class SitePrepTakeoffRequest(BaseModel):
+    project_sport_id: uuid.UUID | None = None  # only used to default anti-termite's area
+
+    cut_fill_volume_cum: float | None = Field(default=None, gt=0)
+    cut_fill_rate_per_cum: float | None = Field(default=None, gt=0)
+    rock_breaking_volume_cum: float | None = Field(default=None, gt=0)
+    rock_breaking_rate_per_cum: float | None = Field(default=None, gt=0)
+    dewatering_days: float | None = Field(default=None, gt=0)
+    dewatering_rate_per_day: float | None = Field(default=None, gt=0)
+    debris_removal_trips: float | None = Field(default=None, gt=0)
+    debris_removal_rate_per_trip: float | None = Field(default=None, gt=0)
+    anti_termite_area_sqft: float | None = Field(default=None, gt=0)  # blank + project_sport_id = sport's build area
+    anti_termite_rate_per_sqft: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _paired_and_at_least_one(self):
+        pairs = [
+            ("cut_fill_volume_cum", "cut_fill_rate_per_cum"),
+            ("rock_breaking_volume_cum", "rock_breaking_rate_per_cum"),
+            ("dewatering_days", "dewatering_rate_per_day"),
+            ("debris_removal_trips", "debris_removal_rate_per_trip"),
+        ]
+        any_given = self.anti_termite_rate_per_sqft is not None
+        for qty_field, rate_field in pairs:
+            qty, rate = getattr(self, qty_field), getattr(self, rate_field)
+            if qty is not None or rate is not None:
+                any_given = True
+                if qty is None or rate is None:
+                    raise ValueError(f"{qty_field} and {rate_field} must be given together")
+        if not any_given:
+            raise ValueError(
+                "Provide at least one site-prep line: a quantity+rate pair, or "
+                "anti_termite_rate_per_sqft (with an area, or project_sport_id to default it)"
+            )
+        return self
+
+
+class SitePrepTakeoffOut(BaseModel):
+    breakdown: dict
+    lines: list[CostSheetLineOut]
+
+
+@site_works_router.post("/cost-sheets/{cost_sheet_id}/site-prep", response_model=SitePrepTakeoffOut, status_code=201)
+def add_site_prep_takeoff(
+    cost_sheet_id: uuid.UUID,
+    payload: SitePrepTakeoffRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """D.4: each of the five items becomes its own CostSheetLine, priced
+    as quantity x PM-entered rate, same as D.1's base line -- not folded
+    into site_establishment_percent (K.1 step 3), which is a separate,
+    flat mobilisation/temporary-services % that never substitutes for an
+    actual earthwork or treatment cost."""
+    cost_sheet = _get_cost_sheet(db, cost_sheet_id)
+    civil_category = _labour_category(db, "civil_base_site_prep")
+
+    anti_termite_area = payload.anti_termite_area_sqft
+    if payload.anti_termite_rate_per_sqft is not None and anti_termite_area is None:
+        if payload.project_sport_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="anti_termite_area_sqft or project_sport_id is required to price the anti-termite line",
+            )
+        L, W, _project_sport = _resolve_dimensions(db, cost_sheet, payload.project_sport_id, None, None)
+        anti_termite_area = L * W
+
+    lines_to_create: list[CostSheetLine] = []
+
+    def _add_line(item_name: str, unit: str, quantity: float, rate: float) -> None:
+        lines_to_create.append(
+            CostSheetLine(
+                cost_sheet_id=cost_sheet_id,
+                project_sport_id=payload.project_sport_id,
+                work_package=WorkPackage.CIVIL,
+                category="Site preparation",
+                item_name=item_name,
+                unit=unit,
+                quantity=round(quantity, 3),
+                rate=rate,
+                source=RateSource.MANUAL,
+                labour_category_id=civil_category.id if civil_category else None,
+            )
+        )
+
+    if payload.cut_fill_volume_cum is not None:
+        _add_line("Cut/fill earthwork", "cum", payload.cut_fill_volume_cum, payload.cut_fill_rate_per_cum)
+    if payload.rock_breaking_volume_cum is not None:
+        _add_line("Rock breaking", "cum", payload.rock_breaking_volume_cum, payload.rock_breaking_rate_per_cum)
+    if payload.dewatering_days is not None:
+        _add_line("Dewatering", "day", payload.dewatering_days, payload.dewatering_rate_per_day)
+    if payload.debris_removal_trips is not None:
+        _add_line("Debris removal", "trip", payload.debris_removal_trips, payload.debris_removal_rate_per_trip)
+    if payload.anti_termite_rate_per_sqft is not None:
+        _add_line("Anti-termite treatment", "sqft", anti_termite_area, payload.anti_termite_rate_per_sqft)
+
+    for line in lines_to_create:
+        db.add(line)
+    db.commit()
+    for line in lines_to_create:
+        db.refresh(line)
+
+    return SitePrepTakeoffOut(
+        breakdown={"anti_termite_area_sqft": round(anti_termite_area, 2) if anti_termite_area is not None else None},
         lines=[_line_to_out(line) for line in lines_to_create],
     )
 

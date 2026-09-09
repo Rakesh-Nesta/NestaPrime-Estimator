@@ -375,3 +375,200 @@ def test_drainage_line_feeds_into_recompute(client, director_user):
     )
     recomputed = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
     assert recomputed["cost_total"] > 0
+
+
+# ---------------------------------------------------------------------------
+# D.4 Site preparation & establishment
+# ---------------------------------------------------------------------------
+
+
+def test_sales_cannot_add_site_prep(client, director_user, db_session):
+    director_headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, director_headers)
+
+    sales_headers = _sales_headers(client, db_session)
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"cut_fill_volume_cum": 50, "cut_fill_rate_per_cum": 200},
+        headers=sales_headers,
+    )
+    assert res.status_code == 403
+
+
+def test_cut_fill_line(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"cut_fill_volume_cum": 50, "cut_fill_rate_per_cum": 200},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    lines = res.json()["lines"]
+    assert len(lines) == 1
+    assert lines[0]["item_name"] == "Cut/fill earthwork"
+    assert lines[0]["unit"] == "cum"
+    assert lines[0]["quantity"] == 50
+    assert lines[0]["rate"] == 200
+    assert lines[0]["category"] == "Site preparation"
+    assert lines[0]["work_package"] == "civil"
+
+
+def test_rock_breaking_line(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers, soil_type="rocky")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"rock_breaking_volume_cum": 20, "rock_breaking_rate_per_cum": 800},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["lines"][0]["item_name"] == "Rock breaking"
+
+
+def test_dewatering_line(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers, soil_type="filled")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"dewatering_days": 5, "dewatering_rate_per_day": 4000},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    line = res.json()["lines"][0]
+    assert line["item_name"] == "Dewatering"
+    assert line["unit"] == "day"
+    assert line["quantity"] == 5
+
+
+def test_debris_removal_line(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"debris_removal_trips": 3, "debris_removal_rate_per_trip": 2500},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["lines"][0]["item_name"] == "Debris removal"
+
+
+def test_anti_termite_with_explicit_area(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"anti_termite_area_sqft": 1000, "anti_termite_rate_per_sqft": 12},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    line = res.json()["lines"][0]
+    assert line["item_name"] == "Anti-termite treatment"
+    assert line["quantity"] == 1000
+    assert line["rate"] == 12
+
+
+def test_anti_termite_defaults_area_from_project_sport(client, director_user):
+    """Box cricket's default build footprint (56 x 31 ft build_l_ft/build_w_ft,
+    the same fields D.1's base take-off uses -- includes the 3 ft buffer each
+    side around the 50 x 25 play area) -> 1736 sqft treated area when no
+    explicit area is given."""
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"project_sport_id": project_sport_id, "anti_termite_rate_per_sqft": 12},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    line = res.json()["lines"][0]
+    assert line["quantity"] == 1736
+    assert res.json()["breakdown"]["anti_termite_area_sqft"] == 1736
+
+
+def test_anti_termite_requires_area_or_project_sport_id(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"anti_termite_rate_per_sqft": 12},
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_multiple_site_prep_lines_in_one_call(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={
+            "project_sport_id": project_sport_id,
+            "cut_fill_volume_cum": 50, "cut_fill_rate_per_cum": 200,
+            "debris_removal_trips": 2, "debris_removal_rate_per_trip": 2500,
+            "anti_termite_rate_per_sqft": 12,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    items = {line["item_name"] for line in res.json()["lines"]}
+    assert items == {"Cut/fill earthwork", "Debris removal", "Anti-termite treatment"}
+
+
+def test_site_prep_requires_at_least_one_pair(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(f"/cost-sheets/{cost_sheet_id}/site-prep", json={}, headers=headers)
+    assert res.status_code == 422
+
+
+def test_site_prep_rejects_a_lone_quantity_without_its_rate(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep", json={"cut_fill_volume_cum": 50}, headers=headers
+    )
+    assert res.status_code == 422
+
+
+def test_site_prep_can_only_be_added_to_a_draft_cost_sheet(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers)
+    client.post(
+        f"/cost-sheets/{cost_sheet_id}/base",
+        json={"project_sport_id": project_sport_id, "base_type": "pcc", "thickness_in": 4, "build_l_ft": 50, "build_w_ft": 25, "material_rate_per_cum": 6000},
+        headers=headers,
+    )
+    client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"cut_fill_volume_cum": 50, "cut_fill_rate_per_cum": 200},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+def test_site_prep_line_feeds_into_recompute(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _setup(client, headers)
+    client.post(
+        f"/cost-sheets/{cost_sheet_id}/site-prep",
+        json={"cut_fill_volume_cum": 50, "cut_fill_rate_per_cum": 200},
+        headers=headers,
+    )
+    recomputed = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
+    assert recomputed["cost_total"] > 0
+    verify_res = client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    assert verify_res.status_code == 200

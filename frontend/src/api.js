@@ -902,6 +902,15 @@ export async function addBaseTakeoff(token, costSheetId, payload) {
   return handle(res);
 }
 
+export async function addSitePrepTakeoff(token, costSheetId, payload) {
+  const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/site-prep`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addFreightCraneTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/freight-crane`, {
     method: "POST",

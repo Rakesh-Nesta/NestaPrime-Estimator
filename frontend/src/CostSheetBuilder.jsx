@@ -17,6 +17,7 @@ import {
   addNaturalGrassTakeoff,
   addPlayEquipmentTakeoff,
   addPoolTakeoff,
+  addSitePrepTakeoff,
   addStructureTakeoff,
   addTenderOverheadsTakeoff,
   addTurfTakeoff,
@@ -36,6 +37,7 @@ import {
 const TABS = [
   { key: "structure", label: "Structures (E)" },
   { key: "base", label: "Base (D.1)" },
+  { key: "site_prep", label: "Site preparation (D.4)" },
   { key: "drainage", label: "Drainage (D.3)" },
   { key: "turf", label: "Turf (F.5)" },
   { key: "wooden", label: "Wooden floor (F.3)" },
@@ -568,6 +570,107 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
           <Field label="Steel Rs/kg"><NumberInput value={f.steel_rate_per_kg} onChange={set("steel_rate_per_kg")} required /></Field>
         </div>
       )}
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        Compute &amp; add to Cost Sheet
+      </button>
+      <BreakdownPanel result={result} />
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Site preparation & establishment (Part D.4)
+// ---------------------------------------------------------------------------
+
+function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
+  const [f, setF] = useState({
+    project_sport_id: "",
+    cut_fill_volume_cum: "", cut_fill_rate_per_cum: "",
+    rock_breaking_volume_cum: "", rock_breaking_rate_per_cum: "",
+    dewatering_days: "", dewatering_rate_per_day: "",
+    debris_removal_trips: "", debris_removal_rate_per_trip: "",
+    anti_termite_area_sqft: "", anti_termite_rate_per_sqft: "",
+  });
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+  const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const payload = {
+        project_sport_id: f.project_sport_id || undefined,
+        cut_fill_volume_cum: f.cut_fill_volume_cum ? Number(f.cut_fill_volume_cum) : undefined,
+        cut_fill_rate_per_cum: f.cut_fill_rate_per_cum ? Number(f.cut_fill_rate_per_cum) : undefined,
+        rock_breaking_volume_cum: f.rock_breaking_volume_cum ? Number(f.rock_breaking_volume_cum) : undefined,
+        rock_breaking_rate_per_cum: f.rock_breaking_rate_per_cum ? Number(f.rock_breaking_rate_per_cum) : undefined,
+        dewatering_days: f.dewatering_days ? Number(f.dewatering_days) : undefined,
+        dewatering_rate_per_day: f.dewatering_rate_per_day ? Number(f.dewatering_rate_per_day) : undefined,
+        debris_removal_trips: f.debris_removal_trips ? Number(f.debris_removal_trips) : undefined,
+        debris_removal_rate_per_trip: f.debris_removal_rate_per_trip ? Number(f.debris_removal_rate_per_trip) : undefined,
+        anti_termite_area_sqft: f.anti_termite_area_sqft ? Number(f.anti_termite_area_sqft) : undefined,
+        anti_termite_rate_per_sqft: f.anti_termite_rate_per_sqft ? Number(f.anti_termite_rate_per_sqft) : undefined,
+      };
+      const res = await addSitePrepTakeoff(token, costSheetId, payload);
+      setResult(res);
+      await onAdded();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-[11px] text-gray-400">
+        D.4: cut/fill, rock breaking, dewatering and debris removal quantities aren't derivable from anything this
+        app captures (no slope %, rock survey or water-table depth field exists) -- enter the actual quantity and
+        rate for whichever lines this site needs. Anti-termite alone can default its area from the sport selection
+        below if left blank.
+      </p>
+      <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Cut/fill earthwork (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Volume (cum)"><NumberInput value={f.cut_fill_volume_cum} onChange={set("cut_fill_volume_cum")} /></Field>
+          <Field label="Rate Rs/cum"><NumberInput value={f.cut_fill_rate_per_cum} onChange={set("cut_fill_rate_per_cum")} /></Field>
+        </div>
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Rock breaking (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Volume (cum)"><NumberInput value={f.rock_breaking_volume_cum} onChange={set("rock_breaking_volume_cum")} /></Field>
+          <Field label="Rate Rs/cum"><NumberInput value={f.rock_breaking_rate_per_cum} onChange={set("rock_breaking_rate_per_cum")} /></Field>
+        </div>
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Dewatering (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Days"><NumberInput value={f.dewatering_days} onChange={set("dewatering_days")} /></Field>
+          <Field label="Rate Rs/day"><NumberInput value={f.dewatering_rate_per_day} onChange={set("dewatering_rate_per_day")} /></Field>
+        </div>
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Debris removal (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Trips"><NumberInput value={f.debris_removal_trips} onChange={set("debris_removal_trips")} /></Field>
+          <Field label="Rate Rs/trip"><NumberInput value={f.debris_removal_rate_per_trip} onChange={set("debris_removal_rate_per_trip")} /></Field>
+        </div>
+      </div>
+
+      <div className="border border-gray-200 rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-gray-600">Anti-termite treatment (optional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Area (sqft)" hint="blank = sport's build area"><NumberInput value={f.anti_termite_area_sqft} onChange={set("anti_termite_area_sqft")} /></Field>
+          <Field label="Rate Rs/sqft"><NumberInput value={f.anti_termite_rate_per_sqft} onChange={set("anti_termite_rate_per_sqft")} /></Field>
+        </div>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
         Compute &amp; add to Cost Sheet
@@ -2590,6 +2693,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
 
           {tab === "structure" && <StructureForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "base" && <BaseForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
+          {tab === "site_prep" && <SitePrepForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "drainage" && <DrainageForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "turf" && <TurfForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
           {tab === "wooden" && <WoodenFlooringForm token={token} costSheetId={costSheet.id} projectSports={projectSports} sportsById={sportsById} onAdded={refresh} />}
