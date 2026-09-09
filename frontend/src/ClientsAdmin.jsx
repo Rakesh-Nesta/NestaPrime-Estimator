@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listClients, updateClientFlags } from "./api";
+import { listClients, updateClientConsent, updateClientFlags } from "./api";
 
 export default function ClientsAdmin({ token, onBack }) {
   const [clients, setClients] = useState([]);
@@ -21,6 +21,19 @@ export default function ClientsAdmin({ token, onBack }) {
     setError("");
     try {
       await updateClientFlags(token, clientId, { [field]: value });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function toggleConsent(clientId, field, value) {
+    setError("");
+    try {
+      await updateClientConsent(token, clientId, {
+        [field]: value,
+        ...(value ? { consent_date: new Date().toISOString().slice(0, 10) } : {}),
+      });
       await load();
     } catch (err) {
       setError(err.message);
@@ -73,6 +86,24 @@ export default function ClientsAdmin({ token, onBack }) {
                 />
                 Blacklisted
               </label>
+              <span className="border-l border-gray-200 pl-4 flex items-center gap-4">
+                <label className="flex items-center gap-1" title="M.7.2 rule 5 (DPDP Act)">
+                  <input
+                    type="checkbox"
+                    checked={c.whatsapp_opt_in}
+                    onChange={(e) => toggleConsent(c.id, "whatsapp_opt_in", e.target.checked)}
+                  />
+                  WhatsApp opt-in
+                </label>
+                <label className="flex items-center gap-1" title="M.7.2 rule 5 (DPDP Act)">
+                  <input
+                    type="checkbox"
+                    checked={c.email_opt_in}
+                    onChange={(e) => toggleConsent(c.id, "email_opt_in", e.target.checked)}
+                  />
+                  Email opt-in
+                </label>
+              </span>
             </div>
           </div>
         ))}
