@@ -126,6 +126,7 @@ export default function App() {
           <SportSelection
             token={accessToken}
             project={activeProject}
+            role={user.role}
             onBack={() => setActiveProject(null)}
             onNext={() => setScreen("scope")}
           />

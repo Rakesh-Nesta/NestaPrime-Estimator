@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { addProjectSport, getSchedule, listProjectSports, listSports, removeProjectSport } from "./api";
+import {
+  addProjectSport,
+  getSchedule,
+  listProjectSports,
+  listSports,
+  removeProjectSport,
+  updateActualDimensions,
+} from "./api";
+
+const DEVIATION_COLOR = {
+  green: "text-green-700 bg-green-50",
+  amber: "text-amber-700 bg-amber-50",
+  red: "text-red-700 bg-red-50",
+};
 
 const BUILDING_STATUSES = [
   ["existing_building", "Existing building"],
@@ -8,13 +21,15 @@ const BUILDING_STATUSES = [
   ["covered_shed", "Covered shed"],
 ];
 
-export default function SportSelection({ token, project, onBack, onNext }) {
+export default function SportSelection({ token, project, role, onBack, onNext }) {
   const [sports, setSports] = useState([]);
   const [selections, setSelections] = useState([]);
   const [drafts, setDrafts] = useState({}); // sportId -> { building_status, number_of_courts }
   const [cardErrors, setCardErrors] = useState({}); // sportId -> message
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState({}); // selectionId -> schedule | "loading"
+  const [dimDrafts, setDimDrafts] = useState({}); // selectionId -> { actual_l_ft, actual_w_ft }
+  const canRecordActuals = role === "site_engineer" || role === "pm" || role === "director";
 
   useEffect(() => {
     Promise.all([listSports(token), listProjectSports(token, project.id)])
@@ -50,6 +65,19 @@ export default function SportSelection({ token, project, onBack, onNext }) {
     } catch (err) {
       setCardErrors((e) => ({ ...e, [sport.id]: err.message }));
     }
+  }
+
+  function setDimDraft(selectionId, field, value) {
+    setDimDrafts((d) => ({ ...d, [selectionId]: { ...d[selectionId], [field]: value } }));
+  }
+
+  async function handleSaveActualDimensions(selectionId) {
+    const draft = dimDrafts[selectionId] || {};
+    const updated = await updateActualDimensions(token, project.id, selectionId, {
+      actual_l_ft: draft.actual_l_ft === "" || draft.actual_l_ft == null ? null : Number(draft.actual_l_ft),
+      actual_w_ft: draft.actual_w_ft === "" || draft.actual_w_ft == null ? null : Number(draft.actual_w_ft),
+    });
+    setSelections((s) => s.map((sel) => (sel.id === selectionId ? updated : sel)));
   }
 
   async function handleRemove(selectionId) {
@@ -161,6 +189,13 @@ export default function SportSelection({ token, project, onBack, onNext }) {
                         Lighting: not enough data (no numeric playing area or lux row) — pending Director confirmation
                       </span>
                     )}
+                    <ActualDimensions
+                      sel={sel}
+                      canEdit={canRecordActuals}
+                      draft={dimDrafts[sel.id]}
+                      setDraft={(field, value) => setDimDraft(sel.id, field, value)}
+                      onSave={() => handleSaveActualDimensions(sel.id)}
+                    />
                   </span>
                   <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
                     <button
@@ -265,6 +300,60 @@ function SportCard({ sport, draft, setDraft, error, onAdd }) {
 
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
+  );
+}
+
+function ActualDimensions({ sel, canEdit, draft, setDraft, onSave }) {
+  const hasActual = sel.actual_l_ft != null || sel.actual_w_ft != null;
+
+  if (!hasActual && !canEdit) {
+    return (
+      <span className="block text-xs text-gray-400 mt-0.5">
+        Actual dimensions (C.3): not yet recorded
+      </span>
+    );
+  }
+
+  return (
+    <span className="block text-xs mt-0.5">
+      {hasActual ? (
+        <span className="text-gray-500">
+          Actual (C.3): {sel.actual_l_ft ?? "-"} x {sel.actual_w_ft ?? "-"} ft
+          {sel.dimension_deviation_status && (
+            <span
+              className={`ml-1 rounded px-1 py-0.5 ${DEVIATION_COLOR[sel.dimension_deviation_status]}`}
+            >
+              {sel.dimension_deviation_status.toUpperCase()}
+              {" "}
+              ({Math.max(...sel.dimension_deviations.map((d) => d.deviation_percent))}% deviation)
+            </span>
+          )}
+        </span>
+      ) : (
+        <span className="text-gray-400">Actual dimensions (C.3): not yet recorded</span>
+      )}
+      {canEdit && (
+        <span className="inline-flex items-center gap-1 ml-2">
+          <input
+            type="number"
+            placeholder="L (ft)"
+            value={draft?.actual_l_ft ?? sel.actual_l_ft ?? ""}
+            onChange={(e) => setDraft("actual_l_ft", e.target.value)}
+            className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs"
+          />
+          <input
+            type="number"
+            placeholder="W (ft)"
+            value={draft?.actual_w_ft ?? sel.actual_w_ft ?? ""}
+            onChange={(e) => setDraft("actual_w_ft", e.target.value)}
+            className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs"
+          />
+          <button onClick={onSave} className="text-blue-600 hover:underline">
+            Save
+          </button>
+        </span>
+      )}
+    </span>
   );
 }
 

@@ -2,10 +2,12 @@ import math
 import re
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
+from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.project import BuildingStatus, Package, Project, SiteCondition, SoilType
@@ -17,6 +19,10 @@ project_sports_router = APIRouter(prefix="/projects", tags=["project-sports"])
 
 READ_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 WRITE_ROLES = ("sales", "pm", "director")
+# A.3: "Site Engineer: Site survey form, actuals entry" -- recording the
+# as-built figure is that duty, not the Sales/PM/Director planning
+# decision of which sports the project even includes (WRITE_ROLES above).
+ACTUALS_WRITE_ROLES = ("site_engineer", "pm", "director")
 # Q.2 rule 6: "Master Settings screen is Director-only (PM read-only)."
 # The Sport master list (Part C) follows the same convention.
 MASTER_WRITE_ROLES = ("director",)
@@ -610,12 +616,74 @@ class ProjectSportCreate(BaseModel):
     number_of_courts: int = 1
 
 
+class ActualDimensionsUpdate(BaseModel):
+    actual_l_ft: float | None = None
+    actual_w_ft: float | None = None
+
+
+class DimensionDeviation(BaseModel):
+    axis: str  # "length" | "width"
+    standard_ft: float
+    actual_ft: float
+    deviation_percent: float
+    status: str  # "green" | "amber" | "red"
+
+
+# C.3: "deviation_thresholds{amber 2-10%, red >10% or below minimum}" --
+# a global Director-set Master Setting, same pattern as every other Q.1
+# threshold in this codebase (no dedicated table).
+DIMENSION_DEVIATION_AMBER_SETTING_KEY = "dimension_deviation_amber_percent"
+DIMENSION_DEVIATION_RED_SETTING_KEY = "dimension_deviation_red_percent"
+DIMENSION_DEVIATION_AMBER_DEFAULT = 2.0
+DIMENSION_DEVIATION_RED_DEFAULT = 10.0
+_DEVIATION_STATUS_SEVERITY = {"green": 0, "amber": 1, "red": 2}
+
+
+def _get_setting_float(db: Session, key: str, default: float) -> float:
+    value = get_current_setting_value(db, key)
+    return float(value) if value is not None else default
+
+
+def _dimension_deviations(db: Session, sport: Sport, project_sport: ProjectSport) -> list[DimensionDeviation]:
+    """C.3/M.6: the client PDF's 'standard vs actual' comparison. Only
+    computed once an actual figure has actually been recorded (see the
+    actual-dimensions endpoint below) -- a project nobody has measured yet
+    has nothing to flag, not a fabricated 0% deviation. Sport stores one
+    standard figure per axis, not a min/max range, so "below minimum"
+    isn't separately modelled -- an undersized actual is flagged by
+    deviation magnitude alone, same as an oversized one."""
+    amber = _get_setting_float(db, DIMENSION_DEVIATION_AMBER_SETTING_KEY, DIMENSION_DEVIATION_AMBER_DEFAULT)
+    red = _get_setting_float(db, DIMENSION_DEVIATION_RED_SETTING_KEY, DIMENSION_DEVIATION_RED_DEFAULT)
+    deviations = []
+    for axis, standard, actual in (
+        ("length", sport.playing_l_ft, project_sport.actual_l_ft),
+        ("width", sport.playing_w_ft, project_sport.actual_w_ft),
+    ):
+        if standard is None or actual is None:
+            continue
+        standard, actual = float(standard), float(actual)
+        pct = abs(actual - standard) / standard * 100 if standard else 0.0
+        status = "red" if pct > red else "amber" if pct >= amber else "green"
+        deviations.append(
+            DimensionDeviation(axis=axis, standard_ft=standard, actual_ft=actual, deviation_percent=round(pct, 1), status=status)
+        )
+    return deviations
+
+
+def _worst_deviation_status(deviations: list[DimensionDeviation]) -> str | None:
+    if not deviations:
+        return None
+    return max(deviations, key=lambda d: _DEVIATION_STATUS_SEVERITY[d.status]).status
+
+
 class ProjectSportOut(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     sport_id: uuid.UUID
     building_status: BuildingStatus
     number_of_courts: int
+    actual_l_ft: float | None = None
+    actual_w_ft: float | None = None
     clear_height_ok: bool = True  # derived; _to_out() sets the real value
     recommended_base: BaseRecommendation | None = None  # derived, D.1/D.2
     recommended_structure: StructureRecommendation | None = None  # derived, E.4
@@ -623,11 +691,14 @@ class ProjectSportOut(BaseModel):
     structural_signoff_reasons: list[str] = []  # derived, E.5
     recommended_flooring: FlooringRecommendation | None = None  # derived, F.1/F.2
     recommended_lighting: LightingRecommendation | None = None  # derived, Part H
+    dimension_deviations: list[DimensionDeviation] = []  # derived, C.3/M.6
+    dimension_deviation_status: str | None = None  # derived, worst of the above
 
     model_config = ConfigDict(from_attributes=True)
 
 
 def _to_out(
+    db: Session,
     project_sport: ProjectSport,
     sport: Sport,
     project: Project,
@@ -649,6 +720,8 @@ def _to_out(
     out.recommended_lighting = _recommend_lighting(
         sport, project_sport.building_status, project_sport.number_of_courts, out.recommended_structure
     )
+    out.dimension_deviations = _dimension_deviations(db, sport, project_sport)
+    out.dimension_deviation_status = _worst_deviation_status(out.dimension_deviations)
     return out
 
 
@@ -704,7 +777,7 @@ def add_project_sport(
     db.commit()
     db.refresh(project_sport)
     regional = _get_regional_multiplier(db, project.city)
-    return _to_out(project_sport, sport, project, regional)
+    return _to_out(db, project_sport, sport, project, regional)
 
 
 @project_sports_router.get("/{project_id}/sports", response_model=list[ProjectSportOut])
@@ -720,7 +793,47 @@ def list_project_sports(
     rows = db.query(ProjectSport).filter(ProjectSport.project_id == project_id).all()
     sports_by_id = {s.id: s for s in db.query(Sport).all()}
     regional = _get_regional_multiplier(db, project.city)
-    return [_to_out(row, sports_by_id[row.sport_id], project, regional) for row in rows]
+    return [_to_out(db, row, sports_by_id[row.sport_id], project, regional) for row in rows]
+
+
+@project_sports_router.patch(
+    "/{project_id}/sports/{selection_id}/actual-dimensions", response_model=ProjectSportOut
+)
+def update_actual_dimensions(
+    project_id: uuid.UUID,
+    selection_id: uuid.UUID,
+    payload: ActualDimensionsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ACTUALS_WRITE_ROLES)),
+):
+    """A.3: 'Site Engineer: Site survey form, actuals entry.' Records the
+    as-built figure the client PDF's 'standard vs actual' table (C.3/M.6)
+    compares the sport master's own standard dimension against. Both
+    fields are nullable so a mistaken entry can be cleared back to
+    "not yet measured" rather than stuck at a wrong number."""
+    project_sport = (
+        db.query(ProjectSport)
+        .filter(ProjectSport.id == selection_id, ProjectSport.project_id == project_id)
+        .first()
+    )
+    if not project_sport:
+        raise HTTPException(status_code=404, detail="Project sport not found")
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
+
+    old_value = f"{project_sport.actual_l_ft}x{project_sport.actual_w_ft}"
+    project_sport.actual_l_ft = payload.actual_l_ft
+    project_sport.actual_w_ft = payload.actual_w_ft
+    write_audit_log_entry(
+        db, current_user, "project_sport", project_sport.id, "actual_dimensions",
+        old_value=old_value, new_value=f"{payload.actual_l_ft}x{payload.actual_w_ft}", request=request,
+    )
+    db.commit()
+    db.refresh(project_sport)
+    regional = _get_regional_multiplier(db, project.city)
+    return _to_out(db, project_sport, sport, project, regional)
 
 
 @project_sports_router.delete("/{project_id}/sports/{selection_id}", status_code=204)

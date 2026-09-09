@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.api.documents import DOCUMENT_ROLES
 from app.api.schedule import get_schedule
 from app.api.settings import get_current_setting_value
+from app.api.sports import _dimension_deviations, _worst_deviation_status
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import Attachment, AttachmentTag
@@ -210,6 +211,32 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         return ""
 
 
+_DEVIATION_COLOR = {"green": "green", "amber": "#b45309", "red": "red"}
+
+
+def _standard_vs_actual_row(db: Session, styles, sport: Sport, project_sport: ProjectSport) -> list:
+    """M.6: 'sport(s), dimensions standard vs actual with citation' on both
+    the Estimate and Quotation PDF. C.3's deviation_thresholds (amber/red)
+    only mean anything once an actual figure has been recorded -- before
+    that this honestly prints 'Not yet recorded' rather than the old
+    placeholder behaviour of quietly repeating the standard figure as if
+    it were a real as-built measurement."""
+    citation = f" ({sport.source_citation})" if sport.source_citation else ""
+    standard_text = f"{sport.playing_dims} ft{citation}"
+    if project_sport.actual_l_ft is None and project_sport.actual_w_ft is None:
+        return [sport.name, standard_text, "Not yet recorded"]
+
+    actual_l = project_sport.actual_l_ft if project_sport.actual_l_ft is not None else "-"
+    actual_w = project_sport.actual_w_ft if project_sport.actual_w_ft is not None else "-"
+    actual_text = f"{actual_l} x {actual_w} ft"
+    deviations = _dimension_deviations(db, sport, project_sport)
+    status = _worst_deviation_status(deviations)
+    if status:
+        worst_pct = max(d.deviation_percent for d in deviations)
+        actual_text += f'<br/><font color="{_DEVIATION_COLOR[status]}">{status.upper()} ({worst_pct}% deviation)</font>'
+    return [sport.name, standard_text, Paragraph(actual_text, styles["Normal"])]
+
+
 def _get_quotation(db: Session, quotation_id: uuid.UUID) -> Quotation:
     quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
     if not quotation:
@@ -340,6 +367,17 @@ def get_estimate_pdf(
     table = Table(rows, colWidths=[26 * mm, 30 * mm, 18 * mm, 38 * mm, 28 * mm, 40 * mm])
     table.setStyle(_TABLE_GRID)
     story.append(table)
+
+    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph("Standard vs. actual dimensions", styles["SectionHeading"]))
+    dims_rows = [["Sport", "Standard (governing body)", "Actual (as built)"]]
+    for option in options:
+        project_sport = db.query(ProjectSport).filter(ProjectSport.id == option.project_sport_id).first()
+        sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
+        dims_rows.append(_standard_vs_actual_row(db, styles, sport, project_sport))
+    dims_table = Table(dims_rows, colWidths=[45 * mm, 75 * mm, 55 * mm])
+    dims_table.setStyle(_TABLE_GRID)
+    story.append(dims_table)
 
     story.append(Spacer(1, 5 * mm))
     story.append(Paragraph("Inclusions (Part I scope)", styles["SectionHeading"]))
@@ -553,20 +591,10 @@ def get_quotation_pdf(
     story.append(Paragraph("Standard vs. actual dimensions", styles["SectionHeading"]))
     dims_rows = [["Sport", "Standard (governing body)", "Actual (as built)"]]
     for row in sport_rows:
-        sport = row["sport"]
-        citation = f" ({sport.source_citation})" if sport.source_citation else ""
-        dims_rows.append([sport.name, f"{sport.playing_dims} ft{citation}", f"{sport.playing_dims} ft"])
+        dims_rows.append(_standard_vs_actual_row(db, styles, row["sport"], row["project_sport"]))
     dims_table = Table(dims_rows, colWidths=[45 * mm, 75 * mm, 55 * mm])
     dims_table.setStyle(_TABLE_GRID)
     story.append(dims_table)
-    story.append(
-        Paragraph(
-            "Note: this version does not separately record a per-project actual dimension override, so "
-            "'Actual' matches the sport master's own standard figure unless the site survey notes a "
-            "deviation.",
-            styles["Normal"],
-        )
-    )
 
     story.append(Paragraph("Exclusions", styles["SectionHeading"]))
     story.extend(_exclusions_flow(styles, exclusions))

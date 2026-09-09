@@ -137,6 +137,15 @@ export async function addProjectSport(token, projectId, payload) {
   return handle(res);
 }
 
+export async function updateActualDimensions(token, projectId, selectionId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/sports/${selectionId}/actual-dimensions`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function removeProjectSport(token, projectId, selectionId) {
   const res = await fetch(`${API_BASE}/projects/${projectId}/sports/${selectionId}`, {
     method: "DELETE",

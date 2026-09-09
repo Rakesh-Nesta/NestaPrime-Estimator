@@ -83,6 +83,17 @@ class ProjectSport(Base):
         Enum(BuildingStatus, name="building_status"), nullable=False
     )
     number_of_courts: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # C.3/M.6: "dimensions standard vs actual with citation" on the client
+    # PDFs. Null until a site engineer/PM records the as-built figure
+    # (see project_sports_router's actual-dimensions endpoint) -- the sport
+    # master's own playing_l_ft/playing_w_ft is always the "standard" side
+    # of that comparison. Sports with no fixed standard dimension (a track,
+    # a per-lane layout) simply never get a deviation computed, same as
+    # Sport.playing_l_ft/playing_w_ft being null for them today.
+    actual_l_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    actual_w_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
