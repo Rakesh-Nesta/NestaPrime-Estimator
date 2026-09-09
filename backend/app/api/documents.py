@@ -1246,6 +1246,28 @@ def _estimate_to_out(db: Session, estimate: Estimate, options: list[EstimateOpti
     )
 
 
+def _price_estimate_option(
+    db: Session,
+    policy: MarginPolicy,
+    gst_rate_percent: float,
+    price_range_percent: float,
+    project_sport: ProjectSport,
+    cost_for_option: float,
+) -> tuple[float, float]:
+    """K.2 / M.1: cost_for_option priced at the sport's own effective
+    target margin (a sport-type floor override, if any, replaces the
+    client floor only for that sport), GST-loaded, then spread into a
+    client-facing +/- range_pct band. Shared by create_estimate and
+    revise_estimate so both compute an option's price the same way."""
+    _, target = effective_floor_and_target(db, policy, project_sport.sport_id)
+    selling_ex_gst = cost_for_option / (1 - target / 100)
+    selling_incl_gst = selling_ex_gst * (1 + gst_rate_percent / 100)
+    return (
+        selling_incl_gst * (1 - price_range_percent / 100),
+        selling_incl_gst * (1 + price_range_percent / 100),
+    )
+
+
 @estimates_router.post(
     "/projects/{project_id}/estimates", response_model=EstimateOut, status_code=201
 )
@@ -1315,16 +1337,16 @@ def create_estimate(
         # sport-type floor override (Director-set) replaces the client
         # floor only for that sport, so options for different sports in
         # the same Estimate can carry different targets.
-        _, target = effective_floor_and_target(db, policy, project_sport.sport_id)
-        selling_ex_gst = option_payload.cost_for_option / (1 - target / 100)
-        selling_incl_gst = selling_ex_gst * (1 + gst_rate_percent / 100)
+        price_low, price_high = _price_estimate_option(
+            db, policy, gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
+        )
         option = EstimateOption(
             estimate_id=estimate.id,
             project_sport_id=option_payload.project_sport_id,
             package=option_payload.package,
             cost_for_option=option_payload.cost_for_option,
-            price_low=selling_incl_gst * (1 - price_range_percent / 100),
-            price_high=selling_incl_gst * (1 + price_range_percent / 100),
+            price_low=price_low,
+            price_high=price_high,
         )
         db.add(option)
         options.append(option)
@@ -1438,6 +1460,112 @@ def rebase_estimate(
     db.refresh(estimate)
     options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
     return _estimate_to_out(db, estimate, options, current_user.role.value)
+
+
+class EstimateReviseRequest(BaseModel):
+    options: list[EstimateOptionCreate] = Field(min_length=1)
+    # M.2 rule 4: "a revision of a Sent document keeps the previously
+    # frozen rates by default -- whoever creates the revision may choose
+    # 'refresh to current settings'." Only meaningful for an option
+    # carried over unchanged (same sport+package, same cost_for_option)
+    # from the prior revision -- anything actually changed or newly
+    # added is priced fresh regardless of this flag, since there is no
+    # "old" figure to freeze for it.
+    refresh_pricing: bool = False
+
+
+@estimates_router.post("/estimates/{estimate_id}/revise", response_model=EstimateOut, status_code=201)
+def revise_estimate(
+    estimate_id: uuid.UUID,
+    payload: EstimateReviseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """M.2 rule 4: 'Any edit to a Sent Estimate ... creates a new
+    revision (previous one read-only, PDF shows -R#) ... a change to
+    priced content: lines, quantities, rates, dimensions, options,
+    terms, validity ... client re-approval required.' The prior
+    revision becomes Superseded (mirrors CostSheet's own Verified ->
+    Superseded pattern) and every option on the new revision starts back
+    at client_status=pending -- a major revision is exactly the case
+    that needs fresh client approval, so nothing carries over."""
+    old = db.query(Estimate).filter(Estimate.id == estimate_id).first()
+    if not old:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    if old.status != EstimateStatus.SENT:
+        raise HTTPException(status_code=400, detail="Only a Sent Estimate can be revised (M.2 rule 4)")
+
+    project = db.query(Project).filter(Project.id == old.project_id).first()
+    client = db.query(Client).filter(Client.id == project.client_id).first()
+    policy = _get_margin_policy(db, client.type)
+    gst_rate_percent = get_gst_rate_percent(db)
+    price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
+
+    old_by_key = {
+        (o.project_sport_id, o.package): o
+        for o in db.query(EstimateOption).filter(EstimateOption.estimate_id == old.id).all()
+    }
+
+    new_revision = Estimate(
+        project_id=old.project_id,
+        cost_sheet_id=old.cost_sheet_id,
+        document_no=_document_no(project.project_no, "EST", old.revision_major + 1),
+        revision_major=old.revision_major + 1,
+        created_by_id=current_user.id,
+    )
+    db.add(new_revision)
+    db.flush()
+
+    new_options = []
+    for option_payload in payload.options:
+        project_sport = (
+            db.query(ProjectSport)
+            .filter(ProjectSport.id == option_payload.project_sport_id, ProjectSport.project_id == old.project_id)
+            .first()
+        )
+        if not project_sport:
+            raise HTTPException(
+                status_code=404, detail=f"Sport selection {option_payload.project_sport_id} not on this project"
+            )
+
+        prior = old_by_key.get((option_payload.project_sport_id, option_payload.package))
+        carried_over_unchanged = (
+            prior is not None
+            and not payload.refresh_pricing
+            and float(prior.cost_for_option) == option_payload.cost_for_option
+        )
+        if carried_over_unchanged:
+            price_low, price_high = float(prior.price_low), float(prior.price_high)
+        else:
+            price_low, price_high = _price_estimate_option(
+                db, policy, gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
+            )
+
+        new_options.append(
+            EstimateOption(
+                estimate_id=new_revision.id,
+                project_sport_id=option_payload.project_sport_id,
+                package=option_payload.package,
+                cost_for_option=option_payload.cost_for_option,
+                price_low=price_low,
+                price_high=price_high,
+            )
+        )
+    db.add_all(new_options)
+
+    old.status = EstimateStatus.SUPERSEDED
+    write_audit_log_entry(
+        db, current_user, "estimate", old.id, "status",
+        old_value=EstimateStatus.SENT.value, new_value=EstimateStatus.SUPERSEDED.value,
+        reason=f"Major revision created: {new_revision.document_no}", request=request,
+    )
+
+    db.commit()
+    for o in new_options:
+        db.refresh(o)
+    db.refresh(new_revision)
+    return _estimate_to_out(db, new_revision, new_options, current_user.role.value)
 
 
 class EstimateOptionStatusUpdate(BaseModel):
@@ -1658,6 +1786,159 @@ def create_quotation(
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(db, quotation, current_user.role.value)
+
+
+class QuotationReviseRequest(BaseModel):
+    included_option_ids: list[uuid.UUID] = Field(min_length=1)
+    discount_type: str | None = None
+    discount_value: float = Field(default=0.0, ge=0)
+    # M.2 rule 4: only meaningful when this actually creates a new
+    # revision (the quotation was already Sent) -- an in-place
+    # Released -> Draft edit has no prior "frozen" snapshot to choose
+    # between, so it always recomputes.
+    refresh_pricing: bool = False
+
+
+@quotations_router.post("/quotations/{quotation_id}/revise", response_model=QuotationOut)
+def revise_quotation(
+    quotation_id: uuid.UUID,
+    payload: QuotationReviseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    """M.1: 'A major edit after Released returns it to Draft (new major
+    revision if it was Sent).' A change to included sports/options or
+    the discount is priced content (M.2 rule 4), so it goes through this
+    endpoint rather than a silent in-place field edit -- there is no
+    other way to change what a Quotation covers once created."""
+    quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    if quotation.status not in (QuotationStatus.RELEASED, QuotationStatus.SENT):
+        raise HTTPException(status_code=400, detail=f"Cannot revise a quotation in {quotation.status.value} status")
+
+    project = db.query(Project).filter(Project.id == quotation.project_id).first()
+
+    included_options = []
+    for option_id in payload.included_option_ids:
+        option = (
+            db.query(EstimateOption)
+            .filter(EstimateOption.id == option_id, EstimateOption.estimate_id == quotation.estimate_id)
+            .first()
+        )
+        if not option:
+            raise HTTPException(status_code=404, detail=f"Estimate option {option_id} not found on this estimate")
+        if option.client_status not in (
+            EstimateOptionClientStatus.APPROVED,
+            EstimateOptionClientStatus.DEMAND_RECEIVED,
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Option {option_id} is not Client approved or Client demand received",
+            )
+        included_options.append(option)
+
+    prior_option_ids = {
+        line.estimate_option_id
+        for line in db.query(QuotationLine).filter(QuotationLine.quotation_id == quotation.id).all()
+    }
+    content_unchanged = (
+        set(payload.included_option_ids) == prior_option_ids
+        and payload.discount_type == quotation.discount_type
+        and float(payload.discount_value) == float(quotation.discount_value)
+    )
+
+    pricing = None
+    cost_total = float(quotation.cost_total)
+    if not content_unchanged or payload.refresh_pricing:
+        client = db.query(Client).filter(Client.id == project.client_id).first()
+        policy = _get_margin_policy(db, client.type)
+        cost_and_sport_ids = [
+            (
+                float(o.cost_for_option),
+                db.query(ProjectSport).filter(ProjectSport.id == o.project_sport_id).first().sport_id,
+            )
+            for o in included_options
+        ]
+        cost_total = sum(cost for cost, _ in cost_and_sport_ids)
+        floor, target = cost_weighted_floor_and_target(db, policy, cost_and_sport_ids)
+        pricing = compute_pricing(db, cost_total, floor, target, payload.discount_type, payload.discount_value)
+
+    estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == estimate.cost_sheet_id).first() if estimate else None
+    cost_basis_unverified = (
+        cost_sheet.status != CostSheetStatus.VERIFIED if cost_sheet else quotation.cost_basis_unverified
+    )
+
+    def _apply_pricing(target_quotation: Quotation) -> None:
+        target_quotation.discount_type = payload.discount_type
+        target_quotation.discount_value = payload.discount_value
+        target_quotation.cost_total = cost_total
+        # Frozen-by-default (M.2 rule 4): when nothing priced actually
+        # changed and no refresh was requested, carry the OLD quotation's
+        # own already-computed figures forward verbatim rather than
+        # recomputing them from (possibly since-changed) settings.
+        source = pricing if pricing is not None else quotation
+        target_quotation.target_margin_percent = source.target_margin_percent
+        target_quotation.floor_margin_percent = source.floor_margin_percent
+        target_quotation.selling_price_ex_gst = source.selling_price_ex_gst
+        target_quotation.discount_amount = source.discount_amount
+        target_quotation.selling_after_discount = source.selling_after_discount
+        target_quotation.margin_percent = source.margin_percent
+        target_quotation.below_floor = source.below_floor
+        target_quotation.gst_amount = source.gst_amount
+        target_quotation.quotation_total = source.quotation_total
+        target_quotation.cost_basis_unverified = cost_basis_unverified
+
+    if quotation.status == QuotationStatus.RELEASED:
+        # M.1: "A major edit after Released returns it to Draft" -- same
+        # row, no new revision number, since nothing has reached the
+        # client yet.
+        old_status = quotation.status
+        _apply_pricing(quotation)
+        quotation.status = QuotationStatus.DRAFT
+        quotation.released_by_id = None
+        quotation.released_at = None
+        db.query(QuotationLine).filter(QuotationLine.quotation_id == quotation.id).delete(
+            synchronize_session=False
+        )
+        for option in included_options:
+            db.add(QuotationLine(quotation_id=quotation.id, estimate_option_id=option.id))
+        write_audit_log_entry(
+            db, current_user, "quotation", quotation.id, "status",
+            old_value=old_status.value, new_value=QuotationStatus.DRAFT.value,
+            reason="Revised (M.2 rule 4)", request=request,
+        )
+        db.commit()
+        db.refresh(quotation)
+        return _quotation_to_out(db, quotation, current_user.role.value)
+
+    # status == SENT: "(new major revision if it was Sent)" -- the
+    # already-sent row stays exactly as the client saw it (Superseded,
+    # read-only); a fresh Draft revision carries the change forward.
+    new_revision = Quotation(
+        project_id=quotation.project_id,
+        estimate_id=quotation.estimate_id,
+        document_no=_document_no(project.project_no, "NPQ", quotation.revision_major + 1),
+        revision_major=quotation.revision_major + 1,
+        created_by_id=current_user.id,
+    )
+    _apply_pricing(new_revision)
+    db.add(new_revision)
+    db.flush()
+    for option in included_options:
+        db.add(QuotationLine(quotation_id=new_revision.id, estimate_option_id=option.id))
+
+    quotation.status = QuotationStatus.SUPERSEDED
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "status",
+        old_value=QuotationStatus.SENT.value, new_value=QuotationStatus.SUPERSEDED.value,
+        reason=f"Major revision created: {new_revision.document_no}", request=request,
+    )
+    db.commit()
+    db.refresh(new_revision)
+    return _quotation_to_out(db, new_revision, current_user.role.value)
 
 
 @quotations_router.get("/projects/{project_id}/quotations", response_model=list[QuotationOut])

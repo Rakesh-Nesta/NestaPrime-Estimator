@@ -440,6 +440,15 @@ export async function rebaseEstimate(token, estimateId) {
   return handle(res);
 }
 
+export async function reviseEstimate(token, estimateId, payload) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/revise`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function updateEstimateOptionClientStatus(token, estimateId, optionId, payload) {
   const res = await fetch(`${API_BASE}/estimates/${estimateId}/options/${optionId}/client-status`, {
     method: "PATCH",
@@ -473,6 +482,15 @@ export async function releaseQuotation(token, quotationId) {
 
 export async function rejectQuotation(token, quotationId, payload) {
   const res = await fetch(`${API_BASE}/quotations/${quotationId}/reject`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function reviseQuotation(token, quotationId, payload) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/revise`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),

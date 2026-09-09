@@ -30,6 +30,8 @@ import {
   rejectQuotation,
   releaseQuotation,
   reviseCostSheet,
+  reviseEstimate,
+  reviseQuotation,
   sendEstimate,
   sendQuotation,
   updateCostSheetLine,
@@ -535,7 +537,10 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   const [waiverReasons, setWaiverReasons] = useState({});
   const [rejectionReasons, setRejectionReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
+  const [openReviseFor, setOpenReviseFor] = useState(null);
+  const [reviseDrafts, setReviseDrafts] = useState({}); // estimateId -> { costs: {optionId: value}, refresh_pricing }
   const canWaive = role === "pm" || role === "director";
+  const canRevise = role === "pm" || role === "director";
 
   async function handleDownloadPdf(estimate) {
     setPdfError("");
@@ -564,6 +569,10 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   });
   const handleSend = onAction(async (id) => sendEstimate(token, id));
   const handleRebase = onAction(async (id) => rebaseEstimate(token, id));
+  const handleRevise = onAction(async (estimateId, options, refreshPricing) => {
+    await reviseEstimate(token, estimateId, { options, refresh_pricing: refreshPricing });
+    setOpenReviseFor(null);
+  });
   const handleClientStatus = onAction(async (estimateId, optionId, client_status, waiveEvidenceReason, rejectionReason) =>
     updateEstimateOptionClientStatus(token, estimateId, optionId, {
       client_status,
@@ -598,6 +607,27 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                   Send
                 </button>
               )}
+              {est.status === "sent" && canRevise && (
+                <button
+                  onClick={() => {
+                    if (openReviseFor === est.id) {
+                      setOpenReviseFor(null);
+                      return;
+                    }
+                    setReviseDrafts((d) => ({
+                      ...d,
+                      [est.id]: {
+                        costs: Object.fromEntries(est.options.map((o) => [o.id, o.cost_for_option])),
+                        refresh_pricing: false,
+                      },
+                    }));
+                    setOpenReviseFor(est.id);
+                  }}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  {openReviseFor === est.id ? "Cancel revise" : "Revise"}
+                </button>
+              )}
               <button onClick={() => handleDownloadPdf(est)} className="text-xs text-blue-600 hover:underline">
                 Download PDF
               </button>
@@ -617,6 +647,59 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
           </div>
           {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
           {openMessagesFor === est.id && <MessagesPanel token={token} docType="estimate" docId={est.id} />}
+          {openReviseFor === est.id && (
+            <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 space-y-2 text-xs">
+              <p className="text-amber-800">
+                M.2 rule 4: a priced-content change to a Sent Estimate creates a new revision (EST-…-R
+                {est.revision_major + 1}) and needs fresh client approval.
+              </p>
+              {est.options.map((opt) => (
+                <div key={opt.id} className="flex items-center gap-2">
+                  <span className="w-40 truncate">
+                    {sportNameByProjectSportId[opt.project_sport_id] ?? opt.project_sport_id} ({opt.package})
+                  </span>
+                  <span>Cost for option (Rs)</span>
+                  <input
+                    type="number"
+                    value={reviseDrafts[est.id]?.costs[opt.id] ?? opt.cost_for_option}
+                    onChange={(e) =>
+                      setReviseDrafts((d) => ({
+                        ...d,
+                        [est.id]: { ...d[est.id], costs: { ...d[est.id]?.costs, [opt.id]: Number(e.target.value) } },
+                      }))
+                    }
+                    className="w-32 rounded border border-gray-300 px-1 py-0.5"
+                  />
+                </div>
+              ))}
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={reviseDrafts[est.id]?.refresh_pricing ?? false}
+                  onChange={(e) =>
+                    setReviseDrafts((d) => ({ ...d, [est.id]: { ...d[est.id], refresh_pricing: e.target.checked } }))
+                  }
+                />
+                Refresh pricing from current settings (otherwise unchanged options keep their frozen price)
+              </label>
+              <button
+                onClick={() =>
+                  handleRevise(
+                    est.id,
+                    est.options.map((opt) => ({
+                      project_sport_id: opt.project_sport_id,
+                      package: opt.package,
+                      cost_for_option: reviseDrafts[est.id]?.costs[opt.id] ?? opt.cost_for_option,
+                    })),
+                    reviseDrafts[est.id]?.refresh_pricing ?? false
+                  )
+                }
+                className="bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700"
+              >
+                Create revision
+              </button>
+            </div>
+          )}
           {est.options.map((opt) => (
             <div key={opt.id} className="space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
@@ -740,8 +823,11 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const [rejectFormFor, setRejectFormFor] = useState(null);
+  const [openReviseFor, setOpenReviseFor] = useState(null);
+  const [reviseDrafts, setReviseDrafts] = useState({}); // quotationId -> { discount_value, refresh_pricing }
   const canWaive = role === "pm" || role === "director";
   const canReject = role === "pm" || role === "director";
+  const canRevise = role === "pm" || role === "director";
 
   async function handleDownloadPdf(quotation) {
     setPdfError("");
@@ -780,6 +866,25 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
   const handleReject = onAction(async (id, reasonCategory, note) => {
     await rejectQuotation(token, id, { reason_category: reasonCategory, note });
     setRejectFormFor(null);
+  });
+  const handleRevise = onAction(async (quotation) => {
+    const draft = reviseDrafts[quotation.id] || {};
+    // The API can revise onto any option set; this form keeps whatever
+    // is currently Client approved / demand received on the linked
+    // Estimate (the common case) rather than exposing a full line
+    // editor here -- changing which sports a Quotation covers still
+    // needs a fresh /quotations POST today.
+    const estimate = estimates.find((e) => e.id === quotation.estimate_id);
+    const includedIds = (estimate?.options ?? [])
+      .filter((o) => o.client_status === "approved" || o.client_status === "demand_received")
+      .map((o) => o.id);
+    await reviseQuotation(token, quotation.id, {
+      included_option_ids: includedIds,
+      discount_type: draft.discount_value ? "amount" : null,
+      discount_value: Number(draft.discount_value || 0),
+      refresh_pricing: draft.refresh_pricing ?? false,
+    });
+    setOpenReviseFor(null);
   });
 
   return (
@@ -840,6 +945,21 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
                 Reject
               </button>
             )}
+            {canRevise && (q.status === "released" || q.status === "sent") && (
+              <button
+                onClick={() => {
+                  if (openReviseFor === q.id) {
+                    setOpenReviseFor(null);
+                    return;
+                  }
+                  setReviseDrafts((d) => ({ ...d, [q.id]: { discount_value: q.discount_value || "", refresh_pricing: false } }));
+                  setOpenReviseFor(q.id);
+                }}
+                className="text-blue-600 hover:underline"
+              >
+                {openReviseFor === q.id ? "Cancel revise" : "Revise"}
+              </button>
+            )}
             <button
               onClick={() => setOpenAttachmentsFor(openAttachmentsFor === q.id ? null : q.id)}
               className="text-gray-500 hover:underline"
@@ -858,6 +978,44 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
               onSubmit={(reasonCategory, note) => handleReject(q.id, reasonCategory, note)}
               onCancel={() => setRejectFormFor(null)}
             />
+          )}
+          {openReviseFor === q.id && (
+            <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 space-y-2 text-xs">
+              <p className="text-amber-800">
+                M.2 rule 4:{" "}
+                {q.status === "sent"
+                  ? `this creates a new revision (NPQ-…-R${q.revision_major + 1}) -- the Sent copy stays frozen as what the client saw.`
+                  : "this updates the Draft in place -- nothing has reached the client yet."}
+                {" "}Keeps the currently Client-approved sports; changing which sports are covered still needs a new Quotation.
+              </p>
+              <div className="flex items-center gap-2">
+                <span>Discount (Rs)</span>
+                <input
+                  type="number"
+                  value={reviseDrafts[q.id]?.discount_value ?? ""}
+                  onChange={(e) =>
+                    setReviseDrafts((d) => ({ ...d, [q.id]: { ...d[q.id], discount_value: e.target.value } }))
+                  }
+                  className="w-28 rounded border border-gray-300 px-1 py-0.5"
+                />
+              </div>
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={reviseDrafts[q.id]?.refresh_pricing ?? false}
+                  onChange={(e) =>
+                    setReviseDrafts((d) => ({ ...d, [q.id]: { ...d[q.id], refresh_pricing: e.target.checked } }))
+                  }
+                />
+                Refresh pricing from current settings (otherwise unchanged figures stay frozen)
+              </label>
+              <button
+                onClick={() => handleRevise(q)}
+                className="bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700"
+              >
+                Create revision
+              </button>
+            </div>
           )}
           {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
           {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}

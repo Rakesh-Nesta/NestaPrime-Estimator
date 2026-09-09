@@ -40,6 +40,11 @@ class EstimateStatus(str, enum.Enum):
     DRAFT = "draft"
     SENT = "sent"
     EXPIRED = "expired"
+    # M.2 rule 4: "Any edit to a Sent Estimate ... creates a new revision
+    # (previous one read-only, PDF shows -R#)" -- set on the prior
+    # revision by POST /estimates/{id}/revise, mirroring CostSheet's own
+    # Verified -> Superseded pattern.
+    SUPERSEDED = "superseded"
 
 
 class EstimateOptionClientStatus(str, enum.Enum):
@@ -73,6 +78,11 @@ class QuotationStatus(str, enum.Enum):
     WON = "won"
     LOST = "lost"
     EXPIRED = "expired"
+    # M.2 rule 4: "(new major revision if it was Sent)" -- set on the
+    # prior revision by POST /quotations/{id}/revise when the quotation
+    # had already reached the client. A Released-only quotation is
+    # instead reset to Draft in place (no new revision needed).
+    SUPERSEDED = "superseded"
 
 
 class CostSheet(Base):
