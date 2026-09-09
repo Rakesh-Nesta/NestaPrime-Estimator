@@ -8,18 +8,21 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.api.documents import _rate_blind_mode_on
+from app.api.audit_log import write_audit_log_entry
+from app.api.documents import _document_no, _rate_blind_mode_on
 from app.config import settings
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client_signatory import ClientSignatory
-from app.models.document import CostSheet, Estimate, EstimateOption, Quotation
+from app.models.document import CostSheet, CostSheetStatus, Estimate, EstimateOption, EstimateStatus, Quotation
+from app.models.message import Message, MessageChannel, MessageStatus
 from app.models.price_request import PriceRequest
 from app.models.project import Project
 from app.models.setting import DocumentType
 from app.models.site_survey import SiteSurvey
 from app.models.technical_bid_checklist import TechnicalBidChecklistItem
+from app.models.user import User, UserRole
 from app.models.work_order import WorkOrder
 
 attachments_router = APIRouter(prefix="/attachments", tags=["attachments"])
@@ -200,6 +203,81 @@ class AttachmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+def _trigger_structural_design_rebase(
+    db: Session, request: Request, current_user, doc_type: DocumentType, doc_id: uuid.UUID, tag: AttachmentTag
+) -> None:
+    """E.5 'Engineer-override workflow': '(1) the engineer's design is
+    uploaded with tag structural_design; (2) the system auto-creates
+    CS-R(n+1) in Draft; (3) PM updates member and foundation lines from
+    the design; (4) PM re-verifies; (5) linked Estimates/Quotations are
+    flagged "rebase required" (M.2 rule 4); (6) Sales is notified.'
+    Steps 3/4 stay manual (a human has to actually read the engineer's
+    design and re-price it) -- this covers 2, 5 and 6. Step 5 needs no
+    code of its own: cost_basis_rebase_required is computed from the
+    Cost Sheet's own status (see _cost_sheet_superseded), so superseding
+    it here already flags every Estimate/Quotation chained to it.
+    Quotations aren't messaged separately since they chain through
+    estimate_id, not cost_sheet_id directly -- notifying the Estimate
+    covers the whole chain.
+    Known gap: 'if the design arrives after the Estimate was Sent, the
+    Estimate gets a major revision' -- there is no Estimate-revision
+    endpoint in this build (only Cost Sheet has /revise), so a Sent
+    Estimate is only flagged and called out in the Sales notification,
+    not actually re-revisioned."""
+    if tag != AttachmentTag.STRUCTURAL_DESIGN or doc_type != DocumentType.COST_SHEET:
+        return
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == doc_id).first()
+    if not cost_sheet or cost_sheet.status != CostSheetStatus.VERIFIED:
+        return
+
+    project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
+    new_revision = CostSheet(
+        project_id=cost_sheet.project_id,
+        document_no=_document_no(project.project_no, "CS", cost_sheet.revision_major + 1),
+        revision_major=cost_sheet.revision_major + 1,
+        cost_total=cost_sheet.cost_total,
+        created_by_id=current_user.id,
+    )
+    cost_sheet.status = CostSheetStatus.SUPERSEDED
+    db.add(new_revision)
+    write_audit_log_entry(
+        db, current_user, "cost_sheet", cost_sheet.id, "status",
+        old_value=CostSheetStatus.VERIFIED.value, new_value=CostSheetStatus.SUPERSEDED.value,
+        reason="Auto-revised: structural engineer design uploaded (E.5 engineer-override workflow)",
+        request=request,
+    )
+
+    estimates = db.query(Estimate).filter(Estimate.cost_sheet_id == cost_sheet.id).all()
+    if estimates:
+        sales_emails = [row[0] for row in db.query(User.email).filter(User.role == UserRole.SALES).all()]
+        for estimate in estimates:
+            body = (
+                f"Structural engineer design uploaded for {project.project_no} -- Cost Sheet revised to "
+                f"{new_revision.document_no}. Estimate {estimate.document_no} has cost basis changed and "
+                "needs to be rebased (M.2 rule 4) before it can be sent."
+            )
+            if estimate.status == EstimateStatus.SENT:
+                body += (
+                    " This Estimate was already Sent -- per E.5, it needs a major revision before "
+                    "anything further goes to the client."
+                )
+            for email in sales_emails:
+                db.add(
+                    Message(
+                        doc_type=DocumentType.ESTIMATE,
+                        doc_id=estimate.id,
+                        channel=MessageChannel.EMAIL,
+                        recipient=email,
+                        sender_id=current_user.id,
+                        template_key="structural_rebase_required",
+                        subject="NestaPrime -- structural design uploaded, rebase required",
+                        body_note=body[:500],
+                        status=MessageStatus.RECORDED,
+                    )
+                )
+    db.commit()
+
+
 async def _store_upload(
     db: Session,
     request: Request,
@@ -244,6 +322,8 @@ async def _store_upload(
     db.add(attachment)
     db.commit()
     db.refresh(attachment)
+
+    _trigger_structural_design_rebase(db, request, current_user, doc_type, doc_id, tag)
     return attachment
 
 
