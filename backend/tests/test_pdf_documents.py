@@ -170,6 +170,43 @@ def test_estimate_pdf_lists_unadded_scope_items_as_exclusions(client, director_u
     assert "Toilets" in text  # never added by _add_scope_item -> must appear under Exclusions
 
 
+def test_estimate_pdf_shows_configured_package_content(client, director_user):
+    """Part O PACKAGES / M.6: once the Director has set the badminton
+    Standard tier's content, the Estimate PDF's 'Package content' section
+    shows it -- not the generic fallback."""
+    headers = _director_headers(client, director_user)
+    sport_id = next(s["id"] for s in client.get("/sports", headers=headers).json() if s["key"] == "badminton")
+    client.put(
+        f"/package-contents/{sport_id}/standard",
+        json={
+            "flooring_description": "22mm interlocking PVC sports tiles",
+            "structure_description": "Type C PEB structure, hot-dip galvanised",
+            "lighting_description": "6 x 150 lm/W LED floodlights, 300 lux",
+            "scope_description": "Full-size court markings\nNet post set",
+            "warranty_years": 5,
+        },
+        headers=headers,
+    )
+    _, estimate = _draft_estimate(client, headers)  # options default to package="standard"
+
+    res = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+    assert "Package content" in text
+    assert "22mm interlocking PVC sports tiles" in text
+    assert "Type C PEB structure, hot-dip galvanised" in text
+    assert "Full-size court markings" in text
+    assert "5 year(s)" in text
+
+
+def test_estimate_pdf_shows_fallback_when_package_content_not_configured(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, estimate = _draft_estimate(client, headers)
+
+    res = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+    assert "Package content not yet configured" in text
+
+
 # ---------------------------------------------------------------------------
 # Quotation PDF
 # ---------------------------------------------------------------------------

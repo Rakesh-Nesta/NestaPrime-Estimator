@@ -17,6 +17,7 @@ from app.api import (
     lighting,
     messages,
     overheads,
+    package_contents,
     pdf_documents,
     play_equipment,
     pool,
@@ -84,6 +85,7 @@ app.include_router(accessories.accessories_router)
 app.include_router(athletics.athletics_router)
 app.include_router(play_equipment.play_equipment_router)
 app.include_router(overheads.overheads_router)
+app.include_router(package_contents.router)
 app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
 app.include_router(audit_log.audit_log_router)

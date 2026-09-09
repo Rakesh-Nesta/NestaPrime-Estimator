@@ -294,6 +294,21 @@ export async function deleteSportMarginPolicy(token, sportId) {
   if (!res.ok && res.status !== 204) return handle(res);
 }
 
+export async function listPackageContents(token, sportId) {
+  const params = sportId ? `?sport_id=${sportId}` : "";
+  const res = await fetch(`${API_BASE}/package-contents${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function upsertPackageContent(token, sportId, tier, payload) {
+  const res = await fetch(`${API_BASE}/package-contents/${sportId}/${tier}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function priceQuote(token, payload) {
   const res = await fetch(`${API_BASE}/pricing/quote`, {
     method: "POST",

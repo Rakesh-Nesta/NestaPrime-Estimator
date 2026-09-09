@@ -36,6 +36,7 @@ from app.db.session import get_db
 from app.models.attachment import Attachment, AttachmentTag
 from app.models.client import Client, ClientType
 from app.models.document import Estimate, EstimateOption, Quotation, QuotationLine
+from app.models.package_content import PackageContent
 from app.models.project import Project
 from app.models.scope_item import ProjectScopeItem, ScopeItem
 from app.models.setting import DocumentType
@@ -315,6 +316,41 @@ def _exclusions_flow(styles, exclusions: list[str]) -> list:
     return [Paragraph("&bull; " + item, styles["Normal"]) for item in exclusions]
 
 
+def _package_content_flow(db: Session, styles, sport: Sport, option: EstimateOption) -> list:
+    """Part O PACKAGES / M.6: what a Budget/Standard/Premium option
+    actually contains -- flooring, structure, lighting, scope and
+    warranty, as the Director has set them for this sport+tier (Q.1).
+    Falls back to an honest 'not yet configured' line rather than
+    fabricating content the Director hasn't entered, same convention as
+    _warranty_years() below when no client-type warranty duration is
+    set."""
+    content = (
+        db.query(PackageContent)
+        .filter(PackageContent.sport_id == sport.id, PackageContent.tier == option.package)
+        .first()
+    )
+    heading = f"{sport.name} -- {option.package.value.capitalize()}"
+    if content is None:
+        return [
+            Paragraph(f"<b>{heading}</b>", styles["Normal"]),
+            Paragraph("Package content not yet configured (Q.1 Master Settings).", styles["Normal"]),
+        ]
+    flow = [
+        Paragraph(f"<b>{heading}</b>", styles["Normal"]),
+        Paragraph(f"<b>Flooring:</b> {content.flooring_description}", styles["Normal"]),
+        Paragraph(f"<b>Structure:</b> {content.structure_description}", styles["Normal"]),
+        Paragraph(f"<b>Lighting:</b> {content.lighting_description}", styles["Normal"]),
+    ]
+    flow.extend(
+        Paragraph("&bull; " + line.strip(), styles["Normal"])
+        for line in content.scope_description.splitlines()
+        if line.strip()
+    )
+    if content.warranty_years is not None:
+        flow.append(Paragraph(f"<b>Warranty:</b> {content.warranty_years} year(s)", styles["Normal"]))
+    return flow
+
+
 # ---------------------------------------------------------------------------
 # Estimate PDF
 # ---------------------------------------------------------------------------
@@ -367,6 +403,14 @@ def get_estimate_pdf(
     table = Table(rows, colWidths=[26 * mm, 30 * mm, 18 * mm, 38 * mm, 28 * mm, 40 * mm])
     table.setStyle(_TABLE_GRID)
     story.append(table)
+
+    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph("Package content", styles["SectionHeading"]))
+    for option in options:
+        project_sport = db.query(ProjectSport).filter(ProjectSport.id == option.project_sport_id).first()
+        sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
+        story.extend(_package_content_flow(db, styles, sport, option))
+        story.append(Spacer(1, 2 * mm))
 
     story.append(Spacer(1, 5 * mm))
     story.append(Paragraph("Standard vs. actual dimensions", styles["SectionHeading"]))

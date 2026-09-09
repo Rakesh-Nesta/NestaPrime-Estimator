@@ -3,16 +3,23 @@ import {
   createScopeItem,
   createSport,
   deleteSportMarginPolicy,
+  listPackageContents,
   listScopeItems,
   listSportMarginPolicies,
   listSports,
   updateScopeItem,
   updateSport,
+  upsertPackageContent,
   upsertSportMarginPolicy,
 } from "./api";
 
 const SPORT_CATEGORIES = ["indoor", "outdoor"];
 const SCOPE_GROUPS = ["civil", "electrical", "water", "external", "services", "maintenance"];
+const PACKAGE_TIERS = ["budget", "standard", "premium"];
+
+function emptyPackageContentForm() {
+  return { flooring_description: "", structure_description: "", lighting_description: "", scope_description: "", warranty_years: "" };
+}
 
 function emptySportForm() {
   return {
@@ -33,21 +40,23 @@ function num(v) {
 }
 
 export default function SportsScopeAdmin({ token, onBack }) {
-  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins"
+  const [tab, setTab] = useState("sports"); // "sports" | "scope" | "margins" | "packages"
   const [sports, setSports] = useState([]);
   const [scopeItems, setScopeItems] = useState([]);
   const [sportMarginPolicies, setSportMarginPolicies] = useState([]);
+  const [packageContents, setPackageContents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function load() {
-    return Promise.all([listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token)]).then(
-      ([s, i, m]) => {
-        setSports(s);
-        setScopeItems(i);
-        setSportMarginPolicies(m);
-      }
-    );
+    return Promise.all([
+      listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token), listPackageContents(token),
+    ]).then(([s, i, m, p]) => {
+      setSports(s);
+      setScopeItems(i);
+      setSportMarginPolicies(m);
+      setPackageContents(p);
+    });
   }
 
   useEffect(() => {
@@ -111,6 +120,12 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Margin floor overrides ({sportMarginPolicies.length})
           </button>
+          <button
+            onClick={() => setTab("packages")}
+            className={`text-sm rounded px-3 py-1 ${tab === "packages" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Package content ({packageContents.length})
+          </button>
         </div>
       </div>
 
@@ -123,6 +138,9 @@ export default function SportsScopeAdmin({ token, onBack }) {
           sportMarginPolicies={sportMarginPolicies}
           onAction={withErrorHandling}
         />
+      )}
+      {tab === "packages" && (
+        <PackageContentsTab token={token} sports={sports} packageContents={packageContents} onAction={withErrorHandling} />
       )}
     </div>
   );
@@ -524,6 +542,126 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PackageContentsTab({ token, sports, packageContents, onAction }) {
+  const [editingKey, setEditingKey] = useState(null); // `${sportId}:${tier}`
+  const [editForm, setEditForm] = useState(emptyPackageContentForm());
+
+  const byKey = Object.fromEntries(packageContents.map((p) => [`${p.sport_id}:${p.tier}`, p]));
+
+  function startEdit(sportId, tier) {
+    const key = `${sportId}:${tier}`;
+    const existing = byKey[key];
+    setEditingKey(key);
+    setEditForm(
+      existing
+        ? {
+            flooring_description: existing.flooring_description,
+            structure_description: existing.structure_description,
+            lighting_description: existing.lighting_description,
+            scope_description: existing.scope_description,
+            warranty_years: existing.warranty_years ?? "",
+          }
+        : emptyPackageContentForm()
+    );
+  }
+
+  const handleSave = onAction(async (sportId, tier) => {
+    await upsertPackageContent(token, sportId, tier, {
+      flooring_description: editForm.flooring_description,
+      structure_description: editForm.structure_description,
+      lighting_description: editForm.lighting_description,
+      scope_description: editForm.scope_description,
+      warranty_years: editForm.warranty_years === "" ? null : Number(editForm.warranty_years),
+    });
+    setEditingKey(null);
+  });
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-4">
+      <p className="text-xs text-gray-400">
+        Part O PACKAGES / Q.1: "Packages | Budget/Standard/Premium contents | Per sport | Director." This is the
+        content the Estimate PDF's "Package content" section prints for each option -- flooring, structure,
+        lighting, what's included (one line per bullet), and warranty duration. Sales still customises items on the
+        actual Estimate; this is only the Director-set default per sport and tier.
+      </p>
+      {sports.map((sport) => (
+        <div key={sport.id} className="border border-gray-200 rounded p-3 space-y-2">
+          <p className="text-sm font-medium">
+            {sport.name} <span className="text-gray-400 text-xs font-normal">({sport.key})</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PACKAGE_TIERS.map((tier) => {
+              const key = `${sport.id}:${tier}`;
+              const configured = Boolean(byKey[key]);
+              return (
+                <button
+                  key={tier}
+                  onClick={() => startEdit(sport.id, tier)}
+                  className={`text-xs rounded px-3 py-1 border ${
+                    configured ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"
+                  }`}
+                >
+                  {tier.charAt(0).toUpperCase() + tier.slice(1)} {configured ? "✓" : "(not set)"}
+                </button>
+              );
+            })}
+          </div>
+          {editingKey?.startsWith(`${sport.id}:`) && (
+            <div className="border border-blue-300 bg-blue-50 rounded p-3 space-y-2 text-sm">
+              <p className="text-xs font-medium text-blue-800">
+                Editing {editingKey.split(":")[1]} tier
+              </p>
+              <LabeledInput
+                label="Flooring"
+                value={editForm.flooring_description}
+                onChange={(v) => setEditForm((f) => ({ ...f, flooring_description: v }))}
+              />
+              <LabeledInput
+                label="Structure"
+                value={editForm.structure_description}
+                onChange={(v) => setEditForm((f) => ({ ...f, structure_description: v }))}
+              />
+              <LabeledInput
+                label="Lighting"
+                value={editForm.lighting_description}
+                onChange={(v) => setEditForm((f) => ({ ...f, lighting_description: v }))}
+              />
+              <label className="text-xs text-gray-500 space-y-0.5 block">
+                Scope (one item per line)
+                <textarea
+                  value={editForm.scope_description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, scope_description: e.target.value }))}
+                  rows={3}
+                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                />
+              </label>
+              <div className="w-32">
+                <LabeledInput
+                  label="Warranty (years)"
+                  type="number"
+                  value={editForm.warranty_years}
+                  onChange={(v) => setEditForm((f) => ({ ...f, warranty_years: v }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleSave(sport.id, editingKey.split(":")[1])}
+                  className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700"
+                >
+                  Save
+                </button>
+                <button onClick={() => setEditingKey(null)} className="text-xs text-gray-500 hover:underline">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
