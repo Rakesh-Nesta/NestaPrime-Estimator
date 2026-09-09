@@ -162,13 +162,17 @@ def test_quotation_messages_are_also_gated(client, director_user):
 def test_cost_sheet_messages_are_not_gated_by_client_consent(client, director_user):
     """Cost Sheet is internal-only (M.7.2 rule 7) -- there's no client
     consent question to ask for a document that never reaches the client
-    at all, regardless of the client's own opt-in state."""
+    at all, regardless of the client's own opt-in state. Uses an internal
+    email recipient rather than WhatsApp: WhatsApp is blocked outright
+    for internal documents by the (separate) internal-domain restriction
+    rule, which is what this test needs to NOT be about -- that rule is
+    covered on its own in test_messages.py."""
     headers = _director_headers(client, director_user)
     client_row = _create_client_record(client, headers)
     project_id = _create_project(client, headers, client_row["id"])
     cs_id = client.post(f"/projects/{project_id}/cost-sheets", json={"cost_total": 850000}, headers=headers).json()["id"]
 
-    res = _log_message(client, headers, "cost_sheet", cs_id, channel="whatsapp", recipient="+911234567890")
+    res = _log_message(client, headers, "cost_sheet", cs_id, recipient="ops@test.local")
     assert res.status_code == 201, res.text
 
 

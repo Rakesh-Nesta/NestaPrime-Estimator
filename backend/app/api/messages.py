@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.attachments import _get_document_or_404, _require_doc_type_role, _resolve_client_id
+from app.api.settings import get_internal_email_domains
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import Attachment
@@ -26,6 +27,35 @@ DOCUMENT_ROLES = ("sales", "pm", "director")
 # company (M.7.2 rule 7), so there's no client consent question to ask
 # for them.
 _CLIENT_FACING_DOC_TYPES = (DocumentType.ESTIMATE, DocumentType.QUOTATION, DocumentType.SITE_SURVEY)
+
+# M.7.1's own table: "Cost Sheet, Material Consumption Sheet, internal
+# BOM -- Internal only". Material Consumption Sheet and internal BOM
+# aren't modelled as their own doc_type in this build (no dedicated
+# entity exists for either), so Cost Sheet is the only DocumentType this
+# rule currently applies to.
+_INTERNAL_DOC_TYPES = (DocumentType.COST_SHEET,)
+
+
+def _enforce_internal_document_channel(db: Session, doc_type: DocumentType, channel: MessageChannel, recipient: str) -> None:
+    """M.7.1 / M.7.2 rule 7: 'Internal documents never go outside ... may
+    be emailed only to addresses on the COMPANY domain list and never by
+    WhatsApp; the API rejects any other recipient.' Unlike
+    _enforce_client_consent (which only cares what the client agreed
+    to), this is an absolute gate that applies regardless of role or
+    consent -- there is no opt-in that makes it acceptable to WhatsApp a
+    Cost Sheet or email it outside the company."""
+    if doc_type not in _INTERNAL_DOC_TYPES:
+        return
+    if channel == MessageChannel.WHATSAPP:
+        raise HTTPException(
+            status_code=400, detail="Internal documents (Cost Sheet) may never be sent by WhatsApp (M.7.2 rule 7)"
+        )
+    domain = recipient.rsplit("@", 1)[-1].lower() if "@" in recipient else ""
+    if domain not in get_internal_email_domains(db):
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{recipient}' is not on the internal-domain list -- internal documents may only be emailed within the company (M.7.2 rule 7)",
+        )
 
 
 def _enforce_client_consent(db: Session, doc_type: DocumentType, doc_id: uuid.UUID, channel: MessageChannel) -> None:
@@ -103,6 +133,7 @@ def create_message(
     _require_doc_type_role(db, payload.doc_type, current_user)
     _get_document_or_404(db, payload.doc_type, payload.doc_id)
     _enforce_client_consent(db, payload.doc_type, payload.doc_id, payload.channel)
+    _enforce_internal_document_channel(db, payload.doc_type, payload.channel, payload.recipient)
 
     if payload.attachment_id is not None:
         attachment = db.query(Attachment).filter(Attachment.id == payload.attachment_id).first()

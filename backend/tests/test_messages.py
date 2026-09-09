@@ -86,17 +86,21 @@ def _log_message(client, headers, doc_type, doc_id, **overrides):
 
 
 def test_log_and_list_a_message(client, director_user):
+    """Cost Sheet is an internal document (M.7.2 rule 7), so the
+    recipient must be on the internal-domain list -- test.local, the
+    domain of the director_user fixture itself, since no explicit
+    internal_email_domains Setting is configured in this test."""
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)
 
     res = _log_message(
-        client, headers, "cost_sheet", cost_sheet_id,
+        client, headers, "cost_sheet", cost_sheet_id, recipient="ops@test.local",
         subject="Cost sheet shared", body_note="Sent for internal review",
     )
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["channel"] == "email"
-    assert body["recipient"] == "client@example.com"
+    assert body["recipient"] == "ops@test.local"
     assert body["status"] == "recorded"
     assert body["subject"] == "Cost sheet shared"
 
@@ -109,20 +113,100 @@ def test_log_and_list_a_message(client, director_user):
 
 def test_messages_are_independently_repeatable(client, director_user):
     """Unlike the /send status-transition endpoints, logging a message is
-    not a one-time state change -- a resend or a follow-up on a different
-    channel should both be recordable."""
+    not a one-time state change -- a resend or a follow-up to a
+    different recipient should both be recordable. Cost Sheet can no
+    longer exercise this across channels (WhatsApp is blocked outright
+    for internal documents, M.7.2 rule 7) so this uses two internal
+    email recipients instead; test_sales_can_log_a_message_on_an_estimate
+    below covers a genuinely different channel on a client-facing doc."""
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)
 
-    _log_message(client, headers, "cost_sheet", cost_sheet_id, channel="email")
-    _log_message(client, headers, "cost_sheet", cost_sheet_id, channel="whatsapp", recipient="+911234567890")
+    _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="pm@test.local")
+    _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="director@test.local")
 
     listed = client.get(
         "/messages", params={"doc_type": "cost_sheet", "doc_id": cost_sheet_id}, headers=headers
     ).json()
     assert len(listed) == 2
-    channels = {m["channel"] for m in listed}
-    assert channels == {"email", "whatsapp"}
+    recipients = {m["recipient"] for m in listed}
+    assert recipients == {"pm@test.local", "director@test.local"}
+
+
+def test_whatsapp_is_blocked_outright_for_internal_documents(client, director_user):
+    """M.7.1 / M.7.2 rule 7: Cost Sheet 'may be emailed only to addresses
+    on the COMPANY domain list and never by WhatsApp' -- unlike the
+    client-consent gate (M.7.2 rule 5), there is no opt-in that makes
+    this acceptable."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+
+    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, channel="whatsapp", recipient="+911234567890")
+    assert res.status_code == 400
+    assert "whatsapp" in res.json()["detail"].lower()
+
+
+def test_internal_document_email_rejected_outside_the_domain_list(client, director_user):
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+
+    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="client@example.com")
+    assert res.status_code == 400
+    assert "internal-domain" in res.json()["detail"].lower()
+
+
+def test_internal_document_email_allowed_within_the_domain_list(client, director_user):
+    """No internal_email_domains Setting is configured in this test, so
+    the check falls back to the domains already in use by this
+    installation's own users -- test.local, from the director_user
+    fixture."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+
+    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="accounts@test.local")
+    assert res.status_code == 201, res.text
+
+
+def test_internal_domain_list_can_be_configured_explicitly(client, director_user):
+    """Once the Director sets internal_email_domains explicitly (Q.1
+    Communications), it replaces the user-email fallback rather than
+    extending it -- a domain no longer in the configured list is
+    rejected even if a user happens to have that email domain."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+
+    setting_res = client.post(
+        "/settings",
+        json={"key": "internal_email_domains", "value": "nestaprime.com", "reason": "go-live domain"},
+        headers=headers,
+    )
+    assert setting_res.status_code == 201, setting_res.text
+
+    still_blocked = _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="ops@test.local")
+    assert still_blocked.status_code == 400
+
+    now_allowed = _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="ops@nestaprime.com")
+    assert now_allowed.status_code == 201, now_allowed.text
+
+
+def test_domain_restriction_does_not_apply_to_client_facing_documents(client, director_user):
+    """Estimate/Quotation are governed only by the client's own consent
+    (M.7.2 rule 5), not the internal-domain list -- an external client
+    email address must still work."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _verified_cost_sheet(client, headers, project_id)
+    estimate_res = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=headers,
+    )
+    estimate_id = estimate_res.json()["id"]
+
+    res = _log_message(client, headers, "estimate", estimate_id, recipient="client@example.com")
+    assert res.status_code == 201, res.text
 
 
 def test_message_requires_the_document_to_exist(client, director_user):
@@ -149,7 +233,7 @@ def test_message_can_reference_an_existing_attachment(client, director_user):
     )
     attachment_id = upload_res.json()["id"]
 
-    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, attachment_id=attachment_id)
+    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="ops@test.local", attachment_id=attachment_id)
     assert res.status_code == 201, res.text
     assert res.json()["attachment_id"] == attachment_id
 
@@ -166,7 +250,7 @@ def test_message_rejects_an_attachment_from_a_different_document(client, directo
     )
     attachment_id = upload_res.json()["id"]
 
-    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, attachment_id=attachment_id)
+    res = _log_message(client, headers, "cost_sheet", cost_sheet_id, recipient="ops@test.local", attachment_id=attachment_id)
     assert res.status_code == 400
 
 
@@ -174,7 +258,8 @@ def test_message_rejects_an_unknown_attachment(client, director_user):
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)
     res = _log_message(
-        client, headers, "cost_sheet", cost_sheet_id, attachment_id="00000000-0000-0000-0000-000000000000"
+        client, headers, "cost_sheet", cost_sheet_id, recipient="ops@test.local",
+        attachment_id="00000000-0000-0000-0000-000000000000",
     )
     assert res.status_code == 404
 

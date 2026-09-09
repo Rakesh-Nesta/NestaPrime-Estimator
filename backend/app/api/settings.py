@@ -9,6 +9,7 @@ from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.setting import DocumentType, Override, Setting, SettingScope
+from app.models.user import User
 
 settings_router = APIRouter(prefix="/settings", tags=["settings"])
 overrides_router = APIRouter(prefix="/overrides", tags=["overrides"])
@@ -42,6 +43,26 @@ def get_gst_rate_percent(db: Session, default: float = 18.0) -> float:
     own default when no Setting row exists yet (e.g. a fresh test DB)."""
     value = get_current_setting_value(db, "gst_rate_percent")
     return float(value) if value is not None else default
+
+
+def get_internal_email_domains(db: Session) -> set[str]:
+    """Q.1 Communications 'internal-domain list' -- the domains Cost
+    Sheet/consumption-sheet/BOM messages (M.7.2 rule 7) may be emailed
+    to. Unlike gst_rate_percent, there's no sensible universal default
+    for a company's own email domain, so until the Director sets
+    `internal_email_domains` explicitly (comma-separated) this falls
+    back to the domains already in use by this installation's own USERS
+    -- self-configuring from real data instead of a fabricated default,
+    and still fail-closed (a domain nobody here has ever logged in from
+    is never treated as internal)."""
+    value = get_current_setting_value(db, "internal_email_domains")
+    if value:
+        return {domain.strip().lower() for domain in value.split(",") if domain.strip()}
+    return {
+        email.split("@", 1)[1].lower()
+        for (email,) in db.query(User.email).all()
+        if "@" in email
+    }
 
 
 class SettingOut(BaseModel):
