@@ -49,6 +49,23 @@ class EstimateOptionClientStatus(str, enum.Enum):
     DEMAND_RECEIVED = "demand_received"
 
 
+class ClientRejectionReason(str, enum.Enum):
+    """M.2 rule 9: 'an Estimate can also close as "Client rejected" with a
+    reason (price / scope / timing / competitor) so lost deals are counted
+    at the estimate stage, not only at quotation.' OTHER is this build's
+    own addition, not in the blueprint's literal list -- without it a
+    rejection that doesn't fit the other four would have no honest
+    category to pick, mirroring the OTHER catch-all documents.py's own
+    RejectReasonCategory already uses for a different (internal
+    Reject->Rework) purpose."""
+
+    PRICE = "price"
+    SCOPE = "scope"
+    TIMING = "timing"
+    COMPETITOR = "competitor"
+    OTHER = "other"
+
+
 class QuotationStatus(str, enum.Enum):
     DRAFT = "draft"
     RELEASED = "released"
@@ -238,6 +255,13 @@ class EstimateOption(Base):
         nullable=False,
     )
     client_demand_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # M.2 rule 9: required when client_status=REJECTED, cleared otherwise
+    # (see update_option_client_status) -- feeds the Pipeline report's
+    # rejected-by-reason breakdown so lost deals are counted at the
+    # estimate stage, not only at quotation.
+    rejection_reason: Mapped[ClientRejectionReason | None] = mapped_column(
+        Enum(ClientRejectionReason, name="client_rejection_reason"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False

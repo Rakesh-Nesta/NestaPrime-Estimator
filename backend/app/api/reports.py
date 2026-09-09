@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
 from app.db.session import get_db
-from app.models.document import Estimate, EstimateOption, Quotation, QuotationLine
+from app.models.document import Estimate, EstimateOption, EstimateOptionClientStatus, Quotation, QuotationLine
 from app.models.report import Report, ReportStatus, ReportType
 from app.models.setting import Override
 from app.models.sport import ProjectSport, Sport
@@ -66,6 +66,27 @@ def _build_pipeline_content(db: Session, period_from: date, period_to: date) -> 
     estimates_created = [e for e in estimates if _in_period(e.created_at, period_from, period_to)]
     estimates_sent = [e for e in estimates if _in_period(e.sent_at, period_from, period_to)]
 
+    # M.2 rule 9: "an Estimate can also close as 'Client rejected' with a
+    # reason ... so lost deals are counted at the estimate stage, not only
+    # at quotation." EstimateOption has no status-change timestamp of its
+    # own (same simplification as Won/Lost below), so this counts rejected
+    # options on the estimates-sent-in-period cohort as its period anchor,
+    # rather than a "rejected in period" date that doesn't exist.
+    sent_estimate_ids = [e.id for e in estimates_sent]
+    rejected_by_reason: dict[str, int] = {}
+    if sent_estimate_ids:
+        rejected_options = (
+            db.query(EstimateOption)
+            .filter(
+                EstimateOption.estimate_id.in_(sent_estimate_ids),
+                EstimateOption.client_status == EstimateOptionClientStatus.REJECTED,
+            )
+            .all()
+        )
+        for option in rejected_options:
+            key = option.rejection_reason.value if option.rejection_reason else "unspecified"
+            rejected_by_reason[key] = rejected_by_reason.get(key, 0) + 1
+
     quotations = db.query(Quotation).all()
     released_in_period = [q for q in quotations if _in_period(q.released_at, period_from, period_to)]
 
@@ -104,6 +125,7 @@ def _build_pipeline_content(db: Session, period_from: date, period_to: date) -> 
         "estimates": {
             "created": len(estimates_created),
             "sent": len(estimates_sent),
+            "rejected_by_reason": rejected_by_reason,
         },
         "quotations_released_in_period": {
             "count": len(released_in_period),

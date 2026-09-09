@@ -533,6 +533,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [openOptionAttachmentsFor, setOpenOptionAttachmentsFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
+  const [rejectionReasons, setRejectionReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const canWaive = role === "pm" || role === "director";
 
@@ -563,10 +564,11 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   });
   const handleSend = onAction(async (id) => sendEstimate(token, id));
   const handleRebase = onAction(async (id) => rebaseEstimate(token, id));
-  const handleClientStatus = onAction(async (estimateId, optionId, client_status, waiveEvidenceReason) =>
+  const handleClientStatus = onAction(async (estimateId, optionId, client_status, waiveEvidenceReason, rejectionReason) =>
     updateEstimateOptionClientStatus(token, estimateId, optionId, {
       client_status,
       ...(waiveEvidenceReason ? { waive_evidence_reason: waiveEvidenceReason } : {}),
+      ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
     })
   );
 
@@ -622,6 +624,9 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                   {sportNameByProjectSportId[opt.project_sport_id] ?? opt.project_sport_id} ({opt.package}): Rs{" "}
                   {opt.price_low.toLocaleString()} - Rs {opt.price_high.toLocaleString()} incl. GST ·{" "}
                   <StatusBadge status={opt.client_status} />
+                  {opt.rejection_reason && (
+                    <span className="text-gray-500"> ({opt.rejection_reason})</span>
+                  )}
                 </span>
                 <div className="flex items-center gap-1">
                   {canWaive && (
@@ -639,7 +644,23 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                   >
                     Approve
                   </button>
-                  <button onClick={() => handleClientStatus(est.id, opt.id, "rejected")} className="text-red-700 hover:underline">
+                  <select
+                    value={rejectionReasons[opt.id] || ""}
+                    onChange={(e) => setRejectionReasons((r) => ({ ...r, [opt.id]: e.target.value }))}
+                    className="text-xs border border-gray-300 rounded px-1 py-0.5"
+                  >
+                    <option value="">reason (for reject)…</option>
+                    <option value="price">Price</option>
+                    <option value="scope">Scope</option>
+                    <option value="timing">Timing</option>
+                    <option value="competitor">Competitor</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <button
+                    onClick={() => handleClientStatus(est.id, opt.id, "rejected", null, rejectionReasons[opt.id])}
+                    disabled={!rejectionReasons[opt.id]}
+                    className="text-red-700 hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+                  >
                     Reject
                   </button>
                   <button

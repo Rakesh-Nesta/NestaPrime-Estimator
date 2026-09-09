@@ -22,6 +22,7 @@ from app.models.client import Client
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus
 from app.models.vendor import Vendor
 from app.models.document import (
+    ClientRejectionReason,
     CostSheet,
     CostSheetLine,
     CostSheetStatus,
@@ -1170,6 +1171,7 @@ class EstimateOptionOut(BaseModel):
     price_high: float
     client_status: EstimateOptionClientStatus
     client_demand_note: str | None
+    rejection_reason: ClientRejectionReason | None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1442,6 +1444,10 @@ class EstimateOptionStatusUpdate(BaseModel):
     client_status: EstimateOptionClientStatus
     client_demand_note: str | None = None
     waive_evidence_reason: str | None = None
+    # M.2 rule 9: required when client_status=REJECTED (enforced in the
+    # endpoint body, not here, since the requirement is conditional on
+    # another field's value rather than universal).
+    rejection_reason: ClientRejectionReason | None = None
 
 
 @estimates_router.patch(
@@ -1471,13 +1477,26 @@ def update_option_client_status(
         _enforce_approval_evidence(
             db, DocumentType.ESTIMATE, estimate_id, current_user, payload.waive_evidence_reason, request=request
         )
+    if payload.client_status == EstimateOptionClientStatus.REJECTED and payload.rejection_reason is None:
+        raise HTTPException(
+            status_code=422,
+            detail="rejection_reason is required when client_status is rejected (M.2 rule 9)",
+        )
 
     old_status = option.client_status
     option.client_status = payload.client_status
     option.client_demand_note = payload.client_demand_note
+    # Only meaningful while REJECTED -- cleared on any other transition
+    # (e.g. re-approved after a corrected quote) so it never lingers as a
+    # stale reason for a status the option no longer holds.
+    option.rejection_reason = (
+        payload.rejection_reason if payload.client_status == EstimateOptionClientStatus.REJECTED else None
+    )
     write_audit_log_entry(
         db, current_user, "estimate_option", option.id, "client_status",
-        old_value=old_status.value, new_value=payload.client_status.value, request=request,
+        old_value=old_status.value, new_value=payload.client_status.value,
+        reason=option.rejection_reason.value if option.rejection_reason else None,
+        request=request,
     )
     db.commit()
     db.refresh(option)

@@ -141,7 +141,7 @@ def test_rejecting_an_option_does_not_require_evidence(client, director_user):
 
     res = client.patch(
         f"/estimates/{estimate_id}/options/{option_id}/client-status",
-        json={"client_status": "rejected"},
+        json={"client_status": "rejected", "rejection_reason": "other"},
         headers=headers,
     )
     assert res.status_code == 200
