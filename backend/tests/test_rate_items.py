@@ -144,3 +144,190 @@ def test_sales_role_cannot_read_rate_items(client, db_session):
 
     res = client.get("/rate-items", headers=headers)
     assert res.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# J.1 "Bulk actions (all AI / all Manual / category)"
+# ---------------------------------------------------------------------------
+
+
+def _sales_headers(client, db_session):
+    from app.core.security import hash_password
+    from app.models.user import User, UserRole
+
+    user = User(
+        name="Test Sales", email="sales-bulk@test.local", hashed_password=hash_password("TestPass!1"),
+        role=UserRole.SALES,
+    )
+    db_session.add(user)
+    db_session.commit()
+    res = client.post("/auth/login", data={"username": "sales-bulk@test.local", "password": "TestPass!1"})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+def test_bulk_mark_all_manual_items_promotes_them_to_ai(client, director_user):
+    headers = _login(client, director_user)
+    id_a = client.post("/rate-items", json={**RATE_ITEM_FIELDS, "item_name": "A"}, headers=headers).json()["id"]
+    id_b = client.post("/rate-items", json={**RATE_ITEM_FIELDS, "item_name": "B"}, headers=headers).json()["id"]
+
+    res = client.post("/rate-items/bulk-mark", json={"source": "ai"}, headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["updated_count"] == 2
+    assert set(body["updated_item_ids"]) == {id_a, id_b}
+
+    item_a = client.get("/rate-items", headers=headers).json()
+    a = next(i for i in item_a if i["id"] == id_a)
+    assert a["source"] == "ai"
+    assert a["verified"] is True
+    assert a["confirmed_date"] is not None
+
+
+def test_bulk_mark_all_ai_items_reverts_them_to_manual(client, director_user):
+    """The reverse of the confirm flow: un-confirming a batch back to
+    Manual clears verified and confirmed_date, same shape as a freshly
+    created item."""
+    headers = _login(client, director_user)
+    item_id = client.post("/rate-items", json=RATE_ITEM_FIELDS, headers=headers).json()["id"]
+    client.post(f"/rate-items/{item_id}/confirm", headers=headers)
+
+    res = client.post("/rate-items/bulk-mark", json={"source": "manual"}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["updated_count"] == 1
+
+    item = next(i for i in client.get("/rate-items", headers=headers).json() if i["id"] == item_id)
+    assert item["source"] == "manual"
+    assert item["verified"] is False
+    assert item["confirmed_date"] is None
+
+
+def test_bulk_mark_with_category_only_touches_that_category(client, director_user):
+    headers = _login(client, director_user)
+    steel_id = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "category": "MS structure", "item_name": "Steel"}, headers=headers
+    ).json()["id"]
+    turf_id = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "category": "Turf", "item_name": "Turf roll"}, headers=headers
+    ).json()["id"]
+
+    res = client.post("/rate-items/bulk-mark", json={"source": "ai", "category": "MS structure"}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["updated_count"] == 1
+    assert res.json()["updated_item_ids"] == [steel_id]
+
+    turf = next(i for i in client.get("/rate-items", headers=headers).json() if i["id"] == turf_id)
+    assert turf["source"] == "manual"
+
+
+def test_bulk_mark_skips_items_already_at_the_target_source(client, director_user):
+    headers = _login(client, director_user)
+    already_ai_id = client.post("/rate-items", json=RATE_ITEM_FIELDS, headers=headers).json()["id"]
+    client.post(f"/rate-items/{already_ai_id}/confirm", headers=headers)
+    still_manual_id = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "item_name": "Other"}, headers=headers
+    ).json()["id"]
+
+    res = client.post("/rate-items/bulk-mark", json={"source": "ai"}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["updated_count"] == 1
+    assert res.json()["updated_item_ids"] == [still_manual_id]
+
+
+def test_sales_cannot_bulk_mark_rate_items(client, director_user, db_session):
+    _login(client, director_user)
+    headers = _sales_headers(client, db_session)
+    res = client.post("/rate-items/bulk-mark", json={"source": "ai"}, headers=headers)
+    assert res.status_code == 403
+
+
+def test_bulk_rate_update_applies_percent_change_across_the_category(client, director_user):
+    headers = _login(client, director_user)
+    id_a = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "category": "Steel", "item_name": "A", "rate": 100.0}, headers=headers
+    ).json()["id"]
+    id_b = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "category": "Steel", "item_name": "B", "rate": 50.0}, headers=headers
+    ).json()["id"]
+    other_category_id = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "category": "Turf", "item_name": "C", "rate": 200.0}, headers=headers
+    ).json()["id"]
+
+    res = client.post(
+        "/rate-items/bulk-rate-update",
+        json={"category": "Steel", "percent_change": 6.0, "reason": "Steel price rise"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["updated_count"] == 2
+    rates_by_id = {i["rate_item"]["id"]: i["rate_item"]["rate"] for i in body["items"]}
+    assert rates_by_id[id_a] == 106.0
+    assert rates_by_id[id_b] == 53.0
+
+    other = next(i for i in client.get("/rate-items", headers=headers).json() if i["id"] == other_category_id)
+    assert other["rate"] == 200.0  # untouched -- different category
+
+    history_a = client.get(f"/rate-items/{id_a}/history", headers=headers).json()
+    assert len(history_a) == 2
+    assert history_a[0]["rate"] == 106.0
+    assert history_a[0]["reason"] == "Steel price rise"
+    assert history_a[1]["effective_to"] is not None
+
+
+def test_bulk_rate_update_skips_zero_rate_items(client, director_user):
+    headers = _login(client, director_user)
+    zero_id = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "category": "Freebie", "rate": 0.0}, headers=headers
+    ).json()["id"]
+
+    res = client.post(
+        "/rate-items/bulk-rate-update",
+        json={"category": "Freebie", "percent_change": 10.0, "reason": "x"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["updated_count"] == 0
+
+    history = client.get(f"/rate-items/{zero_id}/history", headers=headers).json()
+    assert len(history) == 1  # only the opening row -- no bulk row added
+
+
+def test_bulk_rate_update_unknown_category_404s(client, director_user):
+    headers = _login(client, director_user)
+    res = client.post(
+        "/rate-items/bulk-rate-update",
+        json={"category": "Does not exist", "percent_change": 5.0, "reason": "x"},
+        headers=headers,
+    )
+    assert res.status_code == 404
+
+
+def test_bulk_rate_update_triggers_commodity_alert_for_watched_items(client, director_user):
+    headers = _login(client, director_user)
+    client.post(
+        "/rate-items",
+        json={**RATE_ITEM_FIELDS, "category": "Steel", "rate": 68.0, "is_commodity_watched": True},
+        headers=headers,
+    )
+
+    # 68 -> ~80 is a ~17.6% move, over the 10% default threshold.
+    res = client.post(
+        "/rate-items/bulk-rate-update",
+        json={"category": "Steel", "percent_change": 17.6, "reason": "Steel price spike"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    alert = res.json()["items"][0]["commodity_alert"]
+    assert alert is not None
+    assert alert["triggered"] is True
+
+
+def test_sales_cannot_bulk_update_rates(client, director_user, db_session):
+    _login(client, director_user)
+    headers = _sales_headers(client, db_session)
+    res = client.post(
+        "/rate-items/bulk-rate-update",
+        json={"category": "Steel", "percent_change": 5.0, "reason": "x"},
+        headers=headers,
+    )
+    assert res.status_code == 403

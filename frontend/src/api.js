@@ -291,6 +291,24 @@ export async function syncDraftLinesToMasterRate(token, rateItemId) {
   return handle(res);
 }
 
+export async function bulkMarkRateItems(token, payload) {
+  const res = await fetch(`${API_BASE}/rate-items/bulk-mark`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function bulkUpdateRateItems(token, payload) {
+  const res = await fetch(`${API_BASE}/rate-items/bulk-rate-update`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function listMarginPolicies(token) {
   const res = await fetch(`${API_BASE}/margin-policies`, { headers: authHeaders(token) });
   return handle(res);

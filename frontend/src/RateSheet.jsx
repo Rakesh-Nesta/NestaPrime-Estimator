@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+  bulkMarkRateItems,
+  bulkUpdateRateItems,
   confirmRateItem,
   createRateItem,
   getRateHistory,
@@ -150,6 +152,8 @@ export default function RateSheet({ token, onBack }) {
         </button>
       </form>
 
+      <BulkActionsPanel token={token} categories={[...new Set(items.map((i) => i.category))].sort()} onChanged={load} />
+
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Items ({items.length})</h3>
         <div className="space-y-2">
@@ -165,6 +169,159 @@ export default function RateSheet({ token, onBack }) {
           ))}
           {items.length === 0 && <p className="text-sm text-gray-400">No rate items yet.</p>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkActionsPanel({ token, categories, onChanged }) {
+  const [markCategory, setMarkCategory] = useState("");
+  const [markBusy, setMarkBusy] = useState(false);
+  const [markError, setMarkError] = useState("");
+  const [markResult, setMarkResult] = useState("");
+
+  const [pctCategory, setPctCategory] = useState("");
+  const [pctChange, setPctChange] = useState("");
+  const [pctReason, setPctReason] = useState("");
+  const [pctBusy, setPctBusy] = useState(false);
+  const [pctError, setPctError] = useState("");
+  const [pctResult, setPctResult] = useState(null);
+
+  async function handleMark(source) {
+    setMarkError("");
+    setMarkResult("");
+    setMarkBusy(true);
+    try {
+      const res = await bulkMarkRateItems(token, { source, category: markCategory || null });
+      setMarkResult(
+        `${res.updated_count} item(s) marked ${source === "ai" ? "AI (confirmed)" : "Manual"}${
+          markCategory ? ` in "${markCategory}"` : ""
+        }.`
+      );
+      await onChanged();
+    } catch (err) {
+      setMarkError(err.message);
+    } finally {
+      setMarkBusy(false);
+    }
+  }
+
+  async function handlePercentUpdate(e) {
+    e.preventDefault();
+    setPctError("");
+    setPctResult(null);
+    setPctBusy(true);
+    try {
+      const res = await bulkUpdateRateItems(token, {
+        category: pctCategory,
+        percent_change: Number(pctChange),
+        reason: pctReason,
+      });
+      setPctResult(res);
+      setPctChange("");
+      setPctReason("");
+      await onChanged();
+    } catch (err) {
+      setPctError(err.message);
+    } finally {
+      setPctBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-4">
+      <h3 className="text-sm font-semibold text-gray-700">Bulk actions (J.1)</h3>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-1">
+          Mark all items (or just one category) AI/Manual in one action -- the multi-item version of the per-row
+          Confirm button and its reverse.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={markCategory}
+            onChange={(e) => setMarkCategory(e.target.value)}
+            className="rounded border border-gray-300 px-2 py-1 text-xs"
+          >
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleMark("ai")}
+            disabled={markBusy}
+            className="text-xs bg-green-600 text-white rounded px-3 py-1 hover:bg-green-700 disabled:opacity-50"
+          >
+            Mark all AI
+          </button>
+          <button
+            onClick={() => handleMark("manual")}
+            disabled={markBusy}
+            className="text-xs bg-gray-500 text-white rounded px-3 py-1 hover:bg-gray-600 disabled:opacity-50"
+          >
+            Mark all Manual
+          </button>
+        </div>
+        {markError && <p className="text-xs text-red-600 mt-1">{markError}</p>}
+        {markResult && <p className="text-xs text-green-700 mt-1">{markResult}</p>}
+      </div>
+
+      <div className="border-t border-gray-100 pt-3">
+        <p className="text-xs text-gray-500 mb-1">
+          Apply a % change to a whole category (e.g. "Steel +6%") with one effective date -- Q.2 rule 5's Master
+          Settings bulk-update, for the rate sheet itself.
+        </p>
+        <form onSubmit={handlePercentUpdate} className="flex flex-wrap items-center gap-2">
+          <select
+            value={pctCategory}
+            onChange={(e) => setPctCategory(e.target.value)}
+            required
+            className="rounded border border-gray-300 px-2 py-1 text-xs"
+          >
+            <option value="" disabled>
+              Select category…
+            </option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            step="0.1"
+            required
+            value={pctChange}
+            onChange={(e) => setPctChange(e.target.value)}
+            placeholder="% change, e.g. 6"
+            className="rounded border border-gray-300 px-2 py-1 text-xs w-32"
+          />
+          <input
+            required
+            value={pctReason}
+            onChange={(e) => setPctReason(e.target.value)}
+            placeholder="Reason"
+            className="rounded border border-gray-300 px-2 py-1 text-xs flex-1 min-w-[10rem]"
+          />
+          <button
+            type="submit"
+            disabled={pctBusy}
+            className="text-xs bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+          >
+            {pctBusy ? "Applying…" : "Apply to category"}
+          </button>
+        </form>
+        {pctError && <p className="text-xs text-red-600 mt-1">{pctError}</p>}
+        {pctResult && (
+          <p className="text-xs text-green-700 mt-1">
+            {pctResult.updated_count} item(s) updated.
+            {pctResult.items.some((i) => i.commodity_alert?.triggered) &&
+              " Commodity alert triggered on one or more watched items -- open each item's history to review."}
+          </p>
+        )}
       </div>
     </div>
   );

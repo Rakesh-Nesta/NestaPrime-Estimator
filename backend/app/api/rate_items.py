@@ -426,3 +426,136 @@ def sync_draft_lines_to_master_rate(
     db.commit()
 
     return BulkSyncResult(updated_line_count=len(lines), updated_cost_sheet_ids=list(updated_cost_sheet_ids))
+
+
+# --------------------------------------------------------------------------
+# J.1 "Bulk actions (all AI / all Manual / category)" -- one filterable
+# mark action (source flips AI<->Manual across many items at once, the
+# multi-item version of POST .../confirm and its reverse) and one
+# category-wide rate % change (the RATE_ITEM-table sibling of Q.2 rule 5's
+# already-built Master Settings bulk_update_settings, since a "category" in
+# J.1 means a group of rate items, not a group of settings).
+# --------------------------------------------------------------------------
+
+
+class BulkMarkRequest(BaseModel):
+    source: RateSource
+    category: str | None = None  # None = every rate item, regardless of category
+
+
+class BulkMarkResult(BaseModel):
+    updated_count: int
+    updated_item_ids: list[uuid.UUID]
+
+
+@rate_items_router.post("/bulk-mark", response_model=BulkMarkResult)
+def bulk_mark_rate_items(
+    payload: BulkMarkRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*CONFIRM_ROLES)),
+):
+    """'All AI' / 'all Manual' (payload.category omitted) or a single
+    category's items (payload.category set), flipped to payload.source in
+    one action. Marking AI mirrors POST .../confirm (verified + today's
+    confirmed_date); marking Manual is the reverse -- unverified, no
+    confirmed_date, same as a freshly-created item."""
+    query = db.query(RateItem).filter(RateItem.source != payload.source)
+    if payload.category is not None:
+        query = query.filter(RateItem.category == payload.category)
+    items = query.all()
+
+    for item in items:
+        item.source = payload.source
+        if payload.source == RateSource.AI:
+            item.verified = True
+            item.confirmed_date = datetime.now(UTC).date()
+        else:
+            item.verified = False
+            item.confirmed_date = None
+    db.commit()
+
+    return BulkMarkResult(updated_count=len(items), updated_item_ids=[i.id for i in items])
+
+
+class BulkRateUpdateRequest(BaseModel):
+    category: str
+    percent_change: float  # e.g. 6.0 for "steel +6%", -5.0 for "-5%"
+    reason: str = Field(min_length=1)
+    effective_from: date | None = None
+
+
+class BulkRateUpdateResult(BaseModel):
+    updated_count: int
+    items: list[RateItemWithAlertOut]
+
+
+@rate_items_router.post("/bulk-rate-update", response_model=BulkRateUpdateResult)
+def bulk_update_rate_items(
+    payload: BulkRateUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """J.1's category-wide '% change to a whole category' bulk action for
+    the rate sheet -- same RATE_HISTORY-preserving mechanics as the
+    single-item POST .../rate (close the open history row, open a new
+    one), applied to every item in the category. Items already at zero
+    rate are skipped (any % change of zero is still zero -- nothing to
+    record). Each updated item's commodity alert is evaluated exactly as
+    it is for a single-item change, so a bulk move that crosses the
+    watch threshold surfaces the same warning it would one item at a
+    time."""
+    items = db.query(RateItem).filter(RateItem.category == payload.category).all()
+    if not items:
+        raise HTTPException(status_code=404, detail=f"No rate items found in category '{payload.category}'")
+
+    effective_from = payload.effective_from or date.today()
+    threshold = _commodity_alert_threshold_percent(db)
+    results: list[RateItemWithAlertOut] = []
+
+    for item in items:
+        previous_rate = float(item.rate)
+        if previous_rate == 0:
+            continue
+        new_rate = round(previous_rate * (1 + payload.percent_change / 100), 2)
+        if new_rate == previous_rate:
+            continue
+
+        open_row = (
+            db.query(RateHistory)
+            .filter(RateHistory.rate_item_id == item.id, RateHistory.effective_to.is_(None))
+            .order_by(RateHistory.effective_from.desc())
+            .first()
+        )
+        if open_row is not None:
+            closed_to = effective_from - timedelta(days=1)
+            open_row.effective_to = closed_to if closed_to >= open_row.effective_from else open_row.effective_from
+
+        item.rate = new_rate
+        db.add(RateHistory(
+            rate_item_id=item.id,
+            rate=new_rate,
+            effective_from=effective_from,
+            effective_to=None,
+            changed_by_id=current_user.id,
+            reason=payload.reason,
+        ))
+        db.flush()
+
+        alert = None
+        if item.is_commodity_watched:
+            percent_move = (new_rate - previous_rate) / previous_rate * 100
+            if abs(percent_move) >= threshold:
+                draft_rows, verified_rows = _affected_cost_sheets(db, item.id)
+                alert = CommodityAlertOut(
+                    triggered=True,
+                    previous_rate=previous_rate,
+                    new_rate=new_rate,
+                    percent_move=round(percent_move, 2),
+                    threshold_percent=threshold,
+                    draft_cost_sheets=_to_affected_out(draft_rows),
+                    verified_cost_sheets=_to_affected_out(verified_rows),
+                )
+        results.append(RateItemWithAlertOut(rate_item=_to_out(db, item), commodity_alert=alert))
+
+    db.commit()
+    return BulkRateUpdateResult(updated_count=len(results), items=results)
