@@ -29,7 +29,11 @@ def _create_client_record(client, headers, client_type="school", name="K1 Overhe
 
 def _create_project(client, headers, client_id, **overrides):
     fields = {
-        "client_id": client_id, "city": "Mumbai", "site_condition": "level", "soil_type": "normal",
+        # Bengaluru is seeded at neutral 1.0/1.0/1.0 regional multipliers --
+        # this file's math is about K.1 overhead percentages, not regional
+        # pricing, so a non-neutral city (e.g. Mumbai) would silently
+        # distort every expected total here.
+        "client_id": client_id, "city": "Bengaluru", "site_condition": "level", "soil_type": "normal",
         "building_status": "open_air", "site_access": "good", "power_available": "yes",
         "water_available": True, "package": "standard",
         **overrides,

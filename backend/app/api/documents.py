@@ -38,6 +38,7 @@ from app.models.document import (
 from app.models.margin_policy import MarginPolicy
 from app.models.project import Package, Project
 from app.models.rate_item import LabourCategory, RateSource
+from app.models.regional_multiplier import RegionalMultiplier
 from app.models.setting import DocumentType, Override
 from app.models.sport import ProjectSport
 
@@ -746,6 +747,22 @@ def _categories_missing_activity_rate(db: Session, cost_sheet_id: uuid.UUID) -> 
     return missing
 
 
+def _regional_multipliers_for_project(db: Session, project: Project | None) -> tuple[float, float]:
+    """J.1: 'Regional multipliers apply to AI/master rates only. A Manual
+    rate carries city_of_quote and is used as entered (it is already
+    local).' Returns (material_multiplier, labour_multiplier) for the
+    project's city -- neutral 1.0/1.0 when the project has no city set
+    yet, or the city is 'Other'/free text with no matching
+    RegionalMultiplier row (B.1's own allowance; Project.city is
+    unenforced free text for exactly this reason)."""
+    if project is None:
+        return 1.0, 1.0
+    row = db.query(RegionalMultiplier).filter(RegionalMultiplier.city == project.city).first()
+    if row is None:
+        return 1.0, 1.0
+    return float(row.material_multiplier), float(row.labour_multiplier)
+
+
 def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     """K.1 steps 1 (material), 2 (labour -- activity rate first, category-%
     fallback per J.2), 3 (site establishment %, D.4; freight/crane are
@@ -775,7 +792,19 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     two passes -- the first computes each package's pre-cess subtotal (and
     their sum, to test the threshold once), the second applies the
     resulting cess percentage (0% or the configured rate, same for every
-    package once decided) ahead of that package's own contingency."""
+    package once decided) ahead of that package's own contingency.
+
+    J.1: 'Regional multipliers apply to AI/master rates only ... the
+    labour multiplier applies to the labour Rs amount, not to the
+    labour %.' So material is scaled by the project city's
+    material_multiplier only for AI-sourced lines (a Manual line's rate
+    already carries city_of_quote -- it's already local); the J.2
+    fallback-%-of-material labour path reads the un-scaled material
+    figure, since that % is a fixed ratio to base material cost, not a
+    regionally varying one; and whichever labour Rs amount results
+    (activity-rate or fallback-%) is then scaled by the city's
+    labour_multiplier, always -- there is no 'manual local labour rate'
+    equivalent to a Manual material rate's city_of_quote."""
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet.id).all()
     if not lines:
         raise HTTPException(status_code=400, detail="Cannot recompute a cost sheet with no lines")
@@ -797,10 +826,14 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
         float(blended_fallback.default_percent) if blended_fallback else BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT
     )
 
+    material_multiplier, labour_multiplier = _regional_multipliers_for_project(db, project)
+
     package_base: dict[WorkPackage, float] = {}
     for line in lines:
-        material = float(line.quantity) * float(line.rate)
-        labour, _warning = _labour_amount_and_warning(db, line, material, blended_fallback_percent)
+        base_material = float(line.quantity) * float(line.rate)
+        labour, _warning = _labour_amount_and_warning(db, line, base_material, blended_fallback_percent)
+        material = base_material * material_multiplier if line.source == RateSource.AI else base_material
+        labour *= labour_multiplier
         package_base[line.work_package] = package_base.get(line.work_package, 0.0) + material + labour
 
     site_establishment_percent = _get_effective_setting_float(

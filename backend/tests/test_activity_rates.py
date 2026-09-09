@@ -28,7 +28,11 @@ def _create_client_record(client, headers):
 def _create_project(client, headers, client_id):
     fields = {
         "client_id": client_id,
-        "city": "Mumbai",
+        # Bengaluru is seeded at neutral 1.0/1.0/1.0 regional multipliers --
+        # this file's math is about J.2 activity rates, not regional
+        # pricing, so a non-neutral city (e.g. Mumbai) would silently
+        # distort every expected total here.
+        "city": "Bengaluru",
         "site_condition": "level",
         "soil_type": "normal",
         "building_status": "open_air",
