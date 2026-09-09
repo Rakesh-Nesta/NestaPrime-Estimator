@@ -1,12 +1,12 @@
 import math
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.api.settings import get_gst_rate_percent
+from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.project import Project
@@ -44,8 +44,38 @@ class TenderDetailsOut(BaseModel):
     bid_due_date: date | None
     pre_bid_meeting_date: date | None
     opening_date: date | None
+    # Derived, M.3/Part L reminders -- computed at read time (no
+    # scheduler exists in this app to fire an actual reminder message;
+    # see documents.py's own note on the same limitation). True inside
+    # the lookahead window up to and including the date itself.
+    pre_bid_meeting_reminder_due: bool = False
+    bid_due_reminder_due: bool = False
+    # True once EMD validity has lapsed -- the deposit should have been
+    # claimed back by then.
+    emd_refund_reminder_due: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+TENDER_REMINDER_LOOKAHEAD_DAYS_DEFAULT = 2
+
+
+def _tender_reminder_lookahead_days(db: Session) -> int:
+    value = get_current_setting_value(db, "tender_reminder_lookahead_days")
+    return int(value) if value is not None else TENDER_REMINDER_LOOKAHEAD_DAYS_DEFAULT
+
+
+def _tender_details_to_out(db: Session, row: TenderDetails) -> TenderDetailsOut:
+    out = TenderDetailsOut.model_validate(row)
+    today = datetime.now(UTC).date()
+    lookahead = timedelta(days=_tender_reminder_lookahead_days(db))
+    if row.pre_bid_meeting_date is not None:
+        out.pre_bid_meeting_reminder_due = today <= row.pre_bid_meeting_date <= today + lookahead
+    if row.bid_due_date is not None:
+        out.bid_due_reminder_due = today <= row.bid_due_date <= today + lookahead
+    if row.emd_validity_date is not None:
+        out.emd_refund_reminder_due = today > row.emd_validity_date
+    return out
 
 
 @tender_details_router.post(
@@ -75,7 +105,7 @@ def create_tender_details(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return row
+    return _tender_details_to_out(db, row)
 
 
 @tender_details_router.get("/{project_id}/tender-details", response_model=TenderDetailsOut)
@@ -87,7 +117,7 @@ def get_tender_details(
     row = db.query(TenderDetails).filter(TenderDetails.project_id == project_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Tender details not found for this project")
-    return row
+    return _tender_details_to_out(db, row)
 
 
 class TechnicalBidChecklistItemOut(BaseModel):

@@ -150,13 +150,28 @@ export default function TenderMode({ token, project, onBack }) {
       {details ? (
         <div className="bg-white shadow rounded-lg p-6 space-y-2 text-sm">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">Tender Details</h3>
-          <Row label="EMD amount" value={details.emd_amount ? `Rs ${details.emd_amount.toLocaleString()}` : "—"} />
-          <Row label="EMD validity" value={details.emd_validity_date || "—"} />
+          <Row
+            label="EMD amount"
+            value={details.emd_amount ? `Rs ${details.emd_amount.toLocaleString()}` : "—"}
+          />
+          <Row
+            label="EMD validity"
+            value={details.emd_validity_date || "—"}
+            reminder={details.emd_refund_reminder_due && "validity lapsed -- claim the refund"}
+          />
           <Row label="Retention %" value={`${details.retention_percent}%`} />
           <Row label="Performance BG %" value={`${details.performance_bg_percent}%`} />
           <Row label="DLP" value={`${details.dlp_months} months`} />
-          <Row label="Bid due date" value={details.bid_due_date || "—"} />
-          <Row label="Pre-bid meeting" value={details.pre_bid_meeting_date || "—"} />
+          <Row
+            label="Bid due date"
+            value={details.bid_due_date || "—"}
+            reminder={details.bid_due_reminder_due && "coming up"}
+          />
+          <Row
+            label="Pre-bid meeting"
+            value={details.pre_bid_meeting_date || "—"}
+            reminder={details.pre_bid_meeting_reminder_due && "coming up"}
+          />
           <Row label="Opening date" value={details.opening_date || "—"} />
         </div>
       ) : (
@@ -260,11 +275,16 @@ export default function TenderMode({ token, project, onBack }) {
   );
 }
 
-function Row({ label, value, bold }) {
+function Row({ label, value, bold, reminder }) {
   return (
     <div className={`flex items-center justify-between ${bold ? "font-semibold" : ""}`}>
       <span className="text-gray-600">{label}</span>
-      <span>{value}</span>
+      <span>
+        {value}
+        {reminder && (
+          <span className="ml-2 text-xs text-red-700 bg-red-50 rounded px-1.5 py-0.5">{reminder}</span>
+        )}
+      </span>
     </div>
   );
 }

@@ -382,6 +382,11 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
               {cs.cost_total != null && <> · Rs {cs.cost_total.toLocaleString()}</>} ·{" "}
               <StatusBadge status={cs.status} />
               {cs.auto_generated && <span className="text-amber-700 text-xs"> · skip-generated</span>}
+              {cs.sla_breached && (
+                <span className="text-red-700 text-xs bg-red-50 rounded px-1.5 py-0.5 ml-1">
+                  SLA breached (M.3) -- awaiting verification
+                </span>
+              )}
             </span>
             <div className="flex items-center gap-3">
               {role !== "sales" && (cs.status === "draft" || cs.status === "unverified") && (
@@ -901,6 +906,11 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
               {q.cost_basis_rebase_required && (
                 <span className="text-red-700"> · cost basis changed — rebase the Estimate</span>
               )}
+              {q.sla_breached && (
+                <span className="text-red-700 text-xs bg-red-50 rounded px-1.5 py-0.5 ml-1">
+                  SLA breached (M.3) -- awaiting release
+                </span>
+              )}
             </span>
             <span className="font-semibold">Rs {q.quotation_total.toLocaleString()}</span>
           </div>
@@ -1241,6 +1251,7 @@ function StatusBadge({ status }) {
     superseded: "bg-gray-100 text-gray-400",
     rejected: "bg-red-50 text-red-700",
     lost: "bg-red-50 text-red-700",
+    expired: "bg-red-50 text-red-700",
     demand_received: "bg-amber-50 text-amber-700",
   };
   return (

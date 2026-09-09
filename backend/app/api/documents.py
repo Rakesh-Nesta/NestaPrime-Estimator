@@ -262,6 +262,58 @@ def _rate_blind_mode_on(db: Session) -> bool:
     return value is not None and value.strip().lower() == "true"
 
 
+# ---------------------------------------------------------------------------
+# "Jobs runner", the honest way: this app has no background scheduler at
+# all, so nothing here is a cron job. Every date-driven state below --
+# an Estimate/Quotation past its validity, a pending approval sitting
+# past its SLA -- is instead computed fresh on every read, the same
+# pattern RateItemOut.is_stale and the C.3 dimension-deviation flags
+# already use. Nothing is ever written back for having gone overdue.
+# ---------------------------------------------------------------------------
+
+SLA_WORKING_DAYS_DEFAULT = 1  # M.3: "SLA timers (1 working day, breach -> escalation)"
+
+
+def _is_past(moment: datetime | None) -> bool:
+    """expires_at columns are typed `date | None` but stored as a plain
+    (timezone-naive) DateTime -- compare against a same-awareness `now`
+    rather than assume either representation."""
+    if moment is None:
+        return False
+    now = datetime.now(UTC)
+    if moment.tzinfo is None:
+        now = now.replace(tzinfo=None)
+    return now > moment
+
+
+def _working_days_elapsed(since: datetime) -> int:
+    """Same rule M.7.3's vendor-reply reminder already uses: counts
+    Mon-Fri days strictly between `since` and now. No public-holiday
+    calendar exists anywhere in this app, so only weekends are excluded."""
+    start = since.date() if isinstance(since, datetime) else since
+    today = datetime.now(UTC).date()
+    days = 0
+    d = start
+    while d < today:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            days += 1
+    return days
+
+
+def _sla_breached(db: Session, since: datetime) -> bool:
+    """M.3: 'Every approval step has ... an SLA timer (1 working day
+    [confirm]); breach -> escalation, shown red on the dashboard.' The
+    escalation notification itself isn't built -- sending one on every
+    GET that happens to land after the breach would just spam the same
+    people repeatedly with no record of who's already been told: real
+    escalation needs its own "already notified" state, which needs a
+    real scheduler to set once, not a request handler. The visible half
+    (flagging it red) needs neither, so that's what this covers."""
+    threshold_days = _get_setting_int(db, "approval_sla_working_days", SLA_WORKING_DAYS_DEFAULT)
+    return _working_days_elapsed(since) >= threshold_days
+
+
 def _document_no(project_no: str, prefix: str, revision_major: int, revision_minor: int = 0) -> str:
     """M.2 rule 10: the CS-/EST-/NPQ- documents reuse the project's own
     YYMM-#### suffix, e.g. project P-2609-0018 -> CS-2609-0018-R1."""
@@ -303,14 +355,17 @@ class CostSheetOut(BaseModel):
     verified_at: datetime | None
     created_by_id: uuid.UUID
     created_at: datetime
+    sla_breached: bool = False  # derived, M.3 -- true only while status is draft/unverified awaiting verification
 
     model_config = ConfigDict(from_attributes=True)
 
 
-def _cost_sheet_to_out(cost_sheet: CostSheet, role: str) -> CostSheetOut:
+def _cost_sheet_to_out(db: Session, cost_sheet: CostSheet, role: str) -> CostSheetOut:
     out = CostSheetOut.model_validate(cost_sheet)
     if role == "sales":
         out.cost_total = None
+    if cost_sheet.status in (CostSheetStatus.DRAFT, CostSheetStatus.UNVERIFIED):
+        out.sla_breached = _sla_breached(db, cost_sheet.created_at)
     return out
 
 
@@ -369,7 +424,7 @@ def create_cost_sheet(
         )
         db.commit()
 
-    return cost_sheet
+    return _cost_sheet_to_out(db, cost_sheet, current_user.role.value)
 
 
 @cost_sheets_router.get("/projects/{project_id}/cost-sheets", response_model=list[CostSheetOut])
@@ -389,7 +444,7 @@ def list_cost_sheets(
         .order_by(CostSheet.revision_major.desc())
         .all()
     )
-    return [_cost_sheet_to_out(row, current_user.role.value) for row in rows]
+    return [_cost_sheet_to_out(db, row, current_user.role.value) for row in rows]
 
 
 @cost_sheets_router.get("/cost-sheets/{cost_sheet_id}", response_model=CostSheetOut)
@@ -402,7 +457,7 @@ def get_cost_sheet(
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not cost_sheet:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
-    return _cost_sheet_to_out(cost_sheet, current_user.role.value)
+    return _cost_sheet_to_out(db, cost_sheet, current_user.role.value)
 
 
 @cost_sheets_router.post("/cost-sheets/{cost_sheet_id}/verify", response_model=CostSheetOut)
@@ -469,7 +524,7 @@ def verify_cost_sheet(
 
     db.commit()
     db.refresh(cost_sheet)
-    return cost_sheet
+    return _cost_sheet_to_out(db, cost_sheet, current_user.role.value)
 
 
 @cost_sheets_router.post("/cost-sheets/{cost_sheet_id}/reject", response_model=CostSheetOut)
@@ -514,7 +569,7 @@ def reject_cost_sheet(
 
     db.commit()
     db.refresh(cost_sheet)
-    return cost_sheet
+    return _cost_sheet_to_out(db, cost_sheet, current_user.role.value)
 
 
 @cost_sheets_router.post(
@@ -550,7 +605,7 @@ def revise_cost_sheet(
     db.add(new_revision)
     db.commit()
     db.refresh(new_revision)
-    return new_revision
+    return _cost_sheet_to_out(db, new_revision, current_user.role.value)
 
 
 # --------------------------------------------------------------------------
@@ -954,7 +1009,7 @@ def recompute_cost_sheet(
     cost_sheet.cost_total = _compute_cost_sheet_total(db, cost_sheet)
     db.commit()
     db.refresh(cost_sheet)
-    return cost_sheet
+    return _cost_sheet_to_out(db, cost_sheet, current_user.role.value)
 
 
 class K1ConstantOut(BaseModel):
@@ -1221,6 +1276,18 @@ def _cost_sheet_superseded(db: Session, cost_sheet_id: uuid.UUID) -> bool:
     return cost_sheet is not None and cost_sheet.status == CostSheetStatus.SUPERSEDED
 
 
+def _effective_estimate_status(estimate: Estimate) -> EstimateStatus:
+    """M.1: Estimate status values include 'Expired (15 days)' -- this
+    project has no scheduler to flip a row to EXPIRED the moment its
+    validity lapses, so it's computed at read time instead, exactly
+    like the rebase/deviation flags above. The stored status stays
+    SENT, so a client who comes back late can still get a fresh
+    /revise without the row first needing to be un-expired."""
+    if estimate.status == EstimateStatus.SENT and _is_past(estimate.expires_at):
+        return EstimateStatus.EXPIRED
+    return estimate.status
+
+
 def _estimate_to_out(db: Session, estimate: Estimate, options: list[EstimateOption], role: str) -> EstimateOut:
     option_outs = []
     for o in options:
@@ -1235,7 +1302,7 @@ def _estimate_to_out(db: Session, estimate: Estimate, options: list[EstimateOpti
         document_no=estimate.document_no,
         revision_major=estimate.revision_major,
         revision_minor=estimate.revision_minor,
-        status=estimate.status,
+        status=_effective_estimate_status(estimate),
         client_status=_derived_client_status(options),
         sent_at=estimate.sent_at,
         expires_at=estimate.expires_at,
@@ -1601,6 +1668,13 @@ def update_option_client_status(
     if not option:
         raise HTTPException(status_code=404, detail="Estimate option not found")
 
+    estimate = db.query(Estimate).filter(Estimate.id == estimate_id).first()
+    if estimate is not None and _effective_estimate_status(estimate) == EstimateStatus.EXPIRED:
+        raise HTTPException(
+            status_code=400,
+            detail="This Estimate has expired (M.1, 15 days) -- revise and resend before recording a client decision",
+        )
+
     if payload.client_status == EstimateOptionClientStatus.APPROVED:
         _enforce_approval_evidence(
             db, DocumentType.ESTIMATE, estimate_id, current_user, payload.waive_evidence_reason, request=request
@@ -1675,12 +1749,25 @@ class QuotationOut(BaseModel):
     created_by_id: uuid.UUID
     created_at: datetime
     cost_basis_rebase_required: bool = False  # derived, M.2 rule 4
+    sla_breached: bool = False  # derived, M.3 -- true only while status=draft awaiting release
 
     model_config = ConfigDict(from_attributes=True)
 
 
+def _effective_quotation_status(quotation: Quotation) -> QuotationStatus:
+    """M.1: 'Sent -> Won / Lost / Expired (30 days)' -- same computed-not-
+    stored treatment as _effective_estimate_status. Mark-Won/Mark-Lost
+    still check the stored (always SENT-until-actioned) status, so a
+    late-signed deal isn't blocked from being recorded just because this
+    read-time label would otherwise call it expired."""
+    if quotation.status == QuotationStatus.SENT and _is_past(quotation.expires_at):
+        return QuotationStatus.EXPIRED
+    return quotation.status
+
+
 def _quotation_to_out(db: Session, quotation: Quotation, role: str) -> QuotationOut:
     out = QuotationOut.model_validate(quotation)
+    out.status = _effective_quotation_status(quotation)
     if role == "sales":
         out.cost_total = None
         out.target_margin_percent = None
@@ -1689,6 +1776,8 @@ def _quotation_to_out(db: Session, quotation: Quotation, role: str) -> Quotation
         out.below_floor = None
     estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
     out.cost_basis_rebase_required = estimate is not None and _cost_sheet_superseded(db, estimate.cost_sheet_id)
+    if quotation.status == QuotationStatus.DRAFT:
+        out.sla_breached = _sla_breached(db, quotation.created_at)
     return out
 
 
