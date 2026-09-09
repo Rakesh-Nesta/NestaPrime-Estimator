@@ -2,17 +2,20 @@ import { useEffect, useState } from "react";
 import {
   createAccessoryCatalogItem,
   createHub,
+  createNettingGrade,
   createScopeItem,
   createSport,
   deleteSportMarginPolicy,
   listAccessoryCatalog,
   listHubs,
+  listNettingGrades,
   listPackageContents,
   listScopeItems,
   listSportMarginPolicies,
   listSports,
   updateAccessoryCatalogItem,
   updateHub,
+  updateNettingGrade,
   updateScopeItem,
   updateSport,
   upsertPackageContent,
@@ -29,6 +32,10 @@ function emptyPackageContentForm() {
 
 function emptyAccessoryItemForm() {
   return { item_name: "", unit: "nos", quantity_per_court: "1" };
+}
+
+function emptyNettingGradeForm() {
+  return { key: "", name: "", material: "", twine: "", mesh: "", uv_stabilized: "", typical_use: "", rate_per_sqm: "" };
 }
 
 function emptySportForm() {
@@ -61,6 +68,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
   const [packageContents, setPackageContents] = useState([]);
   const [hubs, setHubs] = useState([]);
   const [accessoryCatalog, setAccessoryCatalog] = useState([]);
+  const [nettingGrades, setNettingGrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -68,13 +76,15 @@ export default function SportsScopeAdmin({ token, onBack }) {
     return Promise.all([
       listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token),
       listPackageContents(token), listHubs(token, true), listAccessoryCatalog(token, undefined, true),
-    ]).then(([s, i, m, p, h, a]) => {
+      listNettingGrades(token, true),
+    ]).then(([s, i, m, p, h, a, n]) => {
       setSports(s);
       setScopeItems(i);
       setSportMarginPolicies(m);
       setPackageContents(p);
       setHubs(h);
       setAccessoryCatalog(a);
+      setNettingGrades(n);
     });
   }
 
@@ -157,6 +167,12 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Accessory catalog ({accessoryCatalog.length})
           </button>
+          <button
+            onClick={() => setTab("netting")}
+            className={`text-sm rounded px-3 py-1 ${tab === "netting" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Netting grades ({nettingGrades.length})
+          </button>
         </div>
       </div>
 
@@ -177,6 +193,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
       {tab === "accessories" && (
         <AccessoryCatalogTab token={token} sports={sports} accessoryCatalog={accessoryCatalog} onAction={withErrorHandling} />
       )}
+      {tab === "netting" && <NettingGradesTab token={token} nettingGrades={nettingGrades} onAction={withErrorHandling} />}
     </div>
   );
 }
@@ -717,6 +734,180 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function NettingGradesTab({ token, nettingGrades, onAction }) {
+  const [adding, setAdding] = useState(false);
+  const [addForm, setAddForm] = useState(emptyNettingGradeForm());
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+  const uvOption = (v) => (v === "" ? null : v === "true");
+
+  const handleCreate = onAction(async () => {
+    await createNettingGrade(token, {
+      key: addForm.key,
+      name: addForm.name,
+      material: addForm.material,
+      twine: addForm.twine || null,
+      mesh: addForm.mesh,
+      uv_stabilized: uvOption(addForm.uv_stabilized),
+      typical_use: addForm.typical_use,
+      rate_per_sqm: Number(addForm.rate_per_sqm),
+    });
+    setAddForm(emptyNettingGradeForm());
+    setAdding(false);
+  });
+
+  function startEdit(grade) {
+    setEditingId(grade.id);
+    setEditForm({
+      name: grade.name, material: grade.material, twine: grade.twine || "", mesh: grade.mesh,
+      uv_stabilized: grade.uv_stabilized === null ? "" : String(grade.uv_stabilized),
+      typical_use: grade.typical_use, rate_per_sqm: String(grade.rate_per_sqm),
+    });
+  }
+
+  const handleSaveEdit = onAction(async () => {
+    await updateNettingGrade(token, editingId, {
+      name: editForm.name,
+      material: editForm.material,
+      twine: editForm.twine || null,
+      mesh: editForm.mesh,
+      uv_stabilized: uvOption(editForm.uv_stabilized),
+      typical_use: editForm.typical_use,
+      rate_per_sqm: Number(editForm.rate_per_sqm),
+    });
+    setEditingId(null);
+  });
+
+  const toggleActive = onAction(async (grade) => updateNettingGrade(token, grade.id, { is_active: !grade.is_active }));
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-gray-400 -mt-1 mb-2">
+        E.3: the netting grades a structure's Cost Sheet take-off can select instead of a bare Rs/sqm figure --
+        N1 Budget through N4 Welded mesh, each with its own material/twine/mesh/UV spec. A PM can still enter a bare
+        rate directly for a one-off spec these four don't cover.
+      </p>
+      <div className="space-y-2">
+        {nettingGrades.map((grade) =>
+          editingId === grade.id ? (
+            <div key={grade.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
+                <LabeledInput label="Material" value={editForm.material} onChange={(v) => setEditForm((f) => ({ ...f, material: v }))} />
+                <LabeledInput label="Twine" value={editForm.twine} onChange={(v) => setEditForm((f) => ({ ...f, twine: v }))} />
+                <LabeledInput label="Mesh" value={editForm.mesh} onChange={(v) => setEditForm((f) => ({ ...f, mesh: v }))} />
+                <div>
+                  <label className="block text-xs text-gray-500">UV stabilized</label>
+                  <select
+                    value={editForm.uv_stabilized}
+                    onChange={(e) => setEditForm((f) => ({ ...f, uv_stabilized: e.target.value }))}
+                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  >
+                    <option value="">-- (n/a)</option>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </div>
+                <LabeledInput
+                  label="Rate Rs/sqm" type="number"
+                  value={editForm.rate_per_sqm} onChange={(v) => setEditForm((f) => ({ ...f, rate_per_sqm: v }))}
+                />
+                <div className="col-span-3">
+                  <LabeledInput label="Typical use" value={editForm.typical_use} onChange={(v) => setEditForm((f) => ({ ...f, typical_use: v }))} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                  Save
+                </button>
+                <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              key={grade.id}
+              className={`flex items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
+                grade.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+              }`}
+            >
+              <div>
+                <span className="font-medium">{grade.name}</span>{" "}
+                <span className="text-gray-400 text-xs">
+                  ({grade.material}
+                  {grade.twine && `, ${grade.twine} twine`}, {grade.mesh} mesh
+                  {grade.uv_stabilized !== null && `, UV ${grade.uv_stabilized ? "yes" : "no"}`}) -- {grade.typical_use}
+                </span>
+                {!grade.is_active && <span className="text-gray-400"> · inactive</span>}
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-gray-600">Rs {grade.rate_per_sqm}/sqm</span>
+                <button onClick={() => startEdit(grade)} className="text-blue-600 hover:underline text-xs">
+                  Edit
+                </button>
+                <button onClick={() => toggleActive(grade)} className="text-gray-500 hover:underline text-xs">
+                  {grade.is_active ? "Deactivate" : "Reactivate"}
+                </button>
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
+      {adding ? (
+        <div className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+          <div className="grid grid-cols-3 gap-2">
+            <LabeledInput label="Key" value={addForm.key} onChange={(v) => setAddForm((f) => ({ ...f, key: v }))} />
+            <LabeledInput label="Name" value={addForm.name} onChange={(v) => setAddForm((f) => ({ ...f, name: v }))} />
+            <LabeledInput label="Material" value={addForm.material} onChange={(v) => setAddForm((f) => ({ ...f, material: v }))} />
+            <LabeledInput label="Twine" value={addForm.twine} onChange={(v) => setAddForm((f) => ({ ...f, twine: v }))} />
+            <LabeledInput label="Mesh" value={addForm.mesh} onChange={(v) => setAddForm((f) => ({ ...f, mesh: v }))} />
+            <div>
+              <label className="block text-xs text-gray-500">UV stabilized</label>
+              <select
+                value={addForm.uv_stabilized}
+                onChange={(e) => setAddForm((f) => ({ ...f, uv_stabilized: e.target.value }))}
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              >
+                <option value="">-- (n/a)</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+            <LabeledInput
+              label="Rate Rs/sqm" type="number"
+              value={addForm.rate_per_sqm} onChange={(v) => setAddForm((f) => ({ ...f, rate_per_sqm: v }))}
+            />
+            <div className="col-span-2">
+              <LabeledInput label="Typical use" value={addForm.typical_use} onChange={(v) => setAddForm((f) => ({ ...f, typical_use: v }))} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleCreate} className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
+              Add grade
+            </button>
+            <button
+              onClick={() => {
+                setAdding(false);
+                setAddForm(emptyNettingGradeForm());
+              }}
+              className="text-xs text-gray-500 hover:underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-xs text-blue-600 hover:underline">
+          + Add grade
+        </button>
+      )}
     </div>
   );
 }

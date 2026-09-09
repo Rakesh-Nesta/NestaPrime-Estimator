@@ -19,6 +19,7 @@ from app.models.document import (  # noqa: F401
 from app.models.hub import Hub  # noqa: F401
 from app.models.margin_policy import MarginPolicy  # noqa: F401
 from app.models.message import Message, MessageChannel, MessageStatus  # noqa: F401
+from app.models.netting_grade import NettingGrade  # noqa: F401
 from app.models.package_content import PackageContent  # noqa: F401
 from app.models.project import (  # noqa: F401
     BuildingStatus,

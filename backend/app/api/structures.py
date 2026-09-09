@@ -3,19 +3,26 @@ import uuid
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.documents import CostSheetLineOut, _line_to_out
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.document import CostSheet, CostSheetLine, CostSheetStatus, WorkPackage
+from app.models.netting_grade import NettingGrade
 from app.models.rate_item import LabourCategory, RateSource
 from app.models.sport import ProjectSport, Sport
 
 structures_router = APIRouter(tags=["structures"])
+netting_grades_router = APIRouter(prefix="/netting-grades", tags=["netting-grades"])
 
 COST_ROLES = ("pm", "director")
+# The catalogue's rate_per_sqm is real cost-side pricing, same footing as
+# RateItem (rate_items.py) -- Sales never sees it (K.3).
+NETTING_CATALOG_READ_ROLES = ("pm", "director", "procurement", "site_engineer")
+# Q.2 rule 6 precedent: "Master Settings screen is Director-only."
+NETTING_CATALOG_WRITE_ROLES = ("director",)
 
 FT_TO_M = 0.3048
 SQFT_TO_SQM = 0.09290304
@@ -189,12 +196,23 @@ class StructureTakeoffRequest(BaseModel):
     foundation_depth_ft: float | None = Field(default=None, gt=0)
     tall_variant: bool = False  # Type C only (E.1: "tall variant")
     steel_rate_per_kg: float = Field(gt=0)
-    netting_rate_per_sqm: float = Field(gt=0)
+    # E.3: either pick a catalogue grade (its current Director-set rate is
+    # used) or enter a bare rate directly, same escape hatch as the
+    # accessory catalog's own custom_items -- a one-off spec the four
+    # standard grades don't cover shouldn't be blocked.
+    netting_grade_id: uuid.UUID | None = None
+    netting_rate_per_sqm: float | None = Field(default=None, gt=0)
     concrete_rate_per_cum: float = Field(gt=0)
     finish_rate_per_kg: float | None = Field(default=None, ge=0)  # paint, or galvanising if coastal
     wind_zone: int | None = Field(default=None, ge=1, le=5)
     seismic_zone: str | None = None  # "I".."V"
     coastal: bool = False
+
+    @model_validator(mode="after")
+    def _netting_rate_or_grade(self):
+        if self.netting_grade_id is None and self.netting_rate_per_sqm is None:
+            raise ValueError("netting_rate_per_sqm or netting_grade_id is required")
+        return self
 
 
 class StructureTakeoffOut(BaseModel):
@@ -265,6 +283,23 @@ def add_structure_takeoff(
         payload.structure_type, L, W, payload.height_ft, S, payload.tall_variant
     )
 
+    netting_grade = None
+    if payload.netting_grade_id is not None:
+        if envelope_label != "Netting":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"netting_grade_id doesn't apply to Type {payload.structure_type.value.upper()}'s envelope "
+                    f"({envelope_label}) -- pass netting_rate_per_sqm directly for that material"
+                ),
+            )
+        netting_grade = db.query(NettingGrade).filter(NettingGrade.id == payload.netting_grade_id).first()
+        if not netting_grade:
+            raise HTTPException(status_code=404, detail="Netting grade not found")
+    netting_rate = (
+        payload.netting_rate_per_sqm if payload.netting_rate_per_sqm is not None else float(netting_grade.rate_per_sqm)
+    )
+
     column_length_m = columns * (payload.height_ft + depth_ft) * FT_TO_M
     beam_length_m = beam_length_ft * FT_TO_M
     truss_length_m = trusses * truss_span_ft * FT_TO_M
@@ -315,10 +350,12 @@ def add_structure_takeoff(
             project_sport_id=payload.project_sport_id,
             work_package=WorkPackage.STRUCTURE,
             category=envelope_label,
-            item_name=f"{envelope_label} -- Type {type_label}",
+            item_name=(
+                f"{envelope_label} -- Type {type_label}" + (f" -- {netting_grade.name}" if netting_grade else "")
+            ),
             unit="sqm",
             quantity=round(envelope_area_ordered_sqm, 2),
-            rate=payload.netting_rate_per_sqm,
+            rate=round(netting_rate, 2),
             source=RateSource.MANUAL,
             labour_category_id=netting_category.id if netting_category else None,
             wastage_percent=NETTING_WASTAGE_PERCENT,
@@ -370,7 +407,97 @@ def add_structure_takeoff(
             "steel_kg_ordered": round(steel_kg_ordered, 2),
             "envelope_area_sqm": round(envelope_area_sqm, 2),
             "envelope_area_ordered_sqm": round(envelope_area_ordered_sqm, 2),
+            "netting_grade": netting_grade.name if netting_grade else None,
+            "netting_rate_per_sqm": round(netting_rate, 2),
             "foundation_volume_cum": round(foundation_volume_cum, 3),
         },
         lines=[_line_to_out(line) for line in lines_to_create],
     )
+
+
+# --------------------------------------------------------------------------
+# E.3 netting grade catalogue -- Director-editable, replacing the bare
+# PM-entered netting_rate_per_sqm that used to be the only option (the
+# audit's ranked gap #12).
+# --------------------------------------------------------------------------
+
+
+class NettingGradeOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    name: str
+    material: str
+    twine: str | None
+    mesh: str
+    uv_stabilized: bool | None
+    typical_use: str
+    rate_per_sqm: float
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@netting_grades_router.get("", response_model=list[NettingGradeOut])
+def list_netting_grades(
+    include_inactive: bool = False,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*NETTING_CATALOG_READ_ROLES)),
+):
+    query = db.query(NettingGrade)
+    if not include_inactive:
+        query = query.filter(NettingGrade.is_active.is_(True))
+    return query.order_by(NettingGrade.key).all()
+
+
+class NettingGradeCreate(BaseModel):
+    key: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    material: str = Field(min_length=1)
+    twine: str | None = None
+    mesh: str = Field(min_length=1)
+    uv_stabilized: bool | None = None
+    typical_use: str = Field(min_length=1)
+    rate_per_sqm: float = Field(gt=0)
+
+
+class NettingGradeUpdate(BaseModel):
+    name: str | None = None
+    material: str | None = None
+    twine: str | None = None
+    mesh: str | None = None
+    uv_stabilized: bool | None = None
+    typical_use: str | None = None
+    rate_per_sqm: float | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+@netting_grades_router.post("", response_model=NettingGradeOut, status_code=201)
+def create_netting_grade(
+    payload: NettingGradeCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*NETTING_CATALOG_WRITE_ROLES)),
+):
+    if db.query(NettingGrade).filter(NettingGrade.key == payload.key).first():
+        raise HTTPException(status_code=409, detail=f"Netting grade '{payload.key}' already exists")
+    grade = NettingGrade(**payload.model_dump())
+    db.add(grade)
+    db.commit()
+    db.refresh(grade)
+    return grade
+
+
+@netting_grades_router.patch("/{grade_id}", response_model=NettingGradeOut)
+def update_netting_grade(
+    grade_id: uuid.UUID,
+    payload: NettingGradeUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*NETTING_CATALOG_WRITE_ROLES)),
+):
+    grade = db.query(NettingGrade).filter(NettingGrade.id == grade_id).first()
+    if not grade:
+        raise HTTPException(status_code=404, detail="Netting grade not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(grade, field, value)
+    db.commit()
+    db.refresh(grade)
+    return grade

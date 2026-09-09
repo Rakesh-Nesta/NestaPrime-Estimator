@@ -30,6 +30,7 @@ import {
   listAccessoryCatalog,
   listCostSheetLines,
   listLabourCategories,
+  listNettingGrades,
   recomputeCostSheet,
   verifyCostSheet,
 } from "./api";
@@ -375,17 +376,30 @@ const SECTIONS = [
 ];
 const ROUND_SECTIONS = new Set(["round_2", "round_2_5", "round_3"]);
 
+const NETTING_ENVELOPE_TYPES = new Set(["a", "b", "d"]); // E.2 geometry: Netting envelope; C = roof sheeting, G = chain-link
+
 function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   const [f, setF] = useState({
     project_sport_id: "", structure_type: "a", section: "shs_3", wall_thickness_mm: "2.0",
     build_l_ft: "", build_w_ft: "", height_ft: "", column_spacing_ft: "", foundation_depth_ft: "",
-    tall_variant: false, steel_rate_per_kg: "", netting_rate_per_sqm: "", concrete_rate_per_cum: "",
-    finish_rate_per_kg: "", wind_zone: "", seismic_zone: "", coastal: false,
+    tall_variant: false, steel_rate_per_kg: "", netting_grade_id: "", netting_rate_per_sqm: "",
+    concrete_rate_per_cum: "", finish_rate_per_kg: "", wind_zone: "", seismic_zone: "", coastal: false,
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [nettingGrades, setNettingGrades] = useState([]);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const isRound = ROUND_SECTIONS.has(f.section);
+  const usesNettingEnvelope = NETTING_ENVELOPE_TYPES.has(f.structure_type);
+
+  useEffect(() => {
+    listNettingGrades(token).then(setNettingGrades).catch(() => setNettingGrades([]));
+  }, [token]);
+
+  function selectNettingGrade(gradeId) {
+    const grade = nettingGrades.find((g) => g.id === gradeId);
+    setF((s) => ({ ...s, netting_grade_id: gradeId, netting_rate_per_sqm: grade ? String(grade.rate_per_sqm) : s.netting_rate_per_sqm }));
+  }
 
   const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
   const rec = selectedProjectSport?.recommended_structure;
@@ -420,6 +434,7 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
         foundation_depth_ft: num(f.foundation_depth_ft),
         tall_variant: f.tall_variant,
         steel_rate_per_kg: num(f.steel_rate_per_kg),
+        netting_grade_id: usesNettingEnvelope ? f.netting_grade_id || null : null,
         netting_rate_per_sqm: num(f.netting_rate_per_sqm),
         concrete_rate_per_cum: num(f.concrete_rate_per_cum),
         finish_rate_per_kg: num(f.finish_rate_per_kg),
@@ -467,9 +482,20 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
         <Field label="Column spacing (ft)" hint="blank = E.1 default"><NumberInput value={f.column_spacing_ft} onChange={set("column_spacing_ft")} /></Field>
         <Field label="Foundation depth (ft)" hint="blank = E.1 default"><NumberInput value={f.foundation_depth_ft} onChange={set("foundation_depth_ft")} /></Field>
       </div>
+      {usesNettingEnvelope && (
+        <Field label="Netting grade (E.3)" hint="or leave as '(manual rate)' and enter the Netting Rs/sqm below directly">
+          <SelectInput
+            value={f.netting_grade_id}
+            onChange={selectNettingGrade}
+            options={[{ value: "", label: "(manual rate)" }, ...nettingGrades.map((g) => ({ value: g.id, label: `${g.name} (Rs ${g.rate_per_sqm}/sqm)` }))]}
+          />
+        </Field>
+      )}
       <div className="grid grid-cols-3 gap-2">
         <Field label="Steel Rs/kg"><NumberInput value={f.steel_rate_per_kg} onChange={set("steel_rate_per_kg")} required /></Field>
-        <Field label="Netting Rs/sqm"><NumberInput value={f.netting_rate_per_sqm} onChange={set("netting_rate_per_sqm")} required /></Field>
+        <Field label={usesNettingEnvelope ? "Netting Rs/sqm" : "Envelope Rs/sqm"}>
+          <NumberInput value={f.netting_rate_per_sqm} onChange={set("netting_rate_per_sqm")} required />
+        </Field>
         <Field label="Concrete Rs/cum"><NumberInput value={f.concrete_rate_per_cum} onChange={set("concrete_rate_per_cum")} required /></Field>
       </div>
       <div className="grid grid-cols-3 gap-2">

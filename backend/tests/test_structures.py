@@ -453,3 +453,232 @@ def test_structure_lines_feed_into_recompute(client, director_user):
 
     verify_res = client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
     assert verify_res.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# E.3 netting grade catalogue
+# ---------------------------------------------------------------------------
+
+
+def _pm_headers(client, db_session):
+    user = User(
+        name="Test PM", email="pm-netting@test.local", hashed_password=hash_password("TestPass!1"), role=UserRole.PM
+    )
+    db_session.add(user)
+    db_session.commit()
+    return _login(client, "pm-netting@test.local")
+
+
+def _netting_grade_id(client, headers, key="n2_standard"):
+    grades = client.get("/netting-grades", headers=headers).json()
+    return next(g["id"] for g in grades if g["key"] == key)
+
+
+def test_take_off_with_netting_grade_uses_catalogue_rate(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers, sport_key="box_cricket")
+    grade_id = _netting_grade_id(client, headers, "n2_standard")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/structures",
+        json={
+            "project_sport_id": project_sport_id,
+            "structure_type": "a",
+            "section": "shs_3",
+            "wall_thickness_mm": 2.0,
+            "build_l_ft": 50,
+            "build_w_ft": 25,
+            "height_ft": 12,
+            "steel_rate_per_kg": 68,
+            "netting_grade_id": grade_id,
+            "concrete_rate_per_cum": 6500,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["breakdown"]["netting_grade"] == "N2 Standard"
+    assert res.json()["breakdown"]["netting_rate_per_sqm"] == 47.5
+
+    netting_line = next(line for line in res.json()["lines"] if line["category"] == "Netting")
+    assert netting_line["rate"] == 47.5
+    assert "N2 Standard" in netting_line["item_name"]
+
+
+def test_explicit_netting_rate_overrides_the_grade(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers, sport_key="box_cricket")
+    grade_id = _netting_grade_id(client, headers, "n2_standard")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/structures",
+        json={
+            "project_sport_id": project_sport_id,
+            "structure_type": "a",
+            "section": "shs_3",
+            "wall_thickness_mm": 2.0,
+            "build_l_ft": 50,
+            "build_w_ft": 25,
+            "height_ft": 12,
+            "steel_rate_per_kg": 68,
+            "netting_grade_id": grade_id,
+            "netting_rate_per_sqm": 52.0,  # a fresh vendor quote for this specific job
+            "concrete_rate_per_cum": 6500,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["breakdown"]["netting_rate_per_sqm"] == 52.0
+    netting_line = next(line for line in res.json()["lines"] if line["category"] == "Netting")
+    assert netting_line["rate"] == 52.0
+
+
+def test_netting_grade_rejected_for_a_non_netting_envelope(client, director_user):
+    """Type G's envelope is Chain-link, not Netting -- the catalogue
+    doesn't apply there."""
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers, sport_key="box_cricket")
+    grade_id = _netting_grade_id(client, headers, "n2_standard")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/structures",
+        json={
+            "project_sport_id": project_sport_id,
+            "structure_type": "g",
+            "section": "round_2_5",
+            "build_l_ft": 40,
+            "build_w_ft": 20,
+            "height_ft": 10,
+            "steel_rate_per_kg": 68,
+            "netting_grade_id": grade_id,
+            "concrete_rate_per_cum": 6500,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_structure_requires_a_netting_rate_or_grade(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers, sport_key="box_cricket")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/structures",
+        json={
+            "project_sport_id": project_sport_id,
+            "structure_type": "a",
+            "section": "shs_3",
+            "wall_thickness_mm": 2.0,
+            "build_l_ft": 50,
+            "build_w_ft": 25,
+            "height_ft": 12,
+            "steel_rate_per_kg": 68,
+            "concrete_rate_per_cum": 6500,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_unknown_netting_grade_id_404s(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, project_sport_id, cost_sheet_id = _setup(client, headers, sport_key="box_cricket")
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/structures",
+        json={
+            "project_sport_id": project_sport_id,
+            "structure_type": "a",
+            "section": "shs_3",
+            "wall_thickness_mm": 2.0,
+            "build_l_ft": 50,
+            "build_w_ft": 25,
+            "height_ft": 12,
+            "steel_rate_per_kg": 68,
+            "netting_grade_id": "00000000-0000-0000-0000-000000000000",
+            "concrete_rate_per_cum": 6500,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 404
+
+
+def test_netting_grade_catalog_lists_the_seeded_four(client, director_user):
+    headers = _director_headers(client, director_user)
+    grades = client.get("/netting-grades", headers=headers).json()
+    assert {g["key"] for g in grades} == {"n1_budget", "n2_standard", "n3_heavy", "n4_welded_mesh"}
+    n1 = next(g for g in grades if g["key"] == "n1_budget")
+    assert n1["material"] == "Nylon"
+    assert n1["mesh"] == "50 mm"
+    assert n1["uv_stabilized"] is False
+    n4 = next(g for g in grades if g["key"] == "n4_welded_mesh")
+    assert n4["uv_stabilized"] is None
+
+
+def test_sales_cannot_list_netting_grades(client, director_user, db_session):
+    _director_headers(client, director_user)
+    sales_headers = _sales_headers(client, db_session)
+    res = client.get("/netting-grades", headers=sales_headers)
+    assert res.status_code == 403
+
+
+def test_pm_can_read_but_not_write_netting_grades(client, director_user, db_session):
+    """Q.2 rule 6 precedent: catalog reads are broader than writes, which
+    stay Director-only."""
+    _director_headers(client, director_user)
+    pm_headers = _pm_headers(client, db_session)
+
+    assert client.get("/netting-grades", headers=pm_headers).status_code == 200
+
+    res = client.post(
+        "/netting-grades",
+        json={
+            "key": "n5_test", "name": "N5 Test", "material": "Test", "mesh": "1 mm",
+            "typical_use": "Testing", "rate_per_sqm": 10,
+        },
+        headers=pm_headers,
+    )
+    assert res.status_code == 403
+
+
+def test_director_can_create_and_update_a_netting_grade(client, director_user):
+    headers = _director_headers(client, director_user)
+
+    create_res = client.post(
+        "/netting-grades",
+        json={
+            "key": "n5_test", "name": "N5 Test grade", "material": "Test poly", "twine": "1.0 mm", "mesh": "30 mm",
+            "uv_stabilized": True, "typical_use": "Unit testing", "rate_per_sqm": 55.0,
+        },
+        headers=headers,
+    )
+    assert create_res.status_code == 201, create_res.text
+    grade_id = create_res.json()["id"]
+
+    update_res = client.patch(f"/netting-grades/{grade_id}", json={"rate_per_sqm": 60.0}, headers=headers)
+    assert update_res.status_code == 200, update_res.text
+    assert update_res.json()["rate_per_sqm"] == 60.0
+
+
+def test_duplicate_netting_grade_key_is_rejected(client, director_user):
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/netting-grades",
+        json={
+            "key": "n1_budget", "name": "Duplicate", "material": "x", "mesh": "1 mm",
+            "typical_use": "x", "rate_per_sqm": 1,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 409
+
+
+def test_deactivated_netting_grade_is_excluded_by_default(client, director_user):
+    headers = _director_headers(client, director_user)
+    grade_id = _netting_grade_id(client, headers, "n1_budget")
+    client.patch(f"/netting-grades/{grade_id}", json={"is_active": False}, headers=headers)
+
+    active = client.get("/netting-grades", headers=headers).json()
+    assert "n1_budget" not in {g["key"] for g in active}
+
+    all_grades = client.get("/netting-grades?include_inactive=true", headers=headers).json()
+    assert "n1_budget" in {g["key"] for g in all_grades}

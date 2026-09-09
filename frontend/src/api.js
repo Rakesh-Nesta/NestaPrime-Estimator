@@ -1055,6 +1055,30 @@ export async function updateAccessoryCatalogItem(token, itemId, payload) {
   return handle(res);
 }
 
+export async function listNettingGrades(token, includeInactive = false) {
+  const qs = includeInactive ? "?include_inactive=true" : "";
+  const res = await fetch(`${API_BASE}/netting-grades${qs}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createNettingGrade(token, payload) {
+  const res = await fetch(`${API_BASE}/netting-grades`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateNettingGrade(token, gradeId, payload) {
+  const res = await fetch(`${API_BASE}/netting-grades/${gradeId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addAthleticsTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/athletics`, {
     method: "POST",

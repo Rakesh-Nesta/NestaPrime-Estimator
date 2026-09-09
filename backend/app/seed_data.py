@@ -134,6 +134,18 @@ SCOPE_ITEMS_SEED = [
     ("amc", 30, "maintenance", "AMC (turf brushing, infill top-up, acrylic re-coat 5-7 yr)"),
 ]
 
+# E.3 — the netting grade catalogue, seeded once for the Director-editable
+# NettingGrade table. rate_per_sqm is the range's midpoint, a starting
+# [confirm] figure like every other seeded rate in this codebase, not a
+# claim that it's NestaPrime's actual current price.
+# (key, name, material, twine, mesh, uv_stabilized, typical_use, rate_per_sqm)
+NETTING_GRADES_SEED = [
+    ("n1_budget", "N1 Budget", "Nylon", "1.5 mm", "50 mm", False, "Practice nets", 30.0),
+    ("n2_standard", "N2 Standard", "HDPE", "2.0 mm", "45 mm", True, "Box cricket, football", 47.5),
+    ("n3_heavy", "N3 Heavy", "HDPE", "3.0 mm", "40 mm", True, "Premium, coastal, roof", 77.5),
+    ("n4_welded_mesh", "N4 Welded mesh", "GI", "4 mm", "50x50 mm", None, "Padel above glass", 400.0),
+]
+
 # Part I / Module 9 — accessories.py's own former ACCESSORY_CATALOG dict,
 # now this app's working default for the Director-editable
 # AccessoryCatalogItem table (the audit's "hardcoded technical

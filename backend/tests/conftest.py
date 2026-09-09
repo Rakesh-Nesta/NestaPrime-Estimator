@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.accessory_catalog_item import AccessoryCatalogItem
+from app.models.netting_grade import NettingGrade
 from app.models.user import User, UserRole
 from app.models.margin_policy import MarginPolicy
 from app.models.rate_item import LabourCategory
@@ -19,6 +20,7 @@ from app.seed_data import (
     ACCESSORY_CATALOG_SEED,
     LABOUR_CATEGORIES_SEED,
     MARGIN_POLICY_SEED,
+    NETTING_GRADES_SEED,
     REGIONAL_MULTIPLIER_SEED,
     SCOPE_ITEMS_SEED,
     SPORTS_SEED,
@@ -91,6 +93,13 @@ def db_session():
         for key, name, default_percent in LABOUR_CATEGORIES_SEED:
             session.add(
                 LabourCategory(key=key, name=name, default_percent=default_percent)
+            )
+        for key, name, material, twine, mesh, uv_stabilized, typical_use, rate_per_sqm in NETTING_GRADES_SEED:
+            session.add(
+                NettingGrade(
+                    key=key, name=name, material=material, twine=twine, mesh=mesh,
+                    uv_stabilized=uv_stabilized, typical_use=typical_use, rate_per_sqm=rate_per_sqm,
+                )
             )
         for client_type, floor_margin_percent, competitive_segment in MARGIN_POLICY_SEED:
             session.add(
