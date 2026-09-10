@@ -7,10 +7,24 @@ project's own blueprint (see `docs/` — hand it the `NPS_FINAL_...` package fro
 
 ## Status
 
-Phase 1a foundation, in progress. Built so far: Postgres schema (users, 6 fixed roles), JWT auth
-with server-side role gating, a login screen. Not yet built: Project Setup, the sport/estimation
-engine, the Cost Sheet → Estimate → Quotation chain — see the blueprint's own Phase 1a scope
-(Part P.2) for what's next.
+Built and tested: the full Cost Sheet → Estimate → Quotation document chain (draft, revise,
+verify, approve, release, send, won/lost) with role-based cost/margin visibility (K.3), the
+sport/estimation take-off engine (structures, flooring, base, drainage, lighting, specialty
+modules, site prep), Tender Mode (BOQ export, GST inclusive/exclusive toggle, live L1 view,
+EMD/BG/DLP/cess), the rate sheet with regional multipliers, message templates, client/vendor
+consent tracking, a check-on-read jobs-runner pattern for expiry/SLA/reminder logic, and PDF/export
+generation for every document type.
+
+An internal completion audit ("Blueprint Ledger") tracked 19 ranked gaps against the blueprint;
+16 are closed. Three remain open:
+
+- **Small-job fast-track (M.2 rule 8):** Resurfacing/Repair jobs under a confirm-threshold
+  skipping straight from Cost Sheet to Quotation under standing PM pre-approval — not yet built.
+- **Procurement-safe Consumption Sheet / BOM exports:** Procurement is currently blocked from
+  these exports entirely, rather than let in with cost/margin stripped (K.3's actual intent).
+- **Director-editable technical catalogues:** flooring/structure/netting/fixture/equipment specs
+  still live as Python dicts in the API layer; only their *rates* are Director-editable via Master
+  Settings today, not the specs themselves.
 
 ## Stack
 
@@ -40,7 +54,8 @@ python -m venv .venv
 copy .env.example .env
 # edit .env: SECRET_KEY should be a real random value before anything but local dev
 .venv\Scripts\python -m alembic upgrade head
-.venv\Scripts\python scripts\seed_test_user.py   # creates director@nestaprime.local / ChangeMe!1
+.venv\Scripts\python scripts\seed_test_user.py   # Dev-only credentials -- never deploy as-is.
+                                                  # Creates director@nestaprime.local / ChangeMe!1
 .venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
 ```
 
