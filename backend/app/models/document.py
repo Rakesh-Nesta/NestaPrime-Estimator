@@ -349,6 +349,16 @@ class Quotation(Base):
     # by a SkipRequest approval and hasn't since been separately Verified.
     cost_basis_unverified: Mapped[bool] = mapped_column(default=False, nullable=False)
 
+    # QUOTATIONS data model's own field list names this directly.  M.2
+    # rule 8: "Small-job fast-track: Resurfacing / Repair jobs below Rs
+    # 2,00,000 [confirm] may go Cost Sheet -> Quotation with a standing
+    # PM pre-approval; logged as a fast-track, not a skip" -- true only
+    # for a Quotation created via documents.py's create_fast_track_quotation,
+    # which auto-creates and auto-approves the intervening Estimate/
+    # EstimateOption rather than routing through the normal client-facing
+    # Estimate send/approve flow.
+    fast_track_flag: Mapped[bool] = mapped_column(default=False, nullable=False)
+
     released_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

@@ -572,6 +572,15 @@ export async function createQuotation(token, projectId, payload) {
   return handle(res);
 }
 
+export async function createFastTrackQuotation(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/quotations/fast-track`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function releaseQuotation(token, quotationId) {
   const res = await fetch(`${API_BASE}/quotations/${quotationId}/release`, {
     method: "POST",
