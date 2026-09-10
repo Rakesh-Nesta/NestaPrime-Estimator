@@ -25,13 +25,23 @@ from app.xlsx_utils import xlsx_response as _xlsx_response
 
 exports_router = APIRouter(tags=["exports"])
 
-# J.4: Cost Sheet / Consumption Sheet / BOM are all "internal only" -- same
-# cost-visibility gate as the documents they're exported from (K.3).
+# J.4: the Cost Sheet export carries cost_total (K.1's contingency- and
+# overhead-inclusive aggregate) -- the one figure K.3 never grants
+# Procurement ("never labour, overhead, contingency, cost price totals,
+# selling price or margin"). PM/Director only.
 COST_ROLES = ("pm", "director")
-# The Vendor RFQ is the one export explicitly meant to leave the building
-# (sent to vendors) -- Procurement needs it even though Procurement has no
-# access to the cost-bearing exports above.
-RFQ_ROLES = ("pm", "director", "procurement")
+# K.3, in full: "Procurement sees quantities, item rates and line amounts
+# on the consumption sheet, BOM and POs (needed to buy), but never
+# labour, overhead, contingency, cost price totals, selling price or
+# margin -- the API strips those for the Procurement role exactly as for
+# Sales." The module-ownership table independently assigns "16 BOM &
+# Procurement" and "16A Material Consumption Sheet" to Procurement by
+# name. Both exports already contain exactly the permitted fields --
+# per-line item/spec/unit/quantity/rate/amount, never the Cost Sheet's
+# own aggregate cost_total or any labour/contingency/margin figure -- so
+# no content stripping is needed here, only the access grant; RFQ
+# (rates-free by construction) already had it.
+PROCUREMENT_ROLES = ("pm", "director", "procurement")
 # Billing Handoff carries no cost/margin (K.3-safe by construction), so
 # Sales -- who creates and sends the Quotation -- can use it too.
 HANDOFF_ROLES = ("sales", "pm", "director")
@@ -99,6 +109,9 @@ def export_cost_sheet(
 
 # --------------------------------------------------------------------------
 # J.4: Material Consumption Sheet (Excel, editable) -- J.3's own columns.
+# Module-ownership table names this "16A Material Consumption Sheet ...
+# Procurement" directly, and every column here is already Procurement-
+# safe by construction (see PROCUREMENT_ROLES' own docstring above).
 # --------------------------------------------------------------------------
 
 
@@ -106,7 +119,7 @@ def export_cost_sheet(
 def export_consumption_sheet(
     cost_sheet_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*COST_ROLES)),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
     cost_sheet = _get_cost_sheet_or_404(db, cost_sheet_id)
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
@@ -159,9 +172,11 @@ def export_consumption_sheet(
 
 # --------------------------------------------------------------------------
 # J.4: Vendor RFQ (Excel/PDF) -- "item, spec, qty, unit only; no rates, no
-# vendor names." Excel chosen over PDF (the blueprint offers either);
-# Procurement gets access here despite having none of the cost-bearing
-# exports, since this is the one meant to leave the building.
+# vendor names." Excel chosen over PDF (the blueprint offers either); the
+# one export meant to leave the building, so it carries no rate at all
+# (stricter than the consumption sheet/BOM's "item rates and line
+# amounts, but nothing else" -- there's no vendor to hide NestaPrime's
+# own numbers from on the two internal exports, but there is here).
 # --------------------------------------------------------------------------
 
 
@@ -169,7 +184,7 @@ def export_consumption_sheet(
 def export_rfq(
     cost_sheet_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*RFQ_ROLES)),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
     cost_sheet = _get_cost_sheet_or_404(db, cost_sheet_id)
     lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == cost_sheet_id).all()
@@ -186,6 +201,9 @@ def export_rfq(
 
 # --------------------------------------------------------------------------
 # J.4: BOM (Excel) -- "internal, categorised, with source AI/Manual."
+# Module-ownership table names this "16 BOM & Procurement" directly, and
+# every column here is already Procurement-safe by construction (see
+# PROCUREMENT_ROLES' own docstring above).
 # --------------------------------------------------------------------------
 
 
@@ -193,7 +211,7 @@ def export_rfq(
 def export_bom(
     cost_sheet_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*COST_ROLES)),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
     cost_sheet = _get_cost_sheet_or_404(db, cost_sheet_id)
     lines = (
