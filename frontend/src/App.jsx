@@ -25,6 +25,7 @@ export default function App() {
   const [activeProject, setActiveProject] = useState(null);
   const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
   const [preNavScreen, setPreNavScreen] = useState("sports");
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
 
   const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests"];
 
@@ -74,43 +75,66 @@ export default function App() {
   }
 
   if (user) {
+    const navItems = [
+      { key: "pricing", label: "Pricing Calculator" },
+      { key: "rates", label: "Rate Sheet" },
+      { key: "settings", label: "Master Settings" },
+      { key: "sports_scope_admin", label: "Sports & Scope Admin" },
+      { key: "clients_admin", label: "Clients" },
+      { key: "reports", label: "Reports" },
+      ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log" }] : []),
+      ...(user.role !== "sales" ? [{ key: "price_requests", label: "Price Requests" }] : []),
+    ];
+
     return (
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b px-8 py-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-900">NestaPrime Estimator</h1>
-          <div className="flex items-center gap-4">
-            <button onClick={() => goToTopLevel("pricing")} className="text-sm text-blue-600 hover:underline">
-              {screen === "pricing" ? "Back to project" : "Pricing Calculator"}
+        <header className="bg-white border-b px-4 sm:px-8 py-4 relative">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold text-gray-900">NestaPrime Estimator</h1>
+            <div className="hidden sm:flex items-center gap-4">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => goToTopLevel(item.key)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  {screen === item.key ? "Back to project" : item.label}
+                </button>
+              ))}
+              <p className="text-sm text-gray-500">
+                {user.name} · <span className="font-medium">{user.role}</span>
+              </p>
+            </div>
+            <button
+              onClick={() => setNavMenuOpen(!navMenuOpen)}
+              className="sm:hidden p-2 -mr-2 text-gray-600"
+              aria-label="Toggle navigation menu"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {navMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                )}
+              </svg>
             </button>
-            <button onClick={() => goToTopLevel("rates")} className="text-sm text-blue-600 hover:underline">
-              {screen === "rates" ? "Back to project" : "Rate Sheet"}
-            </button>
-            <button onClick={() => goToTopLevel("settings")} className="text-sm text-blue-600 hover:underline">
-              {screen === "settings" ? "Back to project" : "Master Settings"}
-            </button>
-            <button onClick={() => goToTopLevel("sports_scope_admin")} className="text-sm text-blue-600 hover:underline">
-              {screen === "sports_scope_admin" ? "Back to project" : "Sports & Scope Admin"}
-            </button>
-            <button onClick={() => goToTopLevel("clients_admin")} className="text-sm text-blue-600 hover:underline">
-              {screen === "clients_admin" ? "Back to project" : "Clients"}
-            </button>
-            <button onClick={() => goToTopLevel("reports")} className="text-sm text-blue-600 hover:underline">
-              {screen === "reports" ? "Back to project" : "Reports"}
-            </button>
-            {user.role === "director" && (
-              <button onClick={() => goToTopLevel("audit_log")} className="text-sm text-blue-600 hover:underline">
-                {screen === "audit_log" ? "Back to project" : "Audit Log"}
-              </button>
-            )}
-            {user.role !== "sales" && (
-              <button onClick={() => goToTopLevel("price_requests")} className="text-sm text-blue-600 hover:underline">
-                {screen === "price_requests" ? "Back to project" : "Price Requests"}
-              </button>
-            )}
-            <p className="text-sm text-gray-500">
-              {user.name} · <span className="font-medium">{user.role}</span>
-            </p>
           </div>
+          {navMenuOpen && (
+            <div className="sm:hidden absolute inset-x-0 top-full bg-white border-b shadow-lg flex flex-col z-10">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => { goToTopLevel(item.key); setNavMenuOpen(false); }}
+                  className="text-left text-sm text-blue-600 px-4 py-3 border-b hover:bg-gray-50"
+                >
+                  {screen === item.key ? "Back to project" : item.label}
+                </button>
+              ))}
+              <p className="text-sm text-gray-500 px-4 py-3">
+                {user.name} · <span className="font-medium">{user.role}</span>
+              </p>
+            </div>
+          )}
         </header>
         {screen === "rates" && (
           <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
