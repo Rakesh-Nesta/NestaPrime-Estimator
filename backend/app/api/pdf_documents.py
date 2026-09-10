@@ -36,7 +36,7 @@ from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import Attachment, AttachmentTag
 from app.models.client import Client, ClientType
-from app.models.document import Estimate, EstimateOption, Quotation, QuotationLine
+from app.models.document import CostSheetLine, Estimate, EstimateOption, Quotation, QuotationLine, WorkPackage
 from app.models.package_content import PackageContent
 from app.models.project import Project
 from app.models.scope_item import ProjectScopeItem, ScopeItem
@@ -485,6 +485,66 @@ def get_estimate_pdf(
 # ---------------------------------------------------------------------------
 
 
+def _granular_boq_rows_for_sport(
+    db: Session, cost_sheet_id: uuid.UUID, project_sport_id: uuid.UUID, sport_ex_gst: float
+) -> list[dict] | None:
+    """Part L Format row: 'BOQ-style itemised schedule ... instead of
+    packages.' Breaks one sport/package's lump-sum BOQ line into one row
+    per (work_package, category) group of its own CostSheetLine rows --
+    grouped, not per individual line, so a client never sees a PM's raw
+    item_name shorthand verbatim and the table reads like a real
+    trade-level tender BOQ rather than a full take-off dump (explicit
+    choice with the user, 2026-09-10, over a full per-line breakdown).
+
+    Every figure here is a SELLING rate, never the internal cost rate:
+    each group's own cost share (qty x cost rate, summed) determines what
+    fraction of this sport's already-computed, post-discount, ex-GST
+    selling amount (sport_ex_gst) it is apportioned -- the same
+    cost-share-apportionment principle the caller already uses to split
+    the whole Quotation's selling total across sports (K.3: no client
+    document ever contains a cost price or margin).
+
+    Returns None (never []) when this sport has no priced CostSheetLine
+    rows to group -- e.g. its Cost Sheet total was entered directly
+    rather than built up from lines -- so the caller falls back to a
+    single lump-sum row rather than fabricate a breakdown that isn't
+    there."""
+    lines = (
+        db.query(CostSheetLine)
+        .filter(
+            CostSheetLine.cost_sheet_id == cost_sheet_id,
+            CostSheetLine.project_sport_id == project_sport_id,
+            CostSheetLine.rate.isnot(None),
+        )
+        .all()
+    )
+    sport_line_cost_total = sum(float(line.quantity) * float(line.rate) for line in lines)
+    if not lines or sport_line_cost_total <= 0:
+        return None
+
+    groups: dict[tuple[str, str], list[CostSheetLine]] = {}
+    for line in lines:
+        groups.setdefault((line.work_package.value, line.category), []).append(line)
+
+    work_package_order = {wp.value: idx for idx, wp in enumerate(WorkPackage)}
+    ordered_keys = sorted(groups.keys(), key=lambda k: (work_package_order[k[0]], k[1]))
+
+    rows = []
+    for work_package, category in ordered_keys:
+        group_lines = groups[(work_package, category)]
+        group_cost = sum(float(line.quantity) * float(line.rate) for line in group_lines)
+        group_amount = sport_ex_gst * (group_cost / sport_line_cost_total)
+        units = {line.unit for line in group_lines}
+        if len(units) == 1:
+            unit = units.pop()
+            qty = sum(float(line.quantity) for line in group_lines)
+            rate = group_amount / qty if qty else group_amount
+        else:
+            unit, qty, rate = "Lot", 1.0, group_amount
+        rows.append({"category": category, "unit": unit, "qty": qty, "rate": rate, "amount": group_amount})
+    return rows
+
+
 @pdf_documents_router.get("/quotations/{quotation_id}/pdf")
 def get_quotation_pdf(
     quotation_id: uuid.UUID,
@@ -494,6 +554,7 @@ def get_quotation_pdf(
     quotation = _get_quotation(db, quotation_id)
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
+    estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
     qlines = db.query(QuotationLine).filter(QuotationLine.quotation_id == quotation_id).all()
     inclusions, exclusions = _inclusions_and_exclusions(db, project.id)
 
@@ -551,29 +612,56 @@ def get_quotation_pdf(
         # is already what row["ex_gst"] does (it apportions
         # selling_after_discount, i.e. post-discount, by cost share), so
         # no separate discount line is needed here, same as the private-
-        # client table below never carries one either. This app has no
-        # granular per-item take-off exposed client-side (K.3 keeps the
-        # cost-side CostSheetLine rows internal), so each sport/package is
-        # one BOQ line at qty 1 -- an honest lump-sum-per-item BOQ, not a
-        # fully granular material-level one. There is no DSR/SOR code
+        # client table below never carries one either.
+        #
+        # Each sport/package is broken into one BOQ row per work-package/
+        # category group of its own CostSheetLine rows (see
+        # _granular_boq_rows_for_sport) -- a real, cost-share-apportioned
+        # breakdown, not a fully per-line material take-off (that would
+        # expose raw PM-entered item_name text to the client; the user
+        # chose category-grouped over that on 2026-09-10). A sport with no
+        # priced CostSheetLine rows (its Cost Sheet total was entered
+        # directly) falls back to a single lump-sum "Lot" line, same as
+        # before this change -- never fabricated. There is no DSR/SOR code
         # system in this app, so that column is printed blank for every
         # item rather than fabricated.
         story.append(Paragraph("Bill of Quantities (BOQ)", styles["SectionHeading"]))
         rows = [["Item", "Description", "DSR/SOR ref.", "Unit", "Qty", "Rate (ex-GST)", "Amount (ex-GST)"]]
-        for idx, row in enumerate(sport_rows, start=1):
+        idx = 0
+        for row in sport_rows:
             sport, option = row["sport"], row["option"]
-            rows.append(
-                [
-                    str(idx),
-                    f"{sport.name} ({option.package.value.capitalize()})",
-                    "--",
-                    "Lot",
-                    "1",
-                    format_inr(row["ex_gst"]),
-                    format_inr(row["ex_gst"]),
-                ]
+            package_label = f"{sport.name} ({option.package.value.capitalize()})"
+            granular = _granular_boq_rows_for_sport(
+                db, estimate.cost_sheet_id, option.project_sport_id, row["ex_gst"]
             )
-        table = Table(rows, colWidths=[10 * mm, 45 * mm, 20 * mm, 15 * mm, 12 * mm, 32 * mm, 32 * mm])
+            if granular:
+                for group in granular:
+                    idx += 1
+                    rows.append(
+                        [
+                            str(idx),
+                            f"{package_label} -- {group['category']}",
+                            "--",
+                            group["unit"],
+                            f"{group['qty']:g}",
+                            format_inr(group["rate"]),
+                            format_inr(group["amount"]),
+                        ]
+                    )
+            else:
+                idx += 1
+                rows.append(
+                    [
+                        str(idx),
+                        package_label,
+                        "--",
+                        "Lot",
+                        "1",
+                        format_inr(row["ex_gst"]),
+                        format_inr(row["ex_gst"]),
+                    ]
+                )
+        table = Table(rows, colWidths=[10 * mm, 55 * mm, 18 * mm, 14 * mm, 12 * mm, 28 * mm, 28 * mm])
         table.setStyle(_TABLE_GRID)
         story.append(table)
     else:
