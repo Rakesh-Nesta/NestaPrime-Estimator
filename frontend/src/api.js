@@ -314,6 +314,26 @@ export async function bulkUpdateRateItems(token, payload) {
   return handle(res);
 }
 
+export async function exportRateItemsBlob(token) {
+  const res = await fetch(`${API_BASE}/rate-items/export`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function importRateItemsExcel(token, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/rate-items/import`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: formData,
+  });
+  return handle(res);
+}
+
 export async function listMarginPolicies(token) {
   const res = await fetch(`${API_BASE}/margin-policies`, { headers: authHeaders(token) });
   return handle(res);

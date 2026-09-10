@@ -95,8 +95,8 @@ function SurveyCard({ token, survey, onChanged }) {
   }
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <div className="flex items-center justify-between">
+    <div className="bg-white shadow rounded-lg p-4 sm:p-6 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm">
           <span className="font-medium">{survey.client_name || "(unnamed)"}</span>{" "}
           <span className="text-xs text-gray-400">{survey.site_address}</span>
@@ -107,7 +107,7 @@ function SurveyCard({ token, survey, onChanged }) {
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
 
-      <div className="grid grid-cols-2 gap-3 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         {FIELD_ROWS.map((row) => (
           <label key={row.key} className="space-y-1">
             <span className="text-xs text-gray-500">{row.label}</span>
@@ -125,7 +125,7 @@ function SurveyCard({ token, survey, onChanged }) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-blue-600 text-white text-xs rounded px-3 py-1.5 hover:bg-blue-700 disabled:opacity-50"
+          className="w-full sm:w-auto bg-blue-600 text-white text-xs rounded px-3 py-2 sm:py-1.5 hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save"}
         </button>
@@ -133,7 +133,7 @@ function SurveyCard({ token, survey, onChanged }) {
 
       <AttachmentsPanel token={token} docType="site_survey" docId={survey.id} />
 
-      <div className="flex items-center justify-between text-xs text-gray-500">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
         <span>
           {survey.photo_count} photo(s) attached (min 4 required to complete)
           {survey.surveyed_by_id && ` · surveyed ${survey.surveyed_at}`}
@@ -142,7 +142,7 @@ function SurveyCard({ token, survey, onChanged }) {
           <button
             onClick={handleComplete}
             disabled={survey.photo_count < 4}
-            className="bg-green-600 text-white rounded px-3 py-1.5 hover:bg-green-700 disabled:opacity-50"
+            className="w-full sm:w-auto bg-green-600 text-white rounded px-3 py-2 sm:py-1.5 hover:bg-green-700 disabled:opacity-50"
           >
             Mark Completed
           </button>
@@ -183,9 +183,9 @@ export default function SiteSurvey({ token, project, role, onBack }) {
   if (loading) return <p className="text-center text-gray-500 mt-10">Loading site surveys…</p>;
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="flex items-center justify-between">
+    <div className="max-w-3xl mx-auto mt-4 sm:mt-8 mb-10 px-3 sm:px-4 space-y-4 sm:space-y-6">
+      <div className="bg-white shadow rounded-lg p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-gray-900">Site Survey (Appendix C)</h2>
           {onBack && (
             <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
@@ -205,38 +205,38 @@ export default function SiteSurvey({ token, project, role, onBack }) {
       ))}
 
       {canWrite && (
-        <div className="bg-white shadow rounded-lg p-6 space-y-2">
+        <div className="bg-white shadow rounded-lg p-4 sm:p-6 space-y-2">
           <h3 className="text-sm font-semibold text-gray-700">Start a new survey</h3>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               placeholder="Client" value={newForm.client_name}
               onChange={(e) => setNewForm((f) => ({ ...f, client_name: e.target.value }))}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-gray-300 px-2 py-2 sm:py-1 text-sm"
             />
             <input
               placeholder="Site address" value={newForm.site_address}
               onChange={(e) => setNewForm((f) => ({ ...f, site_address: e.target.value }))}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-gray-300 px-2 py-2 sm:py-1 text-sm"
             />
             <input
               placeholder="PIN code" value={newForm.pin_code}
               onChange={(e) => setNewForm((f) => ({ ...f, pin_code: e.target.value }))}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-gray-300 px-2 py-2 sm:py-1 text-sm"
             />
             <input
               placeholder="Contact name" value={newForm.contact_name}
               onChange={(e) => setNewForm((f) => ({ ...f, contact_name: e.target.value }))}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-gray-300 px-2 py-2 sm:py-1 text-sm"
             />
             <input
               placeholder="Contact phone" value={newForm.contact_phone}
               onChange={(e) => setNewForm((f) => ({ ...f, contact_phone: e.target.value }))}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-gray-300 px-2 py-2 sm:py-1 text-sm"
             />
           </div>
           <button
             onClick={handleCreate}
-            className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700"
+            className="w-full sm:w-auto bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700"
           >
             Start survey
           </button>

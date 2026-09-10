@@ -4,13 +4,24 @@ import {
   bulkUpdateRateItems,
   confirmRateItem,
   createRateItem,
+  exportRateItemsBlob,
   getRateHistory,
+  importRateItemsExcel,
   listLabourCategories,
   listRateItems,
   syncDraftLinesToMasterRate,
   updateRateItem,
   updateRateValue,
 } from "./api";
+
+function downloadBlobAsFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const emptyForm = {
   category: "",
@@ -31,6 +42,8 @@ export default function RateSheet({ token, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [importingExcel, setImportingExcel] = useState(false);
+  const [importResult, setImportResult] = useState(null);
 
   function load() {
     return Promise.all([listRateItems(token), listLabourCategories(token)]).then(
@@ -94,6 +107,34 @@ export default function RateSheet({ token, onBack }) {
     }
   }
 
+  async function handleExportExcel() {
+    setError("");
+    try {
+      const blob = await exportRateItemsBlob(token);
+      downloadBlobAsFile(blob, "rate-sheet.xlsx");
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleImportExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setImportResult(null);
+    setImportingExcel(true);
+    try {
+      const result = await importRateItemsExcel(token, file);
+      setImportResult(result);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImportingExcel(false);
+      e.target.value = "";
+    }
+  }
+
   if (loading) {
     return <p className="text-center text-gray-500 mt-10">Loading rate sheet…</p>;
   }
@@ -113,6 +154,58 @@ export default function RateSheet({ token, onBack }) {
           Every entry starts as a Manual, unverified rate. A PM or Director confirming it
           promotes it to an AI (master) rate (J.1).
         </p>
+      </div>
+
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-1">Excel export / import</h3>
+        <p className="text-xs text-gray-400 mb-3">
+          P.2 Phase 1b: "Excel rate import" -- so NestaPrime can maintain its rate card in Excel and
+          upload it. Re-importing an unchanged file is a safe no-op; a changed rate on an existing item
+          goes through the same rate-history mechanics as editing it here. New items always start
+          Manual/unverified, same as adding one below -- an Excel file can never promote a rate to AI.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportExcel}
+            className="text-xs bg-gray-100 text-gray-700 rounded px-3 py-1.5 hover:bg-gray-200"
+          >
+            Export to Excel
+          </button>
+          <label className="text-xs bg-blue-600 text-white rounded px-3 py-1.5 cursor-pointer hover:bg-blue-700">
+            {importingExcel ? "Importing…" : "Import from Excel"}
+            <input
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={handleImportExcel}
+              className="hidden"
+              disabled={importingExcel}
+            />
+          </label>
+        </div>
+        {importResult && (
+          <div className="mt-3 text-xs bg-gray-50 border border-gray-200 rounded p-3">
+            <p className="text-gray-700">
+              <span className="font-medium">{importResult.created.length}</span> new item(s) created,{" "}
+              <span className="font-medium">{importResult.updated.length}</span> item(s) updated,{" "}
+              <span className="font-medium">{importResult.unchanged}</span> row(s) unchanged (skipped)
+              {importResult.errors.length > 0 && (
+                <>
+                  , <span className="font-medium text-red-600">{importResult.errors.length}</span> row error(s)
+                </>
+              )}
+              .
+            </p>
+            {importResult.errors.length > 0 && (
+              <ul className="mt-1 list-disc list-inside text-red-600">
+                {importResult.errors.map((e) => (
+                  <li key={e.row}>
+                    Row {e.row}: {e.detail}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-3">
