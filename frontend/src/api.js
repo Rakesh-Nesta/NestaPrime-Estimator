@@ -1474,3 +1474,44 @@ export async function supersedeAttachment(token, attachmentId, { tag, approvalSt
   });
   return handle(res);
 }
+
+export async function changePassword(token, { currentPassword, newPassword }) {
+  const res = await fetch(`${API_BASE}/auth/change-password`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  return handle(res);
+}
+
+export async function listUsers(token) {
+  const res = await fetch(`${API_BASE}/users`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createUser(token, { name, email, role, password }) {
+  const res = await fetch(`${API_BASE}/users`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, role, password }),
+  });
+  return handle(res);
+}
+
+export async function updateUser(token, userId, payload) {
+  const res = await fetch(`${API_BASE}/users/${userId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function resetUserPassword(token, userId, newPassword) {
+  const res = await fetch(`${API_BASE}/users/${userId}/reset-password`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+  return handle(res);
+}
