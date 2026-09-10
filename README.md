@@ -28,6 +28,10 @@ business figures a Director tunes, a distinction the codebase's own code comment
 before this gap was picked up. Only the flooring guide and lighting lux/pole-count tables were
 actually built.
 
+See [`docs/audit-closure.md`](docs/audit-closure.md) for the full gap-by-gap closure record,
+including this one and two other judgment calls (a blueprint contradiction on Tender Mode's GST
+toggle, and how granular the Tender BOQ actually needed to be).
+
 ## Stack
 
 - Backend: Python, FastAPI, SQLAlchemy, Alembic, PostgreSQL 15
