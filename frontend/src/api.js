@@ -356,6 +356,58 @@ export async function upsertPackageContent(token, sportId, tier, payload) {
   return handle(res);
 }
 
+export async function listFlooringGuides(token, sportId) {
+  const params = sportId ? `?sport_id=${sportId}` : "";
+  const res = await fetch(`${API_BASE}/flooring-guides${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function upsertFlooringGuide(token, sportId, payload) {
+  const res = await fetch(`${API_BASE}/flooring-guides/${sportId}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listLightingLuxStandards(token) {
+  const res = await fetch(`${API_BASE}/lighting-standards/lux`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function upsertLightingLuxStandard(token, category, payload) {
+  const res = await fetch(`${API_BASE}/lighting-standards/lux/${category}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listSportPoleCounts(token, sportId) {
+  const params = sportId ? `?sport_id=${sportId}` : "";
+  const res = await fetch(`${API_BASE}/lighting-standards/pole-counts${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function upsertSportPoleCount(token, sportId, payload) {
+  const res = await fetch(`${API_BASE}/lighting-standards/pole-counts/${sportId}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deleteSportPoleCount(token, sportId) {
+  const res = await fetch(`${API_BASE}/lighting-standards/pole-counts/${sportId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}
+
 export async function priceQuote(token, payload) {
   const res = await fetch(`${API_BASE}/pricing/quote`, {
     method: "POST",

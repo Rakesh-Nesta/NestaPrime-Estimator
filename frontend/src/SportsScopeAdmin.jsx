@@ -7,12 +7,16 @@ import {
   createSport,
   createVehicleClass,
   deleteSportMarginPolicy,
+  deleteSportPoleCount,
   listAccessoryCatalog,
+  listFlooringGuides,
   listHubs,
+  listLightingLuxStandards,
   listNettingGrades,
   listPackageContents,
   listScopeItems,
   listSportMarginPolicies,
+  listSportPoleCounts,
   listSports,
   listVehicleClasses,
   updateAccessoryCatalogItem,
@@ -21,8 +25,11 @@ import {
   updateScopeItem,
   updateSport,
   updateVehicleClass,
+  upsertFlooringGuide,
+  upsertLightingLuxStandard,
   upsertPackageContent,
   upsertSportMarginPolicy,
+  upsertSportPoleCount,
 } from "./api";
 
 const SPORT_CATEGORIES = ["indoor", "outdoor"];
@@ -43,6 +50,14 @@ function emptyNettingGradeForm() {
 
 function emptyVehicleClassForm() {
   return { key: "", name: "", truck_capacity_tonnes: "", rate_per_km: "" };
+}
+
+function emptyFlooringGuideForm() {
+  return { primary_spec: "", secondary_spec: "", budget_spec: "", rationale: "" };
+}
+
+function emptyLuxStandardForm() {
+  return { lux_practice: "", lux_match: "", lux_tournament: "" };
 }
 
 function emptySportForm() {
@@ -77,6 +92,9 @@ export default function SportsScopeAdmin({ token, onBack }) {
   const [accessoryCatalog, setAccessoryCatalog] = useState([]);
   const [nettingGrades, setNettingGrades] = useState([]);
   const [vehicleClasses, setVehicleClasses] = useState([]);
+  const [flooringGuides, setFlooringGuides] = useState([]);
+  const [luxStandards, setLuxStandards] = useState([]);
+  const [poleCounts, setPoleCounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -85,7 +103,8 @@ export default function SportsScopeAdmin({ token, onBack }) {
       listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token),
       listPackageContents(token), listHubs(token, true), listAccessoryCatalog(token, undefined, true),
       listNettingGrades(token, true), listVehicleClasses(token, true),
-    ]).then(([s, i, m, p, h, a, n, v]) => {
+      listFlooringGuides(token), listLightingLuxStandards(token), listSportPoleCounts(token),
+    ]).then(([s, i, m, p, h, a, n, v, fg, lux, pole]) => {
       setSports(s);
       setScopeItems(i);
       setSportMarginPolicies(m);
@@ -94,6 +113,9 @@ export default function SportsScopeAdmin({ token, onBack }) {
       setAccessoryCatalog(a);
       setNettingGrades(n);
       setVehicleClasses(v);
+      setFlooringGuides(fg);
+      setLuxStandards(lux);
+      setPoleCounts(pole);
     });
   }
 
@@ -188,6 +210,18 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Vehicle classes ({vehicleClasses.length})
           </button>
+          <button
+            onClick={() => setTab("flooring_guides")}
+            className={`text-sm rounded px-3 py-1 ${tab === "flooring_guides" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Flooring guides ({flooringGuides.length})
+          </button>
+          <button
+            onClick={() => setTab("lighting_standards")}
+            className={`text-sm rounded px-3 py-1 ${tab === "lighting_standards" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Lighting standards ({luxStandards.length + poleCounts.length})
+          </button>
         </div>
       </div>
 
@@ -210,6 +244,18 @@ export default function SportsScopeAdmin({ token, onBack }) {
       )}
       {tab === "netting" && <NettingGradesTab token={token} nettingGrades={nettingGrades} onAction={withErrorHandling} />}
       {tab === "vehicles" && <VehicleClassesTab token={token} vehicleClasses={vehicleClasses} onAction={withErrorHandling} />}
+      {tab === "flooring_guides" && (
+        <FlooringGuidesTab token={token} sports={sports} flooringGuides={flooringGuides} onAction={withErrorHandling} />
+      )}
+      {tab === "lighting_standards" && (
+        <LightingStandardsTab
+          token={token}
+          sports={sports}
+          luxStandards={luxStandards}
+          poleCounts={poleCounts}
+          onAction={withErrorHandling}
+        />
+      )}
     </div>
   );
 }
@@ -1286,6 +1332,270 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function FlooringGuidesTab({ token, sports, flooringGuides, onAction }) {
+  const [editingId, setEditingId] = useState(null); // sport_id
+  const [editForm, setEditForm] = useState(emptyFlooringGuideForm());
+
+  const bySportId = Object.fromEntries(flooringGuides.map((g) => [g.sport_id, g]));
+
+  function startEdit(sportId) {
+    const existing = bySportId[sportId];
+    setEditingId(sportId);
+    setEditForm(
+      existing
+        ? {
+            primary_spec: existing.primary_spec,
+            secondary_spec: existing.secondary_spec ?? "",
+            budget_spec: existing.budget_spec ?? "",
+            rationale: existing.rationale,
+          }
+        : emptyFlooringGuideForm()
+    );
+  }
+
+  const handleSave = onAction(async (sportId) => {
+    await upsertFlooringGuide(token, sportId, {
+      primary_spec: editForm.primary_spec,
+      secondary_spec: editForm.secondary_spec || null,
+      budget_spec: editForm.budget_spec || null,
+      rationale: editForm.rationale,
+    });
+    setEditingId(null);
+  });
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-4">
+      <p className="text-xs text-gray-400">
+        Parts F.1 (indoor) / F.2 (outdoor): the per-sport flooring recommendation -- primary spec (Premium
+        package), an optional secondary spec (Standard, falling back to primary if unset), an optional budget spec
+        (Budget package, falling back to secondary then primary), and the rationale shown alongside it. A sport with
+        no row here gets no flooring recommendation at all, rather than a guess -- e.g. shooting_range_10m and
+        archery_range have none, on purpose.
+      </p>
+      {sports.map((sport) => {
+        const guide = bySportId[sport.id];
+        return (
+          <div key={sport.id} className="border border-gray-200 rounded p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">
+                {sport.name} <span className="text-gray-400 text-xs font-normal">({sport.key})</span>
+              </p>
+              <button
+                onClick={() => startEdit(sport.id)}
+                className={`text-xs rounded px-3 py-1 border ${
+                  guide ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"
+                }`}
+              >
+                {guide ? "Edit" : "Not set"}
+              </button>
+            </div>
+            {guide && editingId !== sport.id && (
+              <p className="text-xs text-gray-500">
+                Primary: {guide.primary_spec}
+                {guide.secondary_spec && <> · Secondary: {guide.secondary_spec}</>}
+                {guide.budget_spec && <> · Budget: {guide.budget_spec}</>}
+              </p>
+            )}
+            {editingId === sport.id && (
+              <div className="border border-blue-300 bg-blue-50 rounded p-3 space-y-2 text-sm">
+                <LabeledInput
+                  label="Primary spec (Premium)"
+                  value={editForm.primary_spec}
+                  onChange={(v) => setEditForm((f) => ({ ...f, primary_spec: v }))}
+                  required
+                />
+                <LabeledInput
+                  label="Secondary spec (Standard, optional)"
+                  value={editForm.secondary_spec}
+                  onChange={(v) => setEditForm((f) => ({ ...f, secondary_spec: v }))}
+                />
+                <LabeledInput
+                  label="Budget spec (optional)"
+                  value={editForm.budget_spec}
+                  onChange={(v) => setEditForm((f) => ({ ...f, budget_spec: v }))}
+                />
+                <LabeledInput
+                  label="Rationale"
+                  value={editForm.rationale}
+                  onChange={(v) => setEditForm((f) => ({ ...f, rationale: v }))}
+                  required
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSave(sport.id)}
+                    className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700"
+                  >
+                    Save
+                  </button>
+                  <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const LUX_CATEGORIES = ["court", "football_cricket", "pool", "gym"];
+
+function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onAction }) {
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [luxForm, setLuxForm] = useState(emptyLuxStandardForm());
+  const [poleSportId, setPoleSportId] = useState("");
+  const [poleCountValue, setPoleCountValue] = useState("");
+
+  const luxByCategory = Object.fromEntries(luxStandards.map((s) => [s.category, s]));
+  const sportsById = Object.fromEntries(sports.map((s) => [s.id, s]));
+
+  function startEditLux(category) {
+    const existing = luxByCategory[category];
+    setEditingCategory(category);
+    setLuxForm(
+      existing
+        ? {
+            lux_practice: existing.lux_practice ?? "",
+            lux_match: existing.lux_match ?? "",
+            lux_tournament: existing.lux_tournament ?? "",
+          }
+        : emptyLuxStandardForm()
+    );
+  }
+
+  const handleSaveLux = onAction(async (category) => {
+    await upsertLightingLuxStandard(token, category, {
+      lux_practice: num(luxForm.lux_practice),
+      lux_match: num(luxForm.lux_match),
+      lux_tournament: num(luxForm.lux_tournament),
+    });
+    setEditingCategory(null);
+  });
+
+  const handleSetPoleCount = onAction(async (e) => {
+    e.preventDefault();
+    await upsertSportPoleCount(token, poleSportId, { pole_count: Number(poleCountValue) });
+    setPoleSportId("");
+    setPoleCountValue("");
+  });
+
+  const handleRemovePoleCount = onAction(async (sportId) => deleteSportPoleCount(token, sportId));
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white shadow rounded-lg p-6 space-y-3">
+        <p className="text-xs text-gray-400">
+          Part H's lux table, by sport group -- "court", "football_cricket", "pool" and "gym" are a fixed code-level
+          grouping (which sports behave alike), not editable here; only the lux figures for each group are.
+        </p>
+        {LUX_CATEGORIES.map((category) => {
+          const standard = luxByCategory[category];
+          return (
+            <div key={category} className="border border-gray-200 rounded p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">{category}</p>
+                <button
+                  onClick={() => startEditLux(category)}
+                  className="text-xs rounded px-3 py-1 border border-blue-300 bg-blue-50 text-blue-700"
+                >
+                  Edit
+                </button>
+              </div>
+              {standard && editingCategory !== category && (
+                <p className="text-xs text-gray-500">
+                  Practice: {standard.lux_practice ?? "--"} · Match: {standard.lux_match ?? "--"} · Tournament:{" "}
+                  {standard.lux_tournament ?? "--"}
+                </p>
+              )}
+              {editingCategory === category && (
+                <div className="border border-blue-300 bg-blue-50 rounded p-3 space-y-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2">
+                    <LabeledInput
+                      label="Practice lux"
+                      type="number"
+                      value={luxForm.lux_practice}
+                      onChange={(v) => setLuxForm((f) => ({ ...f, lux_practice: v }))}
+                    />
+                    <LabeledInput
+                      label="Match lux"
+                      type="number"
+                      value={luxForm.lux_match}
+                      onChange={(v) => setLuxForm((f) => ({ ...f, lux_match: v }))}
+                    />
+                    <LabeledInput
+                      label="Tournament lux"
+                      type="number"
+                      value={luxForm.lux_tournament}
+                      onChange={(v) => setLuxForm((f) => ({ ...f, lux_tournament: v }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSaveLux(category)}
+                      className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingCategory(null)} className="text-xs text-gray-500 hover:underline">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-white shadow rounded-lg p-6 space-y-3">
+        <p className="text-xs text-gray-400">
+          Part H's pole table (open-air only): the fixture-count floor once a sport mounts lighting on poles rather
+          than structure. Most sports have no row -- that's a real state (no pole-count floor applies), not a gap.
+        </p>
+        {poleCounts.map((row) => (
+          <div key={row.sport_id} className="flex items-center justify-between border border-gray-200 rounded p-2 text-sm">
+            <span>
+              {sportsById[row.sport_id]?.name ?? row.sport_id} · {row.pole_count} poles
+            </span>
+            <button onClick={() => handleRemovePoleCount(row.sport_id)} className="text-xs text-red-600 hover:underline">
+              Remove
+            </button>
+          </div>
+        ))}
+        <form onSubmit={handleSetPoleCount} className="flex items-center gap-2">
+          <select
+            value={poleSportId}
+            onChange={(e) => setPoleSportId(e.target.value)}
+            required
+            className="rounded border border-gray-300 px-2 py-1 text-sm"
+          >
+            <option value="">Select sport…</option>
+            {sports.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min="1"
+            placeholder="Pole count"
+            value={poleCountValue}
+            onChange={(e) => setPoleCountValue(e.target.value)}
+            required
+            className="w-28 rounded border border-gray-300 px-2 py-1 text-sm"
+          />
+          <button type="submit" className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+            Set
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

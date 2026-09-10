@@ -8,6 +8,8 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.accessory_catalog_item import AccessoryCatalogItem
+from app.models.flooring_guide import FlooringGuide
+from app.models.lighting_standard import LightingLuxStandard, SportPoleCount
 from app.models.netting_grade import NettingGrade
 from app.models.user import User, UserRole
 from app.models.margin_policy import MarginPolicy
@@ -18,11 +20,14 @@ from app.models.sport import Sport
 from app.core.security import hash_password
 from app.seed_data import (
     ACCESSORY_CATALOG_SEED,
+    FLOORING_GUIDES_SEED,
     LABOUR_CATEGORIES_SEED,
+    LIGHTING_LUX_STANDARDS_SEED,
     MARGIN_POLICY_SEED,
     NETTING_GRADES_SEED,
     REGIONAL_MULTIPLIER_SEED,
     SCOPE_ITEMS_SEED,
+    SPORT_POLE_COUNTS_SEED,
     SPORTS_SEED,
 )
 
@@ -86,6 +91,24 @@ def db_session():
                     quantity_per_court=quantity_per_court,
                 )
             )
+        for sport_key, primary_spec, secondary_spec, budget_spec, rationale in FLOORING_GUIDES_SEED:
+            session.add(
+                FlooringGuide(
+                    sport_id=sport_id_by_key[sport_key],
+                    primary_spec=primary_spec,
+                    secondary_spec=secondary_spec,
+                    budget_spec=budget_spec,
+                    rationale=rationale,
+                )
+            )
+        for category, lux_practice, lux_match, lux_tournament in LIGHTING_LUX_STANDARDS_SEED:
+            session.add(
+                LightingLuxStandard(
+                    category=category, lux_practice=lux_practice, lux_match=lux_match, lux_tournament=lux_tournament,
+                )
+            )
+        for sport_key, pole_count in SPORT_POLE_COUNTS_SEED:
+            session.add(SportPoleCount(sport_id=sport_id_by_key[sport_key], pole_count=pole_count))
         for key, order, group, name in SCOPE_ITEMS_SEED:
             session.add(
                 ScopeItem(key=key, display_order=order, group=group, name=name)
