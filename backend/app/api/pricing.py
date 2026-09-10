@@ -8,6 +8,7 @@ from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import ClientType
+from app.models.document import GstMode
 from app.models.margin_policy import MarginPolicy, SportMarginPolicy
 
 margin_policies_router = APIRouter(prefix="/margin-policies", tags=["margin-policies"])
@@ -184,6 +185,7 @@ class PricingResult(BaseModel):
     gst_rate_percent: float
     gst_amount: float
     quotation_total: float
+    gst_mode: GstMode
 
 
 def compute_pricing(
@@ -193,42 +195,69 @@ def compute_pricing(
     target: float,
     discount_type: str | None,
     discount_value: float,
+    gst_mode: GstMode = GstMode.EXCLUSIVE,
 ) -> PricingResult:
     """K.1 steps 7-12 + K.2/K.4, shared by /pricing/quote and the document
     state machine (Estimate options, Quotations) so both price identically.
     Callers resolve floor/target beforehand -- via effective_floor_and_target
     (single sport) or cost_weighted_floor_and_target (multi-sport) -- since
     K.2's sport-type override means the applicable floor is not always the
-    client-type policy's own floor."""
+    client-type policy's own floor.
+
+    gst_mode (Part L 'Price basis' toggle, Tender Mode only -- see
+    GstMode's own docstring) changes only where GST and the discount fall
+    relative to each other, never how target margin is defined: target
+    margin is always anchored to the ex-GST base in both modes, so
+    margin_percent stays comparable regardless of which basis a tender
+    happens to quote in.
+    - EXCLUSIVE (default, every private/non-Tender quotation): the
+      target-margin price is already the ex-GST base; discount is taken
+      off it; GST is added on top to reach quotation_total.
+    - INCLUSIVE: the target-margin price is grossed up by GST first (the
+      figure actually comparable to a competitor's inclusive tender bid);
+      discount is taken off that grossed-up figure to land directly on
+      quotation_total; the ex-GST base (and so margin) is then backed out
+      of that final total."""
     if target >= 100:
         raise HTTPException(status_code=400, detail="Target margin must be below 100%")
 
-    selling_price_ex_gst = cost / (1 - target / 100)
+    target_price_ex_gst = cost / (1 - target / 100)
+    gst_rate_percent = get_gst_rate_percent(db)
+
+    if gst_mode == GstMode.INCLUSIVE:
+        target_price = target_price_ex_gst * (1 + gst_rate_percent / 100)
+    else:
+        target_price = target_price_ex_gst
 
     if discount_type == "percent":
-        discount_amount = selling_price_ex_gst * discount_value / 100
+        discount_amount = target_price * discount_value / 100
     elif discount_type == "amount":
         discount_amount = discount_value
     else:
         discount_amount = 0.0
 
-    selling_after_discount = selling_price_ex_gst - discount_amount
-    if selling_after_discount <= 0:
+    price_after_discount = target_price - discount_amount
+    if price_after_discount <= 0:
         raise HTTPException(status_code=400, detail="Discount cannot reduce selling price to zero or below")
+
+    if gst_mode == GstMode.INCLUSIVE:
+        quotation_total = price_after_discount
+        selling_after_discount = quotation_total / (1 + gst_rate_percent / 100)
+        gst_amount = quotation_total - selling_after_discount
+    else:
+        selling_after_discount = price_after_discount
+        gst_amount = selling_after_discount * gst_rate_percent / 100
+        quotation_total = selling_after_discount + gst_amount
 
     margin_percent = (selling_after_discount - cost) / selling_after_discount * 100
     markup_percent = (selling_after_discount - cost) / cost * 100
     below_floor = margin_percent < floor
 
-    gst_rate_percent = get_gst_rate_percent(db)
-    gst_amount = selling_after_discount * gst_rate_percent / 100
-    quotation_total = selling_after_discount + gst_amount
-
     return PricingResult(
         cost=cost,
         floor_margin_percent=floor,
         target_margin_percent=target,
-        selling_price_ex_gst=selling_price_ex_gst,
+        selling_price_ex_gst=target_price_ex_gst,
         discount_amount=discount_amount,
         selling_after_discount=selling_after_discount,
         margin_percent=margin_percent,
@@ -237,6 +266,7 @@ def compute_pricing(
         gst_rate_percent=gst_rate_percent,
         gst_amount=gst_amount,
         quotation_total=quotation_total,
+        gst_mode=gst_mode,
     )
 
 
@@ -246,6 +276,11 @@ class PricingQuoteRequest(BaseModel):
     sport_id: uuid.UUID | None = None  # K.2 sport-type floor override, if the Director has set one
     discount_type: str | None = None  # "percent" | "amount" | None
     discount_value: float = Field(default=0.0, ge=0)
+    # Part L "Price basis" toggle -- a standalone sandbox calculator, not
+    # tied to a real Quotation, so unlike the document endpoints this
+    # isn't gated to Tender Mode; anyone sanity-checking "what would an
+    # inclusive tender bid look like" can flip it.
+    gst_mode: GstMode = GstMode.EXCLUSIVE
 
 
 class PricingQuoteOut(BaseModel):
@@ -261,6 +296,7 @@ class PricingQuoteOut(BaseModel):
     gst_rate_percent: float
     gst_amount: float  # K.1 step 11
     quotation_total: float  # K.1 step 12
+    gst_mode: GstMode
 
 
 @pricing_router.post("/quote", response_model=PricingQuoteOut)
@@ -279,7 +315,8 @@ def price_quote(
 
     floor, target = effective_floor_and_target(db, policy, payload.sport_id)
     result = compute_pricing(
-        db, payload.cost_incl_contingency, floor, target, payload.discount_type, payload.discount_value
+        db, payload.cost_incl_contingency, floor, target, payload.discount_type, payload.discount_value,
+        gst_mode=payload.gst_mode,
     )
     return PricingQuoteOut(
         cost_incl_contingency=result.cost,
@@ -294,4 +331,5 @@ def price_quote(
         gst_rate_percent=result.gst_rate_percent,
         gst_amount=result.gst_amount,
         quotation_total=result.quotation_total,
+        gst_mode=result.gst_mode,
     )

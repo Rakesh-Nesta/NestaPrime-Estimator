@@ -382,6 +382,35 @@ export async function createTenderDetails(token, projectId, payload) {
   return handle(res);
 }
 
+export async function listCompetitorBids(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/tender-details/competitor-bids`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function addCompetitorBid(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/tender-details/competitor-bids`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deleteCompetitorBid(token, projectId, bidId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/tender-details/competitor-bids/${bidId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}
+
+export async function getL1View(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/l1-view`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 export async function getTechnicalBidChecklist(token, projectId) {
   const res = await fetch(`${API_BASE}/projects/${projectId}/technical-bid-checklist`, {
     headers: authHeaders(token),

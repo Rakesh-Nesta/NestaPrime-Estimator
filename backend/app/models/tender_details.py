@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,3 +43,25 @@ class TenderDetails(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
+
+
+class TenderCompetitorBid(Base):
+    """Part L 'Price basis' row: 'L1 mode shows margin at proposed price
+    live.' The blueprint gives no schema for tracking competing bids --
+    this is the minimum needed to make 'live' mean something: as PM/
+    Director learn of other bidders' amounts during price discovery
+    (a pre-bid estimate, a rumoured figure, the actual opening-day
+    reading), they record it here; the L1 view (tender.py) then compares
+    the project's current Quotation total against whatever's on file,
+    live, rather than a one-time snapshot."""
+
+    __tablename__ = "tender_competitor_bids"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tender_details_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tender_details.id"), nullable=False
+    )
+    bidder_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    recorded_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)

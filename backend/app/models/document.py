@@ -85,6 +85,26 @@ class QuotationStatus(str, enum.Enum):
     SUPERSEDED = "superseded"
 
 
+class GstMode(str, enum.Enum):
+    """Part L Tender Mode table, 'Price basis' row: 'Inclusive/exclusive
+    GST toggle.' K.4 elsewhere states GST 'is not a per-document
+    override -- it is a flat, Master-Settings rate,' and the v5.1.9
+    QUOTATIONS data model note says gst_mode was removed -- both written
+    before this Part L row, which the rest of the document never
+    reconciles with them. Built anyway per an explicit, informed
+    decision to treat Tender Mode as a deliberate carve-out from that
+    later simplification (the same kind of override this codebase's own
+    GST-TDS net-receivable calculator already applies to a different
+    K.1b retirement note) -- EXCLUSIVE (today's only behavior, and the
+    default) keeps every private/non-Tender Quotation exactly as K.4
+    describes; INCLUSIVE only becomes selectable on a Tender Mode
+    project, since Part L's whole table is scoped to Government
+    clients."""
+
+    EXCLUSIVE = "exclusive"
+    INCLUSIVE = "inclusive"
+
+
 class CostSheet(Base):
     """Part M.1 stage 1. document_no reuses the project's own YYMM-####
     suffix with a CS- prefix (M.2 rule 10: 'one project number ... is
@@ -316,6 +336,11 @@ class Quotation(Base):
     below_floor: Mapped[bool] = mapped_column(nullable=False)
     gst_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     quotation_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    # Part L "Price basis" row (Tender Mode only -- see GstMode's own
+    # docstring for why this exists despite K.4). EXCLUSIVE for every
+    # private/non-Tender quotation, matching every quotation before this
+    # field existed.
+    gst_mode: Mapped[GstMode] = mapped_column(Enum(GstMode, name="gst_mode"), default=GstMode.EXCLUSIVE, nullable=False)
 
     # M.2 rule 3: a Quotation on an Unverified Cost Sheet needs Director
     # release and can't be marked Won until verified. Set from the

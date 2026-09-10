@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.document import Quotation
 from app.models.project import Project
 from app.models.technical_bid_checklist import TechnicalBidChecklistItem, TechnicalBidChecklistKey
-from app.models.tender_details import TenderDetails
+from app.models.tender_details import TenderCompetitorBid, TenderDetails
 
 tender_details_router = APIRouter(prefix="/projects", tags=["tender-details"])
 tender_calc_router = APIRouter(prefix="/tender", tags=["tender-calculators"])
+l1_view_router = APIRouter(tags=["tender-l1-view"])
 
 # Tender Mode is money-adjacent (EMD, retention, BG %) the same way K's
 # commercial layer is -- every K.1 step touching it is "PM, Director" only,
@@ -118,6 +120,153 @@ def get_tender_details(
     if not row:
         raise HTTPException(status_code=404, detail="Tender details not found for this project")
     return _tender_details_to_out(db, row)
+
+
+def _get_tender_details_or_404(db: Session, project_id: uuid.UUID) -> TenderDetails:
+    row = db.query(TenderDetails).filter(TenderDetails.project_id == project_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Tender details not found for this project")
+    return row
+
+
+class TenderCompetitorBidCreate(BaseModel):
+    bidder_name: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+
+
+class TenderCompetitorBidOut(BaseModel):
+    id: uuid.UUID
+    tender_details_id: uuid.UUID
+    bidder_name: str
+    amount: float
+    recorded_by_id: uuid.UUID
+    recorded_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@tender_details_router.post(
+    "/{project_id}/tender-details/competitor-bids", response_model=TenderCompetitorBidOut, status_code=201
+)
+def add_competitor_bid(
+    project_id: uuid.UUID,
+    payload: TenderCompetitorBidCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ROLES)),
+):
+    """Part L 'Price basis' row: 'L1 mode shows margin at proposed price
+    live.' The blueprint gives no schema for competing bids -- each
+    recorded amount (a pre-bid estimate, a rumoured figure, an
+    opening-day reading) feeds the live L1 comparison below as PM/
+    Director learn of it during price discovery."""
+    tender_details = _get_tender_details_or_404(db, project_id)
+    bid = TenderCompetitorBid(
+        tender_details_id=tender_details.id,
+        bidder_name=payload.bidder_name,
+        amount=payload.amount,
+        recorded_by_id=current_user.id,
+    )
+    db.add(bid)
+    db.commit()
+    db.refresh(bid)
+    return bid
+
+
+@tender_details_router.get(
+    "/{project_id}/tender-details/competitor-bids", response_model=list[TenderCompetitorBidOut]
+)
+def list_competitor_bids(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ROLES)),
+):
+    tender_details = _get_tender_details_or_404(db, project_id)
+    return (
+        db.query(TenderCompetitorBid)
+        .filter(TenderCompetitorBid.tender_details_id == tender_details.id)
+        .order_by(TenderCompetitorBid.amount)
+        .all()
+    )
+
+
+@tender_details_router.delete(
+    "/{project_id}/tender-details/competitor-bids/{bid_id}", status_code=204
+)
+def delete_competitor_bid(
+    project_id: uuid.UUID,
+    bid_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ROLES)),
+):
+    tender_details = _get_tender_details_or_404(db, project_id)
+    bid = (
+        db.query(TenderCompetitorBid)
+        .filter(TenderCompetitorBid.id == bid_id, TenderCompetitorBid.tender_details_id == tender_details.id)
+        .first()
+    )
+    if not bid:
+        raise HTTPException(status_code=404, detail="Competitor bid not found")
+    db.delete(bid)
+    db.commit()
+
+
+class L1ViewOut(BaseModel):
+    quotation_id: uuid.UUID
+    our_price: float
+    margin_percent: float | None  # stripped for Sales (K.3), same as QuotationOut
+    competitor_bids: list[TenderCompetitorBidOut]
+    lowest_competitor_amount: float | None
+    # None = no competitor bids on file yet, so there's nothing to rank
+    # against -- distinct from False (we're beaten by at least one bid).
+    is_l1: bool | None
+    rank: int | None
+
+
+@l1_view_router.get("/quotations/{quotation_id}/l1-view", response_model=L1ViewOut)
+def get_l1_view(
+    quotation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    """Part L 'Price basis' row: 'L1 mode shows margin at proposed price
+    live.' Recomputed on every call from the Quotation's current
+    quotation_total and whatever competitor bids are on file -- 'live'
+    in the sense that it always reflects the latest of either, not a
+    snapshot taken once at tender entry. our_price is the GST-basis
+    figure a tender is actually compared on (quotation_total already
+    carries whichever gst_mode this Quotation used)."""
+    quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    project = db.query(Project).filter(Project.id == quotation.project_id).first()
+    if not project or not project.tender_mode:
+        raise HTTPException(
+            status_code=400, detail="The L1 view only applies to Tender Mode (Government client) projects (Part L)"
+        )
+    tender_details = _get_tender_details_or_404(db, project.id)
+
+    bids = (
+        db.query(TenderCompetitorBid)
+        .filter(TenderCompetitorBid.tender_details_id == tender_details.id)
+        .order_by(TenderCompetitorBid.amount)
+        .all()
+    )
+    our_price = float(quotation.quotation_total)
+    lowest_competitor_amount = float(bids[0].amount) if bids else None
+    is_l1 = our_price <= lowest_competitor_amount if lowest_competitor_amount is not None else None
+    rank = 1 + sum(1 for b in bids if float(b.amount) < our_price) if bids else None
+
+    margin_percent = None if current_user.role.value == "sales" else float(quotation.margin_percent)
+
+    return L1ViewOut(
+        quotation_id=quotation.id,
+        our_price=our_price,
+        margin_percent=margin_percent,
+        competitor_bids=bids,
+        lowest_competitor_amount=lowest_competitor_amount,
+        is_l1=is_l1,
+        rank=rank,
+    )
 
 
 class TechnicalBidChecklistItemOut(BaseModel):

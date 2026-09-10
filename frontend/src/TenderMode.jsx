@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import AttachmentsPanel from "./AttachmentsPanel";
 import {
+  addCompetitorBid,
   createTenderDetails,
+  deleteCompetitorBid,
   getTechnicalBidChecklist,
   getTenderDetails,
+  listCompetitorBids,
   netReceivable,
   performanceBgCost,
   updateTechnicalBidChecklistItem,
@@ -43,14 +46,47 @@ export default function TenderMode({ token, project, onBack }) {
   const [checklist, setChecklist] = useState([]);
   const [openChecklistDoc, setOpenChecklistDoc] = useState(null);
 
+  const [competitorBids, setCompetitorBids] = useState([]);
+  const [bidForm, setBidForm] = useState({ bidder_name: "", amount: "" });
+
+  function loadCompetitorBids() {
+    return listCompetitorBids(token, project.id).then(setCompetitorBids).catch(() => setCompetitorBids([]));
+  }
+
   useEffect(() => {
     getTenderDetails(token, project.id)
       .then(setDetails)
       .finally(() => setLoading(false));
     if (project.tender_mode) {
       getTechnicalBidChecklist(token, project.id).then(setChecklist).catch(() => {});
+      loadCompetitorBids();
     }
   }, [token, project.id]);
+
+  async function handleAddBid(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await addCompetitorBid(token, project.id, {
+        bidder_name: bidForm.bidder_name,
+        amount: Number(bidForm.amount),
+      });
+      setBidForm({ bidder_name: "", amount: "" });
+      await loadCompetitorBids();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleDeleteBid(bidId) {
+    setError("");
+    try {
+      await deleteCompetitorBid(token, project.id, bidId);
+      await loadCompetitorBids();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function handleToggleChecklistItem(key, confirmed) {
     setError("");
@@ -226,6 +262,52 @@ export default function TenderMode({ token, project, onBack }) {
           </div>
         ))}
       </div>
+
+      {details && (
+        <div className="bg-white shadow rounded-lg p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-700">Competitor bids (Price basis -- live L1 view)</h3>
+          <p className="text-xs text-gray-400">
+            Part L: "L1 mode shows margin at proposed price live." Record each competing bid as you learn of it
+            (a pre-bid estimate, a rumoured figure, an opening-day reading) -- the Quotation's own "L1 view" (below,
+            in Documents) compares NestaPrime's current price against these live, recomputed on every look.
+          </p>
+          <div className="space-y-1">
+            {competitorBids.map((b) => (
+              <div key={b.id} className="flex items-center justify-between text-sm border border-gray-200 rounded px-3 py-1.5">
+                <span>{b.bidder_name}</span>
+                <span className="flex items-center gap-2">
+                  Rs {b.amount.toLocaleString()}
+                  <button onClick={() => handleDeleteBid(b.id)} className="text-xs text-red-600 hover:underline">
+                    Remove
+                  </button>
+                </span>
+              </div>
+            ))}
+            {competitorBids.length === 0 && <p className="text-xs text-gray-400">No competitor bids recorded yet.</p>}
+          </div>
+          <form onSubmit={handleAddBid} className="flex items-center gap-2">
+            <input
+              type="text"
+              required
+              placeholder="Bidder name"
+              value={bidForm.bidder_name}
+              onChange={(e) => setBidForm((f) => ({ ...f, bidder_name: e.target.value }))}
+              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+            <input
+              type="number"
+              required
+              placeholder="Amount (Rs)"
+              value={bidForm.amount}
+              onChange={(e) => setBidForm((f) => ({ ...f, amount: e.target.value }))}
+              className="w-40 rounded border border-gray-300 px-3 py-2 text-sm"
+            />
+            <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+              Add bid
+            </button>
+          </form>
+        </div>
+      )}
 
       <form onSubmit={handleBgCalc} className="bg-white shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-gray-700">Performance BG cost calculator</h3>

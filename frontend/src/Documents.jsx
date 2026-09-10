@@ -14,6 +14,7 @@ import {
   createWorkOrder,
   downloadEstimatePdfBlob,
   downloadQuotationPdfBlob,
+  getL1View,
   getWorkOrder,
   listCostSheetLines,
   listCostSheets,
@@ -823,16 +824,36 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
 function QuotationPanel({ token, project, role, estimates, quotations, onAction }) {
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const [discountValue, setDiscountValue] = useState("");
+  const [gstMode, setGstMode] = useState("exclusive");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const [rejectFormFor, setRejectFormFor] = useState(null);
   const [openReviseFor, setOpenReviseFor] = useState(null);
-  const [reviseDrafts, setReviseDrafts] = useState({}); // quotationId -> { discount_value, refresh_pricing }
+  const [reviseDrafts, setReviseDrafts] = useState({}); // quotationId -> { discount_value, refresh_pricing, gst_mode }
+  const [openL1For, setOpenL1For] = useState(null);
+  const [l1Views, setL1Views] = useState({}); // quotationId -> L1ViewOut
+  const [l1Error, setL1Error] = useState("");
   const canWaive = role === "pm" || role === "director";
   const canReject = role === "pm" || role === "director";
   const canRevise = role === "pm" || role === "director";
+
+  async function toggleL1View(quotationId) {
+    if (openL1For === quotationId) {
+      setOpenL1For(null);
+      return;
+    }
+    setL1Error("");
+    setOpenL1For(quotationId);
+    try {
+      const view = await getL1View(token, quotationId);
+      setL1Views((v) => ({ ...v, [quotationId]: view }));
+    } catch (err) {
+      setL1Views((v) => ({ ...v, [quotationId]: null }));
+      setL1Error(err.message);
+    }
+  }
 
   async function handleDownloadPdf(quotation) {
     setPdfError("");
@@ -859,6 +880,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
       estimate_id: selectedEstimateId,
       included_option_ids: includedIds,
       ...(discountValue ? { discount_type: "amount", discount_value: Number(discountValue) } : {}),
+      ...(project.tender_mode ? { gst_mode: gstMode } : {}),
     });
     setDiscountValue("");
   });
@@ -888,6 +910,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
       discount_type: draft.discount_value ? "amount" : null,
       discount_value: Number(draft.discount_value || 0),
       refresh_pricing: draft.refresh_pricing ?? false,
+      ...(project.tender_mode && draft.gst_mode ? { gst_mode: draft.gst_mode } : {}),
     });
     setOpenReviseFor(null);
   });
@@ -909,6 +932,11 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
               {q.sla_breached && (
                 <span className="text-red-700 text-xs bg-red-50 rounded px-1.5 py-0.5 ml-1">
                   SLA breached (M.3) -- awaiting release
+                </span>
+              )}
+              {q.gst_mode === "inclusive" && (
+                <span className="text-blue-700 text-xs bg-blue-50 rounded px-1.5 py-0.5 ml-1">
+                  GST inclusive (Part L)
                 </span>
               )}
             </span>
@@ -962,7 +990,10 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
                     setOpenReviseFor(null);
                     return;
                   }
-                  setReviseDrafts((d) => ({ ...d, [q.id]: { discount_value: q.discount_value || "", refresh_pricing: false } }));
+                  setReviseDrafts((d) => ({
+                    ...d,
+                    [q.id]: { discount_value: q.discount_value || "", refresh_pricing: false, gst_mode: q.gst_mode },
+                  }));
                   setOpenReviseFor(q.id);
                 }}
                 className="text-blue-600 hover:underline"
@@ -982,7 +1013,38 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
             >
               {openMessagesFor === q.id ? "Hide messages" : "Messages"}
             </button>
+            {project.tender_mode && (
+              <button onClick={() => toggleL1View(q.id)} className="text-amber-700 hover:underline">
+                {openL1For === q.id ? "Hide L1 view" : "L1 view (live)"}
+              </button>
+            )}
           </div>
+          {l1Error && openL1For === q.id && <p className="text-xs text-red-600">{l1Error}</p>}
+          {openL1For === q.id && l1Views[q.id] && (
+            <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs space-y-1">
+              <p className="text-amber-800 font-medium">
+                {l1Views[q.id].is_l1 === null
+                  ? "No competitor bids on file yet -- add some in Tender Mode to see a live L1 comparison."
+                  : l1Views[q.id].is_l1
+                  ? `We're L1 (lowest), rank 1 of ${l1Views[q.id].competitor_bids.length + 1}.`
+                  : `Not L1 -- rank ${l1Views[q.id].rank} of ${l1Views[q.id].competitor_bids.length + 1}.`}
+              </p>
+              <p>Our price: Rs {l1Views[q.id].our_price.toLocaleString()}</p>
+              {l1Views[q.id].margin_percent !== null && <p>Margin at this price: {l1Views[q.id].margin_percent}%</p>}
+              {l1Views[q.id].lowest_competitor_amount !== null && (
+                <p>Lowest known competitor: Rs {l1Views[q.id].lowest_competitor_amount.toLocaleString()}</p>
+              )}
+              {l1Views[q.id].competitor_bids.length > 0 && (
+                <ul className="list-disc list-inside text-gray-600">
+                  {l1Views[q.id].competitor_bids.map((b) => (
+                    <li key={b.id}>
+                      {b.bidder_name}: Rs {b.amount.toLocaleString()}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {rejectFormFor === q.id && (
             <RejectForm
               onSubmit={(reasonCategory, note) => handleReject(q.id, reasonCategory, note)}
@@ -1009,6 +1071,21 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
                   className="w-28 rounded border border-gray-300 px-1 py-0.5"
                 />
               </div>
+              {project.tender_mode && (
+                <div className="flex items-center gap-2">
+                  <span>GST basis (Part L)</span>
+                  <select
+                    value={reviseDrafts[q.id]?.gst_mode ?? q.gst_mode}
+                    onChange={(e) =>
+                      setReviseDrafts((d) => ({ ...d, [q.id]: { ...d[q.id], gst_mode: e.target.value } }))
+                    }
+                    className="rounded border border-gray-300 px-1 py-0.5"
+                  >
+                    <option value="exclusive">Exclusive</option>
+                    <option value="inclusive">Inclusive</option>
+                  </select>
+                </div>
+              )}
               <label className="flex items-center gap-1">
                 <input
                   type="checkbox"
@@ -1054,6 +1131,17 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
             onChange={(e) => setDiscountValue(e.target.value)}
             className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
           />
+          {project.tender_mode && (
+            <select
+              value={gstMode}
+              onChange={(e) => setGstMode(e.target.value)}
+              title="Part L: Inclusive/exclusive GST toggle"
+              className="rounded border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="exclusive">GST exclusive</option>
+              <option value="inclusive">GST inclusive</option>
+            </select>
+          )}
           <button
             onClick={handleCreate}
             disabled={!selectedEstimateId}

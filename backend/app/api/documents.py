@@ -30,6 +30,7 @@ from app.models.document import (
     EstimateOption,
     EstimateOptionClientStatus,
     EstimateStatus,
+    GstMode,
     Quotation,
     QuotationLine,
     QuotationStatus,
@@ -1772,6 +1773,18 @@ class QuotationCreate(BaseModel):
     included_option_ids: list[uuid.UUID] = Field(min_length=1)
     discount_type: str | None = None
     discount_value: float = Field(default=0.0, ge=0)
+    # Part L "Price basis" toggle -- INCLUSIVE is only accepted when the
+    # project is Tender Mode (see GstMode's own docstring for why this
+    # carve-out exists at all).
+    gst_mode: GstMode = GstMode.EXCLUSIVE
+
+
+def _validate_gst_mode(project: Project, gst_mode: GstMode) -> None:
+    if gst_mode == GstMode.INCLUSIVE and not project.tender_mode:
+        raise HTTPException(
+            status_code=422,
+            detail="gst_mode=inclusive only applies to Tender Mode (Government client) projects (Part L)",
+        )
 
 
 class QuotationOut(BaseModel):
@@ -1794,6 +1807,7 @@ class QuotationOut(BaseModel):
     below_floor: bool | None  # stripped for Sales
     gst_amount: float
     quotation_total: float
+    gst_mode: GstMode
     cost_basis_unverified: bool
     released_by_id: uuid.UUID | None
     released_at: datetime | None
@@ -1891,8 +1905,11 @@ def create_quotation(
         for o in included_options
     ]
     cost_total = sum(cost for cost, _ in cost_and_sport_ids)
+    _validate_gst_mode(project, payload.gst_mode)
     floor, target = cost_weighted_floor_and_target(db, policy, cost_and_sport_ids)
-    pricing = compute_pricing(db, cost_total, floor, target, payload.discount_type, payload.discount_value)
+    pricing = compute_pricing(
+        db, cost_total, floor, target, payload.discount_type, payload.discount_value, gst_mode=payload.gst_mode
+    )
 
     quotation = Quotation(
         project_id=project_id,
@@ -1910,6 +1927,7 @@ def create_quotation(
         below_floor=pricing.below_floor,
         gst_amount=pricing.gst_amount,
         quotation_total=pricing.quotation_total,
+        gst_mode=pricing.gst_mode,
         cost_basis_unverified=(cost_sheet.status != CostSheetStatus.VERIFIED),
         created_by_id=current_user.id,
     )
@@ -1935,6 +1953,10 @@ class QuotationReviseRequest(BaseModel):
     included_option_ids: list[uuid.UUID] = Field(min_length=1)
     discount_type: str | None = None
     discount_value: float = Field(default=0.0, ge=0)
+    # None = carry the prior revision's gst_mode forward unchanged;
+    # explicit value switches it (still Tender-Mode-only -- validated
+    # the same as on create).
+    gst_mode: GstMode | None = None
     # M.2 rule 4: only meaningful when this actually creates a new
     # revision (the quotation was already Sent) -- an in-place
     # Released -> Draft edit has no prior "frozen" snapshot to choose
@@ -1986,10 +2008,13 @@ def revise_quotation(
         line.estimate_option_id
         for line in db.query(QuotationLine).filter(QuotationLine.quotation_id == quotation.id).all()
     }
+    new_gst_mode = payload.gst_mode if payload.gst_mode is not None else quotation.gst_mode
+    _validate_gst_mode(project, new_gst_mode)
     content_unchanged = (
         set(payload.included_option_ids) == prior_option_ids
         and payload.discount_type == quotation.discount_type
         and float(payload.discount_value) == float(quotation.discount_value)
+        and new_gst_mode == quotation.gst_mode
     )
 
     pricing = None
@@ -2006,7 +2031,9 @@ def revise_quotation(
         ]
         cost_total = sum(cost for cost, _ in cost_and_sport_ids)
         floor, target = cost_weighted_floor_and_target(db, policy, cost_and_sport_ids)
-        pricing = compute_pricing(db, cost_total, floor, target, payload.discount_type, payload.discount_value)
+        pricing = compute_pricing(
+            db, cost_total, floor, target, payload.discount_type, payload.discount_value, gst_mode=new_gst_mode
+        )
 
     estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == estimate.cost_sheet_id).first() if estimate else None
@@ -2032,6 +2059,7 @@ def revise_quotation(
         target_quotation.below_floor = source.below_floor
         target_quotation.gst_amount = source.gst_amount
         target_quotation.quotation_total = source.quotation_total
+        target_quotation.gst_mode = source.gst_mode
         target_quotation.cost_basis_unverified = cost_basis_unverified
 
     if quotation.status == QuotationStatus.RELEASED:
