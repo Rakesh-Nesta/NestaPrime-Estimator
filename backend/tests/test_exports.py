@@ -127,16 +127,50 @@ def test_sales_cannot_export_cost_sheet_consumption_or_bom(client, director_user
         assert res.status_code == 403, path
 
 
-def test_procurement_can_export_rfq_but_not_cost_sheet(client, director_user, db_session):
+def test_procurement_can_export_rfq_consumption_and_bom_but_not_cost_sheet(client, director_user, db_session):
+    """Blueprint Ledger gap #7 / K.3: 'Procurement sees quantities, item
+    rates and line amounts on the consumption sheet, BOM and POs ... but
+    never ... cost price totals.' The module-ownership table assigns
+    "16 BOM & Procurement" and "16A Material Consumption Sheet" to
+    Procurement by name -- previously all three of consumption-sheet,
+    bom and cost-sheet were PM/Director-only, locking Procurement out of
+    the two exports that are actually theirs."""
     headers = _director_headers(client, director_user)
     _, _, cost_sheet_id = _cost_sheet_with_structure_line(client, headers)
 
     procurement_headers = _procurement_headers(client, db_session)
-    rfq_res = client.get(f"/cost-sheets/{cost_sheet_id}/exports/rfq", headers=procurement_headers)
-    assert rfq_res.status_code == 200
+    for path in ("rfq", "consumption-sheet", "bom"):
+        res = client.get(f"/cost-sheets/{cost_sheet_id}/exports/{path}", headers=procurement_headers)
+        assert res.status_code == 200, path
 
     cost_sheet_res = client.get(f"/cost-sheets/{cost_sheet_id}/exports/cost-sheet", headers=procurement_headers)
     assert cost_sheet_res.status_code == 403
+
+
+def test_procurement_consumption_sheet_and_bom_never_carry_cost_total_or_margin(client, director_user, db_session):
+    """K.3: Procurement gets item rates and line amounts, but the
+    aggregate cost_total (K.1's labour/overhead/contingency-inclusive
+    figure) and any margin/selling-price figure must never appear --
+    confirmed against the real, Verified Cost Sheet total, not just by
+    column-name inspection."""
+    headers = _director_headers(client, director_user)
+    _, _, cost_sheet_id = _cost_sheet_with_structure_line(client, headers)
+    recomputed = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers).json()
+    cost_total_str = f"{float(recomputed['cost_total']):.2f}"
+
+    procurement_headers = _procurement_headers(client, db_session)
+    for path in ("consumption-sheet", "bom"):
+        wb = _load_xlsx(client.get(f"/cost-sheets/{cost_sheet_id}/exports/{path}", headers=procurement_headers))
+        ws = wb.active
+        all_text = " ".join(
+            str(ws.cell(row=r, column=c).value)
+            for r in range(1, ws.max_row + 1)
+            for c in range(1, ws.max_column + 1)
+        )
+        assert cost_total_str not in all_text, path
+        assert "margin" not in all_text.lower(), path
+        assert "contingency" not in all_text.lower(), path
+        assert "overhead" not in all_text.lower(), path
 
 
 # ---------------------------------------------------------------------------
