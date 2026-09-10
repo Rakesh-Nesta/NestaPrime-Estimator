@@ -1,7 +1,8 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.models.project import Project
 from app.models.rate_history import RateHistory
 from app.models.rate_item import LabourCategory, RateItem, RateSource
 from app.models.vendor import Vendor
+from app.xlsx_utils import xlsx_header_row, xlsx_response
 
 labour_categories_router = APIRouter(prefix="/labour-categories", tags=["labour-categories"])
 rate_items_router = APIRouter(prefix="/rate-items", tags=["rate-items"])
@@ -559,3 +561,209 @@ def bulk_update_rate_items(
 
     db.commit()
     return BulkRateUpdateResult(updated_count=len(results), items=results)
+
+
+# --------------------------------------------------------------------------
+# Excel export/import (P.2 Phase 1b: "Excel rate import" -- named alongside
+# "rate verification workflow" in the same roadmap line, both J.1 features;
+# distinct from Q.2 rule 6's Master Settings export/import, which covers
+# global %/threshold config, not per-item rates. Appendix D item 1's "can
+# be supplied as an Excel rate card" is this: NestaPrime's own existing
+# rate-card spreadsheet, one row per material/item.)
+# --------------------------------------------------------------------------
+
+_RATE_ITEM_XLSX_COLUMNS = [
+    "Category", "Item name", "Spec", "Unit", "HSN/SAC", "Rate", "Vendor", "City of quote",
+    "Labour category key", "Commodity watched", "Source", "Verified",
+]
+_RATE_ITEM_IMPORT_DEFAULT_REASON = "Bulk Excel import"
+
+
+@rate_items_router.get("/export")
+def export_rate_items(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    """One row per current rate item, in the same column order
+    import_rate_items() expects back -- export-then-reimport unchanged is
+    always a safe no-op (nothing differs, every row is skipped). Source
+    and Verified are informational only here; import never sets them --
+    J.1's governance ('PM or Director confirms -> becomes AI rate') stays
+    the only path, so a bulk file can't quietly promote a rate to master."""
+    labour_category_key_by_id = {lc.id: lc.key for lc in db.query(LabourCategory).all()}
+    items = db.query(RateItem).order_by(RateItem.category, RateItem.item_name).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Rate Sheet"
+    xlsx_header_row(ws, _RATE_ITEM_XLSX_COLUMNS)
+    for item in items:
+        ws.append(
+            [
+                item.category, item.item_name, item.spec, item.unit, item.hsn_sac, float(item.rate),
+                item.vendor, item.city_of_quote, labour_category_key_by_id.get(item.labour_category_id),
+                item.is_commodity_watched, item.source.value, item.verified,
+            ]
+        )
+    return xlsx_response(wb, "rate-sheet.xlsx")
+
+
+class RateItemImportRowError(BaseModel):
+    row: int
+    detail: str
+
+
+class RateItemImportResult(BaseModel):
+    created: list[RateItemOut]
+    updated: list[RateItemOut]
+    unchanged: int
+    errors: list[RateItemImportRowError]
+
+
+def _parse_import_bool(raw, default: bool = False) -> bool:
+    if raw is None or raw == "":
+        return default
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ("true", "1", "yes", "y")
+
+
+@rate_items_router.post("/import", response_model=RateItemImportResult)
+def import_rate_items(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """Expects the same columns export_rate_items() produces, header row
+    first. Matches an existing item by (category, item_name, spec) --
+    NestaPrime's own natural key for "the same line" on a rate card.
+
+    - No match: creates a new item (always MANUAL/unverified, per J.1 --
+      Source/Verified columns are ignored on create, same as they're
+      ignored on update below), plus its opening RateHistory row.
+    - Match, rate differs: updates the rate through the same
+      RateHistory-preserving mechanics as POST .../rate (close the open
+      history row, open a new one) -- never a silent overwrite. Other
+      changed fields (vendor, spec, unit, hsn_sac, city_of_quote, labour
+      category, commodity-watched) are applied directly, same as PATCH
+      .../{id}.
+    - Match, rate identical: counted unchanged (even if some other field
+      also changed -- see below) and skipped, so an unmodified
+      export-then-reimport is always a safe no-op.
+
+    Deliberately out of scope: a rate change made here does NOT evaluate
+    the commodity alert (POST .../rate's draft/verified cost-sheet
+    breakdown) -- a bulk file can touch far more items than a Director
+    would want individually reviewed mid-import. Use the Rate Sheet
+    screen afterwards to check any commodity-watched item's alert if
+    needed; nothing about the alert itself is lost, only deferred.
+
+    One bad row (missing category/item_name/unit/rate, an unreadable
+    rate, an unknown labour category key) is recorded as a per-row error
+    and does not stop the rest of the file from importing."""
+    try:
+        wb = load_workbook(file.file, data_only=True)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not read this file as an Excel workbook: {exc}")
+    ws = wb.active
+
+    labour_category_id_by_key = {lc.key: lc.id for lc in db.query(LabourCategory).all()}
+    existing_by_key = {
+        (i.category, i.item_name, i.spec): i
+        for i in db.query(RateItem).all()
+    }
+
+    created: list[RateItem] = []
+    updated: list[RateItem] = []
+    unchanged = 0
+    errors: list[RateItemImportRowError] = []
+
+    for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if row is None or all(cell in (None, "") for cell in row):
+            continue  # blank row -- e.g. Excel's own trailing rows
+        (
+            category_cell, item_name_cell, spec_cell, unit_cell, hsn_sac_cell, rate_cell,
+            vendor_cell, city_cell, labour_key_cell, watched_cell, _source_cell, _verified_cell,
+        ) = (list(row) + [None] * (len(_RATE_ITEM_XLSX_COLUMNS) - len(row)))[: len(_RATE_ITEM_XLSX_COLUMNS)]
+
+        try:
+            category = str(category_cell).strip() if category_cell not in (None, "") else ""
+            if not category:
+                raise ValueError("Category is required")
+            item_name = str(item_name_cell).strip() if item_name_cell not in (None, "") else ""
+            if not item_name:
+                raise ValueError("Item name is required")
+            spec = str(spec_cell).strip() if spec_cell not in (None, "") else None
+            unit = str(unit_cell).strip() if unit_cell not in (None, "") else ""
+            if not unit:
+                raise ValueError("Unit is required")
+            hsn_sac = str(hsn_sac_cell).strip() if hsn_sac_cell not in (None, "") else ""
+            if rate_cell in (None, ""):
+                raise ValueError("Rate is required")
+            rate = float(rate_cell)
+            vendor = str(vendor_cell).strip() if vendor_cell not in (None, "") else None
+            city_of_quote = str(city_cell).strip() if city_cell not in (None, "") else None
+            labour_category_id = None
+            if labour_key_cell not in (None, ""):
+                labour_key = str(labour_key_cell).strip()
+                if labour_key not in labour_category_id_by_key:
+                    raise ValueError(f"Unknown labour category key '{labour_key}'")
+                labour_category_id = labour_category_id_by_key[labour_key]
+            is_commodity_watched = _parse_import_bool(watched_cell)
+        except (ValueError, TypeError) as exc:
+            errors.append(RateItemImportRowError(row=row_number, detail=str(exc)))
+            continue
+
+        existing = existing_by_key.get((category, item_name, spec))
+        if existing is None:
+            item = RateItem(
+                source=RateSource.MANUAL,
+                verified=False,
+                category=category, item_name=item_name, spec=spec, unit=unit, hsn_sac=hsn_sac, rate=rate,
+                vendor=vendor, city_of_quote=city_of_quote, labour_category_id=labour_category_id,
+                is_commodity_watched=is_commodity_watched,
+            )
+            db.add(item)
+            db.flush()
+            db.add(RateHistory(
+                rate_item_id=item.id, rate=rate, effective_from=date.today(), effective_to=None,
+                changed_by_id=current_user.id, reason=_RATE_ITEM_IMPORT_DEFAULT_REASON,
+            ))
+            existing_by_key[(category, item_name, spec)] = item
+            created.append(item)
+            continue
+
+        previous_rate = float(existing.rate)
+        if rate != previous_rate:
+            open_row = (
+                db.query(RateHistory)
+                .filter(RateHistory.rate_item_id == existing.id, RateHistory.effective_to.is_(None))
+                .order_by(RateHistory.effective_from.desc())
+                .first()
+            )
+            if open_row is not None:
+                open_row.effective_to = date.today()
+            existing.rate = rate
+            db.add(RateHistory(
+                rate_item_id=existing.id, rate=rate, effective_from=date.today(), effective_to=None,
+                changed_by_id=current_user.id, reason=_RATE_ITEM_IMPORT_DEFAULT_REASON,
+            ))
+            existing.unit = unit
+            existing.hsn_sac = hsn_sac
+            existing.vendor = vendor
+            existing.city_of_quote = city_of_quote
+            existing.labour_category_id = labour_category_id
+            existing.is_commodity_watched = is_commodity_watched
+            updated.append(existing)
+        else:
+            unchanged += 1
+
+    db.commit()
+    for item in created + updated:
+        db.refresh(item)
+    return RateItemImportResult(
+        created=[_to_out(db, i) for i in created],
+        updated=[_to_out(db, i) for i in updated],
+        unchanged=unchanged,
+        errors=errors,
+    )
