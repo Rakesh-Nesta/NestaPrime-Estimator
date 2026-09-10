@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   bulkUpdateSettings,
+  createMessageTemplate,
   createSettingVersion,
   downloadCompanyLogoBlob,
   exportSettingsBlob,
   getCompanyLogoMeta,
   importSettingsExcel,
+  listMessageTemplates,
   listSettings,
+  updateMessageTemplate,
   uploadCompanyLogo,
 } from "./api";
 
@@ -263,6 +266,8 @@ export default function MasterSettings({ token, onBack }) {
         )}
       </div>
 
+      <MessageTemplatesCard token={token} />
+
       <div className="bg-white shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Current settings ({settings.length})</h3>
         <div className="space-y-2">
@@ -415,6 +420,286 @@ export default function MasterSettings({ token, onBack }) {
           Apply bulk update
         </button>
       </form>
+    </div>
+  );
+}
+
+const DOC_TYPES = [
+  "", "cost_sheet", "estimate", "quotation", "work_order", "technical_bid_checklist_item", "price_request", "site_survey",
+];
+
+function emptyTemplateForm() {
+  return { document_type: "", channel: "email", name: "", subject: "", body: "", language: "en" };
+}
+
+function MessageTemplatesCard({ token }) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addForm, setAddForm] = useState(emptyTemplateForm());
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+  function load() {
+    return listMessageTemplates(token, { includeInactive: true }).then(setTemplates);
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      await createMessageTemplate(token, {
+        document_type: addForm.document_type || null,
+        channel: addForm.channel,
+        name: addForm.name,
+        subject: addForm.subject || null,
+        body: addForm.body,
+        language: addForm.language,
+      });
+      setAddForm(emptyTemplateForm());
+      setAdding(false);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function startEdit(t) {
+    setEditingId(t.id);
+    setEditForm({
+      document_type: t.document_type || "", name: t.name, subject: t.subject || "", body: t.body,
+      language: t.language, whatsapp_template_status: t.whatsapp_template_status || "",
+    });
+  }
+
+  async function handleSaveEdit() {
+    setError("");
+    try {
+      await updateMessageTemplate(token, editingId, {
+        document_type: editForm.document_type || null,
+        name: editForm.name,
+        subject: editForm.subject || null,
+        body: editForm.body,
+        language: editForm.language,
+        ...(editForm.whatsapp_template_status ? { whatsapp_template_status: editForm.whatsapp_template_status } : {}),
+      });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function toggleActive(t) {
+    setError("");
+    try {
+      await updateMessageTemplate(token, t.id, { is_active: !t.is_active });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <h3 className="text-sm font-semibold text-gray-700 mb-1">Message templates</h3>
+      <p className="text-xs text-gray-400 mb-2">
+        M.7.2 rule 6: "Director-managed library of message templates per document and channel." A WhatsApp
+        template needs Meta's approval (through the provider, outside this app) before it can be used on a real
+        send -- editing a submitted/approved template's wording resets it to draft, since Meta's approval is tied
+        to specific text. Placeholders like {"{client_name}"} stay literal text for the sender to fill in -- no
+        real provider is wired up in this build to render them.
+      </p>
+      {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+
+      <div className="space-y-2">
+        {templates.map((t) =>
+          editingId === t.id ? (
+            <div key={t.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <MiniField label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
+                <div>
+                  <label className="block text-xs text-gray-500">Document type</label>
+                  <select
+                    value={editForm.document_type}
+                    onChange={(e) => setEditForm((f) => ({ ...f, document_type: e.target.value }))}
+                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  >
+                    {DOC_TYPES.map((d) => (
+                      <option key={d} value={d}>{d || "(any document type)"}</option>
+                    ))}
+                  </select>
+                </div>
+                <MiniField label="Subject" value={editForm.subject} onChange={(v) => setEditForm((f) => ({ ...f, subject: v }))} />
+                <MiniField label="Language" value={editForm.language} onChange={(v) => setEditForm((f) => ({ ...f, language: v }))} />
+                {t.channel === "whatsapp" && (
+                  <div>
+                    <label className="block text-xs text-gray-500">WhatsApp status</label>
+                    <select
+                      value={editForm.whatsapp_template_status}
+                      onChange={(e) => setEditForm((f) => ({ ...f, whatsapp_template_status: e.target.value }))}
+                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                    >
+                      <option value="">(leave as-is)</option>
+                      <option value="draft">draft</option>
+                      <option value="submitted">submitted</option>
+                      <option value="approved">approved</option>
+                      <option value="rejected">rejected</option>
+                    </select>
+                  </div>
+                )}
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500">Body</label>
+                  <textarea
+                    value={editForm.body}
+                    onChange={(e) => setEditForm((f) => ({ ...f, body: e.target.value }))}
+                    rows={3}
+                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                  Save
+                </button>
+                <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              key={t.id}
+              className={`text-sm border rounded px-3 py-2 ${t.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  <span className="font-medium">{t.name}</span>{" "}
+                  <span className="text-gray-400 text-xs">
+                    ({t.channel}{t.document_type ? `, ${t.document_type}` : ""}, v{t.version}, {t.language})
+                  </span>
+                  {t.channel === "whatsapp" && (
+                    <span
+                      className={`ml-2 text-[10px] uppercase rounded px-1.5 py-0.5 ${
+                        t.whatsapp_template_status === "approved"
+                          ? "bg-green-100 text-green-700"
+                          : t.whatsapp_template_status === "rejected"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {t.whatsapp_template_status}
+                    </span>
+                  )}
+                  {!t.is_active && <span className="text-gray-400"> · inactive</span>}
+                </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button onClick={() => startEdit(t)} className="text-blue-600 hover:underline text-xs">
+                    Edit
+                  </button>
+                  <button onClick={() => toggleActive(t)} className="text-gray-500 hover:underline text-xs">
+                    {t.is_active ? "Deactivate" : "Reactivate"}
+                  </button>
+                </div>
+              </div>
+              {t.subject && <p className="text-xs text-gray-500 mt-1">Subject: {t.subject}</p>}
+              <p className="text-xs text-gray-500 mt-0.5 whitespace-pre-wrap">{t.body}</p>
+            </div>
+          )
+        )}
+        {templates.length === 0 && !adding && (
+          <p className="text-xs text-gray-400">No message templates yet -- add one below.</p>
+        )}
+      </div>
+
+      {adding ? (
+        <form onSubmit={handleCreate} className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+          <div className="grid grid-cols-2 gap-2">
+            <MiniField label="Name" value={addForm.name} onChange={(v) => setAddForm((f) => ({ ...f, name: v }))} required />
+            <div>
+              <label className="block text-xs text-gray-500">Channel</label>
+              <select
+                value={addForm.channel}
+                onChange={(e) => setAddForm((f) => ({ ...f, channel: e.target.value }))}
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              >
+                <option value="email">email</option>
+                <option value="whatsapp">whatsapp</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500">Document type</label>
+              <select
+                value={addForm.document_type}
+                onChange={(e) => setAddForm((f) => ({ ...f, document_type: e.target.value }))}
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              >
+                {DOC_TYPES.map((d) => (
+                  <option key={d} value={d}>{d || "(any document type)"}</option>
+                ))}
+              </select>
+            </div>
+            <MiniField label="Language" value={addForm.language} onChange={(v) => setAddForm((f) => ({ ...f, language: v }))} />
+            <MiniField label="Subject" value={addForm.subject} onChange={(v) => setAddForm((f) => ({ ...f, subject: v }))} />
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500">Body</label>
+              <textarea
+                required
+                value={addForm.body}
+                onChange={(e) => setAddForm((f) => ({ ...f, body: e.target.value }))}
+                rows={3}
+                placeholder="e.g. Hi {client_name}, your Quotation {quotation_number} for Rs {amount} is ready, valid {validity} days."
+                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
+              Add template
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAdding(false);
+                setAddForm(emptyTemplateForm());
+              }}
+              className="text-xs text-gray-500 hover:underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-xs text-blue-600 hover:underline">
+          + Add template
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MiniField({ label, value, onChange, required = false }) {
+  return (
+    <div>
+      <label className="block text-xs text-gray-500">{label}</label>
+      <input
+        type="text"
+        required={required}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+      />
     </div>
   );
 }

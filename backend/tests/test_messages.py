@@ -311,3 +311,137 @@ def test_procurement_cannot_log_a_message(client, director_user, db_session):
 def test_messages_require_auth(client):
     res = client.get("/messages", params={"doc_type": "cost_sheet", "doc_id": "00000000-0000-0000-0000-000000000000"})
     assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# template_id (M.7.2 rule 6 -- Director-managed MESSAGE_TEMPLATES library)
+# ---------------------------------------------------------------------------
+
+
+def _create_template(client, headers, channel="email", name="Quotation follow-up", **overrides):
+    payload = {"channel": channel, "name": name, "body": "Hi {client_name}, your quotation is ready.", **overrides}
+    res = client.post("/message-templates", json=payload, headers=headers)
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+def _client_facing_estimate(client, headers):
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _verified_cost_sheet(client, headers, project_id)
+    estimate_res = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=headers,
+    )
+    assert estimate_res.status_code == 201, estimate_res.text
+    return client_id, estimate_res.json()["id"]
+
+
+def test_message_can_reference_an_approved_whatsapp_template(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id, estimate_id = _client_facing_estimate(client, headers)
+    client.patch(f"/clients/{client_id}/consent", json={"whatsapp_opt_in": True}, headers=headers)
+    template = _create_template(client, headers, channel="whatsapp", name="Estimate ready")
+    client.patch(
+        f"/message-templates/{template['id']}", json={"whatsapp_template_status": "approved"}, headers=headers
+    )
+
+    res = _log_message(
+        client, headers, "estimate", estimate_id, channel="whatsapp", recipient="+911234567890",
+        template_id=template["id"],
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["template_id"] == template["id"]
+    assert res.json()["body_note"] == template["body"]
+
+
+def test_message_rejects_a_non_approved_whatsapp_template(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id, estimate_id = _client_facing_estimate(client, headers)
+    client.patch(f"/clients/{client_id}/consent", json={"whatsapp_opt_in": True}, headers=headers)
+    template = _create_template(client, headers, channel="whatsapp", name="Estimate ready")  # still draft
+
+    res = _log_message(
+        client, headers, "estimate", estimate_id, channel="whatsapp", recipient="+911234567890",
+        template_id=template["id"],
+    )
+    assert res.status_code == 422
+    assert "not meta-approved" in res.json()["detail"].lower()
+
+
+def test_message_rejects_a_template_for_the_wrong_channel(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id, estimate_id = _client_facing_estimate(client, headers)
+    client.patch(f"/clients/{client_id}/consent", json={"whatsapp_opt_in": True}, headers=headers)
+    template = _create_template(client, headers, channel="email", name="Email only")
+
+    res = _log_message(
+        client, headers, "estimate", estimate_id, channel="whatsapp", recipient="+911234567890",
+        template_id=template["id"],
+    )
+    assert res.status_code == 422
+    assert "not whatsapp" in res.json()["detail"].lower()
+
+
+def test_message_rejects_a_template_for_the_wrong_document_type(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, estimate_id = _client_facing_estimate(client, headers)
+    template = _create_template(
+        client, headers, channel="email", name="Quotation-only", document_type="quotation"
+    )
+
+    res = _log_message(client, headers, "estimate", estimate_id, recipient="client@example.com", template_id=template["id"])
+    assert res.status_code == 422
+    assert "quotation" in res.json()["detail"].lower()
+
+
+def test_message_rejects_an_inactive_template(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, estimate_id = _client_facing_estimate(client, headers)
+    template = _create_template(client, headers, channel="email")
+    client.patch(f"/message-templates/{template['id']}", json={"is_active": False}, headers=headers)
+
+    res = _log_message(client, headers, "estimate", estimate_id, recipient="client@example.com", template_id=template["id"])
+    assert res.status_code == 422
+    assert "not active" in res.json()["detail"].lower()
+
+
+def test_message_rejects_an_unknown_template_id(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, estimate_id = _client_facing_estimate(client, headers)
+
+    res = _log_message(
+        client, headers, "estimate", estimate_id, recipient="client@example.com",
+        template_id="00000000-0000-0000-0000-000000000000",
+    )
+    assert res.status_code == 404
+
+
+def test_template_subject_and_body_default_into_the_message(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, estimate_id = _client_facing_estimate(client, headers)
+    template = _create_template(
+        client, headers, channel="email", name="Estimate cover note", subject="Your estimate is ready",
+    )
+
+    res = _log_message(client, headers, "estimate", estimate_id, recipient="client@example.com", template_id=template["id"])
+    assert res.status_code == 201, res.text
+    assert res.json()["subject"] == "Your estimate is ready"
+    assert res.json()["body_note"] == template["body"]
+
+
+def test_explicit_subject_overrides_the_template(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, estimate_id = _client_facing_estimate(client, headers)
+    template = _create_template(
+        client, headers, channel="email", name="Estimate cover note", subject="Default subject",
+    )
+
+    res = _log_message(
+        client, headers, "estimate", estimate_id, recipient="client@example.com",
+        template_id=template["id"], subject="Custom subject for this send",
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["subject"] == "Custom subject for this send"

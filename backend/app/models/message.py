@@ -54,6 +54,12 @@ class Message(Base):
     sender_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     template_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # M.7.2 rule 6: a real, Director-managed MESSAGE_TEMPLATES row this
+    # send used -- distinct from template_key above (this build's own
+    # freeform tag for automatic internal notifications).
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("message_templates.id"), nullable=True
+    )
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Which stored file (if any) this message refers to -- optional

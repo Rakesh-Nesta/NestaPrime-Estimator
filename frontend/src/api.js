@@ -1210,7 +1210,7 @@ export async function listMessages(token, docType, docId) {
   return handle(res);
 }
 
-export async function createMessage(token, { docType, docId, channel, recipient, templateKey, subject, bodyNote, attachmentId }) {
+export async function createMessage(token, { docType, docId, channel, recipient, templateKey, templateId, subject, bodyNote, attachmentId }) {
   const res = await fetch(`${API_BASE}/messages`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
@@ -1220,10 +1220,39 @@ export async function createMessage(token, { docType, docId, channel, recipient,
       channel,
       recipient,
       template_key: templateKey || null,
+      template_id: templateId || null,
       subject: subject || null,
       body_note: bodyNote || null,
       attachment_id: attachmentId || null,
     }),
+  });
+  return handle(res);
+}
+
+export async function listMessageTemplates(token, { channel, documentType, includeInactive } = {}) {
+  const params = new URLSearchParams();
+  if (channel) params.set("channel", channel);
+  if (documentType) params.set("document_type", documentType);
+  if (includeInactive) params.set("include_inactive", "true");
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/message-templates${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createMessageTemplate(token, payload) {
+  const res = await fetch(`${API_BASE}/message-templates`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateMessageTemplate(token, templateId, payload) {
+  const res = await fetch(`${API_BASE}/message-templates/${templateId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   return handle(res);
 }

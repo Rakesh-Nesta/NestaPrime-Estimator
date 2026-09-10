@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createMessage, listMessages } from "./api";
+import { createMessage, listMessages, listMessageTemplates } from "./api";
 
 export default function MessagesPanel({ token, docType, docId }) {
   const [messages, setMessages] = useState([]);
@@ -7,9 +7,11 @@ export default function MessagesPanel({ token, docType, docId }) {
   const [error, setError] = useState("");
   const [channel, setChannel] = useState("email");
   const [recipient, setRecipient] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [subject, setSubject] = useState("");
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
+  const [templates, setTemplates] = useState([]);
 
   function load() {
     return listMessages(token, docType, docId)
@@ -23,6 +25,22 @@ export default function MessagesPanel({ token, docType, docId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, docType, docId]);
 
+  useEffect(() => {
+    listMessageTemplates(token, { channel })
+      .then((rows) => setTemplates(rows.filter((t) => t.document_type === null || t.document_type === docType)))
+      .catch(() => setTemplates([]));
+    setTemplateId("");
+  }, [token, channel, docType]);
+
+  function selectTemplate(id) {
+    setTemplateId(id);
+    const t = templates.find((row) => row.id === id);
+    if (t) {
+      if (t.subject) setSubject(t.subject);
+      setNote(t.body);
+    }
+  }
+
   async function handleLog(e) {
     e.preventDefault();
     setError("");
@@ -30,10 +48,11 @@ export default function MessagesPanel({ token, docType, docId }) {
     setSending(true);
     try {
       await createMessage(token, {
-        docType, docId, channel, recipient,
+        docType, docId, channel, recipient, templateId: templateId || undefined,
         subject: subject || undefined, bodyNote: note || undefined,
       });
       setRecipient("");
+      setTemplateId("");
       setSubject("");
       setNote("");
       await load();
@@ -70,6 +89,20 @@ export default function MessagesPanel({ token, docType, docId }) {
         <select value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-xs">
           <option value="email">email</option>
           <option value="whatsapp">whatsapp</option>
+        </select>
+        <select
+          value={templateId}
+          onChange={(e) => selectTemplate(e.target.value)}
+          className="rounded border border-gray-300 px-2 py-1 text-xs"
+          title="M.7.2 rule 6: Director-managed template library"
+        >
+          <option value="">(no template)</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id} disabled={channel === "whatsapp" && t.whatsapp_template_status !== "approved"}>
+              {t.name}
+              {channel === "whatsapp" && t.whatsapp_template_status !== "approved" ? ` (${t.whatsapp_template_status})` : ""}
+            </option>
+          ))}
         </select>
         <input
           value={recipient}

@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.attachment import Attachment
 from app.models.client import Client
 from app.models.message import Message, MessageChannel, MessageStatus
+from app.models.message_template import MessageTemplate, WhatsappTemplateStatus
 from app.models.setting import DocumentType
 
 messages_router = APIRouter(prefix="/messages", tags=["messages"])
@@ -88,12 +89,47 @@ def _enforce_client_consent(db: Session, doc_type: DocumentType, doc_id: uuid.UU
         )
 
 
+def _resolve_template(
+    db: Session, template_id: uuid.UUID, doc_type: DocumentType, channel: MessageChannel
+) -> MessageTemplate:
+    """M.7.2 rule 6: 'Director-managed library ... per document and
+    channel ... only approved [WhatsApp] templates are used for
+    business-initiated messages.' Enforced here, not just offered as a
+    UI suggestion -- the same server-side-gate discipline this codebase
+    applies to every other blueprint rule."""
+    template = db.query(MessageTemplate).filter(MessageTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Message template not found")
+    if not template.is_active:
+        raise HTTPException(status_code=422, detail=f"Template '{template.name}' is not active")
+    if template.channel != channel:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Template '{template.name}' is a {template.channel.value} template, not {channel.value}",
+        )
+    if template.document_type is not None and template.document_type != doc_type:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Template '{template.name}' is for {template.document_type.value}, not {doc_type.value}",
+        )
+    if channel == MessageChannel.WHATSAPP and template.whatsapp_template_status != WhatsappTemplateStatus.APPROVED:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Template '{template.name}' is not Meta-approved yet "
+                f"(status: {template.whatsapp_template_status.value if template.whatsapp_template_status else 'none'})"
+            ),
+        )
+    return template
+
+
 class MessageCreate(BaseModel):
     doc_type: DocumentType
     doc_id: uuid.UUID
     channel: MessageChannel
     recipient: str = Field(min_length=1)
     template_key: str | None = None
+    template_id: uuid.UUID | None = None
     subject: str | None = None
     body_note: str | None = None
     attachment_id: uuid.UUID | None = None
@@ -107,6 +143,7 @@ class MessageOut(BaseModel):
     recipient: str
     sender_id: uuid.UUID
     template_key: str | None
+    template_id: uuid.UUID | None
     subject: str | None
     body_note: str | None
     attachment_id: uuid.UUID | None
@@ -129,7 +166,15 @@ def create_message(
     never actually sends anything. status is always RECORDED. Repeatable
     any number of times per document (a re-send, a WhatsApp follow-up to
     an earlier email, etc.), independent of the document's own status-
-    transition endpoints (POST .../send)."""
+    transition endpoints (POST .../send).
+
+    template_id (M.7.2 rule 6) references a real Director-managed
+    MESSAGE_TEMPLATES row -- _resolve_template enforces the channel/
+    document-type match and, for WhatsApp, that Meta has actually
+    approved it. Its subject/body default subject/body_note when the
+    caller doesn't override them; the template's {placeholder} text is
+    not substituted (no real provider is wired up to consume the
+    rendered result -- see the docstring on MessageTemplate)."""
     _require_doc_type_role(db, payload.doc_type, current_user)
     _get_document_or_404(db, payload.doc_type, payload.doc_id)
     _enforce_client_consent(db, payload.doc_type, payload.doc_id, payload.channel)
@@ -142,6 +187,15 @@ def create_message(
         if attachment.doc_type != payload.doc_type or attachment.doc_id != payload.doc_id:
             raise HTTPException(status_code=400, detail="Attachment does not belong to this document")
 
+    subject = payload.subject
+    body_note = payload.body_note
+    if payload.template_id is not None:
+        template = _resolve_template(db, payload.template_id, payload.doc_type, payload.channel)
+        if subject is None:
+            subject = template.subject
+        if body_note is None:
+            body_note = template.body[:500]  # body_note is capped at 500 chars, same convention as elsewhere
+
     message = Message(
         doc_type=payload.doc_type,
         doc_id=payload.doc_id,
@@ -149,8 +203,9 @@ def create_message(
         recipient=payload.recipient,
         sender_id=current_user.id,
         template_key=payload.template_key,
-        subject=payload.subject,
-        body_note=payload.body_note,
+        template_id=payload.template_id,
+        subject=subject,
+        body_note=body_note,
         attachment_id=payload.attachment_id,
         status=MessageStatus.RECORDED,
     )
