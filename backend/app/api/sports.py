@@ -1,15 +1,18 @@
 import math
 import re
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.flooring_guide import FlooringGuide
+from app.models.lighting_standard import LightingLuxStandard, SportPoleCount
 from app.models.project import BuildingStatus, Package, Project, SiteCondition, SoilType
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.sport import ProjectSport, Sport, SportCategory
@@ -287,77 +290,20 @@ class FlooringRecommendation(BaseModel):
     selected_tier: str  # "primary" | "secondary" | "budget"
 
 
-# F.1 (indoor) + F.2 (outdoor) flooring guides, keyed by sport. Two sports
-# have no row in either table — shooting_range_10m and archery_range — and
-# correctly get no recommendation rather than a guess. tennis (F.2 splits
-# hard/clay/grass; our Sport list has one combined "tennis" entry) defaults
-# to the hard-court row, the most common surface.
-_FLOORING_TABLE: dict[str, tuple[str, str | None, str | None, str]] = {
-    "badminton": (
-        "Wooden sprung 22 mm + BWF-approved PVC mat 4.5-7 mm", "PU 6 mm", "PVC mat 4.5 mm on PCC",
-        "BWF tournaments are played on approved PVC mats laid over a wooden or synthetic base; bare wood is a club finish",
-    ),
-    "table_tennis": (
-        "Hardwood 22 mm or ITTF-approved PVC/PU 4.5-6 mm", "PU 6 mm", "Vinyl 4 mm",
-        "ITTF approves wood and synthetic; non-reflective, non-slip",
-    ),
-    "squash": (
-        "Hardwood strip 22 mm (maple/beech) on sprung battens", None, None,
-        "WSF specifies unsealed hardwood floor",
-    ),
-    "basketball_indoor": ("Maple 22 mm", "PU 6 mm", "Vinyl 4 mm", "Tournament standard"),
-    "volleyball_indoor": ("PU 6 mm", "Teak 22 mm", "Vinyl 4 mm", "Shock absorption"),
-    "gymnasium": (
-        "Rubber 8 mm (cardio) / 15-20 mm (free weights)", "Wooden", "Vinyl", "Equipment drops",
-    ),
-    "kabaddi": ("PU 6 mm / mat", "Wooden", "Vinyl", "Barefoot grip"),
-    "wrestling_boxing_martial_arts": ("Rubber 15-20 mm + mat", "PU mat", None, "Falls"),
-    "indoor_cricket_nets": ("Turf 30 mm", "Rubber mat", None, "Ball behaviour"),
-    "football_11": (
-        "FIFA Quality Pro 50-60 mm", "FIFA Quality 50 mm", "Multi-sport 40 mm", "Certification",
-    ),
-    "football_7": ("Multi-sport 40 mm", "Cricket 40 mm", "Poly 30 mm", "Cost/performance"),
-    "football_5_futsal": ("Multi-sport 40 mm", "Cricket 40 mm", "Poly 30 mm", "Cost/performance"),
-    "box_cricket": ("Cricket turf 40 mm", "Multi-sport 40 mm", "Poly 35 mm", "Bounce"),
-    "cricket_practice_nets": ("Cricket 30 mm", "Multi 30 mm", "Poly 25 mm", "Bowling"),
-    "tennis": ("Acrylic 3-5 mm (5-8 coats)", "Synthetic 5 mm", "Concrete + paint", "ITF"),
-    "padel": ("Monofilament 12 mm + sand", None, None, "FIP"),
-    "pickleball": ("Acrylic 3 mm", "Concrete + coating", None, "USA Pickleball"),
-    "basketball_outdoor": ("Acrylic 3 mm", "PU 5 mm", "Concrete + coating", "Weather"),
-    "volleyball_outdoor": ("PU 5 mm", "Sand", "Concrete", "All-weather"),
-    "beach_volleyball": ("Washed silica sand 16 in", None, None, "FIVB"),
-    "hockey_turf": (
-        "FIH water-based 12-15 mm (needs irrigation)", "FIH sand-dressed 20-25 mm",
-        "Multi-sport 40 mm (non-FIH, school use)",
-        "FIH pitches are short-pile; 50 mm turf is football turf and is not hockey-legal",
-    ),
-    "athletic_track_400m": (
-        "Sandwich system 13 mm", "Full-PU 13 mm", "Spray-coat 13 mm (non-certified)",
-        "World Athletics certified systems; spike-resistant",
-    ),
-    "athletic_track_200_250m": (
-        "Sandwich system 13 mm", "Full-PU 13 mm", "Spray-coat 13 mm (non-certified)",
-        "World Athletics certified systems; spike-resistant",
-    ),
-    "skating_rink": ("Concrete + coating", "Tiles", None, "Smooth"),
-    "kids_play_area": (
-        "EPDM system 40 mm (10 mm EPDM wearing + 30 mm SBR base; CFH 1.5 m)",
-        "Rubber tiles 25-40 mm", "Grass / sand",
-        "Fall protection - 15 mm EPDM alone gives CFH under 1 m",
-    ),
-    "swimming_pool_25m": ("Anti-slip tiles", "Mosaic", "Marble", "Non-slip"),
-    "swimming_pool_50m": ("Anti-slip tiles", "Mosaic", "Marble", "Non-slip"),
-    "multipurpose_court": ("Acrylic 3 mm", "PU 5 mm", "Concrete", "Multi-line"),
-}
+# F.1 (indoor) + F.2 (outdoor) flooring guides, keyed by sport, live in the
+# Director-editable FlooringGuide table (audit gap #9 -- this used to be a
+# hardcoded _FLOORING_TABLE dict here). Two sports have no row --
+# shooting_range_10m and archery_range -- and correctly get no
+# recommendation rather than a guess, same as before the table existed.
 
 
-def _recommend_flooring(sport: Sport, package: Package) -> FlooringRecommendation | None:
+def _recommend_flooring(db: Session, sport: Sport, package: Package) -> FlooringRecommendation | None:
     """F.1/F.2, tiered by B.1's own rule for the package field: 'Pre-selects
     flooring, structure, lighting, scope'."""
-    row = _FLOORING_TABLE.get(sport.key)
-    if row is None:
+    guide = db.query(FlooringGuide).filter(FlooringGuide.sport_id == sport.id).first()
+    if guide is None:
         return None
-    primary, secondary, budget, why = row
+    primary, secondary, budget, why = guide.primary_spec, guide.secondary_spec, guide.budget_spec, guide.rationale
 
     if package == Package.PREMIUM:
         selected, tier = primary, "primary"
@@ -393,14 +339,10 @@ class LightingRecommendation(BaseModel):
 
 _SQFT_PER_SQM = 10.7639
 
-# H's lux table, by sport group. None = that tier has no figure in the
-# table (e.g. Gym has only a practice figure).
-_LUX_TABLE: dict[str, dict[str, int | None]] = {
-    "court": {"practice": 200, "match": 500, "tournament": 750},
-    "football_cricket": {"practice": 200, "match": 500, "tournament": 750},  # tournament up to 1000 per H
-    "pool": {"practice": 300, "match": 500, "tournament": None},
-    "gym": {"practice": 300, "match": None, "tournament": None},
-}
+# H's lux table, by sport group, lives in the Director-editable
+# LightingLuxStandard table (audit gap #9 -- this used to be a hardcoded
+# _LUX_TABLE dict here). The sport->category grouping below stays a
+# code-level taxonomy ("which sports behave alike"), not a tunable figure.
 
 _COURT_SPORTS = {
     "badminton", "table_tennis", "squash", "basketball_indoor", "basketball_outdoor",
@@ -421,21 +363,17 @@ _UF_MF_BY_STATUS: dict[BuildingStatus, tuple[float, float]] = {
     BuildingStatus.OPEN_AIR: (0.6, 0.7),
 }
 
-# H's pole table (open-air only): lower bound of each range used as the
-# Phase 1b default fixture-count floor.
-_POLE_COUNT: dict[str, int] = {
-    "box_cricket": 4,
-    "football_7": 6,
-    "tennis": 4,
-    "basketball_outdoor": 4,
-    "padel": 4,
-    "swimming_pool_25m": 6,
-    "swimming_pool_50m": 6,
-}
+# H's pole table (open-air only) lives in the Director-editable
+# SportPoleCount table (audit gap #9 -- this used to be a hardcoded
+# _POLE_COUNT dict here).
 
 # Only fixture in the blueprint's worked example — 200 W at 130 lm/W.
-_FIXTURE_LUMENS = 26000
-_FIXTURE_SPEC = "200 W / 26,000 lm (Phase 1b default fixture)"
+# Director-editable Master Settings, same "XXX_DEFAULT constant, override
+# via Settings" pattern as every other [confirm] figure in this codebase
+# (audit gap #9 -- this used to be hardcoded _FIXTURE_LUMENS/_FIXTURE_SPEC
+# constants with no override path at all).
+DEFAULT_FIXTURE_LUMENS_DEFAULT = 26000.0
+DEFAULT_FIXTURE_SPEC_TEXT_DEFAULT = "200 W / 26,000 lm (Phase 1b default fixture)"
 
 
 def _sport_lux_category(key: str) -> str | None:
@@ -451,6 +389,7 @@ def _sport_lux_category(key: str) -> str | None:
 
 
 def _recommend_lighting(
+    db: Session,
     sport: Sport,
     building_status: BuildingStatus,
     number_of_courts: int,
@@ -469,23 +408,34 @@ def _recommend_lighting(
     if category is None:
         return None
 
-    lux_by_tier = _LUX_TABLE[category]
-    lux_tier = "match" if lux_by_tier["match"] is not None else "practice"
-    lux_level = lux_by_tier[lux_tier]
+    lux_standard = db.query(LightingLuxStandard).filter(LightingLuxStandard.category == category).first()
+    if lux_standard is None:
+        return None
+    lux_tier = "match" if lux_standard.lux_match is not None else "practice"
+    lux_level = lux_standard.lux_match if lux_tier == "match" else lux_standard.lux_practice
     if lux_level is None:
         return None
 
     area_sqm = float(sport.playing_l_ft) * float(sport.playing_w_ft) * number_of_courts / _SQFT_PER_SQM
     uf, mf = _UF_MF_BY_STATUS[building_status]
 
-    formula_fixtures = math.ceil((area_sqm * lux_level) / (_FIXTURE_LUMENS * uf * mf))
+    fixture_lumens = float(
+        get_current_setting_value(db, "default_fixture_lumens_lm") or DEFAULT_FIXTURE_LUMENS_DEFAULT
+    )
+    fixture_spec = (
+        get_current_setting_value(db, "default_fixture_spec_text") or DEFAULT_FIXTURE_SPEC_TEXT_DEFAULT
+    )
+    formula_fixtures = math.ceil((area_sqm * lux_level) / (fixture_lumens * uf * mf))
 
     # E.5: "Types A/B/C/E -> on columns/trusses, no poles; open air/Type
     # D/Type G -> poles" -- driven by the sport's own recommended structure.
     structure_type = structure.structure_type if structure else None
     uses_poles = structure_type is None or structure_type in ("D", "G")
 
-    pole_count = _POLE_COUNT.get(sport.key) if uses_poles else None
+    pole_count_row = (
+        db.query(SportPoleCount).filter(SportPoleCount.sport_id == sport.id).first() if uses_poles else None
+    )
+    pole_count = pole_count_row.pole_count if pole_count_row else None
     fixtures = max(formula_fixtures, pole_count) if pole_count is not None else formula_fixtures
     if uses_poles and pole_count is not None and fixtures % 2 != 0:
         fixtures += 1  # every pole carries at least one fixture
@@ -496,7 +446,7 @@ def _recommend_lighting(
         area_sqm=round(area_sqm, 1),
         mounting_mode="poles" if uses_poles else "structure",
         pole_count=pole_count,
-        fixture_spec=_FIXTURE_SPEC,
+        fixture_spec=fixture_spec,
         fixtures=fixtures,
         why=f"{lux_level} lux ({lux_tier}) over {round(area_sqm, 1)} sqm playing area",
     )
@@ -716,9 +666,9 @@ def _to_out(
         sport, project_sport.building_status, project, regional
     )
     out.structural_signoff_required = len(out.structural_signoff_reasons) > 0
-    out.recommended_flooring = _recommend_flooring(sport, project.package)
+    out.recommended_flooring = _recommend_flooring(db, sport, project.package)
     out.recommended_lighting = _recommend_lighting(
-        sport, project_sport.building_status, project_sport.number_of_courts, out.recommended_structure
+        db, sport, project_sport.building_status, project_sport.number_of_courts, out.recommended_structure
     )
     out.dimension_deviations = _dimension_deviations(db, sport, project_sport)
     out.dimension_deviation_status = _worst_deviation_status(out.dimension_deviations)
@@ -850,5 +800,192 @@ def remove_project_sport(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Sport selection not found")
+    db.delete(row)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Director-editable catalogues backing _recommend_flooring/_recommend_lighting
+# (audit gap #9: these used to be hardcoded dicts in this file). Both follow
+# PackageContent's upsert-by-natural-key shape (Q.2 rule 6 precedent:
+# Director-only master content) -- there's no independent row lifecycle
+# beyond "the current figures for this key," so no is_active/DELETE.
+# ---------------------------------------------------------------------------
+
+flooring_guides_router = APIRouter(prefix="/flooring-guides", tags=["flooring-guides"])
+lighting_standards_router = APIRouter(prefix="/lighting-standards", tags=["lighting-standards"])
+
+
+class FlooringGuideOut(BaseModel):
+    id: uuid.UUID
+    sport_id: uuid.UUID
+    primary_spec: str
+    secondary_spec: str | None
+    budget_spec: str | None
+    rationale: str
+    updated_by_id: uuid.UUID | None
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FlooringGuideUpsert(BaseModel):
+    primary_spec: str = Field(min_length=1)
+    secondary_spec: str | None = None
+    budget_spec: str | None = None
+    rationale: str = Field(min_length=1)
+
+
+@flooring_guides_router.get("", response_model=list[FlooringGuideOut])
+def list_flooring_guides(
+    sport_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    query = db.query(FlooringGuide)
+    if sport_id is not None:
+        query = query.filter(FlooringGuide.sport_id == sport_id)
+    return query.order_by(FlooringGuide.sport_id).all()
+
+
+@flooring_guides_router.put("/{sport_id}", response_model=FlooringGuideOut)
+def upsert_flooring_guide(
+    sport_id: uuid.UUID,
+    payload: FlooringGuideUpsert,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    """F.1/F.2: creates the guide row for this sport the first time,
+    replaces its content on every later call -- same upsert shape as
+    PUT /package-contents/{sport_id}/{tier}."""
+    if not db.query(Sport).filter(Sport.id == sport_id).first():
+        raise HTTPException(status_code=404, detail="Sport not found")
+
+    guide = db.query(FlooringGuide).filter(FlooringGuide.sport_id == sport_id).first()
+    if guide is None:
+        guide = FlooringGuide(sport_id=sport_id, updated_by_id=current_user.id)
+        db.add(guide)
+
+    guide.primary_spec = payload.primary_spec
+    guide.secondary_spec = payload.secondary_spec
+    guide.budget_spec = payload.budget_spec
+    guide.rationale = payload.rationale
+    guide.updated_by_id = current_user.id
+
+    db.commit()
+    db.refresh(guide)
+    return guide
+
+
+class LightingLuxStandardOut(BaseModel):
+    id: uuid.UUID
+    category: str
+    lux_practice: int | None
+    lux_match: int | None
+    lux_tournament: int | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LightingLuxStandardUpsert(BaseModel):
+    lux_practice: int | None = Field(default=None, ge=0)
+    lux_match: int | None = Field(default=None, ge=0)
+    lux_tournament: int | None = Field(default=None, ge=0)
+
+
+@lighting_standards_router.get("/lux", response_model=list[LightingLuxStandardOut])
+def list_lighting_lux_standards(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    return db.query(LightingLuxStandard).order_by(LightingLuxStandard.category).all()
+
+
+@lighting_standards_router.put("/lux/{category}", response_model=LightingLuxStandardOut)
+def upsert_lighting_lux_standard(
+    category: str,
+    payload: LightingLuxStandardUpsert,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    """Part H's lux table. category is the same "court" / "football_cricket"
+    / "pool" / "gym" grouping _sport_lux_category() derives in code -- not
+    itself Director-editable (it's a sport taxonomy, not a figure), so this
+    endpoint only edits the lux numbers for an existing grouping, not the
+    grouping's own membership."""
+    standard = db.query(LightingLuxStandard).filter(LightingLuxStandard.category == category).first()
+    if standard is None:
+        standard = LightingLuxStandard(category=category)
+        db.add(standard)
+
+    standard.lux_practice = payload.lux_practice
+    standard.lux_match = payload.lux_match
+    standard.lux_tournament = payload.lux_tournament
+
+    db.commit()
+    db.refresh(standard)
+    return standard
+
+
+class SportPoleCountOut(BaseModel):
+    id: uuid.UUID
+    sport_id: uuid.UUID
+    pole_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SportPoleCountUpsert(BaseModel):
+    pole_count: int = Field(gt=0)
+
+
+@lighting_standards_router.get("/pole-counts", response_model=list[SportPoleCountOut])
+def list_sport_pole_counts(
+    sport_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    query = db.query(SportPoleCount)
+    if sport_id is not None:
+        query = query.filter(SportPoleCount.sport_id == sport_id)
+    return query.order_by(SportPoleCount.sport_id).all()
+
+
+@lighting_standards_router.put("/pole-counts/{sport_id}", response_model=SportPoleCountOut)
+def upsert_sport_pole_count(
+    sport_id: uuid.UUID,
+    payload: SportPoleCountUpsert,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    if not db.query(Sport).filter(Sport.id == sport_id).first():
+        raise HTTPException(status_code=404, detail="Sport not found")
+
+    row = db.query(SportPoleCount).filter(SportPoleCount.sport_id == sport_id).first()
+    if row is None:
+        row = SportPoleCount(sport_id=sport_id, pole_count=payload.pole_count)
+        db.add(row)
+    else:
+        row.pole_count = payload.pole_count
+
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@lighting_standards_router.delete("/pole-counts/{sport_id}", status_code=204)
+def remove_sport_pole_count(
+    sport_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*MASTER_WRITE_ROLES)),
+):
+    """Unlike FlooringGuide/LightingLuxStandard (every sport/category
+    should always have some current figures), a sport genuinely having NO
+    pole-count floor is a meaningful, real state -- most sports never had
+    a row in the original _POLE_COUNT dict at all -- so this is the one
+    catalogue in this trio with a real delete path."""
+    row = db.query(SportPoleCount).filter(SportPoleCount.sport_id == sport_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="No pole-count row for this sport")
     db.delete(row)
     db.commit()

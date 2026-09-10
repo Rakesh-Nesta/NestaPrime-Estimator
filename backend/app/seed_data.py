@@ -235,3 +235,71 @@ SETTINGS_SEED = [
     # D.4: "Site establishment [confirm 4-8%]" -- K.1 step 3.
     ("site_establishment_percent", "6.0", "%", "2026-01-01"),
 ]
+
+# Parts F.1/F.2 -- sports.py's own former _FLOORING_TABLE dict, now this
+# app's working default for the Director-editable FlooringGuide table (the
+# audit's "hardcoded technical catalogues" finding, gap #9). Two sports
+# intentionally have no row here -- shooting_range_10m and archery_range --
+# matching the original dict, which correctly gave them no recommendation
+# rather than a guess. (sport_key, primary_spec, secondary_spec, budget_spec, rationale)
+FLOORING_GUIDES_SEED = [
+    ("badminton", "Wooden sprung 22 mm + BWF-approved PVC mat 4.5-7 mm", "PU 6 mm", "PVC mat 4.5 mm on PCC",
+     "BWF tournaments are played on approved PVC mats laid over a wooden or synthetic base; bare wood is a club finish"),
+    ("table_tennis", "Hardwood 22 mm or ITTF-approved PVC/PU 4.5-6 mm", "PU 6 mm", "Vinyl 4 mm",
+     "ITTF approves wood and synthetic; non-reflective, non-slip"),
+    ("squash", "Hardwood strip 22 mm (maple/beech) on sprung battens", None, None,
+     "WSF specifies unsealed hardwood floor"),
+    ("basketball_indoor", "Maple 22 mm", "PU 6 mm", "Vinyl 4 mm", "Tournament standard"),
+    ("volleyball_indoor", "PU 6 mm", "Teak 22 mm", "Vinyl 4 mm", "Shock absorption"),
+    ("gymnasium", "Rubber 8 mm (cardio) / 15-20 mm (free weights)", "Wooden", "Vinyl", "Equipment drops"),
+    ("kabaddi", "PU 6 mm / mat", "Wooden", "Vinyl", "Barefoot grip"),
+    ("wrestling_boxing_martial_arts", "Rubber 15-20 mm + mat", "PU mat", None, "Falls"),
+    ("indoor_cricket_nets", "Turf 30 mm", "Rubber mat", None, "Ball behaviour"),
+    ("football_11", "FIFA Quality Pro 50-60 mm", "FIFA Quality 50 mm", "Multi-sport 40 mm", "Certification"),
+    ("football_7", "Multi-sport 40 mm", "Cricket 40 mm", "Poly 30 mm", "Cost/performance"),
+    ("football_5_futsal", "Multi-sport 40 mm", "Cricket 40 mm", "Poly 30 mm", "Cost/performance"),
+    ("box_cricket", "Cricket turf 40 mm", "Multi-sport 40 mm", "Poly 35 mm", "Bounce"),
+    ("cricket_practice_nets", "Cricket 30 mm", "Multi 30 mm", "Poly 25 mm", "Bowling"),
+    ("tennis", "Acrylic 3-5 mm (5-8 coats)", "Synthetic 5 mm", "Concrete + paint", "ITF"),
+    ("padel", "Monofilament 12 mm + sand", None, None, "FIP"),
+    ("pickleball", "Acrylic 3 mm", "Concrete + coating", None, "USA Pickleball"),
+    ("basketball_outdoor", "Acrylic 3 mm", "PU 5 mm", "Concrete + coating", "Weather"),
+    ("volleyball_outdoor", "PU 5 mm", "Sand", "Concrete", "All-weather"),
+    ("beach_volleyball", "Washed silica sand 16 in", None, None, "FIVB"),
+    ("hockey_turf", "FIH water-based 12-15 mm (needs irrigation)", "FIH sand-dressed 20-25 mm",
+     "Multi-sport 40 mm (non-FIH, school use)",
+     "FIH pitches are short-pile; 50 mm turf is football turf and is not hockey-legal"),
+    ("athletic_track_400m", "Sandwich system 13 mm", "Full-PU 13 mm", "Spray-coat 13 mm (non-certified)",
+     "World Athletics certified systems; spike-resistant"),
+    ("athletic_track_200_250m", "Sandwich system 13 mm", "Full-PU 13 mm", "Spray-coat 13 mm (non-certified)",
+     "World Athletics certified systems; spike-resistant"),
+    ("skating_rink", "Concrete + coating", "Tiles", None, "Smooth"),
+    ("kids_play_area", "EPDM system 40 mm (10 mm EPDM wearing + 30 mm SBR base; CFH 1.5 m)",
+     "Rubber tiles 25-40 mm", "Grass / sand", "Fall protection - 15 mm EPDM alone gives CFH under 1 m"),
+    ("swimming_pool_25m", "Anti-slip tiles", "Mosaic", "Marble", "Non-slip"),
+    ("swimming_pool_50m", "Anti-slip tiles", "Mosaic", "Marble", "Non-slip"),
+    ("multipurpose_court", "Acrylic 3 mm", "PU 5 mm", "Concrete", "Multi-line"),
+]
+
+# Part H's lux table, by sport group -- sports.py's own former _LUX_TABLE
+# dict, now this app's working default for the Director-editable
+# LightingLuxStandard table (audit gap #9). (category, lux_practice, lux_match, lux_tournament)
+LIGHTING_LUX_STANDARDS_SEED = [
+    ("court", 200, 500, 750),
+    ("football_cricket", 200, 500, 750),  # tournament up to 1000 per H
+    ("pool", 300, 500, None),
+    ("gym", 300, None, None),
+]
+
+# Part H's pole table (open-air only) -- sports.py's own former
+# _POLE_COUNT dict, now this app's working default for the Director-
+# editable SportPoleCount table (audit gap #9). (sport_key, pole_count)
+SPORT_POLE_COUNTS_SEED = [
+    ("box_cricket", 4),
+    ("football_7", 6),
+    ("tennis", 4),
+    ("basketball_outdoor", 4),
+    ("padel", 4),
+    ("swimming_pool_25m", 6),
+    ("swimming_pool_50m", 6),
+]

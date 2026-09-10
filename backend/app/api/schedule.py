@@ -184,7 +184,7 @@ def get_schedule(
 
     base = _recommend_base(sport, project_sport.building_status, project.soil_type)
     structure = _recommend_structure(sport, project_sport.building_status, project.package)
-    flooring = _recommend_flooring(sport, project.package)
+    flooring = _recommend_flooring(db, sport, project.package)
     flooring_text = flooring.selected if flooring else None
 
     flooring_complete_day = None

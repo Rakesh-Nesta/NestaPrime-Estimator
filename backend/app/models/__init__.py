@@ -3,6 +3,7 @@ from app.models.attachment import Attachment, AttachmentTag, ApprovalStrength  #
 from app.models.client import Client, ClientType  # noqa: F401
 from app.models.client_signatory import ClientSignatory  # noqa: F401
 from app.models.company_logo import CompanyLogo  # noqa: F401
+from app.models.flooring_guide import FlooringGuide  # noqa: F401
 from app.models.document import (  # noqa: F401
     CostSheet,
     CostSheetLine,
@@ -17,6 +18,7 @@ from app.models.document import (  # noqa: F401
     WorkPackage,
 )
 from app.models.hub import Hub  # noqa: F401
+from app.models.lighting_standard import LightingLuxStandard, SportPoleCount  # noqa: F401
 from app.models.margin_policy import MarginPolicy  # noqa: F401
 from app.models.message import Message, MessageChannel, MessageStatus  # noqa: F401
 from app.models.message_template import MessageTemplate, WhatsappTemplateStatus  # noqa: F401
