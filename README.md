@@ -16,15 +16,17 @@ consent tracking, a check-on-read jobs-runner pattern for expiry/SLA/reminder lo
 generation for every document type.
 
 An internal completion audit ("Blueprint Ledger") tracked 19 ranked gaps against the blueprint;
-16 are closed. Three remain open:
+all 19 are now closed, including small-job fast-track (M.2 rule 8), Procurement-safe Consumption
+Sheet/BOM exports (K.3), and Director-editable flooring/lighting catalogues.
 
-- **Small-job fast-track (M.2 rule 8):** Resurfacing/Repair jobs under a confirm-threshold
-  skipping straight from Cost Sheet to Quotation under standing PM pre-approval — not yet built.
-- **Procurement-safe Consumption Sheet / BOM exports:** Procurement is currently blocked from
-  these exports entirely, rather than let in with cost/margin stripped (K.3's actual intent).
-- **Director-editable technical catalogues:** flooring/structure/netting/fixture/equipment specs
-  still live as Python dicts in the API layer; only their *rates* are Director-editable via Master
-  Settings today, not the specs themselves.
+That last one is narrower than its one-line audit description implied, worth stating plainly
+rather than repeating the headline claim: of the five catalogues the audit named, two
+(netting grades, accessory catalog) turned out to already be Director-editable tables from an
+earlier gap, and the structural steel/pipe specs (`STRUCTURE_DEFAULTS`, `PIPE_WEIGHT_KG_PER_M`)
+were deliberately left as hardcoded Python dicts — they're IS 1239 engineering standards, not
+business figures a Director tunes, a distinction the codebase's own code comments already argued
+before this gap was picked up. Only the flooring guide and lighting lux/pole-count tables were
+actually built.
 
 ## Stack
 
