@@ -9,6 +9,7 @@ import {
   approveSkipRequest,
   createCostSheet,
   createEstimate,
+  createFastTrackQuotation,
   createQuotation,
   createSkipRequest,
   createWorkOrder,
@@ -220,6 +221,7 @@ export default function Documents({ token, project, role, onBack }) {
             role={role}
             estimates={estimates}
             quotations={quotations}
+            activeCostSheet={activeCostSheet}
             onAction={withErrorHandling}
           />
         </>
@@ -821,10 +823,11 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   );
 }
 
-function QuotationPanel({ token, project, role, estimates, quotations, onAction }) {
+function QuotationPanel({ token, project, role, estimates, quotations, activeCostSheet, onAction }) {
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const [discountValue, setDiscountValue] = useState("");
   const [gstMode, setGstMode] = useState("exclusive");
+  const [fastTrackPackage, setFastTrackPackage] = useState("standard");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
@@ -884,6 +887,12 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
     });
     setDiscountValue("");
   });
+  const handleFastTrack = onAction(async () => {
+    await createFastTrackQuotation(token, project.id, {
+      cost_sheet_id: activeCostSheet.id,
+      package: fastTrackPackage,
+    });
+  });
   const handleRelease = onAction(async (id) => releaseQuotation(token, id));
   const handleSend = onAction(async (id) => sendQuotation(token, id));
   const handleWon = onAction(async (id, waiveEvidenceReason) =>
@@ -937,6 +946,14 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
               {q.gst_mode === "inclusive" && (
                 <span className="text-blue-700 text-xs bg-blue-50 rounded px-1.5 py-0.5 ml-1">
                   GST inclusive (Part L)
+                </span>
+              )}
+              {q.fast_track_flag && (
+                <span
+                  className="text-amber-700 text-xs bg-amber-50 rounded px-1.5 py-0.5 ml-1"
+                  title="Small-job fast-track (M.2 rule 8): created directly from a Cost Sheet under standing PM pre-approval"
+                >
+                  Fast-track (M.2 rule 8)
                 </span>
               )}
             </span>
@@ -1155,6 +1172,33 @@ function QuotationPanel({ token, project, role, estimates, quotations, onAction 
           Requires at least one Client-approved or demand-received estimate option (M.2 rule 2).
         </p>
       )}
+
+      {["resurfacing", "repair"].includes(project.project_type) &&
+        (role === "pm" || role === "director") &&
+        activeCostSheet &&
+        activeCostSheet.status === "verified" && (
+          <div className="border-t pt-3 mt-1 flex items-center gap-2">
+            <span className="text-xs text-gray-500" title="M.2 rule 8">
+              Fast-track ({activeCostSheet.document_no}) →
+            </span>
+            <select
+              value={fastTrackPackage}
+              onChange={(e) => setFastTrackPackage(e.target.value)}
+              className="rounded border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="budget">Budget</option>
+              <option value="standard">Standard</option>
+              <option value="premium">Premium</option>
+            </select>
+            <button
+              onClick={handleFastTrack}
+              title="Small-job fast-track (M.2 rule 8): Cost Sheet -> Quotation directly, under a standing PM pre-approval, for Resurfacing/Repair jobs below the Director-set limit."
+              className="bg-amber-600 text-white text-xs rounded px-3 py-2 hover:bg-amber-700"
+            >
+              Fast-track to Quotation
+            </button>
+          </div>
+        )}
     </div>
   );
 }

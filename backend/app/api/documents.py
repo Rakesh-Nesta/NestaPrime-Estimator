@@ -37,7 +37,7 @@ from app.models.document import (
     WorkPackage,
 )
 from app.models.margin_policy import MarginPolicy
-from app.models.project import Package, Project
+from app.models.project import Package, Project, ProjectType
 from app.models.rate_item import LabourCategory, RateSource
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.setting import DocumentType, Override
@@ -188,6 +188,9 @@ BOCW_CESS_PERCENT_DEFAULT = 1.0
 BOCW_CESS_THRESHOLD_RS_DEFAULT = 1_000_000.0  # "Rs 10 L"
 # K.1 step 5A: "Company overhead recovery [confirm 10%] of step 5."
 COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT = 10.0
+# M.2 rule 8 / Q.1 "Thresholds & modes": "Small-job fast-track limit ...
+# Global ... Director". Appendix B's own worked figure: "Rs 2 L".
+FAST_TRACK_LIMIT_RS_DEFAULT = 200_000.0
 
 # J.2: "Preferred: activity-based labour rates ... so labour follows
 # effort, not material value." Named activities, matched by the labour
@@ -1809,6 +1812,7 @@ class QuotationOut(BaseModel):
     quotation_total: float
     gst_mode: GstMode
     cost_basis_unverified: bool
+    fast_track_flag: bool
     released_by_id: uuid.UUID | None
     released_at: datetime | None
     sent_at: datetime | None
@@ -1938,6 +1942,181 @@ def create_quotation(
 
     if payload.discount_value:
         # M.5 names "discounts" as an audit log category.
+        write_audit_log_entry(
+            db, current_user, "quotation", quotation.id, "discount_value",
+            old_value=0, new_value=payload.discount_value,
+            reason=f"discount_type={payload.discount_type}", request=request,
+        )
+
+    db.commit()
+    db.refresh(quotation)
+    return _quotation_to_out(db, quotation, current_user.role.value)
+
+
+class QuotationFastTrackCreate(BaseModel):
+    cost_sheet_id: uuid.UUID
+    package: Package
+    discount_type: str | None = None
+    discount_value: float = Field(default=0.0, ge=0)
+    gst_mode: GstMode = GstMode.EXCLUSIVE
+
+
+@quotations_router.post(
+    "/projects/{project_id}/quotations/fast-track", response_model=QuotationOut, status_code=201
+)
+def create_fast_track_quotation(
+    project_id: uuid.UUID,
+    payload: QuotationFastTrackCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    # M.4 approval matrix: "Skip a stage / fast-track small job | (requests)
+    # | check | check" -- Sales can only request; this endpoint IS the
+    # standing PM/Director pre-approval M.2 rule 8 describes, so there is
+    # no separate approval step here, only PM/Director eligibility to act
+    # on it directly. Sales also never sees a Cost Sheet total (K.3), so
+    # Sales could not meaningfully invoke this even if allowed.
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """M.2 rule 8: 'Small-job fast-track: Resurfacing / Repair jobs below
+    Rs 2,00,000 [confirm] may go Cost Sheet -> Quotation with a standing
+    PM pre-approval; logged as a fast-track, not a skip.' Unlike M.2 rule
+    3's SkipRequest (a per-instance, ad-hoc approval for when there's no
+    Cost Sheet basis at all), this is a standing eligibility rule -- no
+    request/approve round trip, since the Director already pre-approved
+    it globally via the fast_track_limit_rs Master Setting. 'Logged as a
+    fast-track, not a skip' means an audit_log entry, not a SkipRequest
+    row (this quotation never went through SkipRequest at all).
+
+    The data model still requires a Quotation to trace back to a real
+    Estimate/EstimateOption (M.2 rule 10's shared project numbering, M.2
+    rule 4's revision handling, K.2's per-sport floor/target -- all of it
+    assumes one exists), so this auto-creates a minimal Estimate and a
+    single, auto-approved EstimateOption behind the scenes rather than
+    inventing a second Quotation-creation code path with none of that.
+    This mirrors the existing precedent for 'the client-facing approval
+    step is skipped, but the underlying row still exists' -- Tender
+    Mode's M.2 rule 7 exception, which auto-records 'Client demand
+    received' on the Estimate stage instead of waiting for a real client
+    approval action."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.project_type not in (ProjectType.RESURFACING, ProjectType.REPAIR):
+        raise HTTPException(
+            status_code=422,
+            detail="Fast-track (M.2 rule 8) only applies to Resurfacing/Repair jobs",
+        )
+
+    cost_sheet = (
+        db.query(CostSheet)
+        .filter(CostSheet.id == payload.cost_sheet_id, CostSheet.project_id == project_id)
+        .first()
+    )
+    if not cost_sheet:
+        raise HTTPException(status_code=404, detail="Cost sheet not found on this project")
+    if cost_sheet.status != CostSheetStatus.VERIFIED:
+        raise HTTPException(
+            status_code=400,
+            detail="Cost sheet must be Verified before fast-track (M.2 rule 1 still applies)",
+        )
+
+    limit = _get_setting_float(db, "fast_track_limit_rs", FAST_TRACK_LIMIT_RS_DEFAULT)
+    cost_total = float(cost_sheet.cost_total)
+    if cost_total >= limit:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Cost sheet total Rs {cost_total:,.2f} is at or above the fast-track limit of "
+                f"Rs {limit:,.2f} (M.2 rule 8) -- use the normal Estimate -> Quotation flow"
+            ),
+        )
+
+    project_sports = db.query(ProjectSport).filter(ProjectSport.project_id == project_id).all()
+    if len(project_sports) != 1:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Fast-track requires exactly one sport on the project, so the Cost Sheet total "
+                "can be attributed to it without inventing a per-sport split the blueprint "
+                "doesn't specify -- use the normal Estimate flow for multi-sport projects"
+            ),
+        )
+    project_sport = project_sports[0]
+
+    client = db.query(Client).filter(Client.id == project.client_id).first()
+    if client.blacklist_flag:
+        raise HTTPException(
+            status_code=400, detail="This client is blacklisted (Part O) -- new Quotations are blocked"
+        )
+    policy = _get_margin_policy(db, client.type)
+    gst_rate_percent = get_gst_rate_percent(db)
+    price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
+    price_low, price_high = _price_estimate_option(
+        db, policy, gst_rate_percent, price_range_percent, project_sport, cost_total
+    )
+
+    estimate = Estimate(
+        project_id=project_id,
+        cost_sheet_id=cost_sheet.id,
+        document_no=_document_no(project.project_no, "EST", 1),
+        created_by_id=current_user.id,
+    )
+    db.add(estimate)
+    db.flush()
+    option = EstimateOption(
+        estimate_id=estimate.id,
+        project_sport_id=project_sport.id,
+        package=payload.package,
+        cost_for_option=cost_total,
+        price_low=price_low,
+        price_high=price_high,
+        # Standing pre-approval, per M.2 rule 8 -- there is no client
+        # decision to wait for on the auto-created Estimate.
+        client_status=EstimateOptionClientStatus.APPROVED,
+    )
+    db.add(option)
+    db.flush()
+
+    _validate_gst_mode(project, payload.gst_mode)
+    floor, target = cost_weighted_floor_and_target(db, policy, [(cost_total, project_sport.sport_id)])
+    pricing = compute_pricing(
+        db, cost_total, floor, target, payload.discount_type, payload.discount_value, gst_mode=payload.gst_mode
+    )
+
+    quotation = Quotation(
+        project_id=project_id,
+        estimate_id=estimate.id,
+        document_no=_document_no(project.project_no, "NPQ", 1),
+        cost_total=cost_total,
+        target_margin_percent=pricing.target_margin_percent,
+        floor_margin_percent=pricing.floor_margin_percent,
+        selling_price_ex_gst=pricing.selling_price_ex_gst,
+        discount_type=payload.discount_type,
+        discount_value=payload.discount_value,
+        discount_amount=pricing.discount_amount,
+        selling_after_discount=pricing.selling_after_discount,
+        margin_percent=pricing.margin_percent,
+        below_floor=pricing.below_floor,
+        gst_amount=pricing.gst_amount,
+        quotation_total=pricing.quotation_total,
+        gst_mode=pricing.gst_mode,
+        cost_basis_unverified=False,  # fast-track requires VERIFIED, checked above
+        fast_track_flag=True,
+        created_by_id=current_user.id,
+    )
+    db.add(quotation)
+    db.flush()
+    db.add(QuotationLine(quotation_id=quotation.id, estimate_option_id=option.id))
+
+    # M.2 rule 8: "logged as a fast-track, not a skip" -- an audit_log
+    # entry, not a SkipRequest row (this never goes through SkipRequest).
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "fast_track_flag",
+        old_value=False, new_value=True,
+        reason=f"Small-job fast-track (M.2 rule 8): cost sheet total Rs {cost_total:,.2f} < limit Rs {limit:,.2f}",
+        request=request,
+    )
+    if payload.discount_value:
         write_audit_log_entry(
             db, current_user, "quotation", quotation.id, "discount_value",
             old_value=0, new_value=payload.discount_value,
