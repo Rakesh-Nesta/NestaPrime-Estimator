@@ -1,7 +1,8 @@
+import math
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.documents import CostSheetLineOut, _line_to_out
@@ -12,10 +13,18 @@ from app.db.session import get_db
 from app.models.document import CostSheetLine, WorkPackage
 from app.models.project import Project
 from app.models.rate_item import RateSource
+from app.models.vehicle_class import VehicleClass
 
 overheads_router = APIRouter(tags=["overheads"])
+vehicle_classes_router = APIRouter(prefix="/vehicle-classes", tags=["vehicle-classes"])
 
 COST_ROLES = ("pm", "director")
+# Same footing as RateItem/NettingGrade -- real cost-side Rs/km and
+# capacity data (K.3), reads open to whoever might build a Cost Sheet.
+VEHICLE_CLASS_READ_ROLES = ("pm", "director", "procurement", "site_engineer")
+# Q.1: "Global | Director" -- Master Settings ownership, same as every
+# other Director-only catalog this session (netting grades, accessories).
+VEHICLE_CLASS_WRITE_ROLES = ("director",)
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +40,16 @@ COST_ROLES = ("pm", "director")
 
 
 class FreightCraneTakeoffRequest(BaseModel):
+    # Either given directly (a one-off manual freight line), or derived
+    # from total_material_tonnes + vehicle_class_id below -- B.1's own
+    # formula, "trips = ceil(total material tonnes / truck capacity)".
+    # An explicit trips/rate_per_km alongside a vehicle_class_id overrides
+    # what that class would otherwise compute, same escape hatch as every
+    # other catalog-with-manual-override this codebase uses (netting
+    # grades, accessory catalog).
     trips: int | None = Field(default=None, gt=0)
+    total_material_tonnes: float | None = Field(default=None, gt=0)
+    vehicle_class_id: uuid.UUID | None = None
     distance_km: float | None = None  # blank = the project's own distance_km
     rate_per_km: float | None = Field(default=None, gt=0)
     crane_days: int | None = Field(default=None, gt=0)
@@ -39,13 +57,21 @@ class FreightCraneTakeoffRequest(BaseModel):
 
     @model_validator(mode="after")
     def _at_least_one_line(self):
-        has_freight = self.trips is not None or self.rate_per_km is not None
-        if has_freight and (self.trips is None or self.rate_per_km is None):
-            raise ValueError("trips and rate_per_km must be given together for a freight line")
+        if self.total_material_tonnes is not None and self.vehicle_class_id is None:
+            raise ValueError("vehicle_class_id is required when total_material_tonnes is given")
+        can_derive_trips = self.total_material_tonnes is not None and self.vehicle_class_id is not None
+        has_rate = self.rate_per_km is not None or self.vehicle_class_id is not None
+        has_trips = self.trips is not None or can_derive_trips
+        has_freight = has_rate or has_trips
+        if has_freight and not (has_rate and has_trips):
+            raise ValueError(
+                "A freight line needs a rate (rate_per_km or vehicle_class_id) and trips (trips, or "
+                "total_material_tonnes + vehicle_class_id to derive it)"
+            )
         if self.crane_days is not None and self.crane_day_rate is None:
             raise ValueError("crane_day_rate is required when crane_days is given")
         if not has_freight and self.crane_days is None:
-            raise ValueError("Provide at least a freight (trips + rate_per_km) or a crane (crane_days + crane_day_rate) line")
+            raise ValueError("Provide at least a freight line or a crane (crane_days + crane_day_rate) line")
         return self
 
 
@@ -66,16 +92,32 @@ def add_freight_crane_takeoff(
     """K.1 step 3's freight/crane addition, and B.1's own formula:
     'Freight = trips x km x Rs/km, trips = ceil(total material tonnes /
     truck capacity) by vehicle class.' This app has no per-take-off
-    weight/tonnage aggregate to derive trips from automatically, so trips
-    (like crane-days) is a PM-entered judgment call, not a computed
-    figure -- honestly matching the blueprint's own silence on how many
-    crane-days a job needs."""
+    weight/tonnage aggregate to derive tonnage from automatically (lines
+    are mixed units -- kg, sqm, cum -- with no density table for most
+    materials), so total_material_tonnes is still a PM-entered figure,
+    same honesty as crane-days. But once that figure is entered alongside
+    a selected VehicleClass, B.1's own ceil(tonnes/capacity) formula and
+    that class's Rs/km rate ARE computed here rather than PM-guessed --
+    the part of the formula the blueprint actually specifies."""
     cost_sheet = _get_cost_sheet(db, cost_sheet_id)
 
     lines_to_create: list[CostSheetLine] = []
     breakdown: dict = {}
 
-    if payload.trips is not None and payload.rate_per_km is not None:
+    vehicle_class = None
+    if payload.vehicle_class_id is not None:
+        vehicle_class = db.query(VehicleClass).filter(VehicleClass.id == payload.vehicle_class_id).first()
+        if not vehicle_class:
+            raise HTTPException(status_code=404, detail="Vehicle class not found")
+
+    rate_per_km = payload.rate_per_km if payload.rate_per_km is not None else (
+        float(vehicle_class.rate_per_km) if vehicle_class else None
+    )
+    trips = payload.trips
+    if trips is None and vehicle_class is not None and payload.total_material_tonnes is not None:
+        trips = math.ceil(payload.total_material_tonnes / float(vehicle_class.truck_capacity_tonnes))
+
+    if trips is not None and rate_per_km is not None:
         distance_km = payload.distance_km
         if distance_km is None:
             project = db.query(Project).filter(Project.id == cost_sheet.project_id).first()
@@ -85,21 +127,26 @@ def add_freight_crane_takeoff(
                 status_code=422,
                 detail="distance_km must be given (the project has no distance_km on file to default to)",
             )
-        total_km = payload.trips * distance_km
+        total_km = trips * distance_km
+        item_name = f"Freight ({trips} trips x {distance_km:g} km)"
+        if vehicle_class is not None:
+            item_name += f" -- {vehicle_class.name}"
         lines_to_create.append(
             CostSheetLine(
                 cost_sheet_id=cost_sheet_id,
                 work_package=WorkPackage.CIVIL,
                 category="Site logistics",
-                item_name=f"Freight ({payload.trips} trips x {distance_km:g} km)",
+                item_name=item_name,
                 unit="km",
                 quantity=round(total_km, 2),
-                rate=payload.rate_per_km,
+                rate=rate_per_km,
                 source=RateSource.MANUAL,
             )
         )
+        breakdown["freight_trips"] = trips
         breakdown["freight_distance_km"] = distance_km
         breakdown["freight_total_km"] = round(total_km, 2)
+        breakdown["freight_vehicle_class"] = vehicle_class.name if vehicle_class else None
 
     if payload.crane_days is not None:
         lines_to_create.append(
@@ -304,3 +351,79 @@ def add_tender_overheads_takeoff(
     return TenderOverheadsTakeoffOut(
         bg_contract_months=bg_contract_months, lines=[_line_to_out(line) for line in lines_to_create]
     )
+
+
+# --------------------------------------------------------------------------
+# Q.1 vehicle class catalog -- Director-editable, empty by default (no
+# worked example anywhere in the blueprint to seed from, unlike E.3's
+# netting grades or B.2's warranty years).
+# --------------------------------------------------------------------------
+
+
+class VehicleClassOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    name: str
+    truck_capacity_tonnes: float
+    rate_per_km: float
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@vehicle_classes_router.get("", response_model=list[VehicleClassOut])
+def list_vehicle_classes(
+    include_inactive: bool = False,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*VEHICLE_CLASS_READ_ROLES)),
+):
+    query = db.query(VehicleClass)
+    if not include_inactive:
+        query = query.filter(VehicleClass.is_active.is_(True))
+    return query.order_by(VehicleClass.key).all()
+
+
+class VehicleClassCreate(BaseModel):
+    key: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    truck_capacity_tonnes: float = Field(gt=0)
+    rate_per_km: float = Field(gt=0)
+
+
+class VehicleClassUpdate(BaseModel):
+    name: str | None = None
+    truck_capacity_tonnes: float | None = Field(default=None, gt=0)
+    rate_per_km: float | None = Field(default=None, gt=0)
+    is_active: bool | None = None
+
+
+@vehicle_classes_router.post("", response_model=VehicleClassOut, status_code=201)
+def create_vehicle_class(
+    payload: VehicleClassCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*VEHICLE_CLASS_WRITE_ROLES)),
+):
+    if db.query(VehicleClass).filter(VehicleClass.key == payload.key).first():
+        raise HTTPException(status_code=409, detail=f"Vehicle class '{payload.key}' already exists")
+    vehicle_class = VehicleClass(**payload.model_dump())
+    db.add(vehicle_class)
+    db.commit()
+    db.refresh(vehicle_class)
+    return vehicle_class
+
+
+@vehicle_classes_router.patch("/{vehicle_class_id}", response_model=VehicleClassOut)
+def update_vehicle_class(
+    vehicle_class_id: uuid.UUID,
+    payload: VehicleClassUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*VEHICLE_CLASS_WRITE_ROLES)),
+):
+    vehicle_class = db.query(VehicleClass).filter(VehicleClass.id == vehicle_class_id).first()
+    if not vehicle_class:
+        raise HTTPException(status_code=404, detail="Vehicle class not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(vehicle_class, field, value)
+    db.commit()
+    db.refresh(vehicle_class)
+    return vehicle_class

@@ -164,6 +164,16 @@ CONTINGENCY_PERCENT_DEFAULT = {
 }
 BLENDED_LABOUR_FALLBACK_PERCENT_DEFAULT = 22.0  # J.2 "Blended fallback"
 SITE_ESTABLISHMENT_PERCENT_DEFAULT = 6.0  # D.4 "[confirm 4-8%]" -- midpoint
+# B.2: "Distance > 100 km -> Site establishment +2% . labour accommodation
+# line." The +2% is an additive bump to site_establishment_percent above,
+# not a separate multiplicative factor -- applied automatically once the
+# project's own distance_km crosses the threshold. The accompanying
+# "labour accommodation line" has no rate or quantity formula anywhere in
+# the document, so it stays a PM-entered Manual line (same honesty as
+# every other unquantified line this codebase has left to PM judgment);
+# the frontend surfaces a reminder rather than fabricating one.
+DISTANCE_UPLIFT_THRESHOLD_KM = 100.0
+DISTANCE_UPLIFT_PERCENT_DEFAULT = 2.0
 # K.1 step 4B: "Warranty reserve 1% (private clients; Appendix B)" --
 # mutually exclusive with step 4A's Tender Mode DLP reserve (never both).
 WARRANTY_RESERVE_PERCENT_DEFAULT = 1.0
@@ -839,6 +849,11 @@ def _compute_cost_sheet_total(db: Session, cost_sheet: CostSheet) -> float:
     site_establishment_percent = _get_effective_setting_float(
         db, DocumentType.COST_SHEET, cost_sheet.id, "site_establishment_percent", SITE_ESTABLISHMENT_PERCENT_DEFAULT
     )
+    # B.2: "Distance > 100 km -> Site establishment +2%."
+    if project is not None and project.distance_km is not None and float(project.distance_km) > DISTANCE_UPLIFT_THRESHOLD_KM:
+        site_establishment_percent += _get_effective_setting_float(
+            db, DocumentType.COST_SHEET, cost_sheet.id, "distance_uplift_percent", DISTANCE_UPLIFT_PERCENT_DEFAULT
+        )
     warranty_reserve_percent = (
         0.0
         if tender_mode
@@ -1077,6 +1092,12 @@ def get_k1_constants(
         ("site_establishment_percent", "Site establishment %", SITE_ESTABLISHMENT_PERCENT_DEFAULT),
         ("company_overhead_recovery_percent", "Company overhead recovery %", COMPANY_OVERHEAD_RECOVERY_PERCENT_DEFAULT),
     ]
+    if project is not None and project.distance_km is not None and float(project.distance_km) > DISTANCE_UPLIFT_THRESHOLD_KM:
+        keys.append((
+            "distance_uplift_percent",
+            f"Distance uplift % (site > {DISTANCE_UPLIFT_THRESHOLD_KM:g} km, B.2)",
+            DISTANCE_UPLIFT_PERCENT_DEFAULT,
+        ))
     if project is not None and project.tender_mode:
         keys.append(("dlp_reserve_percent", "DLP reserve % (Tender Mode)", DLP_RESERVE_PERCENT_DEFAULT))
         keys.append(("bocw_cess_percent", "BOCW cess % (Tender Mode, works > Rs 10 L)", BOCW_CESS_PERCENT_DEFAULT))

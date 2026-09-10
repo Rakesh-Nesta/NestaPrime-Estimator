@@ -5,6 +5,7 @@ import {
   createNettingGrade,
   createScopeItem,
   createSport,
+  createVehicleClass,
   deleteSportMarginPolicy,
   listAccessoryCatalog,
   listHubs,
@@ -13,11 +14,13 @@ import {
   listScopeItems,
   listSportMarginPolicies,
   listSports,
+  listVehicleClasses,
   updateAccessoryCatalogItem,
   updateHub,
   updateNettingGrade,
   updateScopeItem,
   updateSport,
+  updateVehicleClass,
   upsertPackageContent,
   upsertSportMarginPolicy,
 } from "./api";
@@ -36,6 +39,10 @@ function emptyAccessoryItemForm() {
 
 function emptyNettingGradeForm() {
   return { key: "", name: "", material: "", twine: "", mesh: "", uv_stabilized: "", typical_use: "", rate_per_sqm: "" };
+}
+
+function emptyVehicleClassForm() {
+  return { key: "", name: "", truck_capacity_tonnes: "", rate_per_km: "" };
 }
 
 function emptySportForm() {
@@ -69,6 +76,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
   const [hubs, setHubs] = useState([]);
   const [accessoryCatalog, setAccessoryCatalog] = useState([]);
   const [nettingGrades, setNettingGrades] = useState([]);
+  const [vehicleClasses, setVehicleClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -76,8 +84,8 @@ export default function SportsScopeAdmin({ token, onBack }) {
     return Promise.all([
       listSports(token, true), listScopeItems(token, true), listSportMarginPolicies(token),
       listPackageContents(token), listHubs(token, true), listAccessoryCatalog(token, undefined, true),
-      listNettingGrades(token, true),
-    ]).then(([s, i, m, p, h, a, n]) => {
+      listNettingGrades(token, true), listVehicleClasses(token, true),
+    ]).then(([s, i, m, p, h, a, n, v]) => {
       setSports(s);
       setScopeItems(i);
       setSportMarginPolicies(m);
@@ -85,6 +93,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
       setHubs(h);
       setAccessoryCatalog(a);
       setNettingGrades(n);
+      setVehicleClasses(v);
     });
   }
 
@@ -173,6 +182,12 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Netting grades ({nettingGrades.length})
           </button>
+          <button
+            onClick={() => setTab("vehicles")}
+            className={`text-sm rounded px-3 py-1 ${tab === "vehicles" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+          >
+            Vehicle classes ({vehicleClasses.length})
+          </button>
         </div>
       </div>
 
@@ -194,6 +209,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
         <AccessoryCatalogTab token={token} sports={sports} accessoryCatalog={accessoryCatalog} onAction={withErrorHandling} />
       )}
       {tab === "netting" && <NettingGradesTab token={token} nettingGrades={nettingGrades} onAction={withErrorHandling} />}
+      {tab === "vehicles" && <VehicleClassesTab token={token} vehicleClasses={vehicleClasses} onAction={withErrorHandling} />}
     </div>
   );
 }
@@ -906,6 +922,139 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
       ) : (
         <button onClick={() => setAdding(true)} className="text-xs text-blue-600 hover:underline">
           + Add grade
+        </button>
+      )}
+    </div>
+  );
+}
+
+function VehicleClassesTab({ token, vehicleClasses, onAction }) {
+  const [adding, setAdding] = useState(false);
+  const [addForm, setAddForm] = useState(emptyVehicleClassForm());
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+
+  const handleCreate = onAction(async () => {
+    await createVehicleClass(token, {
+      key: addForm.key,
+      name: addForm.name,
+      truck_capacity_tonnes: Number(addForm.truck_capacity_tonnes),
+      rate_per_km: Number(addForm.rate_per_km),
+    });
+    setAddForm(emptyVehicleClassForm());
+    setAdding(false);
+  });
+
+  function startEdit(vc) {
+    setEditingId(vc.id);
+    setEditForm({
+      name: vc.name, truck_capacity_tonnes: String(vc.truck_capacity_tonnes), rate_per_km: String(vc.rate_per_km),
+    });
+  }
+
+  const handleSaveEdit = onAction(async () => {
+    await updateVehicleClass(token, editingId, {
+      name: editForm.name,
+      truck_capacity_tonnes: Number(editForm.truck_capacity_tonnes),
+      rate_per_km: Number(editForm.rate_per_km),
+    });
+    setEditingId(null);
+  });
+
+  const toggleActive = onAction(async (vc) => updateVehicleClass(token, vc.id, { is_active: !vc.is_active }));
+
+  return (
+    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-gray-400 -mt-1 mb-2">
+        Q.1: "Freight & crane | Rs/km by vehicle class, truck capacity t, crane day rate." No worked example exists
+        for this row -- NestaPrime adds its own actual fleet/vendor vehicle classes here, so the catalog starts
+        empty. Selecting one on a freight take-off both supplies Rs/km and lets trips = ceil(tonnes / capacity) be
+        computed automatically from a PM-entered total tonnage (B.1).
+      </p>
+      <div className="space-y-2">
+        {vehicleClasses.map((vc) =>
+          editingId === vc.id ? (
+            <div key={vc.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
+                <LabeledInput
+                  label="Capacity (t)" type="number"
+                  value={editForm.truck_capacity_tonnes} onChange={(v) => setEditForm((f) => ({ ...f, truck_capacity_tonnes: v }))}
+                />
+                <LabeledInput
+                  label="Rate Rs/km" type="number"
+                  value={editForm.rate_per_km} onChange={(v) => setEditForm((f) => ({ ...f, rate_per_km: v }))}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                  Save
+                </button>
+                <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              key={vc.id}
+              className={`flex items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
+                vc.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+              }`}
+            >
+              <span>
+                {vc.name} <span className="text-gray-400 text-xs">({vc.truck_capacity_tonnes} t capacity)</span>
+                {!vc.is_active && <span className="text-gray-400"> · inactive</span>}
+              </span>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-gray-600">Rs {vc.rate_per_km}/km</span>
+                <button onClick={() => startEdit(vc)} className="text-blue-600 hover:underline text-xs">
+                  Edit
+                </button>
+                <button onClick={() => toggleActive(vc)} className="text-gray-500 hover:underline text-xs">
+                  {vc.is_active ? "Deactivate" : "Reactivate"}
+                </button>
+              </div>
+            </div>
+          )
+        )}
+        {vehicleClasses.length === 0 && !adding && (
+          <p className="text-sm text-gray-400">No vehicle classes yet -- add your own fleet/vendor classes below.</p>
+        )}
+      </div>
+
+      {adding ? (
+        <div className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+          <div className="grid grid-cols-3 gap-2">
+            <LabeledInput label="Key" value={addForm.key} onChange={(v) => setAddForm((f) => ({ ...f, key: v }))} />
+            <LabeledInput label="Name" value={addForm.name} onChange={(v) => setAddForm((f) => ({ ...f, name: v }))} />
+            <LabeledInput
+              label="Capacity (t)" type="number"
+              value={addForm.truck_capacity_tonnes} onChange={(v) => setAddForm((f) => ({ ...f, truck_capacity_tonnes: v }))}
+            />
+            <LabeledInput
+              label="Rate Rs/km" type="number"
+              value={addForm.rate_per_km} onChange={(v) => setAddForm((f) => ({ ...f, rate_per_km: v }))}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleCreate} className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
+              Add vehicle class
+            </button>
+            <button
+              onClick={() => {
+                setAdding(false);
+                setAddForm(emptyVehicleClassForm());
+              }}
+              className="text-xs text-gray-500 hover:underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="text-xs text-blue-600 hover:underline">
+          + Add vehicle class
         </button>
       )}
     </div>

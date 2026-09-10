@@ -42,4 +42,5 @@ from app.models.setting import DocumentType, Override, Setting, SettingScope  # 
 from app.models.sport import ProjectSport, Sport, SportCategory  # noqa: F401
 from app.models.tender_details import TenderDetails  # noqa: F401
 from app.models.user import User, UserRole  # noqa: F401
+from app.models.vehicle_class import VehicleClass  # noqa: F401
 from app.models.vendor import Vendor  # noqa: F401

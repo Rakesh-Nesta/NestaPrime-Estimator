@@ -31,6 +31,7 @@ import {
   listCostSheetLines,
   listLabourCategories,
   listNettingGrades,
+  listVehicleClasses,
   recomputeCostSheet,
   verifyCostSheet,
 } from "./api";
@@ -2193,10 +2194,29 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
 // ---------------------------------------------------------------------------
 
 function FreightCraneForm({ token, costSheetId, onAdded }) {
-  const [f, setF] = useState({ trips: "", distance_km: "", rate_per_km: "", crane_days: "", crane_day_rate: "" });
+  const [f, setF] = useState({
+    vehicle_class_id: "", total_material_tonnes: "",
+    trips: "", distance_km: "", rate_per_km: "", crane_days: "", crane_day_rate: "",
+  });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [vehicleClasses, setVehicleClasses] = useState([]);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
+  const usesVehicleClass = f.vehicle_class_id !== "";
+
+  useEffect(() => {
+    listVehicleClasses(token).then(setVehicleClasses).catch(() => setVehicleClasses([]));
+  }, [token]);
+
+  function selectVehicleClass(vehicleClassId) {
+    const vc = vehicleClasses.find((v) => v.id === vehicleClassId);
+    setF((s) => ({
+      ...s,
+      vehicle_class_id: vehicleClassId,
+      trips: vehicleClassId ? "" : s.trips,
+      rate_per_km: vc ? String(vc.rate_per_km) : s.rate_per_km,
+    }));
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -2204,6 +2224,8 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
     try {
       const payload = {
         trips: f.trips ? Number(f.trips) : undefined,
+        total_material_tonnes: usesVehicleClass && f.total_material_tonnes ? Number(f.total_material_tonnes) : undefined,
+        vehicle_class_id: usesVehicleClass ? f.vehicle_class_id : undefined,
         distance_km: f.distance_km ? Number(f.distance_km) : undefined,
         rate_per_km: f.rate_per_km ? Number(f.rate_per_km) : undefined,
         crane_days: f.crane_days ? Number(f.crane_days) : undefined,
@@ -2220,17 +2242,39 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <p className="text-[11px] text-gray-400">
-        B.1: "Freight = trips x km x Rs/km." Distance blank = the project's own distance-from-hub. Trip count and
-        crane-days are your own judgment call -- the blueprint gives no formula for either, so nothing here is
-        computed for you.
+        B.1: "Freight = trips x km x Rs/km, trips = ceil(total material tonnes / truck capacity)." Pick a vehicle
+        class to compute trips from tonnage automatically, or leave it as manual entry. Distance blank = the
+        project's own distance-from-hub. Crane-days are still your own judgment call -- the blueprint gives no
+        formula for how many a job needs. B.2: sites over 100 km already get an automatic Site establishment
+        uplift (see K.1 constants above) -- consider also adding a labour accommodation Manual line for a site
+        that far out.
       </p>
 
       <div className="border border-gray-200 rounded p-2 space-y-2">
         <p className="text-xs font-semibold text-gray-600">Freight (optional)</p>
+        <Field label="Vehicle class" hint="or leave as manual entry and type trips directly">
+          <SelectInput
+            value={f.vehicle_class_id}
+            onChange={selectVehicleClass}
+            options={[
+              { value: "", label: "(manual entry)" },
+              ...vehicleClasses.map((v) => ({
+                value: v.id,
+                label: `${v.name} (${v.truck_capacity_tonnes} t, Rs ${v.rate_per_km}/km)`,
+              })),
+            ]}
+          />
+        </Field>
         <div className="grid grid-cols-3 gap-2">
-          <Field label="Trips"><NumberInput value={f.trips} onChange={set("trips")} min="1" /></Field>
+          {usesVehicleClass ? (
+            <Field label="Total material (tonnes)"><NumberInput value={f.total_material_tonnes} onChange={set("total_material_tonnes")} /></Field>
+          ) : (
+            <Field label="Trips"><NumberInput value={f.trips} onChange={set("trips")} min="1" /></Field>
+          )}
           <Field label="Distance (km)" hint="blank = project default"><NumberInput value={f.distance_km} onChange={set("distance_km")} /></Field>
-          <Field label="Rate Rs/km"><NumberInput value={f.rate_per_km} onChange={set("rate_per_km")} /></Field>
+          <Field label="Rate Rs/km" hint={usesVehicleClass ? "from vehicle class, editable" : undefined}>
+            <NumberInput value={f.rate_per_km} onChange={set("rate_per_km")} />
+          </Field>
         </div>
       </div>
 

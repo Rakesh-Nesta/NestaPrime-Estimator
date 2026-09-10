@@ -1084,6 +1084,30 @@ export async function updateNettingGrade(token, gradeId, payload) {
   return handle(res);
 }
 
+export async function listVehicleClasses(token, includeInactive = false) {
+  const qs = includeInactive ? "?include_inactive=true" : "";
+  const res = await fetch(`${API_BASE}/vehicle-classes${qs}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createVehicleClass(token, payload) {
+  const res = await fetch(`${API_BASE}/vehicle-classes`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateVehicleClass(token, vehicleClassId, payload) {
+  const res = await fetch(`${API_BASE}/vehicle-classes/${vehicleClassId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function addAthleticsTakeoff(token, costSheetId, payload) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/athletics`, {
     method: "POST",

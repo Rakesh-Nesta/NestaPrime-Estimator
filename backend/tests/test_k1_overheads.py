@@ -169,6 +169,164 @@ def test_crane_days_without_day_rate_is_rejected(client, director_user):
     assert res.status_code == 422
 
 
+def _create_vehicle_class(client, headers, key="tata_407", name="Tata 407", capacity=2.5, rate_per_km=45):
+    res = client.post(
+        "/vehicle-classes",
+        json={"key": key, "name": name, "truck_capacity_tonnes": capacity, "rate_per_km": rate_per_km},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    return res.json()["id"]
+
+
+def test_vehicle_class_derives_trips_from_tonnage(client, director_user):
+    """B.1: 'trips = ceil(total material tonnes / truck capacity).'
+    9.2 tonnes / 2.5 t capacity = 3.68 -> ceil to 4 trips."""
+    headers = _director_headers(client, director_user)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers)
+    vehicle_class_id = _create_vehicle_class(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/freight-crane",
+        json={"total_material_tonnes": 9.2, "vehicle_class_id": vehicle_class_id, "distance_km": 20},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["breakdown"]["freight_trips"] == 4
+    assert body["breakdown"]["freight_vehicle_class"] == "Tata 407"
+    line = body["lines"][0]
+    assert line["quantity"] == 80  # 4 trips x 20 km
+    assert line["rate"] == 45  # the vehicle class's own rate
+    assert "Tata 407" in line["item_name"]
+
+
+def test_explicit_trips_overrides_vehicle_class_derivation(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers)
+    vehicle_class_id = _create_vehicle_class(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/freight-crane",
+        json={
+            "total_material_tonnes": 9.2, "vehicle_class_id": vehicle_class_id,
+            "trips": 2, "distance_km": 20,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["breakdown"]["freight_trips"] == 2
+
+
+def test_explicit_rate_per_km_overrides_the_vehicle_class_rate(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers)
+    vehicle_class_id = _create_vehicle_class(client, headers, rate_per_km=45)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/freight-crane",
+        json={
+            "total_material_tonnes": 9.2, "vehicle_class_id": vehicle_class_id,
+            "rate_per_km": 60, "distance_km": 20,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["lines"][0]["rate"] == 60
+
+
+def test_total_material_tonnes_without_a_vehicle_class_is_rejected(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/freight-crane",
+        json={"total_material_tonnes": 9.2, "distance_km": 20},
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_unknown_vehicle_class_id_404s(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers)
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/freight-crane",
+        json={
+            "total_material_tonnes": 9.2, "vehicle_class_id": "00000000-0000-0000-0000-000000000000",
+            "distance_km": 20,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Q.1 vehicle class catalog
+# ---------------------------------------------------------------------------
+
+
+def test_vehicle_class_catalog_starts_empty(client, director_user):
+    headers = _director_headers(client, director_user)
+    res = client.get("/vehicle-classes", headers=headers)
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_director_can_create_and_update_a_vehicle_class(client, director_user):
+    headers = _director_headers(client, director_user)
+    vehicle_class_id = _create_vehicle_class(client, headers)
+
+    res = client.patch(f"/vehicle-classes/{vehicle_class_id}", json={"rate_per_km": 50}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["rate_per_km"] == 50
+
+
+def test_pm_cannot_create_a_vehicle_class(client, director_user, db_session):
+    """Q.1: 'Global | Director' -- vehicle classes are Director-only, even
+    though PM can select one on the Cost Sheet."""
+    from app.core.security import hash_password
+    from app.models.user import User, UserRole
+
+    pm_user = User(
+        name="Test PM", email="pm-vehicle@test.local", hashed_password=hash_password("TestPass!1"), role=UserRole.PM
+    )
+    db_session.add(pm_user)
+    db_session.commit()
+    pm_headers = _login(client, "pm-vehicle@test.local")
+
+    res = client.post(
+        "/vehicle-classes",
+        json={"key": "tata_407", "name": "Tata 407", "truck_capacity_tonnes": 2.5, "rate_per_km": 45},
+        headers=pm_headers,
+    )
+    assert res.status_code == 403
+
+
+def test_duplicate_vehicle_class_key_is_rejected(client, director_user):
+    headers = _director_headers(client, director_user)
+    _create_vehicle_class(client, headers, key="tata_407")
+
+    res = client.post(
+        "/vehicle-classes",
+        json={"key": "tata_407", "name": "Duplicate", "truck_capacity_tonnes": 1, "rate_per_km": 1},
+        headers=headers,
+    )
+    assert res.status_code == 409
+
+
+def test_deactivated_vehicle_class_excluded_by_default(client, director_user):
+    headers = _director_headers(client, director_user)
+    vehicle_class_id = _create_vehicle_class(client, headers)
+    client.patch(f"/vehicle-classes/{vehicle_class_id}", json={"is_active": False}, headers=headers)
+
+    active = client.get("/vehicle-classes", headers=headers).json()
+    assert active == []
+    all_classes = client.get("/vehicle-classes?include_inactive=true", headers=headers).json()
+    assert len(all_classes) == 1
+
+
 def test_freight_crane_only_on_draft_cost_sheet(client, director_user):
     headers = _director_headers(client, director_user)
     _, cost_sheet_id = _draft_cost_sheet(client, headers)
@@ -266,6 +424,64 @@ def _add_structure_line(client, headers, cost_sheet_id):
         json={"work_package": "structure", "category": "MS structure", "item_name": "SHS 3x3", "unit": "kg", "quantity": 100, "rate": 68},
         headers=headers,
     )
+
+
+def test_distance_over_100km_adds_the_site_establishment_uplift(client, director_user):
+    """B.2: 'Distance > 100 km -> Site establishment +2%.' 6% base + 2%
+    uplift = 8%: material 6800, blended labour 22% -> 1496, base 8296;
+    site estab 8% -> 8959.68; warranty 1% -> 9049.2768; overhead 10% ->
+    9954.20448; structure contingency 5% -> 10451.914..."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id, distance_km=150)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers, project_id=project_id)
+    _add_structure_line(client, headers, cost_sheet_id)
+
+    res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
+    expected = 8296 * 1.08 * 1.01 * 1.10 * 1.05
+    assert round(res.json()["cost_total"], 2) == round(expected, 2)
+
+
+def test_distance_at_or_under_100km_has_no_uplift(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id, distance_km=100)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers, project_id=project_id)
+    _add_structure_line(client, headers, cost_sheet_id)
+
+    res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
+    expected = 8296 * 1.06 * 1.01 * 1.10 * 1.05  # base 6% only, no uplift at exactly 100km
+    assert round(res.json()["cost_total"], 2) == round(expected, 2)
+
+
+def test_distance_uplift_percent_is_a_live_master_setting(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id, distance_km=150)
+    _, cost_sheet_id = _draft_cost_sheet(client, headers, project_id=project_id)
+    _add_structure_line(client, headers, cost_sheet_id)
+
+    client.post(
+        "/settings", json={"key": "distance_uplift_percent", "value": "5.0", "reason": "director decision"},
+        headers=headers,
+    )
+    res = client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
+    expected = 8296 * 1.11 * 1.01 * 1.10 * 1.05  # 6% base + 5% configured uplift
+    assert round(res.json()["cost_total"], 2) == round(expected, 2)
+
+
+def test_k1_constants_panel_includes_distance_uplift_only_beyond_100km(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    near_project_id = _create_project(client, headers, client_id, distance_km=50)
+    _, near_cost_sheet_id = _draft_cost_sheet(client, headers, project_id=near_project_id)
+    far_project_id = _create_project(client, headers, client_id, distance_km=150)
+    _, far_cost_sheet_id = _draft_cost_sheet(client, headers, project_id=far_project_id)
+
+    near_keys = {c["key"] for c in client.get(f"/cost-sheets/{near_cost_sheet_id}/k1-constants", headers=headers).json()}
+    far_keys = {c["key"] for c in client.get(f"/cost-sheets/{far_cost_sheet_id}/k1-constants", headers=headers).json()}
+    assert "distance_uplift_percent" not in near_keys
+    assert "distance_uplift_percent" in far_keys
 
 
 def test_warranty_reserve_applies_by_default_for_private_clients(client, director_user):
