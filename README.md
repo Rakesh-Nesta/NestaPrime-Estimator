@@ -1,5 +1,7 @@
 # NestaPrime Estimator
 
+[![Backend CI](https://github.com/Rakesh-Nesta/NestaPrime-Estimator/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Rakesh-Nesta/NestaPrime-Estimator/actions/workflows/backend-ci.yml)
+
 Pre-sales quotation and lead-tracking tool for NestaPrime Sports Infrastructure. Built from the
 project's own blueprint (see `docs/` — hand it the `NPS_FINAL_...` package from the design phase).
 
