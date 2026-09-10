@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getCurrentUser, login } from "./api";
+import { changePassword, getCurrentUser, login } from "./api";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
 import Documents from "./Documents";
@@ -53,6 +53,26 @@ export default function App() {
     }
   }
 
+  function handleLogout() {
+    setUser(null);
+    setAccessToken("");
+    setEmail("");
+    setPassword("");
+  }
+
+  if (user && user.must_change_password) {
+    return (
+      <ForceChangePasswordScreen
+        token={accessToken}
+        onChanged={async () => {
+          const me = await getCurrentUser(accessToken);
+          setUser(me);
+        }}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   if (user) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -99,7 +119,7 @@ export default function App() {
           <PricingCalculator token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "settings" && (
-          <MasterSettings token={accessToken} onBack={() => setScreen(preNavScreen)} />
+          <MasterSettings token={accessToken} currentUser={user} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "sports_scope_admin" && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
@@ -206,6 +226,101 @@ export default function App() {
           className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ForceChangePasswordScreen({ token, onChanged, onLogout }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation don't match");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await changePassword(token, { currentPassword, newPassword });
+      await onChanged();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white shadow rounded-lg p-6 sm:p-8 max-w-sm w-full space-y-4"
+      >
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Change your password</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Your account has a Director-assigned password. Set your own before continuing.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Current password</label>
+          <input
+            type="password"
+            required
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">New password</label>
+          <input
+            type="password"
+            required
+            minLength={8}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Confirm new password</label>
+          <input
+            type="password"
+            required
+            minLength={8}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+        >
+          {submitting ? "Changing…" : "Change password and continue"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onLogout}
+          className="w-full text-sm text-gray-500 hover:underline"
+        >
+          Log out instead
         </button>
       </form>
     </div>

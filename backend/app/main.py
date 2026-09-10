@@ -40,6 +40,7 @@ from app.api import (
     sports,
     structures,
     tender,
+    users,
     vendors,
     work_orders,
 )
@@ -55,6 +56,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(users.users_router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)
 app.include_router(company.router)
