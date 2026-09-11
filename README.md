@@ -36,11 +36,10 @@ Since then, from the blueprint's own Phase 1b roadmap (P.2): Excel rate import f
 Sheet and a mobile-responsive site-survey form are both built. Rate verification turned out to
 already exist (the AI/Manual confirm flow, J.1) — not actually a gap. 3-project calibration
 (±10% actuals-vs-estimate validation) is not done and can't be until real completed-project cost
-data exists to validate against; it isn't something this codebase can fabricate. The remaining
-roadmap item, "remaining 20 sports," is left unverified here rather than claimed done: the
-codebase currently seeds 30 sports, but that hasn't been checked against the blueprint's actual
-target list, so whether the sports catalogue is complete is still an open question, not a closed
-one.
+data exists to validate against; it isn't something this codebase can fabricate. The roadmap's
+"remaining 20 sports" item is done, verified directly against Part C's Master Sport List: all 30
+sports the blueprint names (#1 Badminton through #30 Multipurpose court) are seeded, in the same
+order, with matching names.
 
 Two further gaps outside both the 19 ranked items and the Phase 1b roadmap were raised directly
 and closed: Director-only user management (create, deactivate/reactivate, change role, reset
