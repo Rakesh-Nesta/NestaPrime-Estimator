@@ -40,3 +40,17 @@ jobs:
           DATABASE_URL: postgresql+psycopg://nestaprime:nestaprime_dev_password@localhost:5432/nestaprime_estimator_test
           SECRET_KEY: ci-only-secret-not-for-real-use
         run: python -m pytest tests/ -v
+
+  docker-build:
+    # Catches a broken Dockerfile (bad COPY path, missing dependency, ...)
+    # before merge -- this doesn't run the image, just proves it builds;
+    # deploy/README.md's smoke test is what proves it actually serves.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -f Dockerfile -t nestaprime-backend:ci .
+
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile --target export --build-arg VITE_API_URL=http://example.invalid/api frontend
