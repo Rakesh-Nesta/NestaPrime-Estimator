@@ -36,7 +36,9 @@ Since then, from the blueprint's own Phase 1b roadmap (P.2): Excel rate import f
 Sheet and a mobile-responsive site-survey form are both built. Rate verification turned out to
 already exist (the AI/Manual confirm flow, J.1) — not actually a gap. 3-project calibration
 (±10% actuals-vs-estimate validation) is not done and can't be until real completed-project cost
-data exists to validate against; it isn't something this codebase can fabricate. The roadmap's
+data exists to validate against; it isn't something this codebase can fabricate.
+[`docs/calibration-data-template.xlsx`](docs/calibration-data-template.xlsx) is the data-collection
+template for gathering it -- a business-side task (Part S #4), not engineering work. The roadmap's
 "remaining 20 sports" item is done, verified directly against Part C's Master Sport List: all 30
 sports the blueprint names (#1 Badminton through #30 Multipurpose court) are seeded, in the same
 order, with matching names.
