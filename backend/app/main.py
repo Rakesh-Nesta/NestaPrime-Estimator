@@ -55,6 +55,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    """X-Content-Type-Options and Cross-Origin-Resource-Policy, flagged Low by
+    a ZAP scan (2026-09-11, docs/security/) -- neither is CORS (already
+    handled by CORSMiddleware above); both just stop the browser's own
+    MIME-sniffing and no-cors embedding of API responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    return response
+
 app.include_router(auth.router)
 app.include_router(users.users_router)
 app.include_router(clients.router)
