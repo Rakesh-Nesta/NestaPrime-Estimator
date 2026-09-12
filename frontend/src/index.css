@@ -38,3 +38,15 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Amendment 10's Quick Start card: "printable" means printing exactly the
+   card, not the app's own dark chrome around it -- nav/header get the
+   print:hidden Tailwind variant on Help.jsx itself; this covers the one
+   thing a Tailwind variant can't (the page background, which the browser
+   won't paint on a printed page correctly if left as the app's own dark
+   base color). */
+@media print {
+  body {
+    background-color: white;
+  }
+}
