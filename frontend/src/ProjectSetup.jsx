@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { createClient, createProject, getClientTypeDefaults, listClients, listHubs, listRegionalMultipliers } from "./api";
+import {
+  addProjectSport,
+  createClient,
+  createProject,
+  getClientTypeDefaults,
+  listClients,
+  listHubs,
+  listRegionalMultipliers,
+  listSports,
+} from "./api";
 
 const PROJECT_TYPES = [
   ["new_build", "New Build"],
@@ -45,6 +54,7 @@ const emptyForm = {
   clientName: "",
   clientType: "school",
   paymentTerms: "",
+  quickSportId: "",
   city: "Mumbai",
   siteAddress: "",
   hubId: "",
@@ -62,19 +72,24 @@ const emptyForm = {
   existingBuildingClearHeightFt: "",
 };
 
-export default function ProjectSetup({ token, onProjectCreated }) {
+export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComplete }) {
   const [form, setForm] = useState(emptyForm);
   const [clients, setClients] = useState([]);
   const [multipliers, setMultipliers] = useState([]);
   const [hubs, setHubs] = useState([]);
+  const [sports, setSports] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  // Amendment 2: Quick is the default -- 5 fields, blind-quoting defaults
+  // for everything else. Detailed is today's full form, unchanged.
+  const [mode, setMode] = useState("quick"); // "quick" | "detailed"
 
   useEffect(() => {
     listClients(token).then(setClients).catch(() => {});
     listRegionalMultipliers(token).then(setMultipliers).catch(() => {});
     listHubs(token).then(setHubs).catch(() => {});
+    listSports(token).then(setSports).catch(() => {});
   }, [token]);
 
   function set(field, value) {
@@ -114,6 +129,63 @@ export default function ProjectSetup({ token, onProjectCreated }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, effectiveClientType]);
+
+  // Amendment 2 spec: Government/Tender clients and any client type with no
+  // B.2 package default get routed to Detailed mode automatically -- Quick
+  // mode's own package field relies on that default existing to auto-resolve
+  // silently, and Tender Mode's extra fields aren't part of the 5-field flow.
+  const forcesDetailed = effectiveClientType === "government" || (typeDefaults !== null && !typeDefaults?.package);
+  useEffect(() => {
+    if (forcesDetailed && mode === "quick") {
+      setMode("detailed");
+    }
+  }, [forcesDetailed, mode]);
+
+  const quickSport = sports.find((s) => s.id === form.quickSportId);
+
+  async function handleQuickSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      let clientId = form.existingClientId;
+      if (form.clientMode === "new") {
+        const client = await createClient(token, {
+          name: form.clientName,
+          type: form.clientType,
+          payment_terms: form.paymentTerms || null,
+        });
+        clientId = client.id;
+      }
+
+      const project = await createProject(token, {
+        client_id: clientId,
+        project_type: form.projectType,
+        city: form.city,
+        site_condition: "level",
+        soil_type: "normal",
+        building_status: "open_air",
+        site_access: "good",
+        power_available: "yes",
+        water_available: true,
+        number_of_courts: 1,
+        unit_system: "feet",
+        quick_setup: true,
+      });
+
+      await addProjectSport(token, project.id, {
+        sport_id: form.quickSportId,
+        building_status: "open_air",
+        number_of_courts: 1,
+      });
+
+      onQuickSetupComplete(project);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -214,9 +286,107 @@ export default function ProjectSetup({ token, onProjectCreated }) {
     );
   }
 
+  if (mode === "quick") {
+    return (
+      <form onSubmit={handleQuickSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-white shadow rounded-lg p-8 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">New Project — Quick setup</h2>
+          <button type="button" onClick={() => setMode("detailed")} className="text-sm text-blue-600 hover:underline">
+            Need more detail? Switch to Detailed setup
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 -mt-3">
+          Five fields, everything else assumed (printed as T&amp;C on the Quotation) -- Amendment 2.
+        </p>
+
+        <fieldset className="space-y-3 border-t pt-4">
+          <legend className="text-sm font-medium text-gray-700 -mt-7 bg-white pr-2">Client</legend>
+          <div className="flex gap-4 text-sm">
+            <label className="flex items-center gap-1">
+              <input type="radio" checked={form.clientMode === "new"} onChange={() => set("clientMode", "new")} />
+              New client
+            </label>
+            <label className="flex items-center gap-1">
+              <input type="radio" checked={form.clientMode === "existing"} onChange={() => set("clientMode", "existing")} />
+              Existing client
+            </label>
+          </div>
+
+          {form.clientMode === "new" ? (
+            <>
+              <Text label="Client name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
+              <Select label="Client type" value={form.clientType} onChange={(v) => set("clientType", v)} options={CLIENT_TYPES} />
+              {isGovernment && (
+                <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+                  Government clients need Detailed setup (Tender Mode fields) -- switching automatically.
+                </p>
+              )}
+            </>
+          ) : (
+            <Select
+              label="Client"
+              value={form.existingClientId}
+              onChange={(v) => set("existingClientId", v)}
+              options={clients.map((c) => [c.id, `${c.name} (${c.type})`])}
+              placeholder="Select a client…"
+              required
+            />
+          )}
+        </fieldset>
+
+        <Select
+          label="Sport"
+          value={form.quickSportId}
+          onChange={(v) => set("quickSportId", v)}
+          options={sports.map((s) => [s.id, s.name])}
+          placeholder="Select a sport…"
+          required
+        />
+        {quickSport && (
+          <p className="text-xs text-gray-500 -mt-3">
+            Dimensions: standard build {quickSport.build_dims} ft (customizable once Amendment 9 ships)
+          </p>
+        )}
+
+        <Select label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES.map((c) => [c, c])} />
+        {cityInfo && !cityInfo.is_confirmed && (
+          <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+            Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
+          </p>
+        )}
+
+        <Select label="Base scope / status" value={form.projectType} onChange={(v) => set("projectType", v)} options={PROJECT_TYPES} />
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={submitting || !form.quickSportId}
+          className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+        >
+          {submitting ? "Creating…" : "Create project"}
+        </button>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-white shadow rounded-lg p-8 space-y-5">
-      <h2 className="text-lg font-semibold text-gray-900">New Project — Setup</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">New Project — Detailed setup</h2>
+        {!forcesDetailed && (
+          <button type="button" onClick={() => setMode("quick")} className="text-sm text-blue-600 hover:underline">
+            Switch to Quick setup
+          </button>
+        )}
+      </div>
+      {forcesDetailed && (
+        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 -mt-3">
+          {effectiveClientType === "government"
+            ? "Government clients need Detailed setup (Tender Mode fields)."
+            : "No B.2 default package configured for this client type -- Quick setup needs one to auto-resolve Package."}
+        </p>
+      )}
 
       <Select label="Project type" value={form.projectType} onChange={(v) => set("projectType", v)} options={PROJECT_TYPES} />
       {form.projectType === "resurfacing" && (

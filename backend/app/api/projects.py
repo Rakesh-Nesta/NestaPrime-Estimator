@@ -76,6 +76,12 @@ class ProjectCreate(BaseModel):
     package: Package | None = None
     safe_bearing_capacity: float | None = Field(default=None, ge=0, le=999999.99)
     existing_building_clear_height_ft: float | None = Field(default=None, ge=0, le=9999.99)
+    # Amendment 2: true only for a project created through the 5-field
+    # Quick setup form -- every field above the frontend didn't ask for
+    # in that flow was filled with a stated assumption. Read back by
+    # pdf_documents.py to print those assumptions as T&C clauses on the
+    # Quotation PDF.
+    quick_setup: bool = False
 
 
 class ProjectOut(BaseModel):
@@ -96,6 +102,7 @@ class ProjectOut(BaseModel):
     number_of_courts: int
     unit_system: UnitSystem
     package: Package
+    quick_setup: bool
     safe_bearing_capacity: float | None
     existing_building_clear_height_ft: float | None
     tender_mode: bool

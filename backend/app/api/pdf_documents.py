@@ -72,7 +72,22 @@ _STARTER_TERMS_FIXED = [
 ]
 
 
-def _starter_terms(db: Session, tender_mode: bool = False) -> list[str]:
+# Amendment 2 (Annexure 2): the Quick setup form's own field-by-field spec
+# table (docs/annexures/Amendments-2-4-9-specs.md) names the exact wording
+# each hidden field's default should carry onto the client-facing document
+# -- reproduced here verbatim rather than re-derived, so the PDF always
+# says the same thing the spec promised it would.
+_QUICK_SETUP_ASSUMPTION_TERMS = [
+    "Site address to be confirmed before survey.",
+    "Distance-based logistics costed at actuals.",
+    "Site assumed level pending physical survey.",
+    "Soil test required before construction if site conditions differ (D.4).",
+    "Site access assumed unrestricted; narrow-road/no-crane surcharge applies if not.",
+    "Power and water assumed available on site.",
+]
+
+
+def _starter_terms(db: Session, tender_mode: bool = False, quick_setup: bool = False) -> list[str]:
     """Appendix B's jurisdiction clause names 'NestaPrime's registered
     office city' -- Part O's COMPANY master carries that city as a real
     field, not a fixed string, so it's substituted in here whenever a
@@ -83,7 +98,14 @@ def _starter_terms(db: Session, tender_mode: bool = False) -> list[str]:
     held reserve is the DLP reserve, not the private-client warranty
     reserve -- the fixed warranty clause's last sentence is swapped
     accordingly rather than printing a reserve that was never actually
-    held for this document."""
+    held for this document.
+
+    quick_setup appends the blind-quoting assumption clauses (Amendment 2)
+    for a project created through the 5-field Quick setup form -- every
+    field that form didn't ask for was filled with a stated assumption
+    rather than a real site fact, and that assumption has to reach the
+    client on the document the price is actually quoted on, not just
+    live invisibly in the database."""
     terms = list(_STARTER_TERMS_FIXED)
     if tender_mode:
         terms[3] = terms[3].replace(
@@ -99,7 +121,14 @@ def _starter_terms(db: Session, tender_mode: bool = False) -> list[str]:
         else "Jurisdiction: courts at NestaPrime's registered office city; disputes above Rs 25 L go to "
         "arbitration under the Arbitration and Conciliation Act 1996 with a sole arbitrator."
     )
-    return [*terms, jurisdiction]
+    result = [*terms, jurisdiction]
+    if quick_setup:
+        result.append(
+            "This quotation was prepared from a simplified (Quick) setup -- the following site "
+            "details were assumed rather than surveyed:"
+        )
+        result.extend(_QUICK_SETUP_ASSUMPTION_TERMS)
+    return result
 
 
 WARRANTY_TABLE = [
@@ -763,7 +792,10 @@ def get_quotation_pdf(
     story.extend(_exclusions_flow(styles, exclusions))
 
     story.append(Paragraph("Terms &amp; conditions", styles["SectionHeading"]))
-    story.extend(Paragraph("&bull; " + term, styles["Normal"]) for term in _starter_terms(db, project.tender_mode))
+    story.extend(
+        Paragraph("&bull; " + term, styles["Normal"])
+        for term in _starter_terms(db, project.tender_mode, project.quick_setup)
+    )
 
     validity_note = (
         f"Valid until {quotation.sent_at.date().isoformat()} (30 days from sending)."

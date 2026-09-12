@@ -292,3 +292,28 @@ def test_distance_km_within_bounds_still_works(client, director_user):
     )
     assert res.status_code == 201, res.text
     assert res.json()["distance_km"] == 42.5
+
+
+# ---------------------------------------------------------------------------
+# Amendment 2 (12 Sep 2026 handoff): quick_setup flag
+# ---------------------------------------------------------------------------
+
+
+def test_quick_setup_defaults_to_false(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post("/projects", json={"client_id": client_id, **BASE_PROJECT_FIELDS}, headers=headers)
+    assert res.status_code == 201, res.text
+    assert res.json()["quick_setup"] is False
+
+
+def test_quick_setup_can_be_set_true(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects",
+        json={"client_id": client_id, "quick_setup": True, **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["quick_setup"] is True

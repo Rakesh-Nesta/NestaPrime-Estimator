@@ -149,6 +149,14 @@ class Project(Base):
     # derived from the client's type at creation time (see api/projects.py).
     tender_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Amendment 2 (Annexure 2): "blind-quoting principle" -- true only for a
+    # project created through the 5-field Quick setup form, where every
+    # field not asked for was filled with a stated assumption rather than a
+    # real site fact. Read by pdf_documents.py to print those assumptions as
+    # T&C clauses on the Quotation PDF, so a blind-quoted price is never
+    # handed to a client silently indistinguishable from a fully surveyed one.
+    quick_setup: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
