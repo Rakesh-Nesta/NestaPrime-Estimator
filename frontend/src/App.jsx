@@ -263,6 +263,7 @@ export default function App() {
           <ProjectSetup
             token={accessToken}
             onProjectCreated={(project) => { setActiveProject(project); setScreen("sports"); }}
+            onQuickSetupComplete={(project) => { setActiveProject(project); setScreen("scope"); }}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (

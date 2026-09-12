@@ -307,3 +307,84 @@ def test_quotation_pdf_line_amounts_sum_to_the_quotation_total(client, director_
     assert format_inr(quotation["selling_after_discount"]) in text
     assert format_inr(quotation["gst_amount"]) in text
     assert format_inr(round_to_nearest_10(quotation["quotation_total"])) in text
+
+
+# ---------------------------------------------------------------------------
+# Amendment 2: Quick setup's blind-quoting assumptions on the Quotation PDF
+# ---------------------------------------------------------------------------
+
+
+def _create_project_quick(client, headers, client_id):
+    """Same shape as _create_project, but flagged quick_setup=True --
+    mirrors what the frontend's Quick setup form actually sends."""
+    fields = {
+        "client_id": client_id,
+        "city": "Mumbai",
+        "site_condition": "level",
+        "soil_type": "normal",
+        "building_status": "open_air",
+        "site_access": "good",
+        "power_available": "yes",
+        "water_available": True,
+        "package": "standard",
+        "quick_setup": True,
+    }
+    res = client.post("/projects", json=fields, headers=headers)
+    assert res.status_code == 201, res.text
+    return res.json()["id"]
+
+
+def _sent_quotation_from_project(client, headers, project_id, cost_for_option=850000):
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _add_scope_item(client, headers, project_id)
+    cost_sheet_id = client.post(
+        f"/projects/{project_id}/cost-sheets", json={"cost_total": cost_for_option}, headers=headers
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    estimate = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": cost_for_option}]},
+        headers=headers,
+    ).json()
+    option_id = estimate["options"][0]["id"]
+    client.patch(
+        f"/estimates/{estimate['id']}/options/{option_id}/client-status",
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    quotation = client.post(
+        f"/projects/{project_id}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [option_id]},
+        headers=headers,
+    ).json()
+    client.post(f"/quotations/{quotation['id']}/release", headers=headers)
+    client.post(f"/quotations/{quotation['id']}/send", headers=headers)
+    return quotation
+
+
+def test_quick_setup_quotation_pdf_prints_the_blind_quoting_assumptions(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project_quick(client, headers, client_id)
+    quotation = _sent_quotation_from_project(client, headers, project_id)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+
+    assert "simplified (Quick) setup" in text
+    assert "Site address to be confirmed before survey" in text
+    assert "Site assumed level pending physical survey" in text
+    assert "Power and water assumed available on site" in text
+
+
+def test_detailed_setup_quotation_pdf_omits_the_blind_quoting_assumptions(client, director_user):
+    """Control: a normal (non-Quick) project must not print assumption
+    clauses it never actually made."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+
+    assert "simplified (Quick) setup" not in text
+    assert "Site address to be confirmed before survey" not in text
