@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.clients import _default_package
@@ -57,7 +57,12 @@ class ProjectCreate(BaseModel):
     site_address: str | None = None
     site_state_code: str | None = None
     hub_id: uuid.UUID | None = None
-    distance_km: float | None = None
+    # Bounds match each column's actual NUMERIC(precision, scale) on the
+    # Project model -- without these, a value the column can't hold
+    # (e.g. distance_km > 99999.9) reaches Postgres and raises an
+    # unhandled NumericValueOutOfRange (a raw 500), instead of the
+    # friendly 422 a bad form value should produce.
+    distance_km: float | None = Field(default=None, ge=0, le=99999.9)
     site_condition: SiteCondition
     soil_type: SoilType
     building_status: BuildingStatus
@@ -69,8 +74,8 @@ class ProjectCreate(BaseModel):
     # B.2: left blank, this resolves from the client's type default
     # (_default_package) at creation time -- explicit still wins.
     package: Package | None = None
-    safe_bearing_capacity: float | None = None
-    existing_building_clear_height_ft: float | None = None
+    safe_bearing_capacity: float | None = Field(default=None, ge=0, le=999999.99)
+    existing_building_clear_height_ft: float | None = Field(default=None, ge=0, le=9999.99)
 
 
 class ProjectOut(BaseModel):
