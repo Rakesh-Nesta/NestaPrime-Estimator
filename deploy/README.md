@@ -155,6 +155,15 @@ sudo nginx -t && sudo systemctl reload nginx
 `nginx -t` validates the config before reloading -- if it errors, nginx keeps running
 the old config rather than going down, so it's safe to fix and retry.
 
+**One-time fix needed on the already-deployed server (12 Sep 2026):** the reference
+config above didn't set `client_max_body_size`, so nginx's own 1 MB default silently
+413'd any upload past that -- smaller than both app-level upload limits (Company Logo's
+5 MB, M.3 Attachments' 100 MB), found live trying to upload a ~2 MB company logo. Fixed
+in the repo's `deploy/nginx/nestaprime.conf`; re-run this step's three commands on the
+server once to pick it up -- this is exactly the case the file's own comment above
+("nginx config all persist[s]" across a redeploy) doesn't cover, since it never re-copies
+an already-deployed config on its own.
+
 ## 7. Smoke test
 
 ```bash
