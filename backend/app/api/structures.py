@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from app.api.documents import CostSheetLineOut, _line_to_out
+from app.api.site_works import _resolve_dimensions
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.document import CostSheet, CostSheetLine, CostSheetStatus, WorkPackage
@@ -263,13 +264,12 @@ def add_structure_takeoff(
         )
 
     defaults = STRUCTURE_DEFAULTS[payload.structure_type]
-    L = payload.build_l_ft if payload.build_l_ft is not None else (float(sport.build_l_ft) if sport.build_l_ft else None)
-    W = payload.build_w_ft if payload.build_w_ft is not None else (float(sport.build_w_ft) if sport.build_w_ft else None)
-    if L is None or W is None:
-        raise HTTPException(
-            status_code=422,
-            detail="build_l_ft/build_w_ft are required -- this sport has no default build dimensions",
-        )
+    # Amendment 9: same three-tier resolution (line override -> this
+    # project's custom court size -> sport-wide standard) as every other
+    # take-off calculator -- see _resolve_dimensions' own docstring.
+    L, W, _project_sport = _resolve_dimensions(
+        db, cost_sheet, payload.project_sport_id, payload.build_l_ft, payload.build_w_ft
+    )
     S = payload.column_spacing_ft or defaults["spacing_ft"]
     footing_ft = 2.0 if (payload.structure_type == StructureType.C and payload.tall_variant) else defaults["footing_ft"]
     depth_ft = payload.foundation_depth_ft or defaults["depth_ft"]

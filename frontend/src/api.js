@@ -170,6 +170,15 @@ export async function updateActualDimensions(token, projectId, selectionId, payl
   return handle(res);
 }
 
+export async function updateBuildSize(token, projectId, selectionId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/sports/${selectionId}/build-size`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function removeProjectSport(token, projectId, selectionId) {
   const res = await fetch(`${API_BASE}/projects/${projectId}/sports/${selectionId}`, {
     method: "DELETE",
