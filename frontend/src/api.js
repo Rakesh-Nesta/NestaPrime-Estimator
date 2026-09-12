@@ -108,6 +108,16 @@ export async function createProject(token, payload) {
   return handle(res);
 }
 
+export async function getProject(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function getDashboard(token) {
+  const res = await fetch(`${API_BASE}/dashboard`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 export async function listRegionalMultipliers(token) {
   const res = await fetch(`${API_BASE}/regional-multipliers`, { headers: authHeaders(token) });
   return handle(res);

@@ -12,6 +12,7 @@ from app.api import (
     client_signatories,
     clients,
     company,
+    dashboard,
     documents,
     exports,
     flooring,
@@ -74,6 +75,7 @@ app.include_router(users.users_router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)
 app.include_router(company.router)
+app.include_router(dashboard.router)
 app.include_router(projects.router)
 app.include_router(hubs.router)
 app.include_router(regional_multipliers.router)
