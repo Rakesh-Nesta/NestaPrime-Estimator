@@ -4,6 +4,7 @@ import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
 import Dashboard from "./Dashboard";
 import Documents from "./Documents";
+import Help from "./Help";
 import MasterSettings from "./MasterSettings";
 import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
@@ -28,7 +29,7 @@ export default function App() {
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
-  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests"];
+  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests", "help"];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
   function goToTopLevel(target) {
@@ -103,6 +104,7 @@ export default function App() {
           { key: "dashboard", label: "Dashboard" },
           { key: "pricing", label: "Pricing Calculator" },
           { key: "rates", label: "Rate Sheet" },
+          { key: "help", label: "Help" },
         ],
       },
       {
@@ -126,7 +128,7 @@ export default function App() {
 
     return (
       <div className="min-h-screen bg-base">
-        <header className="bg-surface border-b border-border-dark px-4 sm:px-8 py-4 relative">
+        <header className="bg-surface border-b border-border-dark px-4 sm:px-8 py-4 relative print:hidden">
           <div className="flex items-center justify-between">
             <button
               onClick={() => goToTopLevel("dashboard")}
@@ -223,7 +225,7 @@ export default function App() {
           )}
         </header>
         {error && (
-          <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-400">{error}</p>
+          <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-400 print:hidden">{error}</p>
         )}
         {activeProject && PROJECT_STAGE_SCREENS.includes(screen) && (
           <ProjectBreadcrumb
@@ -265,6 +267,9 @@ export default function App() {
         )}
         {screen === "reports" && (
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "help" && (
+          <Help onBack={() => setScreen(preNavScreen)} />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
           <ProjectSetup
