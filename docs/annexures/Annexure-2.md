@@ -99,17 +99,21 @@ a backup.
 
 ## 3. Priority & Sequencing (Recommended)
 
-| Wave | Amendments / Notes | Why this order |
+No calendar commitment (no "Week N" deadlines) -- work proceeds in small sections, each
+shipped through the full branch → PR → tests → merge → deploy cycle before the next
+starts. The order below is the priority, not a schedule.
+
+| Section | Amendments / Notes | Why this order |
 |---|---|---|
-| Week 1 | No. 2 + No. 4 (form + dashboard/guided) | Makes the app USABLE daily |
-| Week 1 | No. 9 (court sizing) — quick win | Small change, immediate flexibility |
-| Week 1 | Note R1: rate validation | Makes the numbers TRUSTWORTHY |
-| Week 2 | No. 1 (branding) + No. 10 (handbook quick-start card) | Beautiful + team can start |
-| Week 3 | No. 10 full handbook + No. 6a/6c (rights + reports) | Team trained; control and oversight |
-| Week 4–5 | No. 5 (customizable fields) + No. 7 (vendor master) | Flexibility + procurement bridge |
-| Week 5+ | No. 3 (cross-sell) | Revenue multiplier once flow is right |
-| Later | No. 8 (integrations) | Investigate wa-gateway first |
-| Quarterly | Note R2: restore drill | Data safety |
+| 1 | No. 2 + No. 4 (form + dashboard/guided) | Makes the app USABLE daily |
+| 2 | No. 9 (court sizing) — quick win | Small change, immediate flexibility |
+| 3 | Note R1: rate validation | Makes the numbers TRUSTWORTHY |
+| 4 | No. 1 (branding) + No. 10 (handbook quick-start card) | Beautiful + team can start |
+| 5 | No. 10 full handbook + No. 6a/6c (rights + reports) | Team trained; control and oversight |
+| 6 | No. 5 (customizable fields) + No. 7 (vendor master) | Flexibility + procurement bridge |
+| 7 | No. 3 (cross-sell) | Revenue multiplier once flow is right |
+| 8 | No. 8 (integrations) | Investigate wa-gateway first |
+| Ongoing | Note R2: restore drill | Data safety, recurring regardless of build sequence |
 
 ## Parking Lot
 
