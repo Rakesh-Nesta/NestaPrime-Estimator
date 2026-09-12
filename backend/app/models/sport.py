@@ -94,6 +94,18 @@ class ProjectSport(Base):
     actual_l_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
     actual_w_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
 
+    # Amendment 9 (Annexure 2): a project-level override of Sport's own
+    # build_l_ft/build_w_ft standard, set once via Sport Selection's Court
+    # size step and read by every take-off calculator's _resolve_dimensions
+    # (site_works.py) as the middle tier between a per-line override and the
+    # sport-wide default -- so a custom size applies across every take-off
+    # for this sport on this project without re-entering it per calculator.
+    # Distinct from actual_l_ft/actual_w_ft above: this is a planning-time
+    # choice made before any cost-sheet line exists, not an as-built
+    # measurement recorded after construction.
+    custom_build_l_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+    custom_build_w_ft: Mapped[float | None] = mapped_column(Numeric(6, 1), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )

@@ -35,6 +35,14 @@ def _labour_category(db: Session, key: str):
 def _resolve_dimensions(
     db: Session, cost_sheet: CostSheet, project_sport_id: uuid.UUID, build_l_ft: float | None, build_w_ft: float | None
 ) -> tuple[float, float, ProjectSport]:
+    """Amendment 9: three tiers, most specific wins -- a per-line override
+    (build_l_ft/build_w_ft passed to this take-off call) beats this
+    project's own custom court size (ProjectSport.custom_build_l_ft/w, set
+    once via Sport Selection's Court size step) beats the sport-wide
+    standard (Sport.build_l_ft/w, Director-editable in Sports & Scope
+    Admin). The middle tier is what makes a project-level size override
+    apply across every take-off for this sport without re-entering it on
+    each calculator."""
     project_sport = (
         db.query(ProjectSport)
         .filter(ProjectSport.id == project_sport_id, ProjectSport.project_id == cost_sheet.project_id)
@@ -43,8 +51,16 @@ def _resolve_dimensions(
     if not project_sport:
         raise HTTPException(status_code=404, detail="Sport selection not on this project")
     sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
-    L = build_l_ft if build_l_ft is not None else (float(sport.build_l_ft) if sport.build_l_ft else None)
-    W = build_w_ft if build_w_ft is not None else (float(sport.build_w_ft) if sport.build_w_ft else None)
+
+    def _pick(line_override, project_override, sport_default):
+        if line_override is not None:
+            return line_override
+        if project_override is not None:
+            return float(project_override)
+        return float(sport_default) if sport_default else None
+
+    L = _pick(build_l_ft, project_sport.custom_build_l_ft, sport.build_l_ft)
+    W = _pick(build_w_ft, project_sport.custom_build_w_ft, sport.build_w_ft)
     if L is None or W is None:
         raise HTTPException(
             status_code=422, detail="build_l_ft/build_w_ft are required -- this sport has no default build dimensions"

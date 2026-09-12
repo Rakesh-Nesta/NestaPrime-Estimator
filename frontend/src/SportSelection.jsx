@@ -6,6 +6,7 @@ import {
   listSports,
   removeProjectSport,
   updateActualDimensions,
+  updateBuildSize,
 } from "./api";
 
 const DEVIATION_COLOR = {
@@ -29,6 +30,9 @@ export default function SportSelection({ token, project, role, onBack, onNext })
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState({}); // selectionId -> schedule | "loading"
   const [dimDrafts, setDimDrafts] = useState({}); // selectionId -> { actual_l_ft, actual_w_ft }
+  const [sizeDrafts, setSizeDrafts] = useState({}); // selectionId -> { custom_build_l_ft, custom_build_w_ft }
+  const [sizeErrors, setSizeErrors] = useState({}); // selectionId -> message
+  const [customizingSize, setCustomizingSize] = useState({}); // selectionId -> bool
   const canRecordActuals = role === "site_engineer" || role === "pm" || role === "director";
 
   useEffect(() => {
@@ -78,6 +82,25 @@ export default function SportSelection({ token, project, role, onBack, onNext })
       actual_w_ft: draft.actual_w_ft === "" || draft.actual_w_ft == null ? null : Number(draft.actual_w_ft),
     });
     setSelections((s) => s.map((sel) => (sel.id === selectionId ? updated : sel)));
+  }
+
+  function setSizeDraft(selectionId, field, value) {
+    setSizeDrafts((d) => ({ ...d, [selectionId]: { ...d[selectionId], [field]: value } }));
+  }
+
+  async function handleSaveBuildSize(selectionId) {
+    setSizeErrors((e) => ({ ...e, [selectionId]: "" }));
+    const draft = sizeDrafts[selectionId] || {};
+    try {
+      const updated = await updateBuildSize(token, project.id, selectionId, {
+        custom_build_l_ft: draft.custom_build_l_ft === "" || draft.custom_build_l_ft == null ? null : Number(draft.custom_build_l_ft),
+        custom_build_w_ft: draft.custom_build_w_ft === "" || draft.custom_build_w_ft == null ? null : Number(draft.custom_build_w_ft),
+      });
+      setSelections((s) => s.map((sel) => (sel.id === selectionId ? updated : sel)));
+      setCustomizingSize((c) => ({ ...c, [selectionId]: false }));
+    } catch (err) {
+      setSizeErrors((e) => ({ ...e, [selectionId]: err.message }));
+    }
   }
 
   async function handleRemove(selectionId) {
@@ -144,6 +167,16 @@ export default function SportSelection({ token, project, role, onBack, onNext })
                     {sel.building_status.replaceAll("_", " ")}
                     {" · "}
                     {sel.number_of_courts} court{sel.number_of_courts > 1 ? "s" : ""}
+                    <CourtSize
+                      sel={sel}
+                      sport={sport}
+                      customizing={customizingSize[sel.id] ?? false}
+                      setCustomizing={(v) => setCustomizingSize((c) => ({ ...c, [sel.id]: v }))}
+                      draft={sizeDrafts[sel.id]}
+                      setDraft={(field, value) => setSizeDraft(sel.id, field, value)}
+                      onSave={() => handleSaveBuildSize(sel.id)}
+                      error={sizeErrors[sel.id]}
+                    />
                     {sel.recommended_base ? (
                       <span className="block text-xs text-gray-500 mt-0.5">
                         Base (D.2): {sel.recommended_base.recommended}
@@ -300,6 +333,68 @@ function SportCard({ sport, draft, setDraft, error, onAdd }) {
 
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
+  );
+}
+
+// Amendment 9 (Annexure 2): Court size step. Standard is accepted with a
+// click; "Customize" reveals L/W, floored at the sport's own federation
+// playing dimensions (server-enforced too -- the message that comes back
+// on a rejected value is shown as-is, not re-derived here).
+function CourtSize({ sel, sport, customizing, setCustomizing, draft, setDraft, onSave, error }) {
+  const hasCustom = sel.custom_build_l_ft != null || sel.custom_build_w_ft != null;
+  const standard = sport?.build_dims;
+
+  if (!customizing && !hasCustom) {
+    return (
+      <span className="block text-xs text-gray-500 mt-0.5">
+        Court size: standard build {standard ?? "—"} ft{" "}
+        <button onClick={() => setCustomizing(true)} className="text-blue-600 hover:underline">
+          Customize size
+        </button>
+      </span>
+    );
+  }
+
+  if (!customizing && hasCustom) {
+    return (
+      <span className="block text-xs mt-0.5">
+        <span className="text-gray-500">
+          Court size: custom build {sel.custom_build_l_ft} x {sel.custom_build_w_ft} ft
+        </span>{" "}
+        <button onClick={() => setCustomizing(true)} className="text-blue-600 hover:underline">
+          Change
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="block text-xs mt-0.5">
+      <span className="text-gray-500">Court size (standard build {standard ?? "—"} ft):</span>
+      <span className="inline-flex items-center gap-1 ml-2">
+        <input
+          type="number"
+          placeholder="L (ft)"
+          value={draft?.custom_build_l_ft ?? sel.custom_build_l_ft ?? ""}
+          onChange={(e) => setDraft("custom_build_l_ft", e.target.value)}
+          className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs"
+        />
+        <input
+          type="number"
+          placeholder="W (ft)"
+          value={draft?.custom_build_w_ft ?? sel.custom_build_w_ft ?? ""}
+          onChange={(e) => setDraft("custom_build_w_ft", e.target.value)}
+          className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs"
+        />
+        <button onClick={onSave} className="text-blue-600 hover:underline">
+          Save
+        </button>
+        <button onClick={() => setCustomizing(false)} className="text-gray-500 hover:underline">
+          Cancel
+        </button>
+      </span>
+      {error && <span className="block text-red-600 mt-0.5">{error}</span>}
+    </span>
   );
 }
 

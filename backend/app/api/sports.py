@@ -571,6 +571,13 @@ class ActualDimensionsUpdate(BaseModel):
     actual_w_ft: float | None = None
 
 
+class BuildSizeUpdate(BaseModel):
+    # Amendment 9: null clears back to the sport-wide standard, same
+    # nullable-to-clear pattern ActualDimensionsUpdate already uses.
+    custom_build_l_ft: float | None = None
+    custom_build_w_ft: float | None = None
+
+
 class DimensionDeviation(BaseModel):
     axis: str  # "length" | "width"
     standard_ft: float
@@ -634,6 +641,8 @@ class ProjectSportOut(BaseModel):
     number_of_courts: int
     actual_l_ft: float | None = None
     actual_w_ft: float | None = None
+    custom_build_l_ft: float | None = None
+    custom_build_w_ft: float | None = None
     clear_height_ok: bool = True  # derived; _to_out() sets the real value
     recommended_base: BaseRecommendation | None = None  # derived, D.1/D.2
     recommended_structure: StructureRecommendation | None = None  # derived, E.4
@@ -779,6 +788,65 @@ def update_actual_dimensions(
     write_audit_log_entry(
         db, current_user, "project_sport", project_sport.id, "actual_dimensions",
         old_value=old_value, new_value=f"{payload.actual_l_ft}x{payload.actual_w_ft}", request=request,
+    )
+    db.commit()
+    db.refresh(project_sport)
+    regional = _get_regional_multiplier(db, project.city)
+    return _to_out(db, project_sport, sport, project, regional)
+
+
+@project_sports_router.patch(
+    "/{project_id}/sports/{selection_id}/build-size", response_model=ProjectSportOut
+)
+def update_build_size(
+    project_id: uuid.UUID,
+    selection_id: uuid.UUID,
+    payload: BuildSizeUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """Amendment 9 (Annexure 2): Sport Selection's Court size step. Sets
+    this project-sport's own build size, read by every take-off
+    calculator's _resolve_dimensions (site_works.py) ahead of the
+    sport-wide standard -- so it applies across every take-off for this
+    sport on this project without re-entering it per calculator. Only the
+    build (surround/clearance) is adjustable: the validation floor here is
+    the sport's own federation playing dimensions, which the spec's own
+    wording draws as the one thing Quick setup's blind-quoting principle
+    still isn't allowed to shrink."""
+    project_sport = (
+        db.query(ProjectSport)
+        .filter(ProjectSport.id == selection_id, ProjectSport.project_id == project_id)
+        .first()
+    )
+    if not project_sport:
+        raise HTTPException(status_code=404, detail="Project sport not found")
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
+
+    if payload.custom_build_l_ft is not None and sport.playing_l_ft is not None:
+        if payload.custom_build_l_ft < float(sport.playing_l_ft):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Build length can't be smaller than {sport.name}'s playing length "
+                f"({sport.playing_l_ft} ft, {sport.governing_body})",
+            )
+    if payload.custom_build_w_ft is not None and sport.playing_w_ft is not None:
+        if payload.custom_build_w_ft < float(sport.playing_w_ft):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Build width can't be smaller than {sport.name}'s playing width "
+                f"({sport.playing_w_ft} ft, {sport.governing_body})",
+            )
+
+    old_value = f"{project_sport.custom_build_l_ft}x{project_sport.custom_build_w_ft}"
+    project_sport.custom_build_l_ft = payload.custom_build_l_ft
+    project_sport.custom_build_w_ft = payload.custom_build_w_ft
+    write_audit_log_entry(
+        db, current_user, "project_sport", project_sport.id, "custom_build_size",
+        old_value=old_value, new_value=f"{payload.custom_build_l_ft}x{payload.custom_build_w_ft}", request=request,
     )
     db.commit()
     db.refresh(project_sport)

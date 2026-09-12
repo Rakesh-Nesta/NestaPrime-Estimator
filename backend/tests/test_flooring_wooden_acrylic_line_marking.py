@@ -362,3 +362,104 @@ def test_line_marking_rejects_a_project_sport_from_another_project(client, direc
         headers=headers,
     )
     assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Amendment 9: project-level custom court size (Court size step)
+# ---------------------------------------------------------------------------
+
+
+def test_custom_build_size_applies_to_a_take_off_with_no_per_line_override(client, director_user):
+    """Badminton's own standard build is 52x30 -- a project-level custom
+    size of 50x25 (still >= the 44x20 playing floor) must flow through to
+    a take-off that specifies no build_l_ft/build_w_ft of its own."""
+    headers = _director_headers(client, director_user)
+    project_id, project_sport_id, cost_sheet_id = _setup(client, headers, "badminton")
+
+    size_res = client.patch(
+        f"/projects/{project_id}/sports/{project_sport_id}/build-size",
+        json={"custom_build_l_ft": 50, "custom_build_w_ft": 25},
+        headers=headers,
+    )
+    assert size_res.status_code == 200, size_res.text
+    assert size_res.json()["custom_build_l_ft"] == 50
+    assert size_res.json()["custom_build_w_ft"] == 25
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/flooring/acrylic-pu",
+        json={"project_sport_id": project_sport_id, "surface_type": "acrylic", "coats": 1, "rate_per_sqft_per_coat": 25},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["breakdown"]["area_sqft"] == 50 * 25  # not badminton's 52x30 standard
+
+
+def test_per_line_override_still_beats_the_project_level_custom_size(client, director_user):
+    headers = _director_headers(client, director_user)
+    project_id, project_sport_id, cost_sheet_id = _setup(client, headers, "badminton")
+    client.patch(
+        f"/projects/{project_id}/sports/{project_sport_id}/build-size",
+        json={"custom_build_l_ft": 50, "custom_build_w_ft": 25},
+        headers=headers,
+    )
+
+    res = client.post(
+        f"/cost-sheets/{cost_sheet_id}/flooring/acrylic-pu",
+        json={
+            "project_sport_id": project_sport_id, "surface_type": "acrylic", "coats": 1,
+            "rate_per_sqft_per_coat": 25, "build_l_ft": 44, "build_w_ft": 20,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["breakdown"]["area_sqft"] == 44 * 20
+
+
+def test_custom_build_size_cannot_go_below_the_sports_playing_dimensions(client, director_user):
+    """Only the build (surround/clearance) is adjustable -- the federation
+    playing dimensions (BWF: 44x20 for badminton) are a hard floor."""
+    headers = _director_headers(client, director_user)
+    project_id, project_sport_id, _ = _setup(client, headers, "badminton")
+
+    res = client.patch(
+        f"/projects/{project_id}/sports/{project_sport_id}/build-size",
+        json={"custom_build_l_ft": 40, "custom_build_w_ft": 25},
+        headers=headers,
+    )
+    assert res.status_code == 422
+    assert "playing length" in res.text
+
+
+def test_custom_build_size_can_be_cleared_back_to_the_sport_standard(client, director_user):
+    headers = _director_headers(client, director_user)
+    project_id, project_sport_id, _ = _setup(client, headers, "badminton")
+    client.patch(
+        f"/projects/{project_id}/sports/{project_sport_id}/build-size",
+        json={"custom_build_l_ft": 50, "custom_build_w_ft": 25},
+        headers=headers,
+    )
+
+    res = client.patch(
+        f"/projects/{project_id}/sports/{project_sport_id}/build-size",
+        json={"custom_build_l_ft": None, "custom_build_w_ft": None},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["custom_build_l_ft"] is None
+    assert res.json()["custom_build_w_ft"] is None
+
+
+def test_sales_can_set_custom_build_size(client, director_user, db_session):
+    """Same write-role gate as adding the sport in the first place
+    (sales/pm/director) -- Amendment 2's own Quick setup form is a Sales
+    flow, so whoever adds a sport must also be able to set its size."""
+    headers = _director_headers(client, director_user)
+    project_id, project_sport_id, _ = _setup(client, headers, "badminton")
+
+    sales_headers = _sales_headers(client, db_session)
+    res = client.patch(
+        f"/projects/{project_id}/sports/{project_sport_id}/build-size",
+        json={"custom_build_l_ft": 50, "custom_build_w_ft": 25},
+        headers=sales_headers,
+    )
+    assert res.status_code == 200, res.text
