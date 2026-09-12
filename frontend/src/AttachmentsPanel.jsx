@@ -237,7 +237,7 @@ export default function AttachmentsPanel({ token, docType, docId }) {
         <button
           onClick={handleUpload}
           disabled={!file || uploading}
-          className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+          className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
         >
           {uploading ? "Uploading…" : "Upload"}
         </button>

@@ -105,7 +105,7 @@ function VendorsPanel({ token, vendors, onChanged }) {
         <button
           onClick={handleCreate}
           disabled={!form.name}
-          className="bg-gold text-white text-xs rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+          className="bg-gold text-base text-xs rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
         >
           Add vendor
         </button>
@@ -189,7 +189,7 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
               <button
                 onClick={() => handleUse(r.id, "master")}
                 disabled={r.parsed_rate == null}
-                className="bg-gold text-white rounded px-2 py-1 hover:bg-gold-hover disabled:opacity-50"
+                className="bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover disabled:opacity-50"
               >
                 Use for master rate
               </button>
@@ -202,7 +202,7 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
               <button
                 onClick={() => handleUse(r.id, "cost_sheet_line")}
                 disabled={r.parsed_rate == null || !lineIdByReply[r.id]}
-                className="bg-surface-raised text-white rounded px-2 py-1 hover:bg-surface-raised disabled:opacity-50"
+                className="bg-surface-raised text-text-primary rounded px-2 py-1 hover:bg-border-dark disabled:opacity-50"
               >
                 Use for this line
               </button>
@@ -260,7 +260,7 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
           <button
             onClick={handleCaptureReply}
             disabled={!replyForm.vendor_id || !replyForm.raw_reply_text}
-            className="bg-gold text-white rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+            className="bg-gold text-base rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
           >
             Capture reply
           </button>
@@ -383,7 +383,7 @@ function NewPriceRequestForm({ token, rateItems, vendors, onCreated }) {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
+          className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
         >
           Send price update request
         </button>

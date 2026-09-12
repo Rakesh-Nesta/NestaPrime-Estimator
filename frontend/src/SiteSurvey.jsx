@@ -125,7 +125,7 @@ function SurveyCard({ token, survey, onChanged }) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="w-full sm:w-auto bg-gold text-white text-xs rounded px-3 py-2 sm:py-1.5 hover:bg-gold-hover disabled:opacity-50"
+          className="w-full sm:w-auto bg-gold text-base text-xs rounded px-3 py-2 sm:py-1.5 hover:bg-gold-hover disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save"}
         </button>
@@ -236,7 +236,7 @@ export default function SiteSurvey({ token, project, role, onBack }) {
           </div>
           <button
             onClick={handleCreate}
-            className="w-full sm:w-auto bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover"
+            className="w-full sm:w-auto bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover"
           >
             Start survey
           </button>

@@ -130,7 +130,7 @@ export default function PricingCalculator({ token, onBack }) {
 
         <button
           type="submit"
-          className="w-full bg-gold text-white rounded py-2 text-sm font-medium hover:bg-gold-hover"
+          className="w-full bg-gold text-base rounded py-2 text-sm font-medium hover:bg-gold-hover"
         >
           Calculate
         </button>

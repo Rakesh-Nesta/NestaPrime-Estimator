@@ -223,7 +223,7 @@ export default function TenderMode({ token, project, onBack }) {
             <DateField label="Pre-bid meeting" value={form.pre_bid_meeting_date} onChange={(v) => set("pre_bid_meeting_date", v)} />
             <DateField label="Opening date" value={form.opening_date} onChange={(v) => set("opening_date", v)} />
           </div>
-          <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+          <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
             Save tender details
           </button>
         </form>
@@ -302,7 +302,7 @@ export default function TenderMode({ token, project, onBack }) {
               onChange={(e) => setBidForm((f) => ({ ...f, amount: e.target.value }))}
               className="w-40 rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
             />
-            <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+            <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
               Add bid
             </button>
           </form>
@@ -317,7 +317,7 @@ export default function TenderMode({ token, project, onBack }) {
           <Num label="Contract weeks" value={bgForm.contract_weeks} onChange={(v) => setBgForm((f) => ({ ...f, contract_weeks: v }))} required />
           <Num label="DLP (months)" value={bgForm.dlp_months} onChange={(v) => setBgForm((f) => ({ ...f, dlp_months: v }))} required />
         </div>
-        <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+        <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
           Calculate BG cost
         </button>
         {bgResult && (
@@ -340,7 +340,7 @@ export default function TenderMode({ token, project, onBack }) {
           <Num label="Retention %" value={receivableForm.retention_percent} onChange={(v) => setReceivableForm((f) => ({ ...f, retention_percent: v }))} required />
           <Num label="GST-TDS % (optional)" value={receivableForm.gst_tds_percent} onChange={(v) => setReceivableForm((f) => ({ ...f, gst_tds_percent: v }))} />
         </div>
-        <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+        <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
           Calculate
         </button>
         {receivableResult && (

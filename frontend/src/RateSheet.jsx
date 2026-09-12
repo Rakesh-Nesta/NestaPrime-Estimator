@@ -171,7 +171,7 @@ export default function RateSheet({ token, onBack }) {
           >
             Export to Excel
           </button>
-          <label className="text-xs bg-gold text-white rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
+          <label className="text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
             {importingExcel ? "Importing…" : "Import from Excel"}
             <input
               type="file"
@@ -239,7 +239,7 @@ export default function RateSheet({ token, onBack }) {
         <button
           type="submit"
           disabled={submitting}
-          className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
+          className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
         >
           {submitting ? "Saving…" : "Save as rate"}
         </button>
@@ -353,7 +353,7 @@ function BulkActionsPanel({ token, categories, onChanged }) {
           <button
             onClick={() => handleMark("manual")}
             disabled={markBusy}
-            className="text-xs bg-surface-raised text-white rounded px-3 py-1 hover:bg-surface-raised disabled:opacity-50"
+            className="text-xs bg-surface-raised text-text-primary rounded px-3 py-1 hover:bg-border-dark disabled:opacity-50"
           >
             Mark all Manual
           </button>
@@ -402,7 +402,7 @@ function BulkActionsPanel({ token, categories, onChanged }) {
           <button
             type="submit"
             disabled={pctBusy}
-            className="text-xs bg-gold text-white rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+            className="text-xs bg-gold text-base rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
           >
             {pctBusy ? "Applying…" : "Apply to category"}
           </button>
@@ -539,7 +539,7 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
           <button
             type="submit"
             disabled={saving}
-            className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+            className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save new rate"}
           </button>

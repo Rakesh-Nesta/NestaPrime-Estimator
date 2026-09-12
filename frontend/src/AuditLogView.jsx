@@ -76,7 +76,7 @@ export default function AuditLogView({ token, onBack }) {
           </select>
           <button
             onClick={handleExport}
-            className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover"
+            className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover"
           >
             Export CSV
           </button>

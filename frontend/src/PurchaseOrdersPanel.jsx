@@ -249,7 +249,7 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
               type="button"
               onClick={handleCreateVendor}
               disabled={!newVendor.name}
-              className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+              className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
             >
               Add
             </button>
@@ -307,7 +307,7 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
             type="button"
             onClick={handleRaisePO}
             disabled={!vendorId || !Object.values(selectedLineIds).some(Boolean)}
-            className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+            className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
           >
             Raise PO
           </button>

@@ -110,7 +110,7 @@ export default function Reports({ token, role, onBack }) {
             />
           </div>
         </div>
-        <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+        <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
           Generate
         </button>
       </form>
@@ -139,7 +139,7 @@ export default function Reports({ token, role, onBack }) {
                   {r.status === "draft" && role === "director" && (
                     <button
                       onClick={() => handleRelease(r.id)}
-                      className="text-xs bg-gold text-white rounded px-2 py-1 hover:bg-gold-hover"
+                      className="text-xs bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover"
                     >
                       Release
                     </button>
