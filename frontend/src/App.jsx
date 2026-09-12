@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { changePassword, getCurrentUser, login } from "./api";
+import { changePassword, getCurrentUser, getProject, login } from "./api";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
+import Dashboard from "./Dashboard";
 import Documents from "./Documents";
 import MasterSettings from "./MasterSettings";
 import PriceRequests from "./PriceRequests";
@@ -23,18 +24,32 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeProject, setActiveProject] = useState(null);
-  const [screen, setScreen] = useState("sports"); // "sports" | "scope" | "rates" | "pricing"
-  const [preNavScreen, setPreNavScreen] = useState("sports");
+  const [screen, setScreen] = useState("dashboard"); // "dashboard" | "sports" | "scope" | "rates" | "pricing" | ...
+  const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
-  const TOP_LEVEL_SCREENS = ["rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests"];
+  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests"];
+  const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
   function goToTopLevel(target) {
-    if (TOP_LEVEL_SCREENS.includes(screen)) {
-      setScreen(screen === target ? preNavScreen : target);
-    } else {
+    if (!TOP_LEVEL_SCREENS.includes(screen)) {
       setPreNavScreen(screen);
-      setScreen(target);
+    }
+    setScreen(target);
+  }
+
+  function handleNewProject() {
+    setActiveProject(null);
+    setScreen("sports");
+  }
+
+  async function handleOpenProject(projectId) {
+    try {
+      const project = await getProject(accessToken, projectId);
+      setActiveProject(project);
+      setScreen("documents");
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -59,6 +74,9 @@ export default function App() {
     setAccessToken("");
     setEmail("");
     setPassword("");
+    setActiveProject(null);
+    setScreen("dashboard");
+    setPreNavScreen("dashboard");
   }
 
   if (user && user.must_change_password) {
@@ -75,35 +93,77 @@ export default function App() {
   }
 
   if (user) {
-    const navItems = [
-      { key: "pricing", label: "Pricing Calculator" },
-      { key: "rates", label: "Rate Sheet" },
-      { key: "settings", label: "Master Settings" },
-      { key: "sports_scope_admin", label: "Sports & Scope Admin" },
-      { key: "clients_admin", label: "Clients" },
-      { key: "reports", label: "Reports" },
-      ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log" }] : []),
-      ...(user.role !== "sales" ? [{ key: "price_requests", label: "Price Requests" }] : []),
+    // Amendment 4: nav regrouped Daily Work / Management / Admin, "the app
+    // itself is the training." A group's own label is never a clickable
+    // item, only the entries within it.
+    const navGroups = [
+      {
+        label: "Daily Work",
+        items: [
+          { key: "dashboard", label: "Dashboard" },
+          { key: "pricing", label: "Pricing Calculator" },
+          { key: "rates", label: "Rate Sheet" },
+        ],
+      },
+      {
+        label: "Management",
+        items: [
+          { key: "clients_admin", label: "Clients" },
+          { key: "reports", label: "Reports" },
+          ...(user.role !== "sales" ? [{ key: "price_requests", label: "Price Requests" }] : []),
+        ],
+      },
+      {
+        label: "Admin",
+        items: [
+          { key: "settings", label: "Master Settings" },
+          { key: "sports_scope_admin", label: "Sports & Scope Admin" },
+          ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log" }] : []),
+        ],
+      },
     ];
+    const canResumeProject = activeProject && TOP_LEVEL_SCREENS.includes(screen) && screen !== "dashboard";
 
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white border-b px-4 sm:px-8 py-4 relative">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold text-gray-900">NestaPrime Estimator</h1>
-            <div className="hidden sm:flex items-center gap-4">
-              {navItems.map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => goToTopLevel(item.key)}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  {screen === item.key ? "Back to project" : item.label}
-                </button>
+            <button
+              onClick={() => goToTopLevel("dashboard")}
+              className="text-lg font-semibold text-gray-900 hover:text-blue-600"
+            >
+              NestaPrime Estimator
+            </button>
+            <div className="hidden sm:flex items-center gap-5">
+              {navGroups.map((group, i) => (
+                <div key={group.label} className={`flex items-center gap-4 ${i > 0 ? "border-l pl-5" : ""}`}>
+                  {group.items.map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => goToTopLevel(item.key)}
+                      className={`text-sm hover:underline ${
+                        screen === item.key ? "text-gray-900 font-medium" : "text-blue-600"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
               ))}
-              <p className="text-sm text-gray-500">
+              {canResumeProject && (
+                <button
+                  onClick={() => setScreen(preNavScreen)}
+                  className="text-sm text-blue-600 hover:underline border-l pl-5"
+                >
+                  ↩ Resume {activeProject.project_no}
+                </button>
+              )}
+              <p className="text-sm text-gray-500 border-l pl-5">
                 {user.name} · <span className="font-medium">{user.role}</span>
               </p>
+              <button onClick={handleLogout} className="text-sm text-gray-500 hover:underline">
+                Log out
+              </button>
             </div>
             <button
               onClick={() => setNavMenuOpen(!navMenuOpen)}
@@ -121,21 +181,60 @@ export default function App() {
           </div>
           {navMenuOpen && (
             <div className="sm:hidden absolute inset-x-0 top-full bg-white border-b shadow-lg flex flex-col z-10">
-              {navItems.map((item) => (
+              {navGroups.map((group) => (
+                <div key={group.label}>
+                  <p className="text-xs uppercase tracking-wide text-gray-400 px-4 pt-3">{group.label}</p>
+                  {group.items.map((item) => (
+                    <button
+                      key={item.key}
+                      onClick={() => { goToTopLevel(item.key); setNavMenuOpen(false); }}
+                      className="text-left text-sm text-blue-600 px-4 py-3 border-b hover:bg-gray-50 w-full"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {canResumeProject && (
                 <button
-                  key={item.key}
-                  onClick={() => { goToTopLevel(item.key); setNavMenuOpen(false); }}
+                  onClick={() => { setScreen(preNavScreen); setNavMenuOpen(false); }}
                   className="text-left text-sm text-blue-600 px-4 py-3 border-b hover:bg-gray-50"
                 >
-                  {screen === item.key ? "Back to project" : item.label}
+                  ↩ Resume {activeProject.project_no}
                 </button>
-              ))}
+              )}
               <p className="text-sm text-gray-500 px-4 py-3">
                 {user.name} · <span className="font-medium">{user.role}</span>
               </p>
+              <button
+                onClick={() => { handleLogout(); setNavMenuOpen(false); }}
+                className="text-left text-sm text-gray-500 px-4 py-3 hover:bg-gray-50"
+              >
+                Log out
+              </button>
             </div>
           )}
         </header>
+        {error && (
+          <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-600">{error}</p>
+        )}
+        {activeProject && PROJECT_STAGE_SCREENS.includes(screen) && (
+          <ProjectBreadcrumb
+            project={activeProject}
+            screen={screen}
+            onDashboard={() => setScreen("dashboard")}
+            onSetup={() => setActiveProject(null)}
+            onStage={(stage) => setScreen(stage)}
+          />
+        )}
+        {screen === "dashboard" && (
+          <Dashboard
+            token={accessToken}
+            role={user.role}
+            onNewProject={handleNewProject}
+            onOpenProject={handleOpenProject}
+          />
+        )}
         {screen === "rates" && (
           <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
@@ -252,6 +351,46 @@ export default function App() {
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
+    </div>
+  );
+}
+
+// Amendment 4: guided step-path shown on every project-stage screen, plus
+// the "← Dashboard" link every section is supposed to get. Site Survey and
+// Tender Mode are optional side-branches reached from Scope, not their own
+// step in the main line -- shown here as "current" by highlighting Scope.
+function ProjectBreadcrumb({ project, screen, onDashboard, onSetup, onStage }) {
+  const steps = [
+    { key: "setup", label: "Setup", onClick: onSetup },
+    { key: "sports", label: "Sport", onClick: () => onStage("sports") },
+    { key: "scope", label: "Scope", onClick: () => onStage("scope") },
+    { key: "documents", label: "Documents", onClick: () => onStage("documents") },
+  ];
+  const currentKey = screen === "site_survey" || screen === "tender" ? "scope" : screen;
+
+  return (
+    <div className="bg-blue-50 border-b border-blue-100 px-4 sm:px-8 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      <button onClick={onDashboard} className="text-blue-600 hover:underline font-medium">
+        🏠 Dashboard
+      </button>
+      <span className="text-gray-400">·</span>
+      <span className="text-gray-500">{project.project_no}</span>
+      <span className="text-gray-400">·</span>
+      {steps.map((step, i) => (
+        <span key={step.key} className="flex items-center gap-2">
+          {i > 0 && <span className="text-gray-400">→</span>}
+          <button
+            onClick={step.onClick}
+            className={
+              currentKey === step.key
+                ? "font-semibold text-gray-900"
+                : "text-blue-600 hover:underline"
+            }
+          >
+            {step.label}
+          </button>
+        </span>
+      ))}
     </div>
   );
 }
