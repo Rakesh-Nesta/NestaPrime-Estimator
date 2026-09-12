@@ -225,3 +225,70 @@ def test_unconfirmed_city_is_clearly_flagged(client, director_user):
     res = client.get("/regional-multipliers", headers=headers)
     bengaluru = next(row for row in res.json() if row["city"] == "Bengaluru")
     assert bengaluru["is_confirmed"] is False
+
+
+# ---------------------------------------------------------------------------
+# Numeric field bounds (housekeeping, 12 Sep 2026) -- distance_km and two
+# siblings on the same form are Numeric(precision, scale) columns; a value
+# past what the column can hold used to reach Postgres unhandled
+# (NumericValueOutOfRange, a raw 500) instead of a friendly 422.
+# ---------------------------------------------------------------------------
+
+
+def test_distance_km_over_column_precision_is_a_friendly_422_not_a_500(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects",
+        json={"client_id": client_id, "distance_km": 999999, **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 422
+    assert res.status_code != 500
+
+
+def test_safe_bearing_capacity_over_column_precision_is_a_friendly_422(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects",
+        json={"client_id": client_id, "safe_bearing_capacity": 9999999, **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_existing_building_clear_height_over_column_precision_is_a_friendly_422(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects",
+        json={"client_id": client_id, "existing_building_clear_height_ft": 99999, **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_negative_distance_km_is_rejected(client, director_user):
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects",
+        json={"client_id": client_id, "distance_km": -5, **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 422
+
+
+def test_distance_km_within_bounds_still_works(client, director_user):
+    """The fix must not reject legitimate values -- only ones the column
+    genuinely can't store."""
+    headers = _login(client, director_user)
+    client_id = _create_client(client, headers)
+    res = client.post(
+        "/projects",
+        json={"client_id": client_id, "distance_km": 42.5, **BASE_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["distance_km"] == 42.5

@@ -21,6 +21,20 @@ cd NestaPrime-Estimator
 If the repo is private, this will prompt for GitHub credentials -- use a personal access
 token as the password, not your GitHub account password.
 
+**Prerequisites this depends on** (already installed on the current server as of
+11 Sep 2026 -- listed here so a rebuild or a second server doesn't have to
+rediscover this the hard way):
+
+- **`docker-compose-v2`** -- `docker compose` (the space, not `docker-compose` the
+  old hyphenated binary) needs this package specifically. Check with `docker compose
+  version`; if that errors, `sudo apt-get install -y docker-compose-v2`.
+- **`docker buildx`** -- step 6 below uses `docker build --output`, which the legacy
+  (non-buildx) builder does not support at all -- it fails outright, not with a
+  helpful message. Check with `docker buildx version`; if missing, `sudo apt-get
+  install -y docker-buildx` (matching `docker.io`'s own Ubuntu package naming --
+  this server's Docker came from Ubuntu's `docker.io` package, not Docker Inc.'s
+  own apt repo, which would instead name this `docker-buildx-plugin`).
+
 ## 2. Generate secrets and write the server's `.env`
 
 This `.env` is read automatically by `docker compose` and is **never committed** --
@@ -73,7 +87,7 @@ categories. Nothing in the app works until this step runs (confirmed locally: th
 picker is empty without it). This only needs to run once, ever:
 
 ```bash
-docker compose -f docker-compose.prod.yml exec backend sh -c '
+docker compose -f docker-compose.prod.yml exec -e PYTHONPATH=/app backend sh -c '
 for s in seed_regional_multipliers seed_sports seed_scope_items seed_labour_categories \
          seed_netting_grades seed_flooring_guides seed_lighting_standards \
          seed_accessory_catalog seed_margin_policies seed_settings; do
@@ -82,6 +96,12 @@ for s in seed_regional_multipliers seed_sports seed_scope_items seed_labour_cate
 done
 '
 ```
+
+`PYTHONPATH=/app` matters here: `python scripts/foo.py` runs with `/app/scripts` as
+`sys.path[0]`, not `/app` itself, so `from app.core... import ...` inside the script
+fails with `ModuleNotFoundError: No module named 'app'` without it. Every one-off
+script invocation in this runbook needs this same flag -- it's not specific to any
+one script.
 
 Each line should say how many rows it seeded (30 sports, 30 scope items, etc.) -- `0
 already existed` on a second run is expected and harmless, not an error.
@@ -92,6 +112,7 @@ script -- that's the point of yesterday's User Management feature.
 
 ```bash
 docker compose -f docker-compose.prod.yml exec \
+  -e PYTHONPATH=/app \
   -e INITIAL_DIRECTOR_EMAIL="you@yourcompany.com" \
   -e INITIAL_DIRECTOR_PASSWORD="pick-a-real-password-here" \
   backend python scripts/seed_initial_director.py
@@ -110,7 +131,13 @@ docker build -f frontend/Dockerfile --target export \
   --output /tmp/nestaprime-frontend \
   frontend
 sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/
+sudo chmod -R 755 /var/www/nestaprime
 ```
+
+The `chmod` matters: nginx runs as `www-data`, not root, and `sudo cp` alone can
+leave the copied tree without the read/execute permissions `www-data` needs -- if
+this step is skipped, nginx serves 403 Forbidden for every file even though the
+config and the files themselves are both correct.
 
 `VITE_API_URL` is baked into the build at this step, not read at runtime -- if the
 server's IP or domain ever changes, this build step has to be rerun, restarting nginx
@@ -152,6 +179,7 @@ docker build -f frontend/Dockerfile --target export \
   --build-arg VITE_API_URL=http://65.1.234.78/api \
   --output /tmp/nestaprime-frontend frontend
 sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/
+sudo chmod -R 755 /var/www/nestaprime
 ```
 
 No need to redo steps 2, 4, or 6 -- secrets, seed data, and the nginx config all persist.

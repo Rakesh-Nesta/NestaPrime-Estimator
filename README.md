@@ -50,6 +50,15 @@ backend-enforced forced-password-change gate on any account just created or rese
 mobile-responsive rewrite of the app's global navigation header, found incidentally while
 verifying the site-survey form above.
 
+The app deployed to production on 11 September 2026 (Lightsail, see
+[`deploy/README.md`](deploy/README.md)). Work since then follows a formal change process
+instead of the ad-hoc gap-closure above: see
+[`docs/annexures/Annexure-2.md`](docs/annexures/Annexure-2.md), the register of 10
+proposed amendments and 2 process notes governing everything built from 12 September
+2026 onward -- v1.9, still in draft pending Director sign-off item by item, not a
+blanket approval. Register freeze rule in force -- no new amendments beyond those 10
+without a formal register update.
+
 ## Stack
 
 - Backend: Python, FastAPI, SQLAlchemy, Alembic, PostgreSQL 15
