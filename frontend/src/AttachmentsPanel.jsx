@@ -30,7 +30,7 @@ function formatBytes(bytes) {
 
 function StrengthBadge({ strength }) {
   if (!strength) return null;
-  const colors = strength === "formal" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700";
+  const colors = strength === "formal" ? "bg-green-500/10 text-green-400" : "bg-amber-500/10 text-amber-400";
   return <span className={`rounded px-1.5 py-0.5 ${colors}`}>{strength}</span>;
 }
 
@@ -124,39 +124,39 @@ export default function AttachmentsPanel({ token, docType, docId }) {
     }
   }
 
-  if (loading) return <p className="text-xs text-gray-400">Loading attachments…</p>;
+  if (loading) return <p className="text-xs text-text-secondary">Loading attachments…</p>;
 
   return (
-    <div className="border border-dashed border-gray-300 rounded p-3 space-y-2 bg-gray-50">
+    <div className="border border-dashed border-border-dark bg-surface-raised text-text-primary rounded p-3 space-y-2 bg-surface-raised">
       <div>
-        <p className="text-xs font-semibold text-gray-600">Attachments (M.3)</p>
-        <p className="text-[11px] text-gray-400">
+        <p className="text-xs font-semibold text-text-secondary">Attachments (M.3)</p>
+        <p className="text-[11px] text-text-secondary">
           Images, PDF, DOCX, XLSX, .eml, DWG · max 100 MB each. Images are kept as uploaded — auto-compression to a
           5 MB preview isn't built yet.
         </p>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      {attachments.length === 0 && <p className="text-xs text-gray-400">No attachments yet.</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      {attachments.length === 0 && <p className="text-xs text-text-secondary">No attachments yet.</p>}
       {attachments.map((a) => (
         <div
           key={a.id}
-          className="flex flex-wrap items-center justify-between gap-2 text-xs bg-white rounded px-2 py-1 border border-gray-200"
+          className="flex flex-wrap items-center justify-between gap-2 text-xs bg-surface rounded px-2 py-1 border border-border-dark"
         >
           <span className="flex flex-wrap items-center gap-1">
             <span className="font-medium">{a.original_filename}</span>
-            <span className="text-gray-400">({formatBytes(a.original_size)})</span>
+            <span className="text-text-secondary">({formatBytes(a.original_size)})</span>
             <span>· {a.tag}</span>
             <StrengthBadge strength={a.approval_strength} />
             {a.signatory_name && (
-              <span className="text-gray-500">
+              <span className="text-text-secondary">
                 · signed by {a.signatory_name} ({a.signatory_designation})
               </span>
             )}
             <span>· v{a.version}</span>
-            <span className="text-gray-400">· {new Date(a.uploaded_at).toLocaleString()}</span>
+            <span className="text-text-secondary">· {new Date(a.uploaded_at).toLocaleString()}</span>
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={() => handleDownload(a)} className="text-blue-600 hover:underline">
+            <button onClick={() => handleDownload(a)} className="text-gold hover:underline">
               Download
             </button>
             {supersedingId === a.id ? (
@@ -170,7 +170,7 @@ export default function AttachmentsPanel({ token, docType, docId }) {
                 <button
                   onClick={() => handleSupersede(a.id)}
                   disabled={!supersedeFile || superseding}
-                  className="text-green-700 hover:underline disabled:opacity-50 disabled:no-underline"
+                  className="text-green-400 hover:underline disabled:opacity-50 disabled:no-underline"
                 >
                   {superseding ? "Uploading…" : "Confirm"}
                 </button>
@@ -180,13 +180,13 @@ export default function AttachmentsPanel({ token, docType, docId }) {
                     setSupersedeFile(null);
                     setError("");
                   }}
-                  className="text-gray-500 hover:underline"
+                  className="text-text-secondary hover:underline"
                 >
                   Cancel
                 </button>
               </>
             ) : (
-              <button onClick={() => setSupersedingId(a.id)} className="text-gray-500 hover:underline">
+              <button onClick={() => setSupersedingId(a.id)} className="text-text-secondary hover:underline">
                 Supersede
               </button>
             )}
@@ -195,7 +195,7 @@ export default function AttachmentsPanel({ token, docType, docId }) {
       ))}
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <select value={tag} onChange={(e) => setTag(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-xs">
+        <select value={tag} onChange={(e) => setTag(e.target.value)} className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs">
           {TAGS.map((t) => (
             <option key={t} value={t}>
               {t}
@@ -205,7 +205,7 @@ export default function AttachmentsPanel({ token, docType, docId }) {
         <select
           value={approvalStrength}
           onChange={(e) => setApprovalStrength(e.target.value)}
-          className="rounded border border-gray-300 px-2 py-1 text-xs"
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
         >
           <option value="">strength: n/a</option>
           <option value="informal">informal</option>
@@ -217,13 +217,13 @@ export default function AttachmentsPanel({ token, docType, docId }) {
               value={signatoryName}
               onChange={(e) => setSignatoryName(e.target.value)}
               placeholder="Signatory name (optional)"
-              className="rounded border border-gray-300 px-2 py-1 text-xs w-40"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs w-40"
             />
             <input
               value={signatoryDesignation}
               onChange={(e) => setSignatoryDesignation(e.target.value)}
               placeholder="Designation (optional)"
-              className="rounded border border-gray-300 px-2 py-1 text-xs w-36"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs w-36"
             />
           </>
         )}
@@ -237,13 +237,13 @@ export default function AttachmentsPanel({ token, docType, docId }) {
         <button
           onClick={handleUpload}
           disabled={!file || uploading}
-          className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+          className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
         >
           {uploading ? "Uploading…" : "Upload"}
         </button>
       </div>
       {tag === "approval_evidence" && (
-        <p className="text-[11px] text-gray-400">
+        <p className="text-[11px] text-text-secondary">
           Formal evidence is required before "Won" for Government/Tender clients or quotations ≥ Rs 25 L (M.3);
           Informal is enough below that. Naming a signatory is optional, but if given it must match an active,
           in-date entry in Client signatories (Part O) or the upload is rejected.

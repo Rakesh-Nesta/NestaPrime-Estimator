@@ -234,12 +234,12 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
   if (result) {
     return (
-      <div className="max-w-lg mx-auto mt-10 bg-white shadow rounded-lg p-8">
-        <h2 className="text-lg font-semibold text-gray-900">Project created</h2>
-        <p className="text-2xl font-mono mt-2 text-blue-700">{result.project_no}</p>
+      <div className="max-w-lg mx-auto mt-10 bg-surface shadow rounded-lg p-8">
+        <h2 className="text-lg font-semibold text-text-primary">Project created</h2>
+        <p className="text-2xl font-mono mt-2 text-gold-hover">{result.project_no}</p>
 
         <div className="mt-4 space-y-2 text-sm">
-          <p className="text-gray-600">
+          <p className="text-text-secondary">
             <span className="font-medium">Project type:</span>{" "}
             {PROJECT_TYPES.find(([v]) => v === result.project_type)?.[1] ?? result.project_type}
           </p>
@@ -272,13 +272,13 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
         <button
           onClick={() => onProjectCreated(result)}
-          className="mt-6 w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700"
+          className="mt-6 w-full bg-gold text-white rounded py-2 font-medium hover:bg-gold-hover"
         >
           Select sports for this project &rarr;
         </button>
         <button
           onClick={() => { setResult(null); setForm(emptyForm); }}
-          className="mt-2 w-full bg-white text-gray-600 border border-gray-300 rounded py-2 font-medium hover:bg-gray-50"
+          className="mt-2 w-full bg-surface text-text-secondary border border-border-dark bg-surface-raised text-text-primary rounded py-2 font-medium hover:bg-surface-raised"
         >
           Start another project
         </button>
@@ -288,19 +288,19 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
   if (mode === "quick") {
     return (
-      <form onSubmit={handleQuickSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-white shadow rounded-lg p-8 space-y-5">
+      <form onSubmit={handleQuickSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-surface shadow rounded-lg p-8 space-y-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">New Project — Quick setup</h2>
-          <button type="button" onClick={() => setMode("detailed")} className="text-sm text-blue-600 hover:underline">
+          <h2 className="text-lg font-semibold text-text-primary">New Project — Quick setup</h2>
+          <button type="button" onClick={() => setMode("detailed")} className="text-sm text-gold hover:underline">
             Need more detail? Switch to Detailed setup
           </button>
         </div>
-        <p className="text-xs text-gray-500 -mt-3">
+        <p className="text-xs text-text-secondary -mt-3">
           Five fields, everything else assumed (printed as T&amp;C on the Quotation) -- Amendment 2.
         </p>
 
         <fieldset className="space-y-3 border-t pt-4">
-          <legend className="text-sm font-medium text-gray-700 -mt-7 bg-white pr-2">Client</legend>
+          <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Client</legend>
           <div className="flex gap-4 text-sm">
             <label className="flex items-center gap-1">
               <input type="radio" checked={form.clientMode === "new"} onChange={() => set("clientMode", "new")} />
@@ -317,7 +317,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
               <Text label="Client name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
               <Select label="Client type" value={form.clientType} onChange={(v) => set("clientType", v)} options={CLIENT_TYPES} />
               {isGovernment && (
-                <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+                <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
                   Government clients need Detailed setup (Tender Mode fields) -- switching automatically.
                 </p>
               )}
@@ -343,26 +343,26 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
           required
         />
         {quickSport && (
-          <p className="text-xs text-gray-500 -mt-3">
+          <p className="text-xs text-text-secondary -mt-3">
             Dimensions: standard build {quickSport.build_dims} ft (customizable once Amendment 9 ships)
           </p>
         )}
 
         <Select label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES.map((c) => [c, c])} />
         {cityInfo && !cityInfo.is_confirmed && (
-          <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+          <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
             Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
           </p>
         )}
 
         <Select label="Base scope / status" value={form.projectType} onChange={(v) => set("projectType", v)} options={PROJECT_TYPES} />
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
 
         <button
           type="submit"
           disabled={submitting || !form.quickSportId}
-          className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-gold text-white rounded py-2 font-medium hover:bg-gold-hover disabled:opacity-50"
         >
           {submitting ? "Creating…" : "Create project"}
         </button>
@@ -371,17 +371,17 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-white shadow rounded-lg p-8 space-y-5">
+    <form onSubmit={handleSubmit} className="max-w-lg mx-auto mt-10 mb-10 bg-surface shadow rounded-lg p-8 space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">New Project — Detailed setup</h2>
+        <h2 className="text-lg font-semibold text-text-primary">New Project — Detailed setup</h2>
         {!forcesDetailed && (
-          <button type="button" onClick={() => setMode("quick")} className="text-sm text-blue-600 hover:underline">
+          <button type="button" onClick={() => setMode("quick")} className="text-sm text-gold hover:underline">
             Switch to Quick setup
           </button>
         )}
       </div>
       {forcesDetailed && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 -mt-3">
+        <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1 -mt-3">
           {effectiveClientType === "government"
             ? "Government clients need Detailed setup (Tender Mode fields)."
             : "No B.2 default package configured for this client type -- Quick setup needs one to auto-resolve Package."}
@@ -390,20 +390,20 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
       <Select label="Project type" value={form.projectType} onChange={(v) => set("projectType", v)} options={PROJECT_TYPES} />
       {form.projectType === "resurfacing" && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+        <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
           Resurfacing hides Site Prep, Base and Structure in the Cost Sheet builder — only Flooring, Line marking
           and Accessories apply (B.1).
         </p>
       )}
       {form.projectType === "supply_only" && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+        <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
           Supply only: goods delivered without installation (no labour, no site prep). Priced the same as a
           turnkey project — one blended rate including GST, not itemized per good (K.1b).
         </p>
       )}
 
       <fieldset className="space-y-3 border-t pt-4">
-        <legend className="text-sm font-medium text-gray-700 -mt-7 bg-white pr-2">Client</legend>
+        <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Client</legend>
         <div className="flex gap-4 text-sm">
           <label className="flex items-center gap-1">
             <input type="radio" checked={form.clientMode === "new"} onChange={() => set("clientMode", "new")} />
@@ -420,7 +420,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
             <Text label="Client name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
             <Select label="Client type" value={form.clientType} onChange={(v) => set("clientType", v)} options={CLIENT_TYPES} />
             {isGovernment && (
-              <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+              <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
                 Tender Mode will switch on automatically for this project (B.2).
               </p>
             )}
@@ -430,14 +430,14 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
               onChange={(v) => set("paymentTerms", v)}
             />
             {typeDefaults?.package || typeDefaults?.payment_terms ? (
-              <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+              <p className="text-xs text-gold-hover bg-gold-muted rounded px-2 py-1">
                 B.2 recommends{typeDefaults.package && ` package ${typeDefaults.package}`}
                 {typeDefaults.package && typeDefaults.payment_terms && " and"}
                 {typeDefaults.payment_terms && ` payment terms ${typeDefaults.payment_terms}`} for this client
                 type -- both prefilled below, editable.
               </p>
             ) : (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-text-secondary">
                 No B.2 default package/payment terms configured for this client type yet -- pick a package below.
               </p>
             )}
@@ -455,10 +455,10 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
       </fieldset>
 
       <fieldset className="space-y-3 border-t pt-4">
-        <legend className="text-sm font-medium text-gray-700 -mt-7 bg-white pr-2">Site</legend>
+        <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Site</legend>
         <Select label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES.map((c) => [c, c])} />
         {cityInfo && !cityInfo.is_confirmed && (
-          <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+          <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
             Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
           </p>
         )}
@@ -490,9 +490,9 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
       </fieldset>
 
       <fieldset className="space-y-3 border-t pt-4">
-        <legend className="text-sm font-medium text-gray-700 -mt-7 bg-white pr-2">Services & scope</legend>
+        <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Services & scope</legend>
         <Select label="Power available" value={form.powerAvailable} onChange={(v) => set("powerAvailable", v)} options={POWER_OPTIONS} />
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm text-text-secondary">
           <input type="checkbox" checked={form.waterAvailable} onChange={(e) => set("waterAvailable", e.target.checked)} />
           Water available
         </label>
@@ -500,7 +500,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         <Select label="Unit system" value={form.unitSystem} onChange={(v) => set("unitSystem", v)} options={[["feet", "Feet"], ["metres", "Metres"]]} />
         <Select label="Package" value={form.package} onChange={(v) => set("package", v)} options={PACKAGES} />
         {form.clientMode === "existing" && typeDefaults?.package && (
-          <p className="text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+          <p className="text-xs text-gold-hover bg-gold-muted rounded px-2 py-1">
             B.2 recommends package {typeDefaults.package} for {selectedExistingClient?.type} clients -- prefilled
             above, editable.
           </p>
@@ -513,12 +513,12 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         />
       </fieldset>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
       <button
         type="submit"
         disabled={submitting}
-        className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+        className="w-full bg-gold text-white rounded py-2 font-medium hover:bg-gold-hover disabled:opacity-50"
       >
         {submitting ? "Creating…" : "Create project"}
       </button>
@@ -528,7 +528,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
 function Flag({ label, active, onText, offText }) {
   return (
-    <div className={`rounded px-3 py-2 ${active ? "bg-amber-50 text-amber-800" : "bg-gray-50 text-gray-500"}`}>
+    <div className={`rounded px-3 py-2 ${active ? "bg-amber-500/10 text-amber-400" : "bg-surface-raised text-text-secondary"}`}>
       <span className="font-medium">{label}:</span> {active ? onText : offText}
     </div>
   );
@@ -537,13 +537,13 @@ function Flag({ label, active, onText, offText }) {
 function Text({ label, value, onChange, required }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary">{label}</label>
       <input
         type="text"
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
       />
     </div>
   );
@@ -552,15 +552,15 @@ function Text({ label, value, onChange, required }) {
 function NumberField({ label, value, onChange, min, hint }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary">{label}</label>
       <input
         type="number"
         min={min}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
       />
-      {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
+      {hint && <p className="text-xs text-text-secondary mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -568,12 +568,12 @@ function NumberField({ label, value, onChange, min, hint }) {
 function Select({ label, value, onChange, options, placeholder, required }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary">{label}</label>
       <select
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
       >
         {placeholder && <option value="">{placeholder}</option>}
         {options.map(([val, label]) => (

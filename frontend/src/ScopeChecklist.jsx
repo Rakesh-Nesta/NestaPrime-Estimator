@@ -46,7 +46,7 @@ export default function ScopeChecklist({ token, project, onBack, onNext, onDocum
   }
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading scope checklist…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading scope checklist…</p>;
   }
 
   const byGroup = GROUP_ORDER.map((group) => ({
@@ -56,44 +56,44 @@ export default function ScopeChecklist({ token, project, onBack, onNext, onDocum
 
   return (
     <div className="max-w-2xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Additional Scope Checklist</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-text-primary">Additional Scope Checklist</h2>
+            <p className="text-sm text-text-secondary">
               Project <span className="font-mono">{project.project_no}</span>
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back to Sport Selection
             </button>
             {project.tender_mode && (
-              <button onClick={onNext} className="text-sm text-blue-600 hover:underline">
+              <button onClick={onNext} className="text-sm text-gold hover:underline">
                 Tender Mode &rarr;
               </button>
             )}
-            <button onClick={onSiteSurvey} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onSiteSurvey} className="text-sm text-gold hover:underline">
               Site Survey &rarr;
             </button>
-            <button onClick={onDocuments} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onDocuments} className="text-sm text-gold hover:underline">
               Documents &rarr;
             </button>
           </div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">
+        <p className="text-xs text-text-secondary mt-2">
           Unchecked items are excluded and listed under Exclusions (Part I). {selections.length} of{" "}
           {items.length} included.
         </p>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 
       {byGroup.map(({ group, items: groupItems }) => (
-        <div key={group} className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">{GROUP_LABELS[group]}</h3>
+        <div key={group} className="bg-surface shadow rounded-lg p-6">
+          <h3 className="text-sm font-semibold text-text-secondary mb-3">{GROUP_LABELS[group]}</h3>
           <div className="space-y-2">
             {groupItems.map((item) => (
-              <label key={item.id} className="flex items-center gap-2 text-sm text-gray-700">
+              <label key={item.id} className="flex items-center gap-2 text-sm text-text-secondary">
                 <input
                   type="checkbox"
                   checked={selectedItemIds.has(item.id)}

@@ -41,33 +41,33 @@ export default function ClientsAdmin({ token, onBack }) {
   }
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading clients…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading clients…</p>;
   }
 
   return (
     <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Clients</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Clients</h2>
           {onBack && (
-            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-text-secondary mt-1">
           Part O: "overdue_flag (blocks new Quotation release until Director clears), blacklist_flag (blocks new
           Estimates)." Director-only.
         </p>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6 space-y-2">
+      <div className="bg-surface shadow rounded-lg p-6 space-y-2">
         {clients.map((c) => (
-          <div key={c.id} className="flex items-center justify-between border border-gray-200 rounded px-3 py-2 text-sm">
+          <div key={c.id} className="flex items-center justify-between border border-border-dark rounded px-3 py-2 text-sm">
             <span>
               <span className="font-medium">{c.name}</span>{" "}
-              <span className="text-xs text-gray-400">({c.type})</span>
+              <span className="text-xs text-text-secondary">({c.type})</span>
             </span>
             <div className="flex items-center gap-4 text-xs">
               <label className="flex items-center gap-1">
@@ -86,7 +86,7 @@ export default function ClientsAdmin({ token, onBack }) {
                 />
                 Blacklisted
               </label>
-              <span className="border-l border-gray-200 pl-4 flex items-center gap-4">
+              <span className="border-l border-border-dark pl-4 flex items-center gap-4">
                 <label className="flex items-center gap-1" title="M.7.2 rule 5 (DPDP Act)">
                   <input
                     type="checkbox"
@@ -107,7 +107,7 @@ export default function ClientsAdmin({ token, onBack }) {
             </div>
           </div>
         ))}
-        {clients.length === 0 && <p className="text-sm text-gray-400">No clients yet.</p>}
+        {clients.length === 0 && <p className="text-sm text-text-secondary">No clients yet.</p>}
       </div>
     </div>
   );

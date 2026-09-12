@@ -125,24 +125,31 @@ export default function App() {
     const canResumeProject = activeProject && TOP_LEVEL_SCREENS.includes(screen) && screen !== "dashboard";
 
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b px-4 sm:px-8 py-4 relative">
+      <div className="min-h-screen bg-base">
+        <header className="bg-surface border-b border-border-dark px-4 sm:px-8 py-4 relative">
           <div className="flex items-center justify-between">
             <button
               onClick={() => goToTopLevel("dashboard")}
-              className="text-lg font-semibold text-gray-900 hover:text-blue-600"
+              className="flex items-center gap-2.5 group"
             >
-              NestaPrime Estimator
+              <span className="w-8 h-8 rounded bg-base border border-gold/40 flex items-center justify-center text-gold font-heading font-bold text-sm group-hover:border-gold transition-colors">
+                N
+              </span>
+              <span className="font-heading font-bold text-text-primary tracking-tight">
+                NestaPrime <span className="text-text-secondary font-normal">Estimator</span>
+              </span>
             </button>
             <div className="hidden sm:flex items-center gap-5">
               {navGroups.map((group, i) => (
-                <div key={group.label} className={`flex items-center gap-4 ${i > 0 ? "border-l pl-5" : ""}`}>
+                <div key={group.label} className={`flex items-center gap-4 ${i > 0 ? "border-l border-border-dark pl-5" : ""}`}>
                   {group.items.map((item) => (
                     <button
                       key={item.key}
                       onClick={() => goToTopLevel(item.key)}
-                      className={`text-sm hover:underline ${
-                        screen === item.key ? "text-gray-900 font-medium" : "text-blue-600"
+                      className={`text-xs uppercase tracking-wider font-medium pb-0.5 border-b-2 transition-colors duration-200 ${
+                        screen === item.key
+                          ? "text-text-primary border-gold"
+                          : "text-text-secondary border-transparent hover:text-text-primary"
                       }`}
                     >
                       {item.label}
@@ -153,21 +160,21 @@ export default function App() {
               {canResumeProject && (
                 <button
                   onClick={() => setScreen(preNavScreen)}
-                  className="text-sm text-blue-600 hover:underline border-l pl-5"
+                  className="text-xs uppercase tracking-wider font-medium text-gold hover:text-gold-hover border-l border-border-dark pl-5"
                 >
                   ↩ Resume {activeProject.project_no}
                 </button>
               )}
-              <p className="text-sm text-gray-500 border-l pl-5">
-                {user.name} · <span className="font-medium">{user.role}</span>
+              <p className="text-xs text-text-secondary border-l border-border-dark pl-5">
+                {user.name} · <span className="text-text-primary">{user.role}</span>
               </p>
-              <button onClick={handleLogout} className="text-sm text-gray-500 hover:underline">
+              <button onClick={handleLogout} className="text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary">
                 Log out
               </button>
             </div>
             <button
               onClick={() => setNavMenuOpen(!navMenuOpen)}
-              className="sm:hidden p-2 -mr-2 text-gray-600"
+              className="sm:hidden p-2 -mr-2 text-text-secondary"
               aria-label="Toggle navigation menu"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -180,15 +187,15 @@ export default function App() {
             </button>
           </div>
           {navMenuOpen && (
-            <div className="sm:hidden absolute inset-x-0 top-full bg-white border-b shadow-lg flex flex-col z-10">
+            <div className="sm:hidden absolute inset-x-0 top-full bg-surface border-b border-border-dark shadow-lg flex flex-col z-10">
               {navGroups.map((group) => (
                 <div key={group.label}>
-                  <p className="text-xs uppercase tracking-wide text-gray-400 px-4 pt-3">{group.label}</p>
+                  <p className="text-xs uppercase tracking-wide text-text-secondary/70 px-4 pt-3">{group.label}</p>
                   {group.items.map((item) => (
                     <button
                       key={item.key}
                       onClick={() => { goToTopLevel(item.key); setNavMenuOpen(false); }}
-                      className="text-left text-sm text-blue-600 px-4 py-3 border-b hover:bg-gray-50 w-full"
+                      className="text-left text-sm text-text-primary px-4 py-3 border-b border-border-dark hover:bg-surface-raised w-full"
                     >
                       {item.label}
                     </button>
@@ -198,17 +205,17 @@ export default function App() {
               {canResumeProject && (
                 <button
                   onClick={() => { setScreen(preNavScreen); setNavMenuOpen(false); }}
-                  className="text-left text-sm text-blue-600 px-4 py-3 border-b hover:bg-gray-50"
+                  className="text-left text-sm text-gold px-4 py-3 border-b border-border-dark hover:bg-surface-raised"
                 >
                   ↩ Resume {activeProject.project_no}
                 </button>
               )}
-              <p className="text-sm text-gray-500 px-4 py-3">
-                {user.name} · <span className="font-medium">{user.role}</span>
+              <p className="text-sm text-text-secondary px-4 py-3">
+                {user.name} · <span className="text-text-primary">{user.role}</span>
               </p>
               <button
                 onClick={() => { handleLogout(); setNavMenuOpen(false); }}
-                className="text-left text-sm text-gray-500 px-4 py-3 hover:bg-gray-50"
+                className="text-left text-sm text-text-secondary px-4 py-3 hover:bg-surface-raised"
               >
                 Log out
               </button>
@@ -216,7 +223,7 @@ export default function App() {
           )}
         </header>
         {error && (
-          <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-600">{error}</p>
+          <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-400">{error}</p>
         )}
         {activeProject && PROJECT_STAGE_SCREENS.includes(screen) && (
           <ProjectBreadcrumb
@@ -313,41 +320,48 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-base px-4">
       <form
         onSubmit={handleSubmit}
-        className="bg-white shadow rounded-lg p-8 max-w-sm w-full space-y-4"
+        className="bg-surface border border-border-dark rounded-lg p-8 max-w-sm w-full space-y-5"
       >
-        <h1 className="text-xl font-semibold text-gray-900">NestaPrime Estimator</h1>
+        <div className="flex items-center gap-2.5">
+          <span className="w-9 h-9 rounded bg-base border border-gold/40 flex items-center justify-center text-gold font-heading font-bold">
+            N
+          </span>
+          <h1 className="font-heading font-bold text-text-primary tracking-tight">
+            NestaPrime <span className="text-text-secondary font-normal">Estimator</span>
+          </h1>
+        </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Email</label>
+          <label className="block text-xs uppercase tracking-wider text-text-secondary">Email</label>
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Password</label>
+          <label className="block text-xs uppercase tracking-wider text-text-secondary">Password</label>
           <input
             type="password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-gold hover:bg-gold-hover text-base rounded py-2.5 font-semibold uppercase tracking-wider text-xs transition-colors duration-200 disabled:opacity-50"
         >
           {loading ? "Signing in…" : "Sign in"}
         </button>
@@ -370,22 +384,22 @@ function ProjectBreadcrumb({ project, screen, onDashboard, onSetup, onStage }) {
   const currentKey = screen === "site_survey" || screen === "tender" ? "scope" : screen;
 
   return (
-    <div className="bg-blue-50 border-b border-blue-100 px-4 sm:px-8 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-      <button onClick={onDashboard} className="text-blue-600 hover:underline font-medium">
-        🏠 Dashboard
+    <div className="bg-surface border-b border-border-dark px-4 sm:px-8 py-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs uppercase tracking-wider">
+      <button onClick={onDashboard} className="text-gold hover:text-gold-hover font-medium">
+        Dashboard
       </button>
-      <span className="text-gray-400">·</span>
-      <span className="text-gray-500">{project.project_no}</span>
-      <span className="text-gray-400">·</span>
+      <span className="text-text-secondary/50 normal-case">·</span>
+      <span className="text-text-secondary normal-case font-mono">{project.project_no}</span>
+      <span className="text-text-secondary/50 normal-case">·</span>
       {steps.map((step, i) => (
         <span key={step.key} className="flex items-center gap-2">
-          {i > 0 && <span className="text-gray-400">→</span>}
+          {i > 0 && <span className="text-text-secondary/50">→</span>}
           <button
             onClick={step.onClick}
             className={
               currentKey === step.key
-                ? "font-semibold text-gray-900"
-                : "text-blue-600 hover:underline"
+                ? "font-semibold text-text-primary border-b-2 border-gold"
+                : "text-text-secondary hover:text-text-primary"
             }
           >
             {step.label}
@@ -422,59 +436,59 @@ function ForceChangePasswordScreen({ token, onChanged, onLogout }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-base px-4">
       <form
         onSubmit={handleSubmit}
-        className="bg-white shadow rounded-lg p-6 sm:p-8 max-w-sm w-full space-y-4"
+        className="bg-surface border border-border-dark rounded-lg p-6 sm:p-8 max-w-sm w-full space-y-5"
       >
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Change your password</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="font-heading font-bold text-text-primary">Change your password</h1>
+          <p className="text-sm text-text-secondary mt-1">
             Your account has a Director-assigned password. Set your own before continuing.
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Current password</label>
+          <label className="block text-xs uppercase tracking-wider text-text-secondary">Current password</label>
           <input
             type="password"
             required
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">New password</label>
+          <label className="block text-xs uppercase tracking-wider text-text-secondary">New password</label>
           <input
             type="password"
             required
             minLength={8}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Confirm new password</label>
+          <label className="block text-xs uppercase tracking-wider text-text-secondary">Confirm new password</label>
           <input
             type="password"
             required
             minLength={8}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full bg-blue-600 text-white rounded py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-gold hover:bg-gold-hover text-base rounded py-2.5 font-semibold uppercase tracking-wider text-xs transition-colors duration-200 disabled:opacity-50"
         >
           {submitting ? "Changing…" : "Change password and continue"}
         </button>
@@ -482,7 +496,7 @@ function ForceChangePasswordScreen({ token, onChanged, onLogout }) {
         <button
           type="button"
           onClick={onLogout}
-          className="w-full text-sm text-gray-500 hover:underline"
+          className="w-full text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary"
         >
           Log out instead
         </button>

@@ -136,29 +136,29 @@ export default function RateSheet({ token, onBack }) {
   }
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading rate sheet…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading rate sheet…</p>;
   }
 
   return (
     <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Rate Sheet</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Rate Sheet</h2>
           {onBack && (
-            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-text-secondary mt-1">
           Every entry starts as a Manual, unverified rate. A PM or Director confirming it
           promotes it to an AI (master) rate (J.1).
         </p>
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-1">Excel export / import</h3>
-        <p className="text-xs text-gray-400 mb-3">
+      <div className="bg-surface shadow rounded-lg p-6">
+        <h3 className="text-sm font-semibold text-text-secondary mb-1">Excel export / import</h3>
+        <p className="text-xs text-text-secondary mb-3">
           P.2 Phase 1b: "Excel rate import" -- so NestaPrime can maintain its rate card in Excel and
           upload it. Re-importing an unchanged file is a safe no-op; a changed rate on an existing item
           goes through the same rate-history mechanics as editing it here. New items always start
@@ -167,11 +167,11 @@ export default function RateSheet({ token, onBack }) {
         <div className="flex items-center gap-3">
           <button
             onClick={handleExportExcel}
-            className="text-xs bg-gray-100 text-gray-700 rounded px-3 py-1.5 hover:bg-gray-200"
+            className="text-xs bg-surface-raised text-text-secondary rounded px-3 py-1.5 hover:bg-surface-raised"
           >
             Export to Excel
           </button>
-          <label className="text-xs bg-blue-600 text-white rounded px-3 py-1.5 cursor-pointer hover:bg-blue-700">
+          <label className="text-xs bg-gold text-white rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
             {importingExcel ? "Importing…" : "Import from Excel"}
             <input
               type="file"
@@ -183,20 +183,20 @@ export default function RateSheet({ token, onBack }) {
           </label>
         </div>
         {importResult && (
-          <div className="mt-3 text-xs bg-gray-50 border border-gray-200 rounded p-3">
-            <p className="text-gray-700">
+          <div className="mt-3 text-xs bg-surface-raised border border-border-dark rounded p-3">
+            <p className="text-text-secondary">
               <span className="font-medium">{importResult.created.length}</span> new item(s) created,{" "}
               <span className="font-medium">{importResult.updated.length}</span> item(s) updated,{" "}
               <span className="font-medium">{importResult.unchanged}</span> row(s) unchanged (skipped)
               {importResult.errors.length > 0 && (
                 <>
-                  , <span className="font-medium text-red-600">{importResult.errors.length}</span> row error(s)
+                  , <span className="font-medium text-red-400">{importResult.errors.length}</span> row error(s)
                 </>
               )}
               .
             </p>
             {importResult.errors.length > 0 && (
-              <ul className="mt-1 list-disc list-inside text-red-600">
+              <ul className="mt-1 list-disc list-inside text-red-400">
                 {importResult.errors.map((e) => (
                   <li key={e.row}>
                     Row {e.row}: {e.detail}
@@ -208,8 +208,8 @@ export default function RateSheet({ token, onBack }) {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-700">Add a rate item</h3>
+      <form onSubmit={handleSubmit} className="bg-surface shadow rounded-lg p-6 space-y-3">
+        <h3 className="text-sm font-semibold text-text-secondary">Add a rate item</h3>
         <div className="grid grid-cols-2 gap-3">
           <Text label="Category" value={form.category} onChange={(v) => set("category", v)} required />
           <Text label="Item name" value={form.item_name} onChange={(v) => set("item_name", v)} required />
@@ -220,11 +220,11 @@ export default function RateSheet({ token, onBack }) {
           <Text label="Vendor" value={form.vendor} onChange={(v) => set("vendor", v)} />
           <Text label="City of quote" value={form.city_of_quote} onChange={(v) => set("city_of_quote", v)} />
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Labour category</label>
+            <label className="block text-sm font-medium text-text-secondary">Labour category</label>
             <select
               value={form.labour_category_id}
               onChange={(e) => set("labour_category_id", e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
             >
               <option value="">None (uses blended fallback %)</option>
               {categories.map((c) => (
@@ -235,11 +235,11 @@ export default function RateSheet({ token, onBack }) {
             </select>
           </div>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+          className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
         >
           {submitting ? "Saving…" : "Save as rate"}
         </button>
@@ -247,8 +247,8 @@ export default function RateSheet({ token, onBack }) {
 
       <BulkActionsPanel token={token} categories={[...new Set(items.map((i) => i.category))].sort()} onChanged={load} />
 
-      <div className="bg-white shadow rounded-lg p-6">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Items ({items.length})</h3>
+      <div className="bg-surface shadow rounded-lg p-6">
+        <h3 className="text-sm font-semibold text-text-secondary mb-3">Items ({items.length})</h3>
         <div className="space-y-2">
           {items.map((item) => (
             <RateItemRow
@@ -260,7 +260,7 @@ export default function RateSheet({ token, onBack }) {
               onChanged={load}
             />
           ))}
-          {items.length === 0 && <p className="text-sm text-gray-400">No rate items yet.</p>}
+          {items.length === 0 && <p className="text-sm text-text-secondary">No rate items yet.</p>}
         </div>
       </div>
     </div>
@@ -322,11 +322,11 @@ function BulkActionsPanel({ token, categories, onChanged }) {
   }
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-4">
-      <h3 className="text-sm font-semibold text-gray-700">Bulk actions (J.1)</h3>
+    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
+      <h3 className="text-sm font-semibold text-text-secondary">Bulk actions (J.1)</h3>
 
       <div>
-        <p className="text-xs text-gray-500 mb-1">
+        <p className="text-xs text-text-secondary mb-1">
           Mark all items (or just one category) AI/Manual in one action -- the multi-item version of the per-row
           Confirm button and its reverse.
         </p>
@@ -334,7 +334,7 @@ function BulkActionsPanel({ token, categories, onChanged }) {
           <select
             value={markCategory}
             onChange={(e) => setMarkCategory(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -353,17 +353,17 @@ function BulkActionsPanel({ token, categories, onChanged }) {
           <button
             onClick={() => handleMark("manual")}
             disabled={markBusy}
-            className="text-xs bg-gray-500 text-white rounded px-3 py-1 hover:bg-gray-600 disabled:opacity-50"
+            className="text-xs bg-surface-raised text-white rounded px-3 py-1 hover:bg-surface-raised disabled:opacity-50"
           >
             Mark all Manual
           </button>
         </div>
-        {markError && <p className="text-xs text-red-600 mt-1">{markError}</p>}
-        {markResult && <p className="text-xs text-green-700 mt-1">{markResult}</p>}
+        {markError && <p className="text-xs text-red-400 mt-1">{markError}</p>}
+        {markResult && <p className="text-xs text-green-400 mt-1">{markResult}</p>}
       </div>
 
-      <div className="border-t border-gray-100 pt-3">
-        <p className="text-xs text-gray-500 mb-1">
+      <div className="border-t border-border-dark pt-3">
+        <p className="text-xs text-text-secondary mb-1">
           Apply a % change to a whole category (e.g. "Steel +6%") with one effective date -- Q.2 rule 5's Master
           Settings bulk-update, for the rate sheet itself.
         </p>
@@ -372,7 +372,7 @@ function BulkActionsPanel({ token, categories, onChanged }) {
             value={pctCategory}
             onChange={(e) => setPctCategory(e.target.value)}
             required
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
           >
             <option value="" disabled>
               Select category…
@@ -390,26 +390,26 @@ function BulkActionsPanel({ token, categories, onChanged }) {
             value={pctChange}
             onChange={(e) => setPctChange(e.target.value)}
             placeholder="% change, e.g. 6"
-            className="rounded border border-gray-300 px-2 py-1 text-xs w-32"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs w-32"
           />
           <input
             required
             value={pctReason}
             onChange={(e) => setPctReason(e.target.value)}
             placeholder="Reason"
-            className="rounded border border-gray-300 px-2 py-1 text-xs flex-1 min-w-[10rem]"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs flex-1 min-w-[10rem]"
           />
           <button
             type="submit"
             disabled={pctBusy}
-            className="text-xs bg-blue-600 text-white rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+            className="text-xs bg-gold text-white rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
           >
             {pctBusy ? "Applying…" : "Apply to category"}
           </button>
         </form>
-        {pctError && <p className="text-xs text-red-600 mt-1">{pctError}</p>}
+        {pctError && <p className="text-xs text-red-400 mt-1">{pctError}</p>}
         {pctResult && (
-          <p className="text-xs text-green-700 mt-1">
+          <p className="text-xs text-green-400 mt-1">
             {pctResult.updated_count} item(s) updated.
             {pctResult.items.some((i) => i.commodity_alert?.triggered) &&
               " Commodity alert triggered on one or more watched items -- open each item's history to review."}
@@ -478,48 +478,48 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
   }
 
   return (
-    <div className="border border-gray-200 rounded px-3 py-2 text-sm">
+    <div className="border border-border-dark rounded px-3 py-2 text-sm">
       <div className="flex items-center justify-between">
         <span className="font-medium">
           {item.item_name}
-          {item.is_commodity_watched && <span className="ml-1 text-amber-600" title="Commodity watched">★</span>}
+          {item.is_commodity_watched && <span className="ml-1 text-amber-400" title="Commodity watched">★</span>}
         </span>
-        <span className="text-gray-500">
+        <span className="text-text-secondary">
           Rs {item.rate} / {item.unit}
         </span>
       </div>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-secondary">
         {item.category} {item.spec && `· ${item.spec}`} · HSN/SAC {item.hsn_sac}
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {item.source === "ai" ? (
-          <span className="text-xs bg-green-50 text-green-700 rounded px-1.5 py-0.5">
+          <span className="text-xs bg-green-500/10 text-green-400 rounded px-1.5 py-0.5">
             AI · confirmed {item.confirmed_date}
             {item.is_stale && " · stale (90+ days)"}
           </span>
         ) : (
-          <span className="text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Manual · Unverified</span>
+          <span className="text-xs bg-surface-raised text-text-secondary rounded px-1.5 py-0.5">Manual · Unverified</span>
         )}
         {item.source === "manual" && (
-          <button onClick={onConfirm} className="text-xs text-blue-600 hover:underline">
+          <button onClick={onConfirm} className="text-xs text-gold hover:underline">
             Confirm &rarr; AI rate
           </button>
         )}
-        <button onClick={onToggleWatch} className="text-xs text-amber-700 hover:underline">
+        <button onClick={onToggleWatch} className="text-xs text-amber-400 hover:underline">
           {item.is_commodity_watched ? "Unwatch (commodity alert)" : "Watch (commodity alert)"}
         </button>
-        <button onClick={() => setShowUpdateForm((v) => !v)} className="text-xs text-blue-600 hover:underline">
+        <button onClick={() => setShowUpdateForm((v) => !v)} className="text-xs text-gold hover:underline">
           {showUpdateForm ? "Cancel" : "Update rate"}
         </button>
-        <button onClick={toggleHistory} className="text-xs text-gray-500 hover:underline">
+        <button onClick={toggleHistory} className="text-xs text-text-secondary hover:underline">
           {showHistory ? "Hide history" : "History"}
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
 
       {showUpdateForm && (
-        <form onSubmit={handleUpdateRate} className="mt-2 flex flex-wrap items-center gap-2 bg-gray-50 rounded p-2">
+        <form onSubmit={handleUpdateRate} className="mt-2 flex flex-wrap items-center gap-2 bg-surface-raised rounded p-2">
           <input
             type="number"
             step="0.01"
@@ -527,19 +527,19 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
             value={newRate}
             onChange={(e) => setNewRate(e.target.value)}
             placeholder="New rate"
-            className="rounded border border-gray-300 px-2 py-1 text-xs w-28"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs w-28"
           />
           <input
             required
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason for change"
-            className="rounded border border-gray-300 px-2 py-1 text-xs flex-1 min-w-[10rem]"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs flex-1 min-w-[10rem]"
           />
           <button
             type="submit"
             disabled={saving}
-            className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+            className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save new rate"}
           </button>
@@ -547,8 +547,8 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
       )}
 
       {alert && alert.triggered && (
-        <div className="mt-2 bg-amber-50 border border-amber-300 rounded p-2 text-xs space-y-1">
-          <p className="font-semibold text-amber-800">
+        <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded p-2 text-xs space-y-1">
+          <p className="font-semibold text-amber-400">
             Commodity alert: {alert.percent_move > 0 ? "+" : ""}
             {alert.percent_move}% (Rs {alert.previous_rate} &rarr; Rs {alert.new_rate}, threshold &plusmn;
             {alert.threshold_percent}%)
@@ -556,13 +556,13 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
           {alert.draft_cost_sheets.length > 0 && (
             <p>
               {alert.draft_cost_sheets.length} draft cost sheet(s) use this rate and can be synced:{" "}
-              <button onClick={handleSync} disabled={syncing} className="text-blue-700 hover:underline disabled:opacity-50">
+              <button onClick={handleSync} disabled={syncing} className="text-gold-hover hover:underline disabled:opacity-50">
                 {syncing ? "Syncing…" : "Sync draft lines now"}
               </button>
             </p>
           )}
           {alert.verified_cost_sheets.length > 0 && (
-            <p className="text-gray-500">
+            <p className="text-text-secondary">
               {alert.verified_cost_sheets.length} verified cost sheet(s) also use this rate -- their figures are
               frozen (M.2 rule 5) and won't be touched.
             </p>
@@ -571,14 +571,14 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
       )}
 
       {showHistory && history && (
-        <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
+        <div className="mt-2 border-t border-border-dark pt-2 space-y-1">
           {history.map((h) => (
-            <p key={h.id} className="text-xs text-gray-500">
+            <p key={h.id} className="text-xs text-text-secondary">
               Rs {h.rate} · {h.effective_from} &rarr; {h.effective_to || "current"}
               {h.reason && ` · ${h.reason}`}
             </p>
           ))}
-          {history.length === 0 && <p className="text-xs text-gray-400">No history.</p>}
+          {history.length === 0 && <p className="text-xs text-text-secondary">No history.</p>}
         </div>
       )}
     </div>
@@ -588,13 +588,13 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
 function Text({ label, value, onChange, type = "text", required }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary">{label}</label>
       <input
         type={type}
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
       />
     </div>
   );

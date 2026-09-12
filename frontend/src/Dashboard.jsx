@@ -28,11 +28,11 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject }) 
   }, [token]);
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading Dashboard…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading Dashboard…</p>;
   }
 
   if (error) {
-    return <p className="text-center text-red-600 mt-10">{error}</p>;
+    return <p className="text-center text-red-400 mt-10">{error}</p>;
   }
 
   const { summary, recent_projects: recentProjects, recent_activity: recentActivity } = data;
@@ -42,16 +42,16 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject }) 
     { label: "Pending estimates", value: summary.pending_estimates_count },
     { label: "Pending quotations", value: summary.pending_quotations_count },
     { label: "Overdue clients", value: summary.overdue_clients_count },
-    { label: "Won this month", value: formatMoney(summary.won_this_month_total) },
+    { label: "Won this month", value: formatMoney(summary.won_this_month_total), accent: true },
   ];
 
   return (
     <div className="max-w-4xl mx-auto mt-8 mb-10 space-y-6 px-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">Dashboard</h2>
+        <h2 className="font-heading font-bold text-text-primary text-lg">Dashboard</h2>
         <button
           onClick={onNewProject}
-          className="text-sm bg-blue-600 text-white rounded px-3 py-1.5 font-medium hover:bg-blue-700"
+          className="text-xs uppercase tracking-wider bg-gold hover:bg-gold-hover text-base rounded px-4 py-2 font-semibold transition-colors duration-200"
         >
           + New project
         </button>
@@ -59,32 +59,34 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject }) 
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {tiles.map((tile) => (
-          <div key={tile.label} className="bg-white shadow rounded-lg p-4">
-            <p className="text-xs text-gray-500">{tile.label}</p>
-            <p className="text-lg font-semibold text-gray-900 mt-1">{tile.value}</p>
+          <div key={tile.label} className="bg-surface border border-border-dark rounded-lg p-4">
+            <p className="text-xs uppercase tracking-wide text-text-secondary">{tile.label}</p>
+            <p className={`text-lg font-heading font-semibold mt-1 ${tile.accent ? "text-gold" : "text-text-primary"}`}>
+              {tile.value}
+            </p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white shadow rounded-lg p-4">
-        <h3 className="font-medium text-gray-900 mb-3">Recent projects</h3>
+      <div className="bg-surface border border-border-dark rounded-lg p-4">
+        <h3 className="font-heading font-semibold text-text-primary mb-3">Recent projects</h3>
         {recentProjects.length === 0 ? (
-          <p className="text-sm text-gray-500">No projects yet -- create one to get started.</p>
+          <p className="text-sm text-text-secondary">No projects yet -- create one to get started.</p>
         ) : (
-          <ul className="divide-y">
+          <ul className="divide-y divide-border-dark">
             {recentProjects.map((project) => (
               <li key={project.id}>
                 <button
                   onClick={() => onOpenProject(project.id)}
-                  className="w-full text-left py-2.5 flex items-center justify-between hover:bg-gray-50 px-1 rounded"
+                  className="w-full text-left py-2.5 flex items-center justify-between hover:bg-surface-raised px-1 rounded transition-colors duration-200"
                 >
                   <span>
-                    <span className="font-medium text-gray-900">{project.project_no}</span>{" "}
-                    <span className="text-gray-500">
+                    <span className="font-medium text-text-primary font-mono text-sm">{project.project_no}</span>{" "}
+                    <span className="text-text-secondary">
                       · {project.client_name} · {project.city}
                     </span>
                   </span>
-                  <span className="text-sm text-blue-600">Open →</span>
+                  <span className="text-sm text-gold">Open →</span>
                 </button>
               </li>
             ))}
@@ -93,16 +95,16 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject }) 
       </div>
 
       {role === "director" && recentActivity && (
-        <div className="bg-white shadow rounded-lg p-4">
-          <h3 className="font-medium text-gray-900 mb-3">Recent activity</h3>
+        <div className="bg-surface border border-border-dark rounded-lg p-4">
+          <h3 className="font-heading font-semibold text-text-primary mb-3">Recent activity</h3>
           {recentActivity.length === 0 ? (
-            <p className="text-sm text-gray-500">Nothing logged yet.</p>
+            <p className="text-sm text-text-secondary">Nothing logged yet.</p>
           ) : (
-            <ul className="divide-y text-sm">
+            <ul className="divide-y divide-border-dark text-sm">
               {recentActivity.map((entry) => (
-                <li key={entry.id} className="py-2 text-gray-600">
-                  <span className="text-gray-400">{formatWhen(entry.timestamp)}</span> — {entry.role}{" "}
-                  {entry.document_type} <span className="font-medium">{entry.field}</span>
+                <li key={entry.id} className="py-2 text-text-secondary">
+                  <span className="text-text-secondary/60">{formatWhen(entry.timestamp)}</span> — {entry.role}{" "}
+                  {entry.document_type} <span className="font-medium text-text-primary">{entry.field}</span>
                   {entry.old_value || entry.new_value ? (
                     <>
                       : {entry.old_value ?? "—"} → {entry.new_value ?? "—"}

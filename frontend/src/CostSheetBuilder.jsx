@@ -146,9 +146,9 @@ function RecommendationBanner({ label, text, why, onUse, note }) {
 function Field({ label, children, hint }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600">{label}</label>
+      <label className="block text-xs font-medium text-text-secondary">{label}</label>
       {children}
-      {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
+      {hint && <p className="text-[11px] text-text-secondary mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -160,7 +160,7 @@ function NumberInput({ value, onChange, ...props }) {
       step="any"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+      className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
       {...props}
     />
   );
@@ -172,7 +172,7 @@ function TextInput({ value, onChange, ...props }) {
       type="text"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+      className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
       {...props}
     />
   );
@@ -183,7 +183,7 @@ function SelectInput({ value, onChange, options, ...props }) {
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+      className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
       {...props}
     >
       {options.map((o) => (
@@ -197,7 +197,7 @@ function SelectInput({ value, onChange, options, ...props }) {
 
 function CheckboxField({ label, checked, onChange }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-gray-700 mt-1">
+    <label className="flex items-center gap-2 text-sm text-text-secondary mt-1">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
@@ -225,10 +225,10 @@ function ProjectSportSelect({ value, onChange, projectSports, sportsById }) {
 function BreakdownPanel({ result }) {
   if (!result) return null;
   return (
-    <div className="bg-blue-50 border border-blue-100 rounded p-3 text-xs space-y-1">
-      <p className="font-semibold text-blue-800">Computed breakdown</p>
-      <pre className="whitespace-pre-wrap text-blue-900">{JSON.stringify(result.breakdown, null, 2)}</pre>
-      <p className="text-blue-700">{result.lines.length} line(s) added to the Cost Sheet.</p>
+    <div className="bg-gold-muted border border-gold rounded p-3 text-xs space-y-1">
+      <p className="font-semibold text-gold">Computed breakdown</p>
+      <pre className="whitespace-pre-wrap text-gold">{JSON.stringify(result.breakdown, null, 2)}</pre>
+      <p className="text-gold-hover">{result.lines.length} line(s) added to the Cost Sheet.</p>
     </div>
   );
 }
@@ -299,50 +299,50 @@ function OverridesPanel({ token, costSheetId }) {
   if (loading) return null;
 
   return (
-    <div className="border border-gray-200 rounded p-3 space-y-2">
+    <div className="border border-border-dark rounded p-3 space-y-2">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold text-gray-600">K.1 constants &amp; overrides (Q.2 rule 2)</p>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-xs font-semibold text-text-secondary">K.1 constants &amp; overrides (Q.2 rule 2)</p>
+          <p className="text-[11px] text-text-secondary">
             An override changes this cost sheet only, with a reason -- the global Master Setting is untouched.
           </p>
         </div>
-        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-blue-600 hover:underline">
+        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-gold hover:underline">
           {expanded ? "Hide" : overriddenCount > 0 ? `${overriddenCount} overridden` : "Show"}
         </button>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      {savedNotice && <p className="text-xs text-green-700">{savedNotice}</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      {savedNotice && <p className="text-xs text-green-400">{savedNotice}</p>}
 
       {expanded && (
         <div className="space-y-1">
           {constants.map((c) => (
-            <div key={c.key} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1">
+            <div key={c.key} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-surface-raised rounded px-2 py-1">
               {editingKey === c.key ? (
                 <>
-                  <span className="text-gray-600">{c.label} (master {c.master_value}%)</span>
+                  <span className="text-text-secondary">{c.label} (master {c.master_value}%)</span>
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
                       step="0.01"
                       value={overrideValue}
                       onChange={(e) => setOverrideValue(e.target.value)}
-                      className="w-20 rounded border border-gray-300 px-1 py-0.5"
+                      className="w-20 rounded border border-border-dark bg-surface-raised text-text-primary px-1 py-0.5"
                     />
                     <input
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                       placeholder="reason (required)"
-                      className="w-40 rounded border border-gray-300 px-1 py-0.5"
+                      className="w-40 rounded border border-border-dark bg-surface-raised text-text-primary px-1 py-0.5"
                     />
                     <button
                       onClick={() => handleSave(c)}
                       disabled={saving || !reason}
-                      className="text-green-700 hover:underline disabled:opacity-50 disabled:no-underline"
+                      className="text-green-400 hover:underline disabled:opacity-50 disabled:no-underline"
                     >
                       Save
                     </button>
-                    <button onClick={() => setEditingKey(null)} className="text-gray-500 hover:underline">
+                    <button onClick={() => setEditingKey(null)} className="text-text-secondary hover:underline">
                       Cancel
                     </button>
                   </div>
@@ -352,10 +352,10 @@ function OverridesPanel({ token, costSheetId }) {
                   <span>
                     {c.label}: {c.effective_value}%
                     {c.is_overridden && (
-                      <span className="text-amber-700"> (overridden from {c.master_value}% -- {c.override_reason})</span>
+                      <span className="text-amber-400"> (overridden from {c.master_value}% -- {c.override_reason})</span>
                     )}
                   </span>
-                  <button onClick={() => startEdit(c)} className="text-blue-600 hover:underline">
+                  <button onClick={() => startEdit(c)} className="text-gold hover:underline">
                     Override
                   </button>
                 </>
@@ -510,8 +510,8 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
       {f.structure_type === "c" && (
         <CheckboxField label="Tall variant" checked={f.tall_variant} onChange={set("tall_variant")} />
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -597,8 +597,8 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
           <Field label="Steel Rs/kg"><NumberInput value={f.steel_rate_per_kg} onChange={set("steel_rate_per_kg")} required /></Field>
         </div>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -650,7 +650,7 @@ function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         D.4: cut/fill, rock breaking, dewatering and debris removal quantities aren't derivable from anything this
         app captures (no slope %, rock survey or water-table depth field exists) -- enter the actual quantity and
         rate for whichever lines this site needs. Anti-termite alone can default its area from the sport selection
@@ -658,48 +658,48 @@ function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }
       </p>
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Cut/fill earthwork (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Cut/fill earthwork (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Volume (cum)"><NumberInput value={f.cut_fill_volume_cum} onChange={set("cut_fill_volume_cum")} /></Field>
           <Field label="Rate Rs/cum"><NumberInput value={f.cut_fill_rate_per_cum} onChange={set("cut_fill_rate_per_cum")} /></Field>
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Rock breaking (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Rock breaking (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Volume (cum)"><NumberInput value={f.rock_breaking_volume_cum} onChange={set("rock_breaking_volume_cum")} /></Field>
           <Field label="Rate Rs/cum"><NumberInput value={f.rock_breaking_rate_per_cum} onChange={set("rock_breaking_rate_per_cum")} /></Field>
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Dewatering (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Dewatering (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Days"><NumberInput value={f.dewatering_days} onChange={set("dewatering_days")} /></Field>
           <Field label="Rate Rs/day"><NumberInput value={f.dewatering_rate_per_day} onChange={set("dewatering_rate_per_day")} /></Field>
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Debris removal (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Debris removal (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Trips"><NumberInput value={f.debris_removal_trips} onChange={set("debris_removal_trips")} /></Field>
           <Field label="Rate Rs/trip"><NumberInput value={f.debris_removal_rate_per_trip} onChange={set("debris_removal_rate_per_trip")} /></Field>
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Anti-termite treatment (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Anti-termite treatment (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Area (sqft)" hint="blank = sport's build area"><NumberInput value={f.anti_termite_area_sqft} onChange={set("anti_termite_area_sqft")} /></Field>
           <Field label="Rate Rs/sqft"><NumberInput value={f.anti_termite_rate_per_sqft} onChange={set("anti_termite_rate_per_sqft")} /></Field>
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -767,8 +767,8 @@ function DrainageForm({ token, costSheetId, projectSports, sportsById, onAdded }
       {f.subsurface_turf_drainage && (
         <Field label="Sub-surface pipe Rs/m"><NumberInput value={f.subsurface_pipe_rate_per_m} onChange={set("subsurface_pipe_rate_per_m")} required /></Field>
       )}
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -859,8 +859,8 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Line-marking sets"><NumberInput value={f.line_marking_sets} onChange={set("line_marking_sets")} min="0" /></Field>
         <Field label="Line-marking Rs/set"><NumberInput value={f.line_marking_rate_per_set} onChange={set("line_marking_rate_per_set")} /></Field>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -930,10 +930,10 @@ function WoodenFlooringForm({ token, costSheetId, projectSports, sportsById, onA
           <NumberInput value={f.moisture_barrier_rate_per_sqft} onChange={set("moisture_barrier_rate_per_sqft")} placeholder="Rs/sqft" />
         )}
       </div>
-      <p className="text-[11px] text-gray-400">Base (PCC/RCC/compacted stone) below this is the separate Base (D.1) tab.</p>
+      <p className="text-[11px] text-text-secondary">Base (PCC/RCC/compacted stone) below this is the separate Base (D.1) tab.</p>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -994,10 +994,10 @@ function AcrylicPuForm({ token, costSheetId, projectSports, sportsById, onAdded 
         <Field label="Coats" hint="PU is usually 1"><NumberInput value={f.coats} onChange={set("coats")} min="1" required /></Field>
         <Field label="Rs/sqft per coat"><NumberInput value={f.rate_per_sqft_per_coat} onChange={set("rate_per_sqft_per_coat")} required /></Field>
       </div>
-      <p className="text-[11px] text-gray-400">Sub-base (asphalt/WBM/PCC) below this is the separate Base (D.1) tab.</p>
+      <p className="text-[11px] text-text-secondary">Sub-base (asphalt/WBM/PCC) below this is the separate Base (D.1) tab.</p>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1047,9 +1047,9 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
       <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-gray-600">Sets (up to 4 -- e.g. basketball white, volleyball yellow)</p>
+          <p className="text-xs font-medium text-text-secondary">Sets (up to 4 -- e.g. basketball white, volleyball yellow)</p>
           {sets.length < 4 && (
-            <button type="button" onClick={addSet} className="text-xs text-blue-600 hover:underline">
+            <button type="button" onClick={addSet} className="text-xs text-gold hover:underline">
               + Add set
             </button>
           )}
@@ -1073,7 +1073,7 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
               <NumberInput value={row.rate_per_set} onChange={(v) => updateSet(i, "rate_per_set", v)} placeholder="Rs/set" />
             </div>
             {sets.length > 1 && (
-              <button type="button" onClick={() => removeSet(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+              <button type="button" onClick={() => removeSet(i)} className="col-span-1 text-xs text-red-400 hover:underline">
                 Remove
               </button>
             )}
@@ -1081,8 +1081,8 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
         ))}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1192,8 +1192,8 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
         <Field label="Tariff Rs/kWh" hint="informational only"><NumberInput value={f.tariff_rate_per_kwh} onChange={set("tariff_rate_per_kwh")} /></Field>
         <Field label="Hours/day" hint="informational only"><NumberInput value={f.hours_per_day} onChange={set("hours_per_day")} /></Field>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1263,8 +1263,8 @@ function HvacForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Coverage % override" hint="blank = squash/badminton/TT/gym default"><NumberInput value={f.coverage_percent} onChange={set("coverage_percent")} /></Field>
         <Field label="Acoustic panel Rs/sqm"><NumberInput value={f.acoustic_panel_rate_per_sqm} onChange={set("acoustic_panel_rate_per_sqm")} /></Field>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1342,7 +1342,7 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
 
       {sport && catalogItems.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-secondary">
             Auto quantities for {sport.name} ({selectedProjectSport.number_of_courts} court
             {selectedProjectSport.number_of_courts === 1 ? "" : "s"}):
           </p>
@@ -1358,15 +1358,15 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
         </div>
       )}
       {sport && catalogItems.length === 0 && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
+        <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-3 py-2">
           No accessories catalog for {sport.name} yet — add items manually below.
         </p>
       )}
 
-      <div className="space-y-2 border-t border-gray-100 pt-3">
+      <div className="space-y-2 border-t border-border-dark pt-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-gray-600">Custom items (optional extras, e.g. scoreboard, umpire chair)</p>
-          <button type="button" onClick={addCustomItem} className="text-xs text-blue-600 hover:underline">
+          <p className="text-xs font-medium text-text-secondary">Custom items (optional extras, e.g. scoreboard, umpire chair)</p>
+          <button type="button" onClick={addCustomItem} className="text-xs text-gold hover:underline">
             + Add item
           </button>
         </div>
@@ -1387,7 +1387,7 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
             <button
               type="button"
               onClick={() => removeCustomItem(i)}
-              className="col-span-1 text-xs text-red-600 hover:underline"
+              className="col-span-1 text-xs text-red-400 hover:underline"
             >
               Remove
             </button>
@@ -1395,11 +1395,11 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
         ))}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
       <button
         type="submit"
         disabled={!projectSportId}
-        className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+        className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
       >
         Compute &amp; add to Cost Sheet
       </button>
@@ -1471,10 +1471,10 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
         <Field label="Drainage ring Rs/m"><NumberInput value={f.drainage_rate_per_m} onChange={set("drainage_rate_per_m")} required /></Field>
       </div>
 
-      <div className="space-y-2 border-t border-gray-100 pt-3">
+      <div className="space-y-2 border-t border-border-dark pt-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-gray-600">Field events checklist (optional)</p>
-          <button type="button" onClick={addFieldEvent} className="text-xs text-blue-600 hover:underline">
+          <p className="text-xs font-medium text-text-secondary">Field events checklist (optional)</p>
+          <button type="button" onClick={addFieldEvent} className="text-xs text-gold hover:underline">
             + Add event
           </button>
         </div>
@@ -1490,15 +1490,15 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
             <div className="col-span-4">
               <NumberInput value={ev.rate} onChange={(v) => updateFieldEvent(i, "rate", v)} placeholder="Rs (supply & install)" />
             </div>
-            <button type="button" onClick={() => removeFieldEvent(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+            <button type="button" onClick={() => removeFieldEvent(i)} className="col-span-1 text-xs text-red-400 hover:underline">
               Remove
             </button>
           </div>
         ))}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1561,7 +1561,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         Each item gets a supply &amp; install line plus an EPDM safety-surfacing line, sized to footprint + fall
         zone on each side (default 6 ft, G.4). The IS 15650 note compares equipment height (if given) against the
         40mm EPDM system's 1.5m rated CFH (F.2) -- informational only, not priced.
@@ -1569,7 +1569,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
 
       <div className="space-y-3">
         {items.map((row, i) => (
-          <div key={i} className="border border-gray-200 rounded p-2 space-y-2">
+          <div key={i} className="border border-border-dark rounded p-2 space-y-2">
             <div className="flex items-center justify-between">
               <TextInput
                 value={row.item_name}
@@ -1577,7 +1577,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
                 placeholder="e.g. Multi-play unit, Swings, Slide, See-saw, Climber, Spring rider"
               />
               {items.length > 1 && (
-                <button type="button" onClick={() => removeItem(i)} className="ml-2 text-xs text-red-600 hover:underline shrink-0">
+                <button type="button" onClick={() => removeItem(i)} className="ml-2 text-xs text-red-400 hover:underline shrink-0">
                   Remove
                 </button>
               )}
@@ -1595,12 +1595,12 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
           </div>
         ))}
       </div>
-      <button type="button" onClick={addItem} className="text-xs text-blue-600 hover:underline">
+      <button type="button" onClick={addItem} className="text-xs text-gold hover:underline">
         + Add another item
       </button>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1678,7 +1678,7 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         HVAC and acoustic treatment: use the HVAC (G.5) tab on this sport (gymnasium already has a 20% acoustic
         default). Lighting: use the Lighting (H) tab at 300 lux (H's own gym figure). Mirrors, sound, reception,
         lockers, showers: add via Manual line -- no formula is given for those.
@@ -1686,8 +1686,8 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-gray-600">Zones (Area -&gt; flooring per zone)</p>
-          <button type="button" onClick={addZone} className="text-xs text-blue-600 hover:underline">
+          <p className="text-xs font-medium text-text-secondary">Zones (Area -&gt; flooring per zone)</p>
+          <button type="button" onClick={addZone} className="text-xs text-gold hover:underline">
             + Add zone
           </button>
         </div>
@@ -1706,17 +1706,17 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
             <div className="col-span-3">
               <NumberInput value={row.flooring_rate_per_sqft} onChange={(v) => updateZone(i, "flooring_rate_per_sqft", v)} placeholder="Rs/sqft" />
             </div>
-            <button type="button" onClick={() => removeZone(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+            <button type="button" onClick={() => removeZone(i)} className="col-span-1 text-xs text-red-400 hover:underline">
               Remove
             </button>
           </div>
         ))}
       </div>
 
-      <div className="space-y-2 border-t border-gray-100 pt-3">
+      <div className="space-y-2 border-t border-border-dark pt-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-gray-600">Equipment (brand tier, qty, rate)</p>
-          <button type="button" onClick={addEquipment} className="text-xs text-blue-600 hover:underline">
+          <p className="text-xs font-medium text-text-secondary">Equipment (brand tier, qty, rate)</p>
+          <button type="button" onClick={addEquipment} className="text-xs text-gold hover:underline">
             + Add equipment
           </button>
         </div>
@@ -1734,7 +1734,7 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
             <div className="col-span-2">
               <NumberInput value={row.rate} onChange={(v) => updateEquipment(i, "rate", v)} placeholder="Rs/unit" />
             </div>
-            <button type="button" onClick={() => removeEquipment(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+            <button type="button" onClick={() => removeEquipment(i)} className="col-span-1 text-xs text-red-400 hover:underline">
               Remove
             </button>
           </div>
@@ -1749,8 +1749,8 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1778,12 +1778,12 @@ function NamedRateList({ rows, onAdd, onUpdate, onRemove, namePlaceholder, addLa
           <div className="col-span-3">
             <NumberInput value={row.rate} onChange={(v) => onUpdate(i, "rate", v)} placeholder="Rs" />
           </div>
-          <button type="button" onClick={() => onRemove(i)} className="col-span-1 text-xs text-red-600 hover:underline">
+          <button type="button" onClick={() => onRemove(i)} className="col-span-1 text-xs text-red-400 hover:underline">
             Remove
           </button>
         </div>
       ))}
-      <button type="button" onClick={onAdd} className="text-xs text-blue-600 hover:underline">
+      <button type="button" onClick={onAdd} className="text-xs text-gold hover:underline">
         + {addLabel}
       </button>
     </div>
@@ -1911,14 +1911,14 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={projectSportId} onChange={setProjectSportId} projectSports={projectSports} sportsById={sportsById} />
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         Pool boundary fence (Type G, mandatory): use the Structures (E) tab. Lighting: use the Lighting (H) tab
         (pool already has a 6-pole default and its own 300/500 lux figures). Schedule already treats pool as a
         10-14 week lump activity.
       </p>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Shell</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Shell</p>
         <div className="grid grid-cols-4 gap-2">
           <Field label="Length (ft)"><NumberInput value={shell.length_ft} onChange={setShellField("length_ft")} required /></Field>
           <Field label="Width (ft)"><NumberInput value={shell.width_ft} onChange={setShellField("width_ft")} required /></Field>
@@ -1956,7 +1956,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         )}
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
+      <div className="border border-border-dark rounded p-2 space-y-2">
         <CheckboxField label="Filtration" checked={filtrationOn} onChange={setFiltrationOn} />
         {filtrationOn && (
           <>
@@ -1982,7 +1982,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         )}
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
+      <div className="border border-border-dark rounded p-2 space-y-2">
         <CheckboxField label="Treatment" checked={treatmentOn} onChange={setTreatmentOn} />
         {treatmentOn && (
           <div className="grid grid-cols-3 gap-2">
@@ -1999,7 +1999,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         )}
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
+      <div className="border border-border-dark rounded p-2 space-y-2">
         <CheckboxField label="Deck & safety" checked={deckOn} onChange={setDeckOn} />
         {deckOn && (
           <>
@@ -2008,7 +2008,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
               <Field label="Anti-slip tiles Rs/sqm"><NumberInput value={deck.anti_slip_tile_rate_per_sqm} onChange={setDeckField("anti_slip_tile_rate_per_sqm")} required /></Field>
               <Field label="Channel drain Rs/m"><NumberInput value={deck.channel_drain_rate_per_m} onChange={setDeckField("channel_drain_rate_per_m")} required /></Field>
             </div>
-            <p className="text-xs font-medium text-gray-600">Safety items (ladders, lane ropes, blocks, lifeguard chair, depth markers)</p>
+            <p className="text-xs font-medium text-text-secondary">Safety items (ladders, lane ropes, blocks, lifeguard chair, depth markers)</p>
             <NamedRateList
               rows={safetyItems}
               {...safetyHandlers}
@@ -2020,7 +2020,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         )}
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
+      <div className="border border-border-dark rounded p-2 space-y-2">
         <CheckboxField label="Water" checked={waterOn} onChange={setWaterOn} />
         {waterOn && (
           <div className="grid grid-cols-2 gap-2">
@@ -2036,8 +2036,8 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         )}
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-medium text-gray-600">Options (heating, cover, underwater lights, PEB cover + dehumidification)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-medium text-text-secondary">Options (heating, cover, underwater lights, PEB cover + dehumidification)</p>
         <NamedRateList
           rows={options}
           {...optionHandlers}
@@ -2046,8 +2046,8 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         />
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-medium text-gray-600">Compliance (pool safety NOC, lifeguard note, signage)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-medium text-text-secondary">Compliance (pool safety NOC, lifeguard note, signage)</p>
         <NamedRateList
           rows={compliance}
           {...complianceHandlers}
@@ -2056,8 +2056,8 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         />
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2103,7 +2103,7 @@ function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdd
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         F.4: topsoil (6in) + sand amendment, sod or seed cover, pop-up sprinklers on a 12m grid, plus a pump and a
         10,000L tank (fixed size, not scaled by area). Monthly maintenance is a recurring cost, not priced here --
         track it under AMC (Part I).
@@ -2129,8 +2129,8 @@ function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdd
         <Field label="10,000L tank Rs (lump)"><NumberInput value={f.tank_rate} onChange={set("tank_rate")} required /></Field>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2168,7 +2168,7 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
   return (
     <form onSubmit={submit} className="space-y-3">
       <ProjectSportSelect value={f.project_sport_id} onChange={set("project_sport_id")} projectSports={projectSports} sportsById={sportsById} />
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         F.4: hockey water-based turf irrigation -- sprinkler cannons (x6 default), a pump, and a 50,000L tank
         (fixed size). A separate, larger system from natural-grass irrigation, not a variant of it.
       </p>
@@ -2180,8 +2180,8 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
         <Field label="50,000L tank Rs (lump)"><NumberInput value={f.tank_rate} onChange={set("tank_rate")} required /></Field>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2241,7 +2241,7 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         B.1: "Freight = trips x km x Rs/km, trips = ceil(total material tonnes / truck capacity)." Pick a vehicle
         class to compute trips from tonnage automatically, or leave it as manual entry. Distance blank = the
         project's own distance-from-hub. Crane-days are still your own judgment call -- the blueprint gives no
@@ -2250,8 +2250,8 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
         that far out.
       </p>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Freight (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Freight (optional)</p>
         <Field label="Vehicle class" hint="or leave as manual entry and type trips directly">
           <SelectInput
             value={f.vehicle_class_id}
@@ -2278,16 +2278,16 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Crane hire (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Crane hire (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Days"><NumberInput value={f.crane_days} onChange={set("crane_days")} min="1" /></Field>
           <Field label="Rate Rs/day"><NumberInput value={f.crane_day_rate} onChange={set("crane_day_rate")} /></Field>
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2323,7 +2323,7 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         K.1 step 4: "only items NOT already ticked as scope lines in step 1 -- CAR policy and workmen's
         compensation insurance are priced here and only here." The structural engineer's own fee is already a
         step-1 scope line (E.5) and does not belong here. Enter the actual premium quoted for each; no formula is
@@ -2334,8 +2334,8 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
         <Field label="Workmen's comp premium (Rs)"><NumberInput value={f.workmens_comp_premium} onChange={set("workmens_comp_premium")} /></Field>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2376,7 +2376,7 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <p className="text-[11px] text-gray-400">
+      <p className="text-[11px] text-text-secondary">
         Part L / K.1 step 4A: DLP reserve % and BOCW cess % (only above Rs 10 L) already apply automatically on
         recompute for Tender Mode projects. Tender fee and performance-BG cost have no formula that can run from
         existing take-off data, so both are entered here as actual amounts, same as CAR/workmen's-comp above. BG
@@ -2384,13 +2384,13 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
         contract months = ceil(schedule weeks / 4.33).
       </p>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Tender fee (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Tender fee (optional)</p>
         <Field label="Fee (Rs)"><NumberInput value={f.tender_fee} onChange={set("tender_fee")} /></Field>
       </div>
 
-      <div className="border border-gray-200 rounded p-2 space-y-2">
-        <p className="text-xs font-semibold text-gray-600">Performance BG cost (optional)</p>
+      <div className="border border-border-dark rounded p-2 space-y-2">
+        <p className="text-xs font-semibold text-text-secondary">Performance BG cost (optional)</p>
         <div className="grid grid-cols-2 gap-2">
           <Field label="BG amount (Rs)"><NumberInput value={f.bg_amount} onChange={set("bg_amount")} /></Field>
           <Field label="Bank charge % p.a."><NumberInput value={f.bank_charge_percent_pa} onChange={set("bank_charge_percent_pa")} /></Field>
@@ -2399,12 +2399,12 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       {result?.bg_contract_months != null && (
-        <p className="text-xs text-gray-500">Contract months (ceil): {result.bg_contract_months}</p>
+        <p className="text-xs text-text-secondary">Contract months (ceil): {result.bg_contract_months}</p>
       )}
       <BreakdownPanel result={result} />
     </form>
@@ -2449,7 +2449,7 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-text-secondary">
         For anything without a dedicated calculator -- e.g. flooring types other than turf, accessories, scope items.
       </p>
       <Field label="Sport (optional -- leave blank for a site-wide line)">
@@ -2479,8 +2479,8 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
           options={[{ value: "", label: "— blended fallback —" }, ...labourCategories.map((c) => ({ value: c.id, label: `${c.name} (${c.default_percent}%)` }))]}
         />
       </Field>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Add line
       </button>
     </form>
@@ -2594,50 +2594,50 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
   const totalAmount = lines.reduce((sum, l) => sum + l.amount, 0);
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading Cost Sheet…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading Cost Sheet…</p>;
   }
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-4">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-700">
+          <h3 className="text-sm font-semibold text-text-secondary">
             Cost Sheet Builder -- {costSheet.document_no}
           </h3>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-text-secondary">
             Status: {costSheet.status} · Recomputed total: Rs {costSheet.cost_total.toLocaleString()}
           </p>
         </div>
-        <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+        <button onClick={onBack} className="text-sm text-gold hover:underline">
           &larr; Back to documents
         </button>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
       {!isDraft && (
-        <p className="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
+        <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-3 py-2">
           This cost sheet is {costSheet.status} -- lines can no longer be added, removed or recomputed.
         </p>
       )}
 
-      <div className="border border-gray-200 rounded">
-        <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">Lines ({lines.length})</span>
-          <span className="text-xs text-gray-500">Sum of amounts: Rs {totalAmount.toLocaleString()}</span>
+      <div className="border border-border-dark rounded">
+        <div className="px-3 py-2 bg-surface-raised border-b border-border-dark flex items-center justify-between">
+          <span className="text-xs font-semibold text-text-secondary">Lines ({lines.length})</span>
+          <span className="text-xs text-text-secondary">Sum of amounts: Rs {totalAmount.toLocaleString()}</span>
         </div>
-        <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
-          {lines.length === 0 && <p className="text-xs text-gray-400 px-3 py-3">No lines yet -- use a calculator below.</p>}
+        <div className="max-h-64 overflow-y-auto divide-y divide-border-dark">
+          {lines.length === 0 && <p className="text-xs text-text-secondary px-3 py-3">No lines yet -- use a calculator below.</p>}
           {lines.map((l) => (
             <div key={l.id} className="px-3 py-2 text-xs flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate">
-                  <span className="text-gray-400">[{l.work_package}/{l.category}]</span> {l.item_name}
+                  <span className="text-text-secondary">[{l.work_package}/{l.category}]</span> {l.item_name}
                 </p>
-                <p className="text-gray-400">
+                <p className="text-text-secondary">
                   {l.quantity} {l.unit} x Rs {l.rate} = Rs {l.amount.toLocaleString()}
                 </p>
               </div>
               {isDraft && (
-                <button onClick={() => handleDelete(l.id)} className="text-red-600 hover:underline shrink-0">
+                <button onClick={() => handleDelete(l.id)} className="text-red-400 hover:underline shrink-0">
                   Remove
                 </button>
               )}
@@ -2647,10 +2647,10 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
       </div>
 
       {warnings.length > 0 && (
-        <div className="bg-amber-50 border border-amber-100 rounded p-3 space-y-1">
-          <p className="text-xs font-semibold text-amber-800">J.2 labour warnings</p>
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded p-3 space-y-1">
+          <p className="text-xs font-semibold text-amber-400">J.2 labour warnings</p>
           {warnings.map((w, i) => (
-            <p key={i} className="text-xs text-amber-700">{w}</p>
+            <p key={i} className="text-xs text-amber-400">{w}</p>
           ))}
         </div>
       )}
@@ -2659,7 +2659,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
         <button
           onClick={handleRecompute}
           disabled={!isDraft || lines.length === 0}
-          className="bg-gray-700 text-white text-sm rounded px-4 py-2 hover:bg-gray-800 disabled:opacity-50"
+          className="bg-surface-raised text-white text-sm rounded px-4 py-2 hover:bg-surface-raised disabled:opacity-50"
         >
           Recompute total (K.1 steps 1-6)
         </button>
@@ -2673,7 +2673,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
         <button
           onClick={toggleConsumptionSheet}
           disabled={lines.length === 0}
-          className="bg-gray-100 text-gray-700 text-sm rounded px-4 py-2 hover:bg-gray-200 disabled:opacity-50"
+          className="bg-surface-raised text-text-secondary text-sm rounded px-4 py-2 hover:bg-surface-raised disabled:opacity-50"
         >
           {showConsumption ? "Hide" : "View"} Consumption Sheet (J.3)
         </button>
@@ -2682,9 +2682,9 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
       {isDraft && <OverridesPanel token={token} costSheetId={costSheet.id} />}
 
       {showConsumption && (
-        <div className="border border-gray-200 rounded overflow-x-auto">
+        <div className="border border-border-dark rounded overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-gray-600">
+            <thead className="bg-surface-raised text-text-secondary">
               <tr>
                 <th className="text-left px-2 py-1.5">Category</th>
                 <th className="text-left px-2 py-1.5">Item &amp; spec</th>
@@ -2699,13 +2699,13 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
                 <th className="text-left px-2 py-1.5">Received</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border-dark">
               {consumptionRows?.map((r) => (
                 <tr key={r.id}>
                   <td className="px-2 py-1.5">{r.category}</td>
                   <td className="px-2 py-1.5">
                     {r.item_name}
-                    {r.spec && <span className="text-gray-400"> ({r.spec})</span>}
+                    {r.spec && <span className="text-text-secondary"> ({r.spec})</span>}
                   </td>
                   <td className="text-right px-2 py-1.5">{r.unit}</td>
                   <td className="text-right px-2 py-1.5">{r.theoretical_qty}</td>
@@ -2713,16 +2713,16 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
                   <td className="text-right px-2 py-1.5">{r.order_qty}</td>
                   <td className="text-right px-2 py-1.5">{r.rate}</td>
                   <td className="text-right px-2 py-1.5">{r.amount.toLocaleString()}</td>
-                  <td className="px-2 py-1.5">{r.vendor ?? <span className="text-gray-400">—</span>}</td>
-                  <td className="px-2 py-1.5">{r.delivery_date ?? <span className="text-gray-400">—</span>}</td>
+                  <td className="px-2 py-1.5">{r.vendor ?? <span className="text-text-secondary">—</span>}</td>
+                  <td className="px-2 py-1.5">{r.delivery_date ?? <span className="text-text-secondary">—</span>}</td>
                   <td className="px-2 py-1.5">
-                    {r.received_qty != null ? `${r.received_qty} (bal. ${r.balance_qty})` : <span className="text-gray-400">—</span>}
+                    {r.received_qty != null ? `${r.received_qty} (bal. ${r.balance_qty})` : <span className="text-text-secondary">—</span>}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="text-[11px] text-gray-400 px-2 py-1.5 bg-gray-50 border-t border-gray-200">
+          <p className="text-[11px] text-text-secondary px-2 py-1.5 bg-surface-raised border-t border-border-dark">
             Vendor / Delivery / Received reflect a real Purchase Order (Part O) once one is raised for that line --
             blank until then.
           </p>
@@ -2738,9 +2738,9 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
       )}
 
       {isDraft && (
-        <div className="border-t border-gray-200 pt-4">
+        <div className="border-t border-border-dark pt-4">
           {projectType === "resurfacing" && (
-            <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1 mb-2">
+            <p className="text-[11px] text-amber-400 bg-amber-500/10 rounded px-2 py-1 mb-2">
               Resurfacing project: Structures, Base and Drainage are hidden (B.1) -- Flooring, Line marking and
               Accessories apply.
             </p>
@@ -2753,7 +2753,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`text-xs rounded px-3 py-1.5 ${
-                  tab === t.key ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  tab === t.key ? "bg-gold text-white" : "bg-surface-raised text-text-secondary hover:bg-surface-raised"
                 }`}
               >
                 {t.label}

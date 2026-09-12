@@ -62,38 +62,38 @@ export default function ClientSignatoriesPanel({ token, clientId }) {
   if (loading) return null;
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-gray-700">Client signatories (Part O)</h3>
-          <p className="text-xs text-gray-400">
+          <h3 className="text-sm font-semibold text-text-secondary">Client signatories (Part O)</h3>
+          <p className="text-xs text-text-secondary">
             Named approvers whose name + designation an approval_evidence attachment can be matched against (M.3).
           </p>
         </div>
-        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-blue-600 hover:underline">
+        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-gold hover:underline">
           {expanded ? "Hide" : signatories.length === 0 ? "+ Add signatory" : `${signatories.length} on file`}
         </button>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
 
       {expanded && (
         <>
           {signatories.map((s) => (
             <div
               key={s.id}
-              className="flex flex-wrap items-center justify-between gap-2 text-xs bg-gray-50 rounded px-2 py-1 border border-gray-200"
+              className="flex flex-wrap items-center justify-between gap-2 text-xs bg-surface-raised rounded px-2 py-1 border border-border-dark"
             >
               <span>
                 <span className="font-medium">{s.name}</span> · {s.designation}
-                {s.email && <span className="text-gray-400"> · {s.email}</span>}
-                <span className="text-gray-400">
+                {s.email && <span className="text-text-secondary"> · {s.email}</span>}
+                <span className="text-text-secondary">
                   {" "}
                   · authorized {s.authorization_date}
                   {s.expiry_date ? ` – ${s.expiry_date}` : ""}
                 </span>
-                <span className={s.is_active ? "text-green-700" : "text-gray-400"}> · {s.is_active ? "active" : "inactive"}</span>
+                <span className={s.is_active ? "text-green-400" : "text-text-secondary"}> · {s.is_active ? "active" : "inactive"}</span>
               </span>
-              <button onClick={() => toggleActive(s)} className="text-gray-500 hover:underline">
+              <button onClick={() => toggleActive(s)} className="text-text-secondary hover:underline">
                 {s.is_active ? "Deactivate" : "Reactivate"}
               </button>
             </div>
@@ -105,50 +105,50 @@ export default function ClientSignatoriesPanel({ token, clientId }) {
               onChange={set("name")}
               placeholder="Name"
               required
-              className="rounded border border-gray-300 px-2 py-1 text-xs"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
             />
             <input
               value={form.designation}
               onChange={set("designation")}
               placeholder="Designation"
               required
-              className="rounded border border-gray-300 px-2 py-1 text-xs"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
             />
             <input
               value={form.email}
               onChange={set("email")}
               placeholder="Email (optional)"
-              className="rounded border border-gray-300 px-2 py-1 text-xs"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
             />
             <input
               value={form.phone}
               onChange={set("phone")}
               placeholder="Phone (optional)"
-              className="rounded border border-gray-300 px-2 py-1 text-xs"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
             />
-            <label className="text-xs text-gray-500 flex items-center gap-1">
+            <label className="text-xs text-text-secondary flex items-center gap-1">
               Authorized from
               <input
                 type="date"
                 value={form.authorization_date}
                 onChange={set("authorization_date")}
                 required
-                className="rounded border border-gray-300 px-2 py-1 text-xs flex-1"
+                className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs flex-1"
               />
             </label>
-            <label className="text-xs text-gray-500 flex items-center gap-1">
+            <label className="text-xs text-text-secondary flex items-center gap-1">
               Expires (optional)
               <input
                 type="date"
                 value={form.expiry_date}
                 onChange={set("expiry_date")}
-                className="rounded border border-gray-300 px-2 py-1 text-xs flex-1"
+                className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs flex-1"
               />
             </label>
             <button
               type="submit"
               disabled={saving}
-              className="col-span-2 bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+              className="col-span-2 bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
             >
               {saving ? "Saving…" : "Add signatory"}
             </button>
