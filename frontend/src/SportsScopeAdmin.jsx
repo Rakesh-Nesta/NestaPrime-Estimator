@@ -140,85 +140,85 @@ export default function SportsScopeAdmin({ token, onBack }) {
   }
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading Sports &amp; Scope admin…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading Sports &amp; Scope admin…</p>;
   }
 
   return (
     <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Sports &amp; Scope master admin</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Sports &amp; Scope master admin</h2>
           {onBack && (
-            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-text-secondary mt-1">
           Part C (Sport master list) and Part I (Additional Scope Checklist) were seeded once and read-only in
           Phase 1b -- this screen closes that gap. Director-only; deactivating retires an item without breaking
           existing projects that already reference it. A sport's key can't be changed once created -- every
           recommendation formula elsewhere in the app matches on it.
         </p>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
         <div className="flex gap-2 mt-4">
           <button
             onClick={() => setTab("sports")}
-            className={`text-sm rounded px-3 py-1 ${tab === "sports" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "sports" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Sports ({sports.length})
           </button>
           <button
             onClick={() => setTab("scope")}
-            className={`text-sm rounded px-3 py-1 ${tab === "scope" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "scope" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Scope items ({scopeItems.length})
           </button>
           <button
             onClick={() => setTab("margins")}
-            className={`text-sm rounded px-3 py-1 ${tab === "margins" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "margins" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Margin floor overrides ({sportMarginPolicies.length})
           </button>
           <button
             onClick={() => setTab("packages")}
-            className={`text-sm rounded px-3 py-1 ${tab === "packages" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "packages" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Package content ({packageContents.length})
           </button>
           <button
             onClick={() => setTab("hubs")}
-            className={`text-sm rounded px-3 py-1 ${tab === "hubs" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "hubs" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Hubs ({hubs.length})
           </button>
           <button
             onClick={() => setTab("accessories")}
-            className={`text-sm rounded px-3 py-1 ${tab === "accessories" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "accessories" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Accessory catalog ({accessoryCatalog.length})
           </button>
           <button
             onClick={() => setTab("netting")}
-            className={`text-sm rounded px-3 py-1 ${tab === "netting" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "netting" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Netting grades ({nettingGrades.length})
           </button>
           <button
             onClick={() => setTab("vehicles")}
-            className={`text-sm rounded px-3 py-1 ${tab === "vehicles" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "vehicles" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Vehicle classes ({vehicleClasses.length})
           </button>
           <button
             onClick={() => setTab("flooring_guides")}
-            className={`text-sm rounded px-3 py-1 ${tab === "flooring_guides" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "flooring_guides" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Flooring guides ({flooringGuides.length})
           </button>
           <button
             onClick={() => setTab("lighting_standards")}
-            className={`text-sm rounded px-3 py-1 ${tab === "lighting_standards" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "lighting_standards" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
           >
             Lighting standards ({luxStandards.length + poleCounts.length})
           </button>
@@ -313,10 +313,10 @@ function SportsTab({ token, sports, onAction }) {
   const toggleActive = onAction(async (sport) => updateSport(token, sport.id, { is_active: !sport.is_active }));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       {sports.map((s) =>
         editingId === s.id ? (
-          <div key={s.id} className="border border-blue-300 rounded p-3 space-y-2 text-sm bg-blue-50">
+          <div key={s.id} className="border border-gold rounded p-3 space-y-2 text-sm bg-gold-muted">
             <div className="grid grid-cols-3 gap-2">
               <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
               <LabeledInput
@@ -389,10 +389,10 @@ function SportsTab({ token, sports, onAction }) {
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+              <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
                 Save
               </button>
-              <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+              <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                 Cancel
               </button>
             </div>
@@ -401,20 +401,20 @@ function SportsTab({ token, sports, onAction }) {
           <div
             key={s.id}
             className={`flex flex-wrap items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
-              s.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+              s.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"
             }`}
           >
             <span>
-              <span className="text-gray-400 font-mono text-xs">#{s.display_order}</span>{" "}
+              <span className="text-text-secondary font-mono text-xs">#{s.display_order}</span>{" "}
               <span className="font-medium">{s.name}</span>{" "}
-              <span className="text-gray-400 text-xs">({s.key})</span> · {s.category} · {s.governing_body}
-              {!s.is_active && <span className="text-gray-400"> · inactive</span>}
+              <span className="text-text-secondary text-xs">({s.key})</span> · {s.category} · {s.governing_body}
+              {!s.is_active && <span className="text-text-secondary"> · inactive</span>}
             </span>
             <div className="flex items-center gap-3">
-              <button onClick={() => startEdit(s)} className="text-blue-600 hover:underline text-xs">
+              <button onClick={() => startEdit(s)} className="text-gold hover:underline text-xs">
                 Edit
               </button>
-              <button onClick={() => toggleActive(s)} className="text-gray-500 hover:underline text-xs">
+              <button onClick={() => toggleActive(s)} className="text-text-secondary hover:underline text-xs">
                 {s.is_active ? "Deactivate" : "Reactivate"}
               </button>
             </div>
@@ -423,7 +423,7 @@ function SportsTab({ token, sports, onAction }) {
       )}
 
       {creating ? (
-        <form onSubmit={handleCreate} className="border border-green-300 rounded p-3 space-y-2 text-sm bg-green-50">
+        <form onSubmit={handleCreate} className="border border-green-500/30 rounded p-3 space-y-2 text-sm bg-green-500/10">
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput label="Key (unique, immutable)" value={createForm.key} onChange={(v) => setCreateForm((f) => ({ ...f, key: v }))} required />
             <LabeledInput label="Order" type="number" value={createForm.display_order} onChange={(v) => setCreateForm((f) => ({ ...f, display_order: v }))} required />
@@ -449,18 +449,18 @@ function SportsTab({ token, sports, onAction }) {
             <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
               Add sport
             </button>
-            <button type="button" onClick={() => setCreating(false)} className="text-xs text-gray-500 hover:underline">
+            <button type="button" onClick={() => setCreating(false)} className="text-xs text-text-secondary hover:underline">
               Cancel
             </button>
           </div>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-text-secondary">
             A brand-new sport gets no Base/Structure/Flooring/Lighting recommendation until this app's
             recommendation tables are extended for its key -- same as any of the 30 seeded sports not covered by
             a given table today.
           </p>
         </form>
       ) : (
-        <button onClick={() => setCreating(true)} className="text-sm text-blue-600 hover:underline">
+        <button onClick={() => setCreating(true)} className="text-sm text-gold hover:underline">
           + Add sport
         </button>
       )}
@@ -503,10 +503,10 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
   const toggleActive = onAction(async (item) => updateScopeItem(token, item.id, { is_active: !item.is_active }));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       {scopeItems.map((i) =>
         editingId === i.id ? (
-          <div key={i.id} className="border border-blue-300 rounded p-3 space-y-2 text-sm bg-blue-50">
+          <div key={i.id} className="border border-gold rounded p-3 space-y-2 text-sm bg-gold-muted">
             <div className="grid grid-cols-3 gap-2">
               <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
               <LabeledInput
@@ -523,10 +523,10 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+              <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
                 Save
               </button>
-              <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+              <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                 Cancel
               </button>
             </div>
@@ -535,20 +535,20 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
           <div
             key={i.id}
             className={`flex flex-wrap items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
-              i.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+              i.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"
             }`}
           >
             <span>
-              <span className="text-gray-400 font-mono text-xs">#{i.display_order}</span>{" "}
+              <span className="text-text-secondary font-mono text-xs">#{i.display_order}</span>{" "}
               <span className="font-medium">{i.name}</span>{" "}
-              <span className="text-gray-400 text-xs">({i.key})</span> · {i.group}
-              {!i.is_active && <span className="text-gray-400"> · inactive</span>}
+              <span className="text-text-secondary text-xs">({i.key})</span> · {i.group}
+              {!i.is_active && <span className="text-text-secondary"> · inactive</span>}
             </span>
             <div className="flex items-center gap-3">
-              <button onClick={() => startEdit(i)} className="text-blue-600 hover:underline text-xs">
+              <button onClick={() => startEdit(i)} className="text-gold hover:underline text-xs">
                 Edit
               </button>
-              <button onClick={() => toggleActive(i)} className="text-gray-500 hover:underline text-xs">
+              <button onClick={() => toggleActive(i)} className="text-text-secondary hover:underline text-xs">
                 {i.is_active ? "Deactivate" : "Reactivate"}
               </button>
             </div>
@@ -557,7 +557,7 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
       )}
 
       {creating ? (
-        <form onSubmit={handleCreate} className="border border-green-300 rounded p-3 space-y-2 text-sm bg-green-50">
+        <form onSubmit={handleCreate} className="border border-green-500/30 rounded p-3 space-y-2 text-sm bg-green-500/10">
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput label="Key (unique, immutable)" value={createForm.key} onChange={(v) => setCreateForm((f) => ({ ...f, key: v }))} required />
             <LabeledInput label="Order" type="number" value={createForm.display_order} onChange={(v) => setCreateForm((f) => ({ ...f, display_order: v }))} required />
@@ -568,13 +568,13 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
             <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
               Add scope item
             </button>
-            <button type="button" onClick={() => setCreating(false)} className="text-xs text-gray-500 hover:underline">
+            <button type="button" onClick={() => setCreating(false)} className="text-xs text-text-secondary hover:underline">
               Cancel
             </button>
           </div>
         </form>
       ) : (
-        <button onClick={() => setCreating(true)} className="text-sm text-blue-600 hover:underline">
+        <button onClick={() => setCreating(true)} className="text-sm text-gold hover:underline">
           + Add scope item
         </button>
       )}
@@ -601,8 +601,8 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
   const handleRemove = onAction(async (sportId) => deleteSportMarginPolicy(token, sportId));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <p className="text-xs text-gray-400">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-text-secondary">
         K.2: "A sport-type floor (e.g. Pool 15%, PEB 14%) replaces the client floor for that sport when the
         Director has defined one." A sport with no override here simply uses its project's client-type floor.
         A multi-sport Quotation blends each included sport's own effective floor as a cost-weighted average.
@@ -610,10 +610,10 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
       {sports.map((s) => {
         const override = bySportId[s.id];
         return editingSportId === s.id ? (
-          <div key={s.id} className="flex items-center gap-2 text-sm border border-blue-300 bg-blue-50 rounded px-3 py-2">
+          <div key={s.id} className="flex items-center gap-2 text-sm border border-gold bg-gold-muted rounded px-3 py-2">
             <span className="flex-1">
               <span className="font-medium">{s.name}</span>{" "}
-              <span className="text-gray-400 text-xs">({s.key})</span>
+              <span className="text-text-secondary text-xs">({s.key})</span>
             </span>
             <input
               type="number"
@@ -622,33 +622,33 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
               max="99.99"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
+              className="w-24 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
             />
-            <span className="text-xs text-gray-400">%</span>
-            <button onClick={() => handleSave(s.id)} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+            <span className="text-xs text-text-secondary">%</span>
+            <button onClick={() => handleSave(s.id)} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
               Save
             </button>
-            <button onClick={() => setEditingSportId(null)} className="text-xs text-gray-500 hover:underline">
+            <button onClick={() => setEditingSportId(null)} className="text-xs text-text-secondary hover:underline">
               Cancel
             </button>
           </div>
         ) : (
-          <div key={s.id} className="flex items-center justify-between gap-2 text-sm border border-gray-200 rounded px-3 py-2">
+          <div key={s.id} className="flex items-center justify-between gap-2 text-sm border border-border-dark rounded px-3 py-2">
             <span>
               <span className="font-medium">{s.name}</span>{" "}
-              <span className="text-gray-400 text-xs">({s.key})</span>
+              <span className="text-text-secondary text-xs">({s.key})</span>
               {override ? (
-                <span className="ml-2 text-blue-700 font-medium">{override.floor_margin_percent}% floor override</span>
+                <span className="ml-2 text-gold-hover font-medium">{override.floor_margin_percent}% floor override</span>
               ) : (
-                <span className="ml-2 text-gray-400">uses client-type floor</span>
+                <span className="ml-2 text-text-secondary">uses client-type floor</span>
               )}
             </span>
             <div className="flex items-center gap-3">
-              <button onClick={() => startEdit(s)} className="text-blue-600 hover:underline text-xs">
+              <button onClick={() => startEdit(s)} className="text-gold hover:underline text-xs">
                 {override ? "Edit" : "Set override"}
               </button>
               {override && (
-                <button onClick={() => handleRemove(s.id)} className="text-gray-500 hover:underline text-xs">
+                <button onClick={() => handleRemove(s.id)} className="text-text-secondary hover:underline text-xs">
                   Remove
                 </button>
               )}
@@ -699,8 +699,8 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
   const toggleActive = onAction(async (item) => updateAccessoryCatalogItem(token, item.id, { is_active: !item.is_active }));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <p className="text-xs text-gray-400 -mt-1 mb-2">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-text-secondary -mt-1 mb-2">
         Part I / Module 9: which accessory (and how many per court/lane) is auto-added for a sport's take-off --
         formerly a hardcoded Python/JS dict, now Director-editable here. A sport with no rows below still works via
         the "custom items" fallback on the Cost Sheet's Accessories form.
@@ -708,14 +708,14 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
       {sports.map((sport) => {
         const items = bySportId[sport.id] ?? [];
         return (
-          <div key={sport.id} className="border border-gray-200 rounded p-3 space-y-2">
+          <div key={sport.id} className="border border-border-dark rounded p-3 space-y-2">
             <p className="text-sm font-medium">
-              {sport.name} <span className="text-gray-400 text-xs font-normal">({sport.key})</span>
+              {sport.name} <span className="text-text-secondary text-xs font-normal">({sport.key})</span>
             </p>
-            {items.length === 0 && <p className="text-xs text-gray-400">No catalog items yet.</p>}
+            {items.length === 0 && <p className="text-xs text-text-secondary">No catalog items yet.</p>}
             {items.map((item) =>
               editingId === item.id ? (
-                <div key={item.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+                <div key={item.id} className="border border-gold bg-gold-muted rounded p-2 space-y-2 text-sm">
                   <div className="grid grid-cols-3 gap-2">
                     <LabeledInput label="Item name" value={editForm.item_name} onChange={(v) => setEditForm((f) => ({ ...f, item_name: v }))} />
                     <LabeledInput label="Unit" value={editForm.unit} onChange={(v) => setEditForm((f) => ({ ...f, unit: v }))} />
@@ -727,10 +727,10 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                    <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
                       Save
                     </button>
-                    <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                    <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                       Cancel
                     </button>
                   </div>
@@ -739,18 +739,18 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
                 <div
                   key={item.id}
                   className={`flex items-center justify-between gap-2 text-sm border rounded px-3 py-1.5 ${
-                    item.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+                    item.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"
                   }`}
                 >
                   <span>
-                    {item.item_name} <span className="text-gray-400 text-xs">({item.quantity_per_court} {item.unit}/court)</span>
-                    {!item.is_active && <span className="text-gray-400"> · inactive</span>}
+                    {item.item_name} <span className="text-text-secondary text-xs">({item.quantity_per_court} {item.unit}/court)</span>
+                    {!item.is_active && <span className="text-text-secondary"> · inactive</span>}
                   </span>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => startEdit(item)} className="text-blue-600 hover:underline text-xs">
+                    <button onClick={() => startEdit(item)} className="text-gold hover:underline text-xs">
                       Edit
                     </button>
-                    <button onClick={() => toggleActive(item)} className="text-gray-500 hover:underline text-xs">
+                    <button onClick={() => toggleActive(item)} className="text-text-secondary hover:underline text-xs">
                       {item.is_active ? "Deactivate" : "Reactivate"}
                     </button>
                   </div>
@@ -759,7 +759,7 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
             )}
 
             {addingForSportId === sport.id ? (
-              <div className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+              <div className="border border-green-500/30 bg-green-500/10 rounded p-2 space-y-2 text-sm">
                 <div className="grid grid-cols-3 gap-2">
                   <LabeledInput label="Item name" value={addForm.item_name} onChange={(v) => setAddForm((f) => ({ ...f, item_name: v }))} />
                   <LabeledInput label="Unit" value={addForm.unit} onChange={(v) => setAddForm((f) => ({ ...f, unit: v }))} />
@@ -782,14 +782,14 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
                       setAddingForSportId(null);
                       setAddForm(emptyAccessoryItemForm());
                     }}
-                    className="text-xs text-gray-500 hover:underline"
+                    className="text-xs text-text-secondary hover:underline"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => setAddingForSportId(sport.id)} className="text-xs text-blue-600 hover:underline">
+              <button onClick={() => setAddingForSportId(sport.id)} className="text-xs text-gold hover:underline">
                 + Add item
               </button>
             )}
@@ -848,8 +848,8 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
   const toggleActive = onAction(async (grade) => updateNettingGrade(token, grade.id, { is_active: !grade.is_active }));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <p className="text-xs text-gray-400 -mt-1 mb-2">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-text-secondary -mt-1 mb-2">
         E.3: the netting grades a structure's Cost Sheet take-off can select instead of a bare Rs/sqm figure --
         N1 Budget through N4 Welded mesh, each with its own material/twine/mesh/UV spec. A PM can still enter a bare
         rate directly for a one-off spec these four don't cover.
@@ -857,18 +857,18 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
       <div className="space-y-2">
         {nettingGrades.map((grade) =>
           editingId === grade.id ? (
-            <div key={grade.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+            <div key={grade.id} className="border border-gold bg-gold-muted rounded p-2 space-y-2 text-sm">
               <div className="grid grid-cols-3 gap-2">
                 <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
                 <LabeledInput label="Material" value={editForm.material} onChange={(v) => setEditForm((f) => ({ ...f, material: v }))} />
                 <LabeledInput label="Twine" value={editForm.twine} onChange={(v) => setEditForm((f) => ({ ...f, twine: v }))} />
                 <LabeledInput label="Mesh" value={editForm.mesh} onChange={(v) => setEditForm((f) => ({ ...f, mesh: v }))} />
                 <div>
-                  <label className="block text-xs text-gray-500">UV stabilized</label>
+                  <label className="block text-xs text-text-secondary">UV stabilized</label>
                   <select
                     value={editForm.uv_stabilized}
                     onChange={(e) => setEditForm((f) => ({ ...f, uv_stabilized: e.target.value }))}
-                    className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                    className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
                   >
                     <option value="">-- (n/a)</option>
                     <option value="true">Yes</option>
@@ -884,10 +884,10 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
                   Save
                 </button>
-                <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                   Cancel
                 </button>
               </div>
@@ -896,24 +896,24 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
             <div
               key={grade.id}
               className={`flex items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
-                grade.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+                grade.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"
               }`}
             >
               <div>
                 <span className="font-medium">{grade.name}</span>{" "}
-                <span className="text-gray-400 text-xs">
+                <span className="text-text-secondary text-xs">
                   ({grade.material}
                   {grade.twine && `, ${grade.twine} twine`}, {grade.mesh} mesh
                   {grade.uv_stabilized !== null && `, UV ${grade.uv_stabilized ? "yes" : "no"}`}) -- {grade.typical_use}
                 </span>
-                {!grade.is_active && <span className="text-gray-400"> · inactive</span>}
+                {!grade.is_active && <span className="text-text-secondary"> · inactive</span>}
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-gray-600">Rs {grade.rate_per_sqm}/sqm</span>
-                <button onClick={() => startEdit(grade)} className="text-blue-600 hover:underline text-xs">
+                <span className="text-text-secondary">Rs {grade.rate_per_sqm}/sqm</span>
+                <button onClick={() => startEdit(grade)} className="text-gold hover:underline text-xs">
                   Edit
                 </button>
-                <button onClick={() => toggleActive(grade)} className="text-gray-500 hover:underline text-xs">
+                <button onClick={() => toggleActive(grade)} className="text-text-secondary hover:underline text-xs">
                   {grade.is_active ? "Deactivate" : "Reactivate"}
                 </button>
               </div>
@@ -923,7 +923,7 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
       </div>
 
       {adding ? (
-        <div className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+        <div className="border border-green-500/30 bg-green-500/10 rounded p-2 space-y-2 text-sm">
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput label="Key" value={addForm.key} onChange={(v) => setAddForm((f) => ({ ...f, key: v }))} />
             <LabeledInput label="Name" value={addForm.name} onChange={(v) => setAddForm((f) => ({ ...f, name: v }))} />
@@ -931,11 +931,11 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
             <LabeledInput label="Twine" value={addForm.twine} onChange={(v) => setAddForm((f) => ({ ...f, twine: v }))} />
             <LabeledInput label="Mesh" value={addForm.mesh} onChange={(v) => setAddForm((f) => ({ ...f, mesh: v }))} />
             <div>
-              <label className="block text-xs text-gray-500">UV stabilized</label>
+              <label className="block text-xs text-text-secondary">UV stabilized</label>
               <select
                 value={addForm.uv_stabilized}
                 onChange={(e) => setAddForm((f) => ({ ...f, uv_stabilized: e.target.value }))}
-                className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
               >
                 <option value="">-- (n/a)</option>
                 <option value="true">Yes</option>
@@ -959,14 +959,14 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
                 setAdding(false);
                 setAddForm(emptyNettingGradeForm());
               }}
-              className="text-xs text-gray-500 hover:underline"
+              className="text-xs text-text-secondary hover:underline"
             >
               Cancel
             </button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} className="text-xs text-blue-600 hover:underline">
+        <button onClick={() => setAdding(true)} className="text-xs text-gold hover:underline">
           + Add grade
         </button>
       )}
@@ -1010,8 +1010,8 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
   const toggleActive = onAction(async (vc) => updateVehicleClass(token, vc.id, { is_active: !vc.is_active }));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <p className="text-xs text-gray-400 -mt-1 mb-2">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-text-secondary -mt-1 mb-2">
         Q.1: "Freight & crane | Rs/km by vehicle class, truck capacity t, crane day rate." No worked example exists
         for this row -- NestaPrime adds its own actual fleet/vendor vehicle classes here, so the catalog starts
         empty. Selecting one on a freight take-off both supplies Rs/km and lets trips = ceil(tonnes / capacity) be
@@ -1020,7 +1020,7 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
       <div className="space-y-2">
         {vehicleClasses.map((vc) =>
           editingId === vc.id ? (
-            <div key={vc.id} className="border border-blue-300 bg-blue-50 rounded p-2 space-y-2 text-sm">
+            <div key={vc.id} className="border border-gold bg-gold-muted rounded p-2 space-y-2 text-sm">
               <div className="grid grid-cols-3 gap-2">
                 <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
                 <LabeledInput
@@ -1033,10 +1033,10 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
                 />
               </div>
               <div className="flex gap-2">
-                <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+                <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
                   Save
                 </button>
-                <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                   Cancel
                 </button>
               </div>
@@ -1045,19 +1045,19 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
             <div
               key={vc.id}
               className={`flex items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
-                vc.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+                vc.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"
               }`}
             >
               <span>
-                {vc.name} <span className="text-gray-400 text-xs">({vc.truck_capacity_tonnes} t capacity)</span>
-                {!vc.is_active && <span className="text-gray-400"> · inactive</span>}
+                {vc.name} <span className="text-text-secondary text-xs">({vc.truck_capacity_tonnes} t capacity)</span>
+                {!vc.is_active && <span className="text-text-secondary"> · inactive</span>}
               </span>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-gray-600">Rs {vc.rate_per_km}/km</span>
-                <button onClick={() => startEdit(vc)} className="text-blue-600 hover:underline text-xs">
+                <span className="text-text-secondary">Rs {vc.rate_per_km}/km</span>
+                <button onClick={() => startEdit(vc)} className="text-gold hover:underline text-xs">
                   Edit
                 </button>
-                <button onClick={() => toggleActive(vc)} className="text-gray-500 hover:underline text-xs">
+                <button onClick={() => toggleActive(vc)} className="text-text-secondary hover:underline text-xs">
                   {vc.is_active ? "Deactivate" : "Reactivate"}
                 </button>
               </div>
@@ -1065,12 +1065,12 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
           )
         )}
         {vehicleClasses.length === 0 && !adding && (
-          <p className="text-sm text-gray-400">No vehicle classes yet -- add your own fleet/vendor classes below.</p>
+          <p className="text-sm text-text-secondary">No vehicle classes yet -- add your own fleet/vendor classes below.</p>
         )}
       </div>
 
       {adding ? (
-        <div className="border border-green-300 bg-green-50 rounded p-2 space-y-2 text-sm">
+        <div className="border border-green-500/30 bg-green-500/10 rounded p-2 space-y-2 text-sm">
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput label="Key" value={addForm.key} onChange={(v) => setAddForm((f) => ({ ...f, key: v }))} />
             <LabeledInput label="Name" value={addForm.name} onChange={(v) => setAddForm((f) => ({ ...f, name: v }))} />
@@ -1092,14 +1092,14 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
                 setAdding(false);
                 setAddForm(emptyVehicleClassForm());
               }}
-              className="text-xs text-gray-500 hover:underline"
+              className="text-xs text-text-secondary hover:underline"
             >
               Cancel
             </button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setAdding(true)} className="text-xs text-blue-600 hover:underline">
+        <button onClick={() => setAdding(true)} className="text-xs text-gold hover:underline">
           + Add vehicle class
         </button>
       )}
@@ -1133,15 +1133,15 @@ function HubsTab({ token, hubs, onAction }) {
   const toggleActive = onAction(async (hub) => updateHub(token, hub.id, { is_active: !hub.is_active }));
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <p className="text-xs text-gray-400 -mt-1 mb-2">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <p className="text-xs text-text-secondary -mt-1 mb-2">
         Part O HUBS / B.1 field #4: NestaPrime's own dispatch/depot locations -- the PM picks one when setting up a
         project and enters the km distance from it (Phase 1 is manual km; PIN-code auto-lookup is a Phase 7
         integration).
       </p>
       {hubs.map((h) =>
         editingId === h.id ? (
-          <div key={h.id} className="border border-blue-300 rounded p-3 space-y-2 text-sm bg-blue-50">
+          <div key={h.id} className="border border-gold rounded p-3 space-y-2 text-sm bg-gold-muted">
             <div className="grid grid-cols-3 gap-2">
               <LabeledInput label="Name" value={editForm.name} onChange={(v) => setEditForm((f) => ({ ...f, name: v }))} />
               <LabeledInput label="City" value={editForm.city} onChange={(v) => setEditForm((f) => ({ ...f, city: v }))} />
@@ -1152,10 +1152,10 @@ function HubsTab({ token, hubs, onAction }) {
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+              <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
                 Save
               </button>
-              <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+              <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                 Cancel
               </button>
             </div>
@@ -1164,21 +1164,21 @@ function HubsTab({ token, hubs, onAction }) {
           <div
             key={h.id}
             className={`flex flex-wrap items-center justify-between gap-2 text-sm border rounded px-3 py-2 ${
-              h.is_active ? "border-gray-200" : "border-gray-200 bg-gray-50 opacity-60"
+              h.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"
             }`}
           >
             <span>
               <span className="font-medium">{h.name}</span>{" "}
-              <span className="text-gray-400 text-xs">
+              <span className="text-text-secondary text-xs">
                 ({h.city}, {h.state_code})
               </span>
-              {!h.is_active && <span className="text-gray-400"> · inactive</span>}
+              {!h.is_active && <span className="text-text-secondary"> · inactive</span>}
             </span>
             <div className="flex items-center gap-3">
-              <button onClick={() => startEdit(h)} className="text-blue-600 hover:underline text-xs">
+              <button onClick={() => startEdit(h)} className="text-gold hover:underline text-xs">
                 Edit
               </button>
-              <button onClick={() => toggleActive(h)} className="text-gray-500 hover:underline text-xs">
+              <button onClick={() => toggleActive(h)} className="text-text-secondary hover:underline text-xs">
                 {h.is_active ? "Deactivate" : "Reactivate"}
               </button>
             </div>
@@ -1187,7 +1187,7 @@ function HubsTab({ token, hubs, onAction }) {
       )}
 
       {creating ? (
-        <form onSubmit={handleCreate} className="border border-green-300 rounded p-3 space-y-2 text-sm bg-green-50">
+        <form onSubmit={handleCreate} className="border border-green-500/30 rounded p-3 space-y-2 text-sm bg-green-500/10">
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput label="Name" value={createForm.name} onChange={(v) => setCreateForm((f) => ({ ...f, name: v }))} required />
             <LabeledInput label="City" value={createForm.city} onChange={(v) => setCreateForm((f) => ({ ...f, city: v }))} required />
@@ -1202,13 +1202,13 @@ function HubsTab({ token, hubs, onAction }) {
             <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
               Add hub
             </button>
-            <button type="button" onClick={() => setCreating(false)} className="text-xs text-gray-500 hover:underline">
+            <button type="button" onClick={() => setCreating(false)} className="text-xs text-text-secondary hover:underline">
               Cancel
             </button>
           </div>
         </form>
       ) : (
-        <button onClick={() => setCreating(true)} className="text-sm text-blue-600 hover:underline">
+        <button onClick={() => setCreating(true)} className="text-sm text-gold hover:underline">
           + Add hub
         </button>
       )}
@@ -1251,17 +1251,17 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
   });
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-4">
-      <p className="text-xs text-gray-400">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
+      <p className="text-xs text-text-secondary">
         Part O PACKAGES / Q.1: "Packages | Budget/Standard/Premium contents | Per sport | Director." This is the
         content the Estimate PDF's "Package content" section prints for each option -- flooring, structure,
         lighting, what's included (one line per bullet), and warranty duration. Sales still customises items on the
         actual Estimate; this is only the Director-set default per sport and tier.
       </p>
       {sports.map((sport) => (
-        <div key={sport.id} className="border border-gray-200 rounded p-3 space-y-2">
+        <div key={sport.id} className="border border-border-dark rounded p-3 space-y-2">
           <p className="text-sm font-medium">
-            {sport.name} <span className="text-gray-400 text-xs font-normal">({sport.key})</span>
+            {sport.name} <span className="text-text-secondary text-xs font-normal">({sport.key})</span>
           </p>
           <div className="flex flex-wrap gap-2">
             {PACKAGE_TIERS.map((tier) => {
@@ -1272,7 +1272,7 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
                   key={tier}
                   onClick={() => startEdit(sport.id, tier)}
                   className={`text-xs rounded px-3 py-1 border ${
-                    configured ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"
+                    configured ? "border-gold bg-gold-muted text-gold-hover" : "border-border-dark text-text-secondary"
                   }`}
                 >
                   {tier.charAt(0).toUpperCase() + tier.slice(1)} {configured ? "✓" : "(not set)"}
@@ -1281,8 +1281,8 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
             })}
           </div>
           {editingKey?.startsWith(`${sport.id}:`) && (
-            <div className="border border-blue-300 bg-blue-50 rounded p-3 space-y-2 text-sm">
-              <p className="text-xs font-medium text-blue-800">
+            <div className="border border-gold bg-gold-muted rounded p-3 space-y-2 text-sm">
+              <p className="text-xs font-medium text-gold">
                 Editing {editingKey.split(":")[1]} tier
               </p>
               <LabeledInput
@@ -1300,13 +1300,13 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
                 value={editForm.lighting_description}
                 onChange={(v) => setEditForm((f) => ({ ...f, lighting_description: v }))}
               />
-              <label className="text-xs text-gray-500 space-y-0.5 block">
+              <label className="text-xs text-text-secondary space-y-0.5 block">
                 Scope (one item per line)
                 <textarea
                   value={editForm.scope_description}
                   onChange={(e) => setEditForm((f) => ({ ...f, scope_description: e.target.value }))}
                   rows={3}
-                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
                 />
               </label>
               <div className="w-32">
@@ -1320,11 +1320,11 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleSave(sport.id, editingKey.split(":")[1])}
-                  className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700"
+                  className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
                 >
                   Save
                 </button>
-                <button onClick={() => setEditingKey(null)} className="text-xs text-gray-500 hover:underline">
+                <button onClick={() => setEditingKey(null)} className="text-xs text-text-secondary hover:underline">
                   Cancel
                 </button>
               </div>
@@ -1368,8 +1368,8 @@ function FlooringGuidesTab({ token, sports, flooringGuides, onAction }) {
   });
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-4">
-      <p className="text-xs text-gray-400">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
+      <p className="text-xs text-text-secondary">
         Parts F.1 (indoor) / F.2 (outdoor): the per-sport flooring recommendation -- primary spec (Premium
         package), an optional secondary spec (Standard, falling back to primary if unset), an optional budget spec
         (Budget package, falling back to secondary then primary), and the rationale shown alongside it. A sport with
@@ -1379,29 +1379,29 @@ function FlooringGuidesTab({ token, sports, flooringGuides, onAction }) {
       {sports.map((sport) => {
         const guide = bySportId[sport.id];
         return (
-          <div key={sport.id} className="border border-gray-200 rounded p-3 space-y-2">
+          <div key={sport.id} className="border border-border-dark rounded p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">
-                {sport.name} <span className="text-gray-400 text-xs font-normal">({sport.key})</span>
+                {sport.name} <span className="text-text-secondary text-xs font-normal">({sport.key})</span>
               </p>
               <button
                 onClick={() => startEdit(sport.id)}
                 className={`text-xs rounded px-3 py-1 border ${
-                  guide ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500"
+                  guide ? "border-gold bg-gold-muted text-gold-hover" : "border-border-dark text-text-secondary"
                 }`}
               >
                 {guide ? "Edit" : "Not set"}
               </button>
             </div>
             {guide && editingId !== sport.id && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-text-secondary">
                 Primary: {guide.primary_spec}
                 {guide.secondary_spec && <> · Secondary: {guide.secondary_spec}</>}
                 {guide.budget_spec && <> · Budget: {guide.budget_spec}</>}
               </p>
             )}
             {editingId === sport.id && (
-              <div className="border border-blue-300 bg-blue-50 rounded p-3 space-y-2 text-sm">
+              <div className="border border-gold bg-gold-muted rounded p-3 space-y-2 text-sm">
                 <LabeledInput
                   label="Primary spec (Premium)"
                   value={editForm.primary_spec}
@@ -1427,11 +1427,11 @@ function FlooringGuidesTab({ token, sports, flooringGuides, onAction }) {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleSave(sport.id)}
-                    className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700"
+                    className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
                   >
                     Save
                   </button>
-                  <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:underline">
+                  <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
                     Cancel
                   </button>
                 </div>
@@ -1489,32 +1489,32 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
 
   return (
     <div className="space-y-4">
-      <div className="bg-white shadow rounded-lg p-6 space-y-3">
-        <p className="text-xs text-gray-400">
+      <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+        <p className="text-xs text-text-secondary">
           Part H's lux table, by sport group -- "court", "football_cricket", "pool" and "gym" are a fixed code-level
           grouping (which sports behave alike), not editable here; only the lux figures for each group are.
         </p>
         {LUX_CATEGORIES.map((category) => {
           const standard = luxByCategory[category];
           return (
-            <div key={category} className="border border-gray-200 rounded p-3 space-y-2">
+            <div key={category} className="border border-border-dark rounded p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">{category}</p>
                 <button
                   onClick={() => startEditLux(category)}
-                  className="text-xs rounded px-3 py-1 border border-blue-300 bg-blue-50 text-blue-700"
+                  className="text-xs rounded px-3 py-1 border border-gold bg-gold-muted text-gold-hover"
                 >
                   Edit
                 </button>
               </div>
               {standard && editingCategory !== category && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-text-secondary">
                   Practice: {standard.lux_practice ?? "--"} · Match: {standard.lux_match ?? "--"} · Tournament:{" "}
                   {standard.lux_tournament ?? "--"}
                 </p>
               )}
               {editingCategory === category && (
-                <div className="border border-blue-300 bg-blue-50 rounded p-3 space-y-2 text-sm">
+                <div className="border border-gold bg-gold-muted rounded p-3 space-y-2 text-sm">
                   <div className="grid grid-cols-3 gap-2">
                     <LabeledInput
                       label="Practice lux"
@@ -1538,11 +1538,11 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleSaveLux(category)}
-                      className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700"
+                      className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
                     >
                       Save
                     </button>
-                    <button onClick={() => setEditingCategory(null)} className="text-xs text-gray-500 hover:underline">
+                    <button onClick={() => setEditingCategory(null)} className="text-xs text-text-secondary hover:underline">
                       Cancel
                     </button>
                   </div>
@@ -1553,17 +1553,17 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
         })}
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6 space-y-3">
-        <p className="text-xs text-gray-400">
+      <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+        <p className="text-xs text-text-secondary">
           Part H's pole table (open-air only): the fixture-count floor once a sport mounts lighting on poles rather
           than structure. Most sports have no row -- that's a real state (no pole-count floor applies), not a gap.
         </p>
         {poleCounts.map((row) => (
-          <div key={row.sport_id} className="flex items-center justify-between border border-gray-200 rounded p-2 text-sm">
+          <div key={row.sport_id} className="flex items-center justify-between border border-border-dark rounded p-2 text-sm">
             <span>
               {sportsById[row.sport_id]?.name ?? row.sport_id} · {row.pole_count} poles
             </span>
-            <button onClick={() => handleRemovePoleCount(row.sport_id)} className="text-xs text-red-600 hover:underline">
+            <button onClick={() => handleRemovePoleCount(row.sport_id)} className="text-xs text-red-400 hover:underline">
               Remove
             </button>
           </div>
@@ -1573,7 +1573,7 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
             value={poleSportId}
             onChange={(e) => setPoleSportId(e.target.value)}
             required
-            className="rounded border border-gray-300 px-2 py-1 text-sm"
+            className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
           >
             <option value="">Select sport…</option>
             {sports.map((s) => (
@@ -1589,9 +1589,9 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
             value={poleCountValue}
             onChange={(e) => setPoleCountValue(e.target.value)}
             required
-            className="w-28 rounded border border-gray-300 px-2 py-1 text-sm"
+            className="w-28 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
           />
-          <button type="submit" className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700">
+          <button type="submit" className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
             Set
           </button>
         </form>
@@ -1602,14 +1602,14 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
 
 function LabeledInput({ label, value, onChange, type = "text", required = false }) {
   return (
-    <label className="text-xs text-gray-500 space-y-0.5 block">
+    <label className="text-xs text-text-secondary space-y-0.5 block">
       {label}
       <input
         type={type}
         value={value}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+        className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
       />
     </label>
   );
@@ -1617,9 +1617,9 @@ function LabeledInput({ label, value, onChange, type = "text", required = false 
 
 function LabeledSelect({ label, value, options, onChange }) {
   return (
-    <label className="text-xs text-gray-500 space-y-0.5 block">
+    <label className="text-xs text-text-secondary space-y-0.5 block">
       {label}
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm">
         {options.map((o) => (
           <option key={o} value={o}>
             {o}

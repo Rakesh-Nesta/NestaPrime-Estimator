@@ -1,1 +1,27 @@
 @import "tailwindcss";
+
+/* Amendment 1 (Annexure 2): dark premium theme, gold #c9a227 accents.
+   Design reference: docs/annexures/Amendment-1-10-quickstart-specs.md.
+   Semantic status colors (green/amber/red) are deliberately NOT part of
+   this palette -- callers keep using Tailwind's own red-600/amber-700/
+   green-700 etc. directly, so a "Verified" badge still reads as green,
+   never gold. */
+@theme {
+  --color-base: #0f1115;
+  --color-surface: #181b21;
+  --color-surface-raised: #20242c;
+  --color-border-dark: #2c313b;
+  --color-text-primary: #f2f0ea;
+  --color-text-secondary: #9ca3af;
+  --color-gold: #c9a227;
+  --color-gold-hover: #dbb542;
+  --color-gold-muted: #c9a2271a;
+  --font-heading: "Sora", "Segoe UI", sans-serif;
+  --font-sans: "Inter", "Segoe UI", sans-serif;
+}
+
+body {
+  background-color: var(--color-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}

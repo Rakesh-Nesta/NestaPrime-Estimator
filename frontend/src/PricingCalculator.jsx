@@ -50,52 +50,52 @@ export default function PricingCalculator({ token, onBack }) {
   }
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading pricing…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading pricing…</p>;
   }
 
   return (
     <div className="max-w-xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Pricing Calculator</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Pricing Calculator</h2>
           {onBack && (
-            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-text-secondary mt-1">
           K.1 steps 7-12: Selling = Cost / (1 - target margin); GST is a flat 18% on the
           subtotal after discount (K.4). Cost, contingency, markup and margin are PM/Director
           only (K.3) — Sales never sees this screen.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-3">
+      <form onSubmit={handleSubmit} className="bg-surface shadow rounded-lg p-6 space-y-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Cost incl. contingency (Rs)</label>
+          <label className="block text-sm font-medium text-text-secondary">Cost incl. contingency (Rs)</label>
           <input
             type="number"
             required
             value={cost}
             onChange={(e) => setCost(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">Client type</label>
+          <label className="block text-sm font-medium text-text-secondary">Client type</label>
           <select
             value={clientType}
             onChange={(e) => setClientType(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
           >
             {CLIENT_TYPES.map(([val, label]) => (
               <option key={val} value={val}>{label}</option>
             ))}
           </select>
           {policy && (
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-text-secondary mt-1">
               Floor {policy.floor_margin_percent}% · Target {policy.target_margin_percent}%
             </p>
           )}
@@ -103,11 +103,11 @@ export default function PricingCalculator({ token, onBack }) {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Discount</label>
+            <label className="block text-sm font-medium text-text-secondary">Discount</label>
             <select
               value={discountType}
               onChange={(e) => setDiscountType(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
             >
               <option value="none">None</option>
               <option value="percent">Percent</option>
@@ -115,29 +115,29 @@ export default function PricingCalculator({ token, onBack }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Value</label>
+            <label className="block text-sm font-medium text-text-secondary">Value</label>
             <input
               type="number"
               disabled={discountType === "none"}
               value={discountValue}
               onChange={(e) => setDiscountValue(e.target.value)}
-              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+              className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm disabled:bg-surface-raised"
             />
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white rounded py-2 text-sm font-medium hover:bg-blue-700"
+          className="w-full bg-gold text-white rounded py-2 text-sm font-medium hover:bg-gold-hover"
         >
           Calculate
         </button>
       </form>
 
       {result && (
-        <div className="bg-white shadow rounded-lg p-6 space-y-2 text-sm">
+        <div className="bg-surface shadow rounded-lg p-6 space-y-2 text-sm">
           <Row label="Cost incl. contingency" value={result.cost_incl_contingency} />
           <Row label="Target margin" value={`${result.target_margin_percent}%`} />
           <Row label="Selling price (ex-GST)" value={result.selling_price_ex_gst} />
@@ -146,7 +146,7 @@ export default function PricingCalculator({ token, onBack }) {
           <Row label="Margin %" value={`${result.margin_percent.toFixed(2)}%`} />
           <Row label="Markup %" value={`${result.markup_percent.toFixed(2)}%`} />
           {result.below_floor && (
-            <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+            <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
               Below floor margin ({result.floor_margin_percent}%) — Director approval required (K.1 step 10)
             </p>
           )}
@@ -162,7 +162,7 @@ function Row({ label, value, bold, big }) {
   const formatted = typeof value === "number" ? `Rs ${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : value;
   return (
     <div className={`flex items-center justify-between ${bold ? "font-semibold" : ""} ${big ? "text-base" : ""}`}>
-      <span className="text-gray-600">{label}</span>
+      <span className="text-text-secondary">{label}</span>
       <span>{formatted}</span>
     </div>
   );

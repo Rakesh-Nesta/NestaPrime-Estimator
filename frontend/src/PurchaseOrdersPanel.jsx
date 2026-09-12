@@ -10,15 +10,15 @@ import {
 } from "./api";
 
 const STATUS_COLORS = {
-  draft: "bg-gray-100 text-gray-600",
-  issued: "bg-blue-50 text-blue-700",
-  partially_received: "bg-amber-50 text-amber-700",
-  received: "bg-green-50 text-green-700",
-  cancelled: "bg-red-50 text-red-700",
+  draft: "bg-surface-raised text-text-secondary",
+  issued: "bg-gold-muted text-gold-hover",
+  partially_received: "bg-amber-500/10 text-amber-400",
+  received: "bg-green-500/10 text-green-400",
+  cancelled: "bg-red-500/10 text-red-400",
 };
 
 function StatusBadge({ status }) {
-  return <span className={`text-xs rounded px-1.5 py-0.5 ${STATUS_COLORS[status] ?? "bg-gray-100"}`}>{status}</span>;
+  return <span className={`text-xs rounded px-1.5 py-0.5 ${STATUS_COLORS[status] ?? "bg-surface-raised"}`}>{status}</span>;
 }
 
 export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRows, onChanged }) {
@@ -147,37 +147,37 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
     }
   }
 
-  if (loading) return <p className="text-xs text-gray-400">Loading purchase orders…</p>;
+  if (loading) return <p className="text-xs text-text-secondary">Loading purchase orders…</p>;
 
   return (
-    <div className="border border-gray-200 rounded p-3 space-y-3">
-      <p className="text-xs font-semibold text-gray-600">Purchase Orders (Part O)</p>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+    <div className="border border-border-dark rounded p-3 space-y-3">
+      <p className="text-xs font-semibold text-text-secondary">Purchase Orders (Part O)</p>
+      {error && <p className="text-xs text-red-400">{error}</p>}
 
-      {purchaseOrders.length === 0 && <p className="text-xs text-gray-400">No purchase orders raised yet.</p>}
+      {purchaseOrders.length === 0 && <p className="text-xs text-text-secondary">No purchase orders raised yet.</p>}
       {purchaseOrders.map((po) => (
-        <div key={po.id} className="border border-gray-200 rounded p-2 space-y-1.5 bg-gray-50">
+        <div key={po.id} className="border border-border-dark rounded p-2 space-y-1.5 bg-surface-raised">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span>
               <span className="font-medium">{po.po_no}</span> · {po.vendor_name} · <StatusBadge status={po.status} />
-              {po.delivery_date && <span className="text-gray-500"> · delivery {po.delivery_date}</span>}
-              {po.eway_bill_no && <span className="text-gray-500"> · e-way {po.eway_bill_no}</span>}
+              {po.delivery_date && <span className="text-text-secondary"> · delivery {po.delivery_date}</span>}
+              {po.eway_bill_no && <span className="text-text-secondary"> · e-way {po.eway_bill_no}</span>}
             </span>
             <div className="flex items-center gap-2">
               {po.status === "draft" && (
-                <button onClick={() => handleIssue(po.id)} className="text-blue-600 hover:underline">
+                <button onClick={() => handleIssue(po.id)} className="text-gold hover:underline">
                   Issue
                 </button>
               )}
               {po.status !== "received" && po.status !== "cancelled" && (
-                <button onClick={() => handleCancel(po.id)} className="text-red-600 hover:underline">
+                <button onClick={() => handleCancel(po.id)} className="text-red-400 hover:underline">
                   Cancel
                 </button>
               )}
             </div>
           </div>
           {po.lines.map((line) => (
-            <div key={line.id} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-white rounded px-2 py-1">
+            <div key={line.id} className="flex flex-wrap items-center justify-between gap-2 text-xs bg-surface rounded px-2 py-1">
               <span>
                 {line.item_name} · {line.quantity} {line.unit} x Rs {line.rate} = Rs {line.amount.toLocaleString()} ·
                 received {line.received_qty} · balance {line.balance_qty}
@@ -189,9 +189,9 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
                     value={receiveInputs[line.id] ?? ""}
                     onChange={(e) => setReceiveInputs((r) => ({ ...r, [line.id]: e.target.value }))}
                     placeholder="received qty"
-                    className="w-24 text-xs border border-gray-300 rounded px-1 py-0.5"
+                    className="w-24 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-1 py-0.5"
                   />
-                  <button onClick={() => handleReceive(po.id, line.id)} className="text-green-700 hover:underline">
+                  <button onClick={() => handleReceive(po.id, line.id)} className="text-green-400 hover:underline">
                     Record receipt
                   </button>
                 </div>
@@ -201,14 +201,14 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
         </div>
       ))}
 
-      <div className="border-t border-gray-200 pt-3 space-y-2">
-        <p className="text-xs font-medium text-gray-600">Raise a new purchase order</p>
+      <div className="border-t border-border-dark pt-3 space-y-2">
+        <p className="text-xs font-medium text-text-secondary">Raise a new purchase order</p>
 
         <div className="flex items-center gap-2">
           <select
             value={vendorId}
             onChange={(e) => setVendorId(e.target.value)}
-            className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
+            className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
           >
             <option value="">Select a vendor…</option>
             {vendors.map((v) => (
@@ -217,7 +217,7 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => setShowNewVendor((s) => !s)} className="text-xs text-blue-600 hover:underline">
+          <button type="button" onClick={() => setShowNewVendor((s) => !s)} className="text-xs text-gold hover:underline">
             {showNewVendor ? "Cancel" : "+ New vendor"}
           </button>
         </div>
@@ -229,27 +229,27 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
               value={newVendor.name}
               onChange={(e) => setNewVendor((v) => ({ ...v, name: e.target.value }))}
               placeholder="Vendor name"
-              className="flex-1 text-xs border border-gray-300 rounded px-2 py-1"
+              className="flex-1 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
             />
             <input
               type="text"
               value={newVendor.city}
               onChange={(e) => setNewVendor((v) => ({ ...v, city: e.target.value }))}
               placeholder="City"
-              className="w-28 text-xs border border-gray-300 rounded px-2 py-1"
+              className="w-28 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
             />
             <input
               type="text"
               value={newVendor.phone}
               onChange={(e) => setNewVendor((v) => ({ ...v, phone: e.target.value }))}
               placeholder="Phone"
-              className="w-32 text-xs border border-gray-300 rounded px-2 py-1"
+              className="w-32 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
             />
             <button
               type="button"
               onClick={handleCreateVendor}
               disabled={!newVendor.name}
-              className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+              className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
             >
               Add
             </button>
@@ -257,7 +257,7 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
         )}
 
         {availableRows.length === 0 ? (
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-text-secondary">
             Every Cost Sheet line already has an open PO, or there are no lines yet.
           </p>
         ) : (
@@ -274,7 +274,7 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
                   value={lineOverrides[row.id]?.quantity ?? ""}
                   onChange={(e) => updateOverride(row.id, "quantity", e.target.value)}
                   placeholder="Qty"
-                  className="col-span-3 text-xs border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100"
+                  className="col-span-3 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1 disabled:bg-surface-raised"
                 />
                 <input
                   type="number"
@@ -282,7 +282,7 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
                   value={lineOverrides[row.id]?.rate ?? ""}
                   onChange={(e) => updateOverride(row.id, "rate", e.target.value)}
                   placeholder="Rs/unit"
-                  className="col-span-4 text-xs border border-gray-300 rounded px-2 py-1 disabled:bg-gray-100"
+                  className="col-span-4 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1 disabled:bg-surface-raised"
                 />
               </div>
             ))}
@@ -294,20 +294,20 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
             type="date"
             value={deliveryDate}
             onChange={(e) => setDeliveryDate(e.target.value)}
-            className="text-xs border border-gray-300 rounded px-2 py-1"
+            className="text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
           />
           <input
             type="text"
             value={ewayBillNo}
             onChange={(e) => setEwayBillNo(e.target.value)}
             placeholder="E-way bill no. (optional)"
-            className="flex-1 text-xs border border-gray-300 rounded px-2 py-1"
+            className="flex-1 text-xs border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
           />
           <button
             type="button"
             onClick={handleRaisePO}
             disabled={!vendorId || !Object.values(selectedLineIds).some(Boolean)}
-            className="bg-blue-600 text-white text-xs rounded px-3 py-1 hover:bg-blue-700 disabled:opacity-50"
+            className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
           >
             Raise PO
           </button>

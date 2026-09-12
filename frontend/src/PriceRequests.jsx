@@ -19,12 +19,12 @@ const CHANNELS = [
 
 function StatusBadge({ status }) {
   const styles = {
-    open: "bg-gray-100 text-gray-700",
-    replied: "bg-blue-50 text-blue-700",
-    closed: "bg-green-50 text-green-700",
+    open: "bg-surface-raised text-text-secondary",
+    replied: "bg-gold-muted text-gold-hover",
+    closed: "bg-green-500/10 text-green-400",
   };
   return (
-    <span className={`text-xs rounded px-2 py-0.5 ${styles[status] || "bg-gray-100 text-gray-700"}`}>{status}</span>
+    <span className={`text-xs rounded px-2 py-0.5 ${styles[status] || "bg-surface-raised text-text-secondary"}`}>{status}</span>
   );
 }
 
@@ -54,17 +54,17 @@ function VendorsPanel({ token, vendors, onChanged }) {
   }
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-700">Vendors</h3>
-      <p className="text-xs text-gray-400">
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <h3 className="text-sm font-semibold text-text-secondary">Vendors</h3>
+      <p className="text-xs text-text-secondary">
         M.7.2 rule 5: WhatsApp only to opted-in numbers; email is opt-out by default.
       </p>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-400">{error}</p>}
       {vendors.map((v) => (
-        <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 border border-gray-200 rounded px-3 py-2 text-sm">
+        <div key={v.id} className="flex flex-wrap items-center justify-between gap-2 border border-border-dark rounded px-3 py-2 text-sm">
           <span>
             <span className="font-medium">{v.name}</span>{" "}
-            <span className="text-xs text-gray-400">{v.phone || "no phone"} · {v.email || "no email"}</span>
+            <span className="text-xs text-text-secondary">{v.phone || "no phone"} · {v.email || "no email"}</span>
           </span>
           <div className="flex items-center gap-3 text-xs">
             <label className="flex items-center gap-1">
@@ -90,22 +90,22 @@ function VendorsPanel({ token, vendors, onChanged }) {
         <input
           type="text" placeholder="Vendor name" value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          className="rounded border border-gray-300 px-2 py-1 text-sm"
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
         />
         <input
           type="text" placeholder="Phone" value={form.phone}
           onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-          className="rounded border border-gray-300 px-2 py-1 text-sm w-32"
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm w-32"
         />
         <input
           type="email" placeholder="Email" value={form.email}
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          className="rounded border border-gray-300 px-2 py-1 text-sm w-40"
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm w-40"
         />
         <button
           onClick={handleCreate}
           disabled={!form.name}
-          className="bg-blue-600 text-white text-xs rounded px-3 py-1.5 hover:bg-blue-700 disabled:opacity-50"
+          className="bg-gold text-white text-xs rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
         >
           Add vendor
         </button>
@@ -165,13 +165,13 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
     }
   }
 
-  if (loading) return <p className="text-xs text-gray-400">Loading replies…</p>;
+  if (loading) return <p className="text-xs text-text-secondary">Loading replies…</p>;
 
   return (
-    <div className="bg-gray-50 rounded p-3 space-y-2 text-xs">
-      {error && <p className="text-red-600">{error}</p>}
+    <div className="bg-surface-raised rounded p-3 space-y-2 text-xs">
+      {error && <p className="text-red-400">{error}</p>}
       {replies.map((r) => (
-        <div key={r.id} className="border border-gray-200 bg-white rounded px-2 py-2 space-y-1">
+        <div key={r.id} className="border border-border-dark bg-surface rounded px-2 py-2 space-y-1">
           <div className="flex items-center justify-between">
             <span className="font-medium">{r.vendor_name}</span>
             <span>
@@ -181,15 +181,15 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
               {r.vendor_reliability_score != null && ` · reliability ${r.vendor_reliability_score}`}
             </span>
           </div>
-          <p className="text-gray-500 italic">"{r.raw_reply_text}"</p>
+          <p className="text-text-secondary italic">"{r.raw_reply_text}"</p>
           {r.confirmed ? (
-            <p className="text-green-700">Used ({r.applied_as})</p>
+            <p className="text-green-400">Used ({r.applied_as})</p>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => handleUse(r.id, "master")}
                 disabled={r.parsed_rate == null}
-                className="bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700 disabled:opacity-50"
+                className="bg-gold text-white rounded px-2 py-1 hover:bg-gold-hover disabled:opacity-50"
               >
                 Use for master rate
               </button>
@@ -197,12 +197,12 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
                 type="text" placeholder="Cost sheet line id"
                 value={lineIdByReply[r.id] || ""}
                 onChange={(e) => setLineIdByReply((m) => ({ ...m, [r.id]: e.target.value }))}
-                className="border border-gray-300 rounded px-1 py-1 w-40"
+                className="border border-border-dark bg-surface-raised text-text-primary rounded px-1 py-1 w-40"
               />
               <button
                 onClick={() => handleUse(r.id, "cost_sheet_line")}
                 disabled={r.parsed_rate == null || !lineIdByReply[r.id]}
-                className="bg-gray-600 text-white rounded px-2 py-1 hover:bg-gray-700 disabled:opacity-50"
+                className="bg-surface-raised text-white rounded px-2 py-1 hover:bg-surface-raised disabled:opacity-50"
               >
                 Use for this line
               </button>
@@ -210,15 +210,15 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
           )}
         </div>
       ))}
-      {replies.length === 0 && <p className="text-gray-400">No replies captured yet.</p>}
+      {replies.length === 0 && <p className="text-text-secondary">No replies captured yet.</p>}
 
-      <div className="border-t border-gray-200 pt-2 space-y-1">
-        <p className="font-semibold text-gray-600">Capture a vendor reply</p>
+      <div className="border-t border-border-dark pt-2 space-y-1">
+        <p className="font-semibold text-text-secondary">Capture a vendor reply</p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={replyForm.vendor_id}
             onChange={(e) => setReplyForm((f) => ({ ...f, vendor_id: e.target.value }))}
-            className="border border-gray-300 rounded px-2 py-1"
+            className="border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
           >
             <option value="">Vendor…</option>
             {vendors.map((v) => (
@@ -229,24 +229,24 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
             type="text" placeholder='e.g. "Rs 68/kg ex-GST, valid 15 days"'
             value={replyForm.raw_reply_text}
             onChange={(e) => setReplyForm((f) => ({ ...f, raw_reply_text: e.target.value }))}
-            className="flex-1 min-w-[220px] border border-gray-300 rounded px-2 py-1"
+            className="flex-1 min-w-[220px] border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="number" placeholder="Rate (override)" value={replyForm.parsed_rate}
             onChange={(e) => setReplyForm((f) => ({ ...f, parsed_rate: e.target.value }))}
-            className="border border-gray-300 rounded px-2 py-1 w-32"
+            className="border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1 w-32"
           />
           <input
             type="text" placeholder="Unit" value={replyForm.parsed_unit}
             onChange={(e) => setReplyForm((f) => ({ ...f, parsed_unit: e.target.value }))}
-            className="border border-gray-300 rounded px-2 py-1 w-20"
+            className="border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1 w-20"
           />
           <select
             value={replyForm.parsed_gst_basis}
             onChange={(e) => setReplyForm((f) => ({ ...f, parsed_gst_basis: e.target.value }))}
-            className="border border-gray-300 rounded px-2 py-1"
+            className="border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1"
           >
             <option value="">GST basis…</option>
             <option value="inclusive">Inclusive</option>
@@ -255,17 +255,17 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
           <input
             type="number" placeholder="Validity days" value={replyForm.parsed_validity_days}
             onChange={(e) => setReplyForm((f) => ({ ...f, parsed_validity_days: e.target.value }))}
-            className="border border-gray-300 rounded px-2 py-1 w-28"
+            className="border border-border-dark bg-surface-raised text-text-primary rounded px-2 py-1 w-28"
           />
           <button
             onClick={handleCaptureReply}
             disabled={!replyForm.vendor_id || !replyForm.raw_reply_text}
-            className="bg-blue-600 text-white rounded px-3 py-1.5 hover:bg-blue-700 disabled:opacity-50"
+            className="bg-gold text-white rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
           >
             Capture reply
           </button>
         </div>
-        <p className="text-gray-400">
+        <p className="text-text-secondary">
           Fields left blank are auto-proposed from the reply text (rate/unit/GST basis/validity) -- override any of
           them before capturing.
         </p>
@@ -316,18 +316,18 @@ function NewPriceRequestForm({ token, rateItems, vendors, onCreated }) {
   const canSubmit = items.some((i) => i.rate_item_id) && vendorIds.size > 0 && channels.size > 0;
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 space-y-3">
-      <h3 className="text-sm font-semibold text-gray-700">Request a price update (M.7.3)</h3>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <h3 className="text-sm font-semibold text-text-secondary">Request a price update (M.7.3)</h3>
+      {error && <p className="text-xs text-red-400">{error}</p>}
 
       <div className="space-y-2">
-        <p className="text-xs font-medium text-gray-600">Items</p>
+        <p className="text-xs font-medium text-text-secondary">Items</p>
         {items.map((row, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">
             <select
               value={row.rate_item_id}
               onChange={(e) => updateItem(i, "rate_item_id", e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1 text-sm min-w-[220px]"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm min-w-[220px]"
             >
               <option value="">Select rate item…</option>
               {rateItems.map((ri) => (
@@ -337,20 +337,20 @@ function NewPriceRequestForm({ token, rateItems, vendors, onCreated }) {
             <input
               type="text" placeholder="Quantity band (e.g. 100-500 kg)" value={row.quantity_band}
               onChange={(e) => updateItem(i, "quantity_band", e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
             />
           </div>
         ))}
         <button
           onClick={() => setItems((rows) => [...rows, { rate_item_id: "", quantity_band: "" }])}
-          className="text-xs text-blue-600 hover:underline"
+          className="text-xs text-gold hover:underline"
         >
           + Add another item
         </button>
       </div>
 
       <div>
-        <p className="text-xs font-medium text-gray-600 mb-1">Vendors</p>
+        <p className="text-xs font-medium text-text-secondary mb-1">Vendors</p>
         <div className="flex flex-wrap gap-3">
           {vendors.map((v) => (
             <label key={v.id} className="flex items-center gap-1 text-xs">
@@ -372,18 +372,18 @@ function NewPriceRequestForm({ token, rateItems, vendors, onCreated }) {
         </div>
         <input
           type="date" value={requiredBy} onChange={(e) => setRequiredBy(e.target.value)}
-          className="rounded border border-gray-300 px-2 py-1 text-sm"
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
           title="Required by"
         />
         <input
           type="number" placeholder="Requested validity (days)" value={validityDays}
           onChange={(e) => setValidityDays(e.target.value)}
-          className="rounded border border-gray-300 px-2 py-1 text-sm w-44"
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm w-44"
         />
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50"
+          className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
         >
           Send price update request
         </button>
@@ -429,48 +429,48 @@ export default function PriceRequests({ token, onBack }) {
     }
   }
 
-  if (loading) return <p className="text-center text-gray-500 mt-10">Loading price requests…</p>;
+  if (loading) return <p className="text-center text-text-secondary mt-10">Loading price requests…</p>;
 
   return (
     <div className="max-w-4xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Vendor Price-Update Requests</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Vendor Price-Update Requests</h2>
           {onBack && (
-            <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+            <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-text-secondary mt-1">
           M.7.3: ask vendors for a current price, capture their reply, and use it to update the master rate or a
           Cost Sheet line. No real WhatsApp/email provider is wired up (the blueprint marks the BSP choice as
           "[confirm]") -- sends are recorded, replies are logged from what the vendor actually said.
         </p>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 
       <VendorsPanel token={token} vendors={vendors} onChanged={load} />
       <NewPriceRequestForm token={token} rateItems={rateItems} vendors={vendors} onCreated={load} />
 
-      <div className="bg-white shadow rounded-lg p-6 space-y-3">
+      <div className="bg-surface shadow rounded-lg p-6 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-700">Requests</h3>
-          <label className="flex items-center gap-1 text-xs text-gray-500">
+          <h3 className="text-sm font-semibold text-text-secondary">Requests</h3>
+          <label className="flex items-center gap-1 text-xs text-text-secondary">
             <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
             Overdue only
           </label>
         </div>
         {priceRequests.map((pr) => (
-          <div key={pr.id} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-2">
+          <div key={pr.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
             <div className="flex items-center justify-between">
               <span>
                 <StatusBadge status={pr.status} />
-                {pr.reminder_due && <span className="text-amber-700 text-xs ml-2">reminder due</span>}
-                {pr.required_by && <span className="text-xs text-gray-400 ml-2">required by {pr.required_by}</span>}
+                {pr.reminder_due && <span className="text-amber-400 text-xs ml-2">reminder due</span>}
+                {pr.required_by && <span className="text-xs text-text-secondary ml-2">required by {pr.required_by}</span>}
               </span>
               {pr.status !== "closed" && (
-                <button onClick={() => handleClose(pr.id)} className="text-xs text-gray-500 hover:underline">
+                <button onClick={() => handleClose(pr.id)} className="text-xs text-text-secondary hover:underline">
                   Close
                 </button>
               )}
@@ -479,7 +479,7 @@ export default function PriceRequests({ token, onBack }) {
               {pr.vendors.map((v) => (
                 <span
                   key={v.id}
-                  className={`rounded px-2 py-0.5 ${v.replied ? "bg-green-50 text-green-700" : v.reminder_due ? "bg-amber-50 text-amber-700" : "bg-gray-100 text-gray-600"}`}
+                  className={`rounded px-2 py-0.5 ${v.replied ? "bg-green-500/10 text-green-400" : v.reminder_due ? "bg-amber-500/10 text-amber-400" : "bg-surface-raised text-text-secondary"}`}
                 >
                   {v.vendor_name}{v.replied ? " · replied" : v.reminder_due ? " · no reply" : ""}
                 </span>
@@ -496,7 +496,7 @@ export default function PriceRequests({ token, onBack }) {
                           : { requestId: pr.id, itemId: item.id }
                       )
                     }
-                    className="text-xs text-blue-600 hover:underline"
+                    className="text-xs text-gold hover:underline"
                   >
                     {item.category} -- {item.item_name} {item.quantity_band ? `(${item.quantity_band})` : ""}
                     {expandedItem?.requestId === pr.id && expandedItem?.itemId === item.id ? " (hide replies)" : " (view replies)"}
@@ -509,7 +509,7 @@ export default function PriceRequests({ token, onBack }) {
             </div>
           </div>
         ))}
-        {priceRequests.length === 0 && <p className="text-sm text-gray-400 text-center py-6">No price requests yet.</p>}
+        {priceRequests.length === 0 && <p className="text-sm text-text-secondary text-center py-6">No price requests yet.</p>}
       </div>
     </div>
   );

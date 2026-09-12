@@ -152,14 +152,14 @@ export default function TenderMode({ token, project, onBack }) {
   }
 
   if (loading) {
-    return <p className="text-center text-gray-500 mt-10">Loading tender details…</p>;
+    return <p className="text-center text-text-secondary mt-10">Loading tender details…</p>;
   }
 
   if (!project.tender_mode) {
     return (
-      <div className="max-w-xl mx-auto mt-10 bg-white shadow rounded-lg p-8 text-center">
-        <p className="text-gray-500">Tender Mode only applies to Government-client projects (Part L).</p>
-        <button onClick={onBack} className="mt-4 text-sm text-blue-600 hover:underline">
+      <div className="max-w-xl mx-auto mt-10 bg-surface shadow rounded-lg p-8 text-center">
+        <p className="text-text-secondary">Tender Mode only applies to Government-client projects (Part L).</p>
+        <button onClick={onBack} className="mt-4 text-sm text-gold hover:underline">
           &larr; Back
         </button>
       </div>
@@ -168,24 +168,24 @@ export default function TenderMode({ token, project, onBack }) {
 
   return (
     <div className="max-w-2xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Tender Mode</h2>
-            <p className="text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-text-primary">Tender Mode</h2>
+            <p className="text-sm text-text-secondary">
               Project <span className="font-mono">{project.project_no}</span>
             </p>
           </div>
-          <button onClick={onBack} className="text-sm text-blue-600 hover:underline">
+          <button onClick={onBack} className="text-sm text-gold hover:underline">
             &larr; Back to Scope Checklist
           </button>
         </div>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 
       {details ? (
-        <div className="bg-white shadow rounded-lg p-6 space-y-2 text-sm">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Tender Details</h3>
+        <div className="bg-surface shadow rounded-lg p-6 space-y-2 text-sm">
+          <h3 className="text-sm font-semibold text-text-secondary mb-2">Tender Details</h3>
           <Row
             label="EMD amount"
             value={details.emd_amount ? `Rs ${details.emd_amount.toLocaleString()}` : "—"}
@@ -211,8 +211,8 @@ export default function TenderMode({ token, project, onBack }) {
           <Row label="Opening date" value={details.opening_date || "—"} />
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700">Add tender details</h3>
+        <form onSubmit={handleSubmit} className="bg-surface shadow rounded-lg p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-text-secondary">Add tender details</h3>
           <div className="grid grid-cols-2 gap-3">
             <Num label="EMD amount (Rs)" value={form.emd_amount} onChange={(v) => set("emd_amount", v)} />
             <DateField label="EMD validity" value={form.emd_validity_date} onChange={(v) => set("emd_validity_date", v)} />
@@ -223,20 +223,20 @@ export default function TenderMode({ token, project, onBack }) {
             <DateField label="Pre-bid meeting" value={form.pre_bid_meeting_date} onChange={(v) => set("pre_bid_meeting_date", v)} />
             <DateField label="Opening date" value={form.opening_date} onChange={(v) => set("opening_date", v)} />
           </div>
-          <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+          <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
             Save tender details
           </button>
         </form>
       )}
 
-      <div className="bg-white shadow rounded-lg p-6 space-y-2">
-        <h3 className="text-sm font-semibold text-gray-700">Technical bid checklist</h3>
-        <p className="text-xs text-gray-400">
+      <div className="bg-surface shadow rounded-lg p-6 space-y-2">
+        <h3 className="text-sm font-semibold text-text-secondary">Technical bid checklist</h3>
+        <p className="text-xs text-text-secondary">
           Part L: "Technical bid checklist (GST, PAN, turnover, past work certificates, ISO)" -- the blueprint's
           complete item list. These are NestaPrime's own bidder-eligibility documents, not the client's.
         </p>
         {checklist.map((item) => (
-          <div key={item.key} className="border border-gray-200 rounded px-3 py-2 text-sm space-y-1">
+          <div key={item.key} className="border border-border-dark rounded px-3 py-2 text-sm space-y-1">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2">
                 <input
@@ -247,10 +247,10 @@ export default function TenderMode({ token, project, onBack }) {
                 <span>{CHECKLIST_LABELS[item.key]}</span>
               </label>
               <div className="flex items-center gap-2 text-xs">
-                {item.confirmed && <span className="text-green-700">confirmed</span>}
+                {item.confirmed && <span className="text-green-400">confirmed</span>}
                 <button
                   onClick={() => setOpenChecklistDoc(openChecklistDoc === item.id ? null : item.id)}
-                  className="text-blue-600 hover:underline"
+                  className="text-gold hover:underline"
                 >
                   {openChecklistDoc === item.id ? "Hide document" : "Document"}
                 </button>
@@ -264,26 +264,26 @@ export default function TenderMode({ token, project, onBack }) {
       </div>
 
       {details && (
-        <div className="bg-white shadow rounded-lg p-6 space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700">Competitor bids (Price basis -- live L1 view)</h3>
-          <p className="text-xs text-gray-400">
+        <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-text-secondary">Competitor bids (Price basis -- live L1 view)</h3>
+          <p className="text-xs text-text-secondary">
             Part L: "L1 mode shows margin at proposed price live." Record each competing bid as you learn of it
             (a pre-bid estimate, a rumoured figure, an opening-day reading) -- the Quotation's own "L1 view" (below,
             in Documents) compares NestaPrime's current price against these live, recomputed on every look.
           </p>
           <div className="space-y-1">
             {competitorBids.map((b) => (
-              <div key={b.id} className="flex items-center justify-between text-sm border border-gray-200 rounded px-3 py-1.5">
+              <div key={b.id} className="flex items-center justify-between text-sm border border-border-dark rounded px-3 py-1.5">
                 <span>{b.bidder_name}</span>
                 <span className="flex items-center gap-2">
                   Rs {b.amount.toLocaleString()}
-                  <button onClick={() => handleDeleteBid(b.id)} className="text-xs text-red-600 hover:underline">
+                  <button onClick={() => handleDeleteBid(b.id)} className="text-xs text-red-400 hover:underline">
                     Remove
                   </button>
                 </span>
               </div>
             ))}
-            {competitorBids.length === 0 && <p className="text-xs text-gray-400">No competitor bids recorded yet.</p>}
+            {competitorBids.length === 0 && <p className="text-xs text-text-secondary">No competitor bids recorded yet.</p>}
           </div>
           <form onSubmit={handleAddBid} className="flex items-center gap-2">
             <input
@@ -292,7 +292,7 @@ export default function TenderMode({ token, project, onBack }) {
               placeholder="Bidder name"
               value={bidForm.bidder_name}
               onChange={(e) => setBidForm((f) => ({ ...f, bidder_name: e.target.value }))}
-              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm"
+              className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
             />
             <input
               type="number"
@@ -300,24 +300,24 @@ export default function TenderMode({ token, project, onBack }) {
               placeholder="Amount (Rs)"
               value={bidForm.amount}
               onChange={(e) => setBidForm((f) => ({ ...f, amount: e.target.value }))}
-              className="w-40 rounded border border-gray-300 px-3 py-2 text-sm"
+              className="w-40 rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
             />
-            <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+            <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
               Add bid
             </button>
           </form>
         </div>
       )}
 
-      <form onSubmit={handleBgCalc} className="bg-white shadow rounded-lg p-6 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-700">Performance BG cost calculator</h3>
+      <form onSubmit={handleBgCalc} className="bg-surface shadow rounded-lg p-6 space-y-3">
+        <h3 className="text-sm font-semibold text-text-secondary">Performance BG cost calculator</h3>
         <div className="grid grid-cols-2 gap-3">
           <Num label="BG amount (Rs)" value={bgForm.bg_amount} onChange={(v) => setBgForm((f) => ({ ...f, bg_amount: v }))} required />
           <Num label="Bank charge % p.a." value={bgForm.bank_charge_percent_pa} onChange={(v) => setBgForm((f) => ({ ...f, bank_charge_percent_pa: v }))} required />
           <Num label="Contract weeks" value={bgForm.contract_weeks} onChange={(v) => setBgForm((f) => ({ ...f, contract_weeks: v }))} required />
           <Num label="DLP (months)" value={bgForm.dlp_months} onChange={(v) => setBgForm((f) => ({ ...f, dlp_months: v }))} required />
         </div>
-        <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
           Calculate BG cost
         </button>
         {bgResult && (
@@ -328,9 +328,9 @@ export default function TenderMode({ token, project, onBack }) {
         )}
       </form>
 
-      <form onSubmit={handleReceivableCalc} className="bg-white shadow rounded-lg p-6 space-y-3">
-        <h3 className="text-sm font-semibold text-gray-700">Net receivable calculator</h3>
-        <p className="text-[11px] text-gray-400">
+      <form onSubmit={handleReceivableCalc} className="bg-surface shadow rounded-lg p-6 space-y-3">
+        <h3 className="text-sm font-semibold text-text-secondary">Net receivable calculator</h3>
+        <p className="text-[11px] text-text-secondary">
           GST-TDS is optional and internal-only -- never shown to the client or on any Quotation/BOQ document. The
           blueprint's own K.1b section (v5.1.9) formally retired GST-TDS logic; this field exists per an explicit
           decision to track it anyway as a receipt-side deduction.
@@ -340,7 +340,7 @@ export default function TenderMode({ token, project, onBack }) {
           <Num label="Retention %" value={receivableForm.retention_percent} onChange={(v) => setReceivableForm((f) => ({ ...f, retention_percent: v }))} required />
           <Num label="GST-TDS % (optional)" value={receivableForm.gst_tds_percent} onChange={(v) => setReceivableForm((f) => ({ ...f, gst_tds_percent: v }))} />
         </div>
-        <button type="submit" className="bg-blue-600 text-white text-sm rounded px-4 py-2 hover:bg-blue-700">
+        <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
           Calculate
         </button>
         {receivableResult && (
@@ -360,11 +360,11 @@ export default function TenderMode({ token, project, onBack }) {
 function Row({ label, value, bold, reminder }) {
   return (
     <div className={`flex items-center justify-between ${bold ? "font-semibold" : ""}`}>
-      <span className="text-gray-600">{label}</span>
+      <span className="text-text-secondary">{label}</span>
       <span>
         {value}
         {reminder && (
-          <span className="ml-2 text-xs text-red-700 bg-red-50 rounded px-1.5 py-0.5">{reminder}</span>
+          <span className="ml-2 text-xs text-red-400 bg-red-500/10 rounded px-1.5 py-0.5">{reminder}</span>
         )}
       </span>
     </div>
@@ -374,13 +374,13 @@ function Row({ label, value, bold, reminder }) {
 function Num({ label, value, onChange, required }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary">{label}</label>
       <input
         type="number"
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
       />
     </div>
   );
@@ -389,12 +389,12 @@ function Num({ label, value, onChange, required }) {
 function DateField({ label, value, onChange }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary">{label}</label>
       <input
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
       />
     </div>
   );
