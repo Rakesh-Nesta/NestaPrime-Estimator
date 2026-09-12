@@ -126,7 +126,7 @@ export default function MessagesPanel({ token, docType, docId }) {
         <button
           type="submit"
           disabled={!recipient || sending}
-          className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+          className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
         >
           {sending ? "Logging…" : "Log sent message"}
         </button>

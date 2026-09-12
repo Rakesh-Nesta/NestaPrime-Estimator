@@ -164,61 +164,61 @@ export default function SportsScopeAdmin({ token, onBack }) {
         <div className="flex gap-2 mt-4">
           <button
             onClick={() => setTab("sports")}
-            className={`text-sm rounded px-3 py-1 ${tab === "sports" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "sports" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Sports ({sports.length})
           </button>
           <button
             onClick={() => setTab("scope")}
-            className={`text-sm rounded px-3 py-1 ${tab === "scope" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "scope" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Scope items ({scopeItems.length})
           </button>
           <button
             onClick={() => setTab("margins")}
-            className={`text-sm rounded px-3 py-1 ${tab === "margins" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "margins" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Margin floor overrides ({sportMarginPolicies.length})
           </button>
           <button
             onClick={() => setTab("packages")}
-            className={`text-sm rounded px-3 py-1 ${tab === "packages" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "packages" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Package content ({packageContents.length})
           </button>
           <button
             onClick={() => setTab("hubs")}
-            className={`text-sm rounded px-3 py-1 ${tab === "hubs" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "hubs" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Hubs ({hubs.length})
           </button>
           <button
             onClick={() => setTab("accessories")}
-            className={`text-sm rounded px-3 py-1 ${tab === "accessories" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "accessories" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Accessory catalog ({accessoryCatalog.length})
           </button>
           <button
             onClick={() => setTab("netting")}
-            className={`text-sm rounded px-3 py-1 ${tab === "netting" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "netting" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Netting grades ({nettingGrades.length})
           </button>
           <button
             onClick={() => setTab("vehicles")}
-            className={`text-sm rounded px-3 py-1 ${tab === "vehicles" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "vehicles" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Vehicle classes ({vehicleClasses.length})
           </button>
           <button
             onClick={() => setTab("flooring_guides")}
-            className={`text-sm rounded px-3 py-1 ${tab === "flooring_guides" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "flooring_guides" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Flooring guides ({flooringGuides.length})
           </button>
           <button
             onClick={() => setTab("lighting_standards")}
-            className={`text-sm rounded px-3 py-1 ${tab === "lighting_standards" ? "bg-gold text-white" : "bg-surface-raised text-text-secondary"}`}
+            className={`text-sm rounded px-3 py-1 ${tab === "lighting_standards" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
           >
             Lighting standards ({luxStandards.length + poleCounts.length})
           </button>
@@ -389,7 +389,7 @@ function SportsTab({ token, sports, onAction }) {
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+              <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                 Save
               </button>
               <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
@@ -523,7 +523,7 @@ function ScopeItemsTab({ token, scopeItems, onAction }) {
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+              <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                 Save
               </button>
               <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
@@ -625,7 +625,7 @@ function MarginFloorsTab({ token, sports, sportMarginPolicies, onAction }) {
               className="w-24 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
             />
             <span className="text-xs text-text-secondary">%</span>
-            <button onClick={() => handleSave(s.id)} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+            <button onClick={() => handleSave(s.id)} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
               Save
             </button>
             <button onClick={() => setEditingSportId(null)} className="text-xs text-text-secondary hover:underline">
@@ -727,7 +727,7 @@ function AccessoryCatalogTab({ token, sports, accessoryCatalog, onAction }) {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+                    <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                       Save
                     </button>
                     <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
@@ -884,7 +884,7 @@ function NettingGradesTab({ token, nettingGrades, onAction }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+                <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                   Save
                 </button>
                 <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
@@ -1033,7 +1033,7 @@ function VehicleClassesTab({ token, vehicleClasses, onAction }) {
                 />
               </div>
               <div className="flex gap-2">
-                <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+                <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                   Save
                 </button>
                 <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
@@ -1152,7 +1152,7 @@ function HubsTab({ token, hubs, onAction }) {
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+              <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                 Save
               </button>
               <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
@@ -1320,7 +1320,7 @@ function PackageContentsTab({ token, sports, packageContents, onAction }) {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleSave(sport.id, editingKey.split(":")[1])}
-                  className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
+                  className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover"
                 >
                   Save
                 </button>
@@ -1427,7 +1427,7 @@ function FlooringGuidesTab({ token, sports, flooringGuides, onAction }) {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleSave(sport.id)}
-                    className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
+                    className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover"
                   >
                     Save
                   </button>
@@ -1538,7 +1538,7 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleSaveLux(category)}
-                      className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
+                      className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover"
                     >
                       Save
                     </button>
@@ -1591,7 +1591,7 @@ function LightingStandardsTab({ token, sports, luxStandards, poleCounts, onActio
             required
             className="w-28 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
           />
-          <button type="submit" className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+          <button type="submit" className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
             Set
           </button>
         </form>

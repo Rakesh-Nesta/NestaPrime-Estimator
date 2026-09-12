@@ -241,7 +241,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
                 </span>
               </p>
             )}
-            <label className="inline-block mt-1 text-xs bg-gold text-white rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
+            <label className="inline-block mt-1 text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
               {uploadingLogo ? "Uploading…" : logoMeta ? "Replace logo" : "Upload logo"}
               <input type="file" accept="image/png,image/svg+xml" onChange={handleLogoUpload} className="hidden" disabled={uploadingLogo} />
             </label>
@@ -264,7 +264,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           >
             Export to Excel
           </button>
-          <label className="text-xs bg-gold text-white rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
+          <label className="text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
             {importingExcel ? "Importing…" : "Import from Excel"}
             <input
               type="file"
@@ -336,7 +336,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
                   <div className="flex gap-2">
                     <button
                       onClick={saveEdit}
-                      className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
+                      className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover"
                     >
                       Save new version
                     </button>
@@ -406,7 +406,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
             />
           </div>
         </div>
-        <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+        <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
           Create setting
         </button>
       </form>
@@ -449,7 +449,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
         />
         <button
           type="submit"
-          className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover"
+          className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover"
         >
           Apply bulk update
         </button>
@@ -594,7 +594,7 @@ function UserManagementTab({ token, currentUser }) {
                       />
                       <button
                         onClick={() => handleResetPassword(u)}
-                        className="text-xs bg-gold text-white rounded px-2 py-1 hover:bg-gold-hover"
+                        className="text-xs bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover"
                       >
                         Save
                       </button>
@@ -820,7 +820,7 @@ function MessageTemplatesCard({ token }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={handleSaveEdit} className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover">
+                <button onClick={handleSaveEdit} className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover">
                   Save
                 </button>
                 <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">

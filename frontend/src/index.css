@@ -25,3 +25,16 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans);
 }
+
+/* Amendment 1's own acceptance criterion: every transition (nav underline,
+   sport-tile hover/select, etc.) collapses to an instant state change when
+   set, no exceptions -- one rule here covers all of them rather than a
+   motion-reduce: variant repeated on each transition individually. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

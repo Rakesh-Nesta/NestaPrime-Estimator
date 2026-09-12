@@ -272,7 +272,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
         <button
           onClick={() => onProjectCreated(result)}
-          className="mt-6 w-full bg-gold text-white rounded py-2 font-medium hover:bg-gold-hover"
+          className="mt-6 w-full bg-gold text-base rounded py-2 font-medium hover:bg-gold-hover"
         >
           Select sports for this project &rarr;
         </button>
@@ -362,7 +362,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         <button
           type="submit"
           disabled={submitting || !form.quickSportId}
-          className="w-full bg-gold text-white rounded py-2 font-medium hover:bg-gold-hover disabled:opacity-50"
+          className="w-full bg-gold text-base rounded py-2 font-medium hover:bg-gold-hover disabled:opacity-50"
         >
           {submitting ? "Creating…" : "Create project"}
         </button>
@@ -518,7 +518,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
       <button
         type="submit"
         disabled={submitting}
-        className="w-full bg-gold text-white rounded py-2 font-medium hover:bg-gold-hover disabled:opacity-50"
+        className="w-full bg-gold text-base rounded py-2 font-medium hover:bg-gold-hover disabled:opacity-50"
       >
         {submitting ? "Creating…" : "Create project"}
       </button>

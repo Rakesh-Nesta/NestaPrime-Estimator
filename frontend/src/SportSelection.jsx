@@ -294,17 +294,34 @@ function SportGroup({ title, sports, drafts, setDraft, cardErrors, onAdd }) {
 }
 
 function SportCard({ sport, draft, setDraft, error, onAdd }) {
+  const [justAdded, setJustAdded] = useState(false);
+
+  function handleAddClick() {
+    onAdd(sport);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 300);
+  }
+
   return (
-    <div className="border border-border-dark rounded-lg p-3">
-      <div className="flex items-baseline justify-between">
-        <h4 className="font-medium text-text-primary">{sport.name}</h4>
-        <span className="text-xs text-text-secondary">{sport.governing_body}</span>
+    <div
+      className={`border rounded-lg p-3 bg-surface transition-all duration-250 ease-out hover:-translate-y-0.5 hover:border-gold ${
+        justAdded ? "border-gold" : "border-border-dark"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between">
+            <h4 className="font-heading font-medium text-text-primary">{sport.name}</h4>
+            <span className="text-xs text-text-secondary">{sport.governing_body}</span>
+          </div>
+          <p className="text-xs text-text-secondary mt-1">Playing: {sport.playing_dims} ft</p>
+          <p className="text-xs text-text-secondary">Build: {sport.build_dims} ft</p>
+          {sport.min_clear_height_ft != null && (
+            <p className="text-xs text-text-secondary">Min clear height: {sport.min_clear_height_ft} ft</p>
+          )}
+        </div>
+        <CourtDiagram sport={sport} />
       </div>
-      <p className="text-xs text-text-secondary mt-1">Playing: {sport.playing_dims} ft</p>
-      <p className="text-xs text-text-secondary">Build: {sport.build_dims} ft</p>
-      {sport.min_clear_height_ft != null && (
-        <p className="text-xs text-text-secondary">Min clear height: {sport.min_clear_height_ft} ft</p>
-      )}
 
       <div className="mt-2 flex items-center gap-2">
         <select
@@ -324,8 +341,8 @@ function SportCard({ sport, draft, setDraft, error, onAdd }) {
           className="w-14 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
         />
         <button
-          onClick={() => onAdd(sport)}
-          className="bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover"
+          onClick={handleAddClick}
+          className="bg-gold text-base text-xs font-medium rounded px-3 py-1 hover:bg-gold-hover transition-colors duration-200"
         >
           Add
         </button>
@@ -333,6 +350,56 @@ function SportCard({ sport, draft, setDraft, error, onAdd }) {
 
       {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
     </div>
+  );
+}
+
+// Amendment 1: "animated sport-tile selection with court diagram." A small
+// inline SVG drawn from the sport's own real playing_l_ft/playing_w_ft
+// where numeric (so a badminton tile's rectangle is visibly narrower than
+// a football tile's, not decoration) -- a dashed placeholder otherwise,
+// for sports with a genuinely variable footprint (a track, a per-lane
+// layout) that Sport.playing_l_ft/w is null for by the same convention
+// used elsewhere in this codebase (C.3's deviation table, Part H's
+// lighting formula).
+function CourtDiagram({ sport }) {
+  const w = 72;
+  const h = 44;
+  const pad = 5;
+
+  if (sport.playing_l_ft == null || sport.playing_w_ft == null) {
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0 opacity-60">
+        <rect
+          x={pad} y={pad} width={w - pad * 2} height={h - pad * 2}
+          rx={2} fill="none" stroke="var(--color-text-secondary)" strokeWidth="1" strokeDasharray="3 2"
+        />
+      </svg>
+    );
+  }
+
+  const rawRatio = sport.playing_l_ft / sport.playing_w_ft;
+  const ratio = Math.min(2.6, Math.max(0.4, rawRatio));
+  const innerW = w - pad * 2;
+  const innerH = h - pad * 2;
+  let rectW = innerW;
+  let rectH = innerW / ratio;
+  if (rectH > innerH) {
+    rectH = innerH;
+    rectW = innerH * ratio;
+  }
+  const x = (w - rectW) / 2;
+  const y = (h - rectH) / 2;
+  const isLandscape = rectW >= rectH;
+
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0">
+      <rect x={x} y={y} width={rectW} height={rectH} rx={1.5} fill="none" stroke="var(--color-gold)" strokeWidth="1.25" />
+      {isLandscape ? (
+        <line x1={w / 2} y1={y} x2={w / 2} y2={y + rectH} stroke="var(--color-gold)" strokeWidth="1" opacity="0.55" />
+      ) : (
+        <line x1={x} y1={h / 2} x2={x + rectW} y2={h / 2} stroke="var(--color-gold)" strokeWidth="1" opacity="0.55" />
+      )}
+    </svg>
   );
 }
 

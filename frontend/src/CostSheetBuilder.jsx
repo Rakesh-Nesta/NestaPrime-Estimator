@@ -511,7 +511,7 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
         <CheckboxField label="Tall variant" checked={f.tall_variant} onChange={set("tall_variant")} />
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -598,7 +598,7 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         </div>
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -699,7 +699,7 @@ function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -768,7 +768,7 @@ function DrainageForm({ token, costSheetId, projectSports, sportsById, onAdded }
         <Field label="Sub-surface pipe Rs/m"><NumberInput value={f.subsurface_pipe_rate_per_m} onChange={set("subsurface_pipe_rate_per_m")} required /></Field>
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -860,7 +860,7 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Line-marking Rs/set"><NumberInput value={f.line_marking_rate_per_set} onChange={set("line_marking_rate_per_set")} /></Field>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -933,7 +933,7 @@ function WoodenFlooringForm({ token, costSheetId, projectSports, sportsById, onA
       <p className="text-[11px] text-text-secondary">Base (PCC/RCC/compacted stone) below this is the separate Base (D.1) tab.</p>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -997,7 +997,7 @@ function AcrylicPuForm({ token, costSheetId, projectSports, sportsById, onAdded 
       <p className="text-[11px] text-text-secondary">Sub-base (asphalt/WBM/PCC) below this is the separate Base (D.1) tab.</p>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1082,7 +1082,7 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1193,7 +1193,7 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
         <Field label="Hours/day" hint="informational only"><NumberInput value={f.hours_per_day} onChange={set("hours_per_day")} /></Field>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1264,7 +1264,7 @@ function HvacForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Acoustic panel Rs/sqm"><NumberInput value={f.acoustic_panel_rate_per_sqm} onChange={set("acoustic_panel_rate_per_sqm")} /></Field>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1399,7 +1399,7 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
       <button
         type="submit"
         disabled={!projectSportId}
-        className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
+        className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
       >
         Compute &amp; add to Cost Sheet
       </button>
@@ -1498,7 +1498,7 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1600,7 +1600,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
       </button>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1750,7 +1750,7 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2057,7 +2057,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2130,7 +2130,7 @@ function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdd
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2181,7 +2181,7 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2287,7 +2287,7 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2335,7 +2335,7 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2400,7 +2400,7 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       {result?.bg_contract_months != null && (
@@ -2480,7 +2480,7 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
         />
       </Field>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-white text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Add line
       </button>
     </form>
@@ -2659,7 +2659,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
         <button
           onClick={handleRecompute}
           disabled={!isDraft || lines.length === 0}
-          className="bg-surface-raised text-white text-sm rounded px-4 py-2 hover:bg-surface-raised disabled:opacity-50"
+          className="bg-surface-raised text-text-primary text-sm rounded px-4 py-2 hover:bg-border-dark disabled:opacity-50"
         >
           Recompute total (K.1 steps 1-6)
         </button>
@@ -2753,7 +2753,7 @@ export default function CostSheetBuilder({ token, costSheet, projectType, tender
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`text-xs rounded px-3 py-1.5 ${
-                  tab === t.key ? "bg-gold text-white" : "bg-surface-raised text-text-secondary hover:bg-surface-raised"
+                  tab === t.key ? "bg-gold text-base" : "bg-surface-raised text-text-secondary hover:bg-surface-raised"
                 }`}
               >
                 {t.label}

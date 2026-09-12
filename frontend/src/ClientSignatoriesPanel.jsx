@@ -148,7 +148,7 @@ export default function ClientSignatoriesPanel({ token, clientId }) {
             <button
               type="submit"
               disabled={saving}
-              className="col-span-2 bg-gold text-white text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
+              className="col-span-2 bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
             >
               {saving ? "Saving…" : "Add signatory"}
             </button>

@@ -324,7 +324,7 @@ function RateBlindLinesPanel({ token, costSheetId, role, onChanged }) {
           <button
             onClick={handlePropose}
             disabled={!form.category || !form.item_name || !form.unit || !form.quantity}
-            className="bg-gold text-white rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+            className="bg-gold text-base rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
           >
             Propose line
           </button>
@@ -455,7 +455,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
           {active && active.status === "verified" ? (
             <button
               onClick={() => handleRevise(active.id)}
-              className="bg-gold text-white text-xs rounded px-3 py-2 hover:bg-gold-hover"
+              className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover"
             >
               Revise (new R+1)
             </button>
@@ -463,7 +463,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
             <button
               onClick={handleCreate}
               disabled={!!active}
-              className="bg-gold text-white text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
+              className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
             >
               Create Cost Sheet
             </button>
@@ -499,7 +499,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
             <button
               onClick={handleRequestSkip}
               disabled={!skipReason}
-              className="bg-surface-raised text-white text-xs rounded px-3 py-2 hover:bg-surface-raised disabled:opacity-50"
+              className="bg-surface-raised text-text-primary text-xs rounded px-3 py-2 hover:bg-border-dark disabled:opacity-50"
             >
               Request skip
             </button>
@@ -702,7 +702,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                     reviseDrafts[est.id]?.refresh_pricing ?? false
                   )
                 }
-                className="bg-gold text-white rounded px-3 py-1 hover:bg-gold-hover"
+                className="bg-gold text-base rounded px-3 py-1 hover:bg-gold-hover"
               >
                 Create revision
               </button>
@@ -810,7 +810,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
             <button
               onClick={handleCreate}
               disabled={!optionForm.project_sport_id || !optionForm.cost_for_option}
-              className="bg-gold text-white text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
+              className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
             >
               Create Estimate
             </button>
@@ -1115,7 +1115,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
               </label>
               <button
                 onClick={() => handleRevise(q)}
-                className="bg-gold text-white rounded px-3 py-1 hover:bg-gold-hover"
+                className="bg-gold text-base rounded px-3 py-1 hover:bg-gold-hover"
               >
                 Create revision
               </button>
@@ -1162,7 +1162,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
           <button
             onClick={handleCreate}
             disabled={!selectedEstimateId}
-            className="bg-gold text-white text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
+            className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
           >
             Create Quotation
           </button>
@@ -1360,7 +1360,7 @@ function WorkOrderPanel({ token, quotationId }) {
                 onChange={(e) => setEntryForm((f) => ({ ...f, notes: e.target.value }))}
                 className="border border-border-dark bg-surface-raised text-text-primary rounded px-1.5 py-1 w-32"
               />
-              <button type="submit" className="bg-gold text-white rounded px-2 py-1 hover:bg-gold-hover">
+              <button type="submit" className="bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover">
                 Add
               </button>
             </form>
