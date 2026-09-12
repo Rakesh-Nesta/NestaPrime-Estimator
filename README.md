@@ -59,6 +59,12 @@ proposed amendments and 2 process notes governing everything built from 12 Septe
 blanket approval. Register freeze rule in force -- no new amendments beyond those 10
 without a formal register update.
 
+Draft specifications for Amendments 2, 4 and 9 (form simplification, dashboard/guided
+navigation, flexible court sizing) are in
+[`docs/annexures/Amendments-2-4-9-specs.md`](docs/annexures/Amendments-2-4-9-specs.md),
+per the register's own change process -- specification only, pending Director sign-off;
+no implementation yet.
+
 ## Stack
 
 - Backend: Python, FastAPI, SQLAlchemy, Alembic, PostgreSQL 15
