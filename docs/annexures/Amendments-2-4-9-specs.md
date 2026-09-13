@@ -11,6 +11,13 @@ today's Task 2 validation run (see the Task 2 report) -- they are exactly what A
 already exists to fix, so this spec treats them as the concrete acceptance criteria rather
 than a separate ask.
 
+**Revised same day (review session 2):** Amendment 4's spec below has been expanded with
+findings from a sales-rep workflow review of the live dashboard and nav -- project search,
+a per-client project list, "Pricing Calculator" naming, admin/user role separation
+(Director instruction), and a plain-language rewrite of the Recent Activity feed. See
+Annexure-2.md v1.10 for the matching register-level summary of these changes. Still
+specification only -- nothing below has been implemented.
+
 ---
 
 ## Amendment No. 2 — Simplified "New Project Setup" Form
@@ -95,20 +102,46 @@ click left you"):
 - Summary tiles: open projects, pending estimates, pending quotations, overdue clients
   (Part O's overdue_flag), this month's won value.
 - **Recent projects list** -- last N projects, each row clickable through to that project's
-  Documents / Cost Sheet / Estimate stage. This is the direct fix for gap #3.
-- Recent activity feed (last N audit-log-visible events).
+  Documents / Cost Sheet / Estimate stage. This is the direct fix for gap #3 (the global
+  half of it -- see "Per-client project list" below for the other half). Excludes
+  calibration/validation projects (Note R1) by default, with a toggle to show them.
+- **Project search** -- by client name, city, or project number, reachable from the
+  Dashboard and the nav; the recent-projects list is necessarily bounded, so a project
+  outside that window still needs to be findable without recreating it.
+- Recent activity feed (last N audit-log-visible events), rendered from a small
+  per-event-type template -- e.g. "{actor} updated {project}'s dimensions: {old} → {new}",
+  "{actor} created user {email} ({role})" -- not the raw field/value diff. Raw diffs remain
+  exclusive to the Audit Log screen. Includes a fix for blank dimensions rendering as the
+  literal text "NonexNone" -- template reads "Not set" for null values instead.
 
 **Guided step-path**, shown as a persistent breadcrumb/progress bar on every project screen:
 `Setup → Sport → Scope → Documents → Cost Sheet → Estimate → Quotation`, each completed step
 clickable to jump back into it.
 
+**Per-client project list** -- the Clients directory (`ClientsAdmin.jsx`) gets a "Projects"
+tab/section per client row, listing every project tied to that client with a link into
+each. This is the direct fix for the other half of gap #3 that the Dashboard's global
+recent-list doesn't cover: "show me everything for this client," not just "show me what's
+recent."
+
+**"Pricing Calculator" naming** -- rename the nav item to make clear it is a standalone
+quick-estimate utility, separate from the real Cost Sheet → Estimate → Quotation flow that
+lives inside a project. Exact label TBD with Director; the two must read as visibly
+different tools so a new user doesn't guess which one produces a real quotation.
+
 **Every section gets a "← Dashboard" link**, distinct from the existing "← Back" (previous
 step). Fixes the "dead end with only a Back button" pattern behind gaps #3 and #4.
 
-**Nav menu regrouped:**
-- *Daily Work*: Dashboard, Pricing Calculator, current project shortcuts.
-- *Management*: Clients, Reports, Price Requests.
-- *Admin*: Master Settings, Sports & Scope Admin, User Management, Audit Log.
+**Nav menu regrouped, and admin/user accounts genuinely separated (Director instruction,
+12 Sept) -- not just visually grouped:**
+- *Daily Work* (all roles): Dashboard, Pricing Calculator, current project shortcuts.
+- *Management* (all roles): Clients, Reports, Price Requests.
+- *Admin* (Director/Admin roles only -- rendered conditionally on the logged-in user's
+  role; not shown to other roles at all, not merely grouped under a visible heading):
+  Master Settings, Sports & Scope Admin, User Management, Audit Log.
+
+This is the minimum viable slice of Amendment 6a's fuller role-permission system, pulled
+forward because it's a role check on the nav component, not a new permissions engine.
 
 **Fix for gap #4:** "Back to project" is replaced by the Dashboard's recent-projects list (a
 real, server-persisted resume path) rather than a client-side "remember the last project"
@@ -122,8 +155,12 @@ in the top-right of the nav bar on every screen (currently absent entirely).
 the Admin nav group above so it's reachable, closing the last piece of that gap.
 
 **Acceptance criteria:** from a fresh login, a Director can open a project created a week ago
-without recreating it; every screen has both a Back and a Dashboard link; Logout is visible
-everywhere; User Management is reachable from the nav.
+without recreating it, either via the Dashboard's recent list, project search, or that
+client's own Projects list; every screen has both a Back and a Dashboard link; Logout is
+visible everywhere; User Management is reachable from the nav for admin roles only; a
+Sales/PM login sees no Admin-group nav items at all; the Recent Activity feed reads in
+plain language with no raw field diffs and no "NonexNone"; calibration/test projects are
+excluded from the default Recent Projects view.
 
 ---
 

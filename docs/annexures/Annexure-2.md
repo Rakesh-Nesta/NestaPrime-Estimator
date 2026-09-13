@@ -1,10 +1,19 @@
 # Annexure 2 — Proposed Amendments to the NestaPrime Estimator Application
 
-**Version 1.9 | Date: 11 September 2026 | Status: DRAFT — Pending Director Approval**
+**Version 1.10 | Date: 12 September 2026 | Status: DRAFT — Pending Director Approval**
 
 Source: `Annexure-2_NestaPrime-Estimator_Amendments.docx`, prepared by R. Patni (with AI
 development assistance). Committed here as the governing change register — see
 [`README.md`](../../README.md) for how it fits into the rest of the project record.
+
+**v1.10 changes (12 September, review session 2):** Amendment No. 4 expanded with
+acceptance criteria confirmed live on production, plus refinements found while
+reviewing the dashboard and nav with a sales-rep workflow in mind (project search,
+per-client project list, naming clarity, plain-language activity feed, admin/user
+role separation). Amendment No. 5 expanded to absorb the 12 September parking-lot
+item (Director decision: merge, not a new amendment). Note R3 added for two
+launch-night housekeeping items that never got a formal home. Nothing in this
+version has been implemented — recording only, per the Change Process below.
 
 ---
 
@@ -44,9 +53,54 @@ Business-summary dashboard; link back to dashboard from every section; guided st
 with progress bar; menu grouped Daily Work / Management / Admin. "The app itself is the
 training."
 
+**Confirmed live on production (12 Sept validation run) — these are Amendment 4's
+acceptance criteria, not separate asks:** no logout control anywhere in the UI; no
+screen to browse or reopen an existing project (the "Existing client" picker only
+starts a *new* project; the Clients directory has no per-client project links); the
+"Back to project" button always opens a blank New Project Setup screen instead of
+resuming anything; the User Management screen exists but isn't reachable from any menu.
+
+**Refinements added 12 Sept (review session 2, sales-rep workflow check):**
+- The dashboard's project list needs search/filter, not just "last N recent" — a
+  recent-only list stops helping once the project count grows past a screenful.
+- The Clients page itself needs a per-client project list, not just the global
+  recent-projects list on the dashboard — this is the specific half of the
+  production gap above that a dashboard alone doesn't fix.
+- "Pricing Calculator" (nav item) vs. the actual Cost Sheet → Estimate → Quotation
+  flow needs a naming decision so a new user isn't left guessing which one produces
+  a real quotation.
+- **Admin and user accounts are genuinely separated, not just visually grouped**
+  (Director instruction, 12 Sept): Master Settings, Sports & Scope Admin, Audit
+  Log, and User Management are hidden entirely for any role other than
+  Director/Admin — not placed under an "Admin" heading that every role still sees.
+  No unused headers shown to a role that can't act on them. This is pulled forward
+  from Amendment 6a as the minimum viable slice.
+- The Recent Activity feed renders in plain business language ("Dimensions updated
+  for P-2609-0002: 60×30 → 30×60 m", "New PM account created") — not raw
+  field-level diffs (`actual_dimensions: NonexNone → NonexNone`, `is_active: True →
+  False`). Raw diffs stay on the Audit Log screen only.
+- The dashboard's project list tags or filters out calibration/test projects (see
+  Note R1) so real client work isn't crowded by validation data.
+
+**Bugs bundled into this amendment's build (logged here so they aren't lost, not new
+scope):** dimensions render as literal text `NonexNone` when blank instead of "Not
+set"; today's nav bar has inconsistent spacing (Clients/Reports/Price Requests sit
+tighter than the rest of the row) — moot once this amendment replaces the nav, worth
+a direct fix only if this amendment slips.
+
 ### Amendment No. 5 — Customizable Forms: Admin Controls Compulsory Fields
 Every dropdown gets a "None" option; admin sets each field compulsory/optional/hidden
 from Master Settings. Phase 1: None options + dashboard. Phase 2: field-settings panel.
+
+**Merged in 12 Sept (Director decision — was parking-lot, reconciled as scope of this
+amendment, not a separate one):**
+- **Dropdown "Others" rule** — append "Others" to every dropdown component in the
+  app; selecting it dynamically renders a text input below; the typed text becomes
+  the display label on Cost Sheets and Quotation PDFs.
+- **Custom Notes component** — a reusable "+ Add Note" button on Project Setup, Cost
+  Sheet, and Estimate screens; toggles a multi-line textarea for unstructured
+  remarks; persisted on the Project record; passed through to the Quotation PDF
+  under "Special Remarks / T&C".
 
 ### Amendment No. 6 — User Rights Management + Reporting & Oversight
 6a: role-based permissions (what each role can see/do). 6b: admin reviews all quotations
@@ -97,6 +151,27 @@ quotation the app produces.
 instance and confirm app + data return correctly. A backup never restored is a hope, not
 a backup.
 
+**Note R3 — Launch-night housekeeping**: Two items from the original post-launch
+punch list were never formally closed out.
+
+(1) **Still open.** Deactivate the placeholder/test account(s) from setup — the live
+audit log shows a *Director*-role account, `agent-temp@nestaprime.com`, created 12
+September, which looks like exactly this kind of leftover test account and should be
+confirmed and deactivated. This needs a Director to act directly in production (User
+Management → find the account → set Inactive); the app's own guardrail
+(`backend/app/api/users.py::update_user`) already permits deactivating a Director-role
+account as long as at least one *other* active Director remains, so this is a one-click
+action once confirmed, not a DB script.
+
+(2) **Confirmed closed (13 Sept code check).** `distance_km`'s bound validation lives
+on the single shared `ProjectCreate` schema (`backend/app/api/projects.py`) that both
+Quick-mode (`handleQuickSubmit`) and Detailed-mode (`handleSubmit`) submit through in
+`frontend/src/ProjectSetup.jsx` — there is no separate Quick-mode schema that could
+have missed the fix. Quick mode simply never populates `distance_km` (defaults to
+`None`, which the `ge=0, le=99999.9` bound accepts); Detailed mode sends it as a real
+number and is validated by the same bound before it reaches Postgres. One schema, one
+fix, both paths covered.
+
 ## 3. Priority & Sequencing (Recommended)
 
 No calendar commitment (no "Week N" deadlines) -- work proceeds in small sections, each
@@ -121,19 +196,10 @@ New ideas raised after the v1.9 freeze, held here per the Register Freeze Rule (
 until reviewed at the next wave's completion -- not approved, not scheduled, not
 implemented.
 
-**Raised 12 September 2026** — described as "Amendment No. 5 (Customizable Fields)," but
-does not match the registered Amendment No. 5 above (dropdown "None" option +
-admin-controlled compulsory/optional/hidden fields). Parked as a distinct, unregistered
-idea pending reconciliation with the Director -- is this a new amendment, or a
-refinement of No. 5's own scope?
-
-1. **Dropdown "Others" rule** -- append "Others" to every dropdown component in the app;
-   selecting it dynamically renders a text input below; the typed text becomes the
-   display label on Cost Sheets and Quotation PDFs.
-2. **Custom Notes component** -- a reusable "+ Add Note" button on Project Setup, Cost
-   Sheet, and Estimate screens; toggles a multi-line textarea for unstructured remarks;
-   persisted on the Project record; passed through to the Quotation PDF under "Special
-   Remarks / T&C".
+*(Empty as of v1.10 — the item raised 12 September, "Amendment No. 5 (Customizable
+Fields)" / dropdown "Others" + Custom Notes, has been reconciled by Director decision:
+merged into Amendment No. 5's own scope above, not registered as a separate
+amendment. See Amendment No. 5.)*
 
 ## 4. Approval
 
