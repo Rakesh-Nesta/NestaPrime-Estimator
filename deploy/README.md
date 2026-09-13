@@ -193,16 +193,63 @@ sudo chmod -R 755 /var/www/nestaprime
 
 No need to redo steps 2, 4, or 6 -- secrets, seed data, and the nginx config all persist.
 
+## Backups & restore drill (Note R2)
+
+*"A backup never restored is a hope, not a backup."* The AWS-side Lightsail snapshot
+(already configured, covers the whole instance disk) doesn't know to quiesce Postgres
+first -- a snapshot taken mid-write is not the same guarantee as a real `pg_dump`. This
+closes that gap with a nightly consistent dump that lands *inside* the same instance
+disk the Lightsail snapshot already covers, so it needs no new off-instance storage or
+AWS credentials.
+
+**One-time setup, on the server:**
+
+```bash
+chmod +x deploy/backup_db.sh deploy/restore_drill.sh
+crontab -e
+```
+
+Add a line that runs the dump every night before Lightsail's own snapshot window (check
+the instance's actual snapshot schedule in the Lightsail console and pick a time a
+couple of hours ahead of it):
+
+```cron
+0 2 * * * /home/ubuntu/NestaPrime-Estimator/deploy/backup_db.sh >> /home/ubuntu/nestaprime-backups/backup.log 2>&1
+```
+
+Dumps land in `~/nestaprime-backups/` as `nestaprime_estimator_<UTC timestamp>.sql.gz`,
+gzip-integrity-checked before it ever overwrites anything, with the newest 14 kept and
+older ones pruned automatically (`deploy/backup_db.sh [dir] [retention_count]` to
+override either).
+
+**Quarterly restore drill.** Two halves -- both need to pass to actually trust the
+backup, not just one:
+
+1. **The pg_dump half (do this one every quarter, no Lightsail console needed):**
+   ```bash
+   deploy/restore_drill.sh ~/nestaprime-backups/nestaprime_estimator_<latest>.sql.gz
+   ```
+   Spins up a throwaway, fully isolated `postgres:16` container (never touches the
+   real database), restores the dump into it, prints every table's row count, and
+   exits non-zero if `users`/`sports` come back empty -- a restore that "succeeds" but
+   recovers nothing is exactly the failure mode this drill exists to catch. Tears the
+   container down automatically either way.
+2. **The full instance-snapshot half (do this one too, at least annually, since it
+   exercises the part `restore_drill.sh` can't -- an actual new Lightsail instance):**
+   In the Lightsail console, restore the latest automatic snapshot to a **new** test
+   instance (never overwrite the live one). On that test instance: `docker compose -f
+   docker-compose.prod.yml up -d`, confirm `curl http://127.0.0.1:8000/health` answers,
+   log into the app with a real account, open an existing project, confirm its data is
+   there. Delete the test instance once confirmed (Lightsail bills for a running
+   instance).
+
+Record every drill -- pass or fail -- in [docs/ops/restore-drill-log.md](../docs/ops/restore-drill-log.md), the same "recurring, provably done" discipline Note R2 itself asks for.
+
 ## What's deliberately not here yet
 
 - **HTTPS** -- serving plain HTTP on the IP directly; no domain name to get a TLS cert
   against yet. Worth revisiting once there's a domain pointed at this IP (`certbot
   --nginx` is the usual path).
-- **Automated backups of the `pgdata_prod` volume** -- the AWS-side snapshot mentioned
-  as already set up covers the instance, but doesn't know to quiesce Postgres first: a
-  snapshot taken mid-write is not the same guarantee as a real `pg_dump`. Worth a cron
-  job running `docker compose -f docker-compose.prod.yml exec db pg_dump ...` to a
-  separate location.
 - **A process supervisor restarting the stack on server reboot** -- `restart:
   unless-stopped` in the compose file brings containers back after a Docker daemon
   restart, but nothing currently re-runs `docker compose up` after a full server reboot

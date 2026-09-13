@@ -177,6 +177,21 @@ scope) is still open as a separate, PM/Director-led exercise.
 instance and confirm app + data return correctly. A backup never restored is a hope, not
 a backup.
 
+**Infrastructure in place (13 September 2026):** the existing Lightsail auto-snapshot
+doesn't quiesce Postgres first, so a real `pg_dump` was added alongside it (Director
+decision, 13 Sept: add the consistent backup, then drill that, rather than drilling a
+snapshot with a known mid-write risk). `deploy/backup_db.sh` (nightly cron, gzip,
+integrity-checked, 14-dump retention) and `deploy/restore_drill.sh` (an isolated,
+throwaway-container restore + row-count sanity check, safe to run anytime) — see
+[`deploy/README.md`](../../deploy/README.md#backups--restore-drill-note-r2) for the full
+runbook, both halves of the quarterly drill (pg_dump + the Lightsail instance-snapshot
+restore), and [`docs/ops/restore-drill-log.md`](../ops/restore-drill-log.md) for the
+recurring record. Both scripts verified locally against a real dump of the dev database
+(13 September 2026 → every table restored with its original row counts intact,
+`users`/`sports` non-empty) — this "Ongoing" item stays open by nature (it recurs every
+quarter), but the
+capability to actually run it, and prove it was run, is now real rather than aspirational.
+
 **Note R3 — Launch-night housekeeping (closed 13 September 2026)**: Two items from the
 original post-launch punch list were never formally closed out. Both are now resolved.
 
