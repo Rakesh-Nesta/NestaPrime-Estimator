@@ -12,6 +12,7 @@ from app.api import (
     client_signatories,
     clients,
     company,
+    cross_sell,
     dashboard,
     documents,
     exports,
@@ -123,6 +124,8 @@ app.include_router(message_templates.message_templates_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)
 app.include_router(vendors.products_router)
+app.include_router(cross_sell.cross_sell_addons_router)
+app.include_router(cross_sell.estimate_option_addons_router)
 app.include_router(price_requests.price_requests_router)
 app.include_router(site_surveys.site_surveys_router)
 app.include_router(purchase_orders.purchase_orders_router)

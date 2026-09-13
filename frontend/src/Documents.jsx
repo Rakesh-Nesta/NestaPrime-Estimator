@@ -5,6 +5,7 @@ import CostSheetBuilder from "./CostSheetBuilder";
 import MessagesPanel from "./MessagesPanel";
 import {
   addCostSheetLine,
+  addEstimateOptionAddon,
   addWorkOrderPaymentEntry,
   approveSkipRequest,
   createCostSheet,
@@ -19,11 +20,13 @@ import {
   getWorkOrder,
   listCostSheetLines,
   listCostSheets,
+  listEstimateOptionAddons,
   listEstimates,
   listProjectSports,
   listQuotations,
   listSkipRequests,
   listSports,
+  listSuggestedAddonsForProject,
   listWorkOrderPaymentEntries,
   markQuotationLost,
   markQuotationWon,
@@ -31,6 +34,7 @@ import {
   rejectCostSheet,
   rejectQuotation,
   releaseQuotation,
+  removeEstimateOptionAddon,
   reviseCostSheet,
   reviseEstimate,
   reviseQuotation,
@@ -542,6 +546,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [openOptionAttachmentsFor, setOpenOptionAttachmentsFor] = useState(null);
+  const [openOptionAddonsFor, setOpenOptionAddonsFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [rejectionReasons, setRejectionReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
@@ -760,10 +765,19 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                   >
                     {openOptionAttachmentsFor === opt.id ? "Hide photo" : "Product photo"}
                   </button>
+                  <button
+                    onClick={() => setOpenOptionAddonsFor(openOptionAddonsFor === opt.id ? null : opt.id)}
+                    className="text-text-secondary hover:underline"
+                  >
+                    {openOptionAddonsFor === opt.id ? "Hide add-ons" : "Add-ons"}
+                  </button>
                 </div>
               </div>
               {openOptionAttachmentsFor === opt.id && (
                 <AttachmentsPanel token={token} docType="estimate_option" docId={opt.id} />
+              )}
+              {openOptionAddonsFor === opt.id && (
+                <OptionAddons token={token} projectId={project.id} optionId={opt.id} />
               )}
             </div>
           ))}
@@ -819,6 +833,128 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
       ) : (
         <p className="text-xs text-text-secondary">Requires a Verified cost sheet (M.2 rule 1).</p>
       )}
+    </div>
+  );
+}
+
+// Amendment 3 (Section 7): "Complete Your Facility" -- up to 5 sport-matched
+// suggestions, one-tap add, a separate "Optional add-ons" subtotal (never
+// folded into the option's own price range -- that range stays exactly what
+// M.1 already computes). K.3: cost/margin come back null for Sales; the
+// selling price is still shown so the persuasion tool still works for them.
+function OptionAddons({ token, projectId, optionId }) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [added, setAdded] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
+  function load() {
+    return Promise.all([
+      listSuggestedAddonsForProject(token, projectId),
+      listEstimateOptionAddons(token, optionId),
+    ]).then(([s, a]) => {
+      setSuggestions(s);
+      setAdded(a);
+    });
+  }
+
+  useEffect(() => {
+    load()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, optionId]);
+
+  const addedAddonIds = new Set(added.map((row) => row.addon_id));
+  const addonsSubtotal = added.reduce((sum, row) => sum + row.selling_price, 0);
+
+  async function handleAdd(addonId) {
+    setError("");
+    setBusyId(addonId);
+    try {
+      await addEstimateOptionAddon(token, optionId, addonId);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleRemove(rowId) {
+    setError("");
+    setBusyId(rowId);
+    try {
+      await removeEstimateOptionAddon(token, rowId);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loading) {
+    return <p className="text-xs text-text-secondary px-2 py-1">Loading add-ons…</p>;
+  }
+
+  return (
+    <div className="bg-surface-raised rounded px-2 py-2 text-xs space-y-2">
+      {error && <p className="text-red-400">{error}</p>}
+
+      {added.length > 0 && (
+        <div className="space-y-1">
+          <p className="font-medium text-text-secondary">Optional add-ons on this option</p>
+          {added.map((row) => (
+            <div key={row.id} className="flex items-center justify-between bg-surface rounded px-2 py-1">
+              <span>
+                {row.name}
+                {row.unit ? ` (${row.unit})` : ""} · Rs {Math.round(row.selling_price).toLocaleString()}
+              </span>
+              <button
+                onClick={() => handleRemove(row.id)}
+                disabled={busyId === row.id}
+                className="text-red-400 hover:underline disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <p className="text-text-secondary">
+            Add-ons subtotal: Rs {Math.round(addonsSubtotal).toLocaleString()} (shown separately, not folded into
+            the price range above)
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-1">
+        <p className="font-medium text-text-secondary">Suggested for this project</p>
+        {suggestions.filter((s) => !addedAddonIds.has(s.id)).length === 0 ? (
+          <p className="text-text-secondary">
+            {suggestions.length === 0 ? "No matching add-ons in the catalog yet." : "All suggestions already added."}
+          </p>
+        ) : (
+          suggestions
+            .filter((s) => !addedAddonIds.has(s.id))
+            .map((s) => (
+              <div key={s.id} className="flex items-center justify-between bg-surface rounded px-2 py-1">
+                <span>
+                  {s.name}
+                  {s.unit ? ` (${s.unit})` : ""} · Rs {Math.round(s.selling_price).toLocaleString()}
+                  {s.description && <span className="text-text-secondary"> — {s.description}</span>}
+                </span>
+                <button
+                  onClick={() => handleAdd(s.id)}
+                  disabled={busyId === s.id}
+                  className="text-gold hover:underline disabled:opacity-50"
+                >
+                  + Add
+                </button>
+              </div>
+            ))
+        )}
+      </div>
     </div>
   );
 }

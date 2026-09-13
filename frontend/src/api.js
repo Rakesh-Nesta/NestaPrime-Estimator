@@ -1576,3 +1576,66 @@ export async function resetUserPassword(token, userId, newPassword) {
   });
   return handle(res);
 }
+
+// Amendment 3 (Section 7): "Complete Your Facility" cross-sell add-ons.
+
+export async function listCrossSellAddons(token) {
+  const res = await fetch(`${API_BASE}/cross-sell-addons`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createCrossSellAddon(token, payload) {
+  const res = await fetch(`${API_BASE}/cross-sell-addons`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateCrossSellAddon(token, addonId, payload) {
+  const res = await fetch(`${API_BASE}/cross-sell-addons/${addonId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function setCrossSellAddonSports(token, addonId, sportIds) {
+  const res = await fetch(`${API_BASE}/cross-sell-addons/${addonId}/sports`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ sport_ids: sportIds }),
+  });
+  return handle(res);
+}
+
+export async function listSuggestedAddonsForProject(token, projectId) {
+  const res = await fetch(`${API_BASE}/cross-sell-addons/suggestions/for-project/${projectId}`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function listEstimateOptionAddons(token, optionId) {
+  const res = await fetch(`${API_BASE}/estimate-options/${optionId}/addons`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function addEstimateOptionAddon(token, optionId, addonId) {
+  const res = await fetch(`${API_BASE}/estimate-options/${optionId}/addons`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ addon_id: addonId }),
+  });
+  return handle(res);
+}
+
+export async function removeEstimateOptionAddon(token, rowId) {
+  const res = await fetch(`${API_BASE}/estimate-option-addons/${rowId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+}

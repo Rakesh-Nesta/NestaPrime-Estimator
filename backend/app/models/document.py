@@ -298,6 +298,40 @@ class EstimateOption(Base):
     )
 
 
+class EstimateOptionAddon(Base):
+    """Amendment 3: one "Complete Your Facility" add-on the client kept
+    on this Estimate option -- "one-tap add ... never forced." Snapshots
+    name/category/price/cost/margin at the moment it was added, the same
+    freezing principle used throughout this app (M.2's own rule that a
+    document's figures don't silently drift when the underlying master
+    data changes later) -- editing the CrossSellAddon catalog afterwards
+    never rewrites an Estimate a client has already seen.
+
+    Estimate-only by design (Director decision, Section 7 spec): this
+    never becomes a real Quotation line -- a Sales/PM who wants to
+    actually bill an accepted add-on folds its scope into the Cost Sheet
+    manually, same as any other real cost."""
+
+    __tablename__ = "estimate_option_addons"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    estimate_option_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("estimate_options.id"), nullable=False
+    )
+    addon_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cross_sell_addons.id"), nullable=False)
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    selling_price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    # K.3: cost/margin are the same PM/Director-only figures as everywhere
+    # else in this app -- Sales sees selling_price only.
+    cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    margin_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+
+
 class Quotation(Base):
     """Part M.1 stage 3. Cannot be created until the Estimate shows
     Client approved or Client demand received on at least one option
