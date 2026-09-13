@@ -1381,7 +1381,7 @@ export async function listMessages(token, docType, docId) {
   return handle(res);
 }
 
-export async function createMessage(token, { docType, docId, channel, recipient, templateKey, templateId, subject, bodyNote, attachmentId }) {
+export async function createMessage(token, { docType, docId, channel, recipient, templateKey, templateId, subject, bodyNote, attachmentId, includeDocument }) {
   const res = await fetch(`${API_BASE}/messages`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
@@ -1395,6 +1395,7 @@ export async function createMessage(token, { docType, docId, channel, recipient,
       subject: subject || null,
       body_note: bodyNote || null,
       attachment_id: attachmentId || null,
+      include_document: !!includeDocument,
     }),
   });
   return handle(res);

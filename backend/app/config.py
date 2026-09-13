@@ -17,5 +17,21 @@ class Settings(BaseSettings):
     # writes bytes, not this setting's meaning.
     attachment_storage_root: str = "uploads"
 
+    # Amendment 8 (Section 8): the company's self-hosted WhatsApp backend
+    # (wa-gateway -- Baileys/WhatsApp Web protocol, not a paid BSP).
+    # Blank by default so a dev/test environment with no .env entry for
+    # these simply can't reach a real gateway -- app/services/wa_gateway.py
+    # treats an empty base URL as "not configured" and fails fast rather
+    # than attempting a network call.
+    wa_gateway_base_url: str = ""
+    wa_gateway_api_key: str = ""
+    # Verified against wa-gateway's X-Webhook-Secret header on inbound
+    # delivery-status webhooks (app/api/wa_gateway_webhook.py).
+    wa_gateway_webhook_secret: str = ""
+
+    # Amendment 8 (Section 8): Telegram Bot API token (from @BotFather).
+    # Same "blank = not configured, fail fast" discipline as wa-gateway.
+    telegram_bot_token: str = ""
+
 
 settings = Settings()

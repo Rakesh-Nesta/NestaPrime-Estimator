@@ -413,12 +413,10 @@ def _package_content_flow(db: Session, styles, sport: Sport, option: EstimateOpt
 # ---------------------------------------------------------------------------
 
 
-@pdf_documents_router.get("/estimates/{estimate_id}/pdf")
-def get_estimate_pdf(
-    estimate_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
-):
+def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO, str]:
+    """Amendment 8 (Section 8): factored out of the route below so
+    app/api/messages.py can attach the same PDF to a WhatsApp/Telegram
+    send without a second, divergent copy of this layout."""
     estimate = _get_estimate(db, estimate_id)
     project = db.query(Project).filter(Project.id == estimate.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -507,7 +505,17 @@ def get_estimate_pdf(
 
     buffer = io.BytesIO()
     SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm).build(story)
-    return _pdf_response(buffer, f"{estimate.document_no}.pdf")
+    return buffer, f"{estimate.document_no}.pdf"
+
+
+@pdf_documents_router.get("/estimates/{estimate_id}/pdf")
+def get_estimate_pdf(
+    estimate_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    buffer, filename = build_estimate_pdf(db, estimate_id)
+    return _pdf_response(buffer, filename)
 
 
 # ---------------------------------------------------------------------------
@@ -575,12 +583,11 @@ def _granular_boq_rows_for_sport(
     return rows
 
 
-@pdf_documents_router.get("/quotations/{quotation_id}/pdf")
-def get_quotation_pdf(
-    quotation_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
-):
+def build_quotation_pdf(db: Session, quotation_id: uuid.UUID, current_user) -> tuple[io.BytesIO, str]:
+    """Amendment 8 (Section 8): see build_estimate_pdf's own docstring.
+    current_user is threaded through to the internal get_schedule() call
+    below (called directly as a plain function here, not through
+    FastAPI's own dependency injection, so it needs a real value)."""
     quotation = _get_quotation(db, quotation_id)
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -826,4 +833,14 @@ def get_quotation_pdf(
 
     buffer = io.BytesIO()
     SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm).build(story)
-    return _pdf_response(buffer, f"{quotation.document_no}.pdf")
+    return buffer, f"{quotation.document_no}.pdf"
+
+
+@pdf_documents_router.get("/quotations/{quotation_id}/pdf")
+def get_quotation_pdf(
+    quotation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    buffer, filename = build_quotation_pdf(db, quotation_id, current_user)
+    return _pdf_response(buffer, filename)

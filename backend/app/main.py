@@ -46,6 +46,7 @@ from app.api import (
     tender,
     users,
     vendors,
+    wa_gateway_webhook,
     work_orders,
 )
 
@@ -120,6 +121,7 @@ app.include_router(exports.exports_router)
 app.include_router(attachments.attachments_router)
 app.include_router(audit_log.audit_log_router)
 app.include_router(messages.messages_router)
+app.include_router(wa_gateway_webhook.wa_gateway_webhook_router)
 app.include_router(message_templates.message_templates_router)
 app.include_router(pdf_documents.pdf_documents_router)
 app.include_router(vendors.vendors_router)

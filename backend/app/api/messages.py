@@ -1,11 +1,15 @@
+import base64
+import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.attachments import _get_document_or_404, _require_doc_type_role, _resolve_client_id
+from app.api.pdf_documents import build_estimate_pdf, build_quotation_pdf
 from app.api.settings import get_internal_email_domains
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -14,8 +18,17 @@ from app.models.client import Client
 from app.models.message import Message, MessageChannel, MessageStatus
 from app.models.message_template import MessageTemplate, WhatsappTemplateStatus
 from app.models.setting import DocumentType
+from app.services import telegram, wa_gateway
+from app.services.message_rendering import render_placeholders
+
+logger = logging.getLogger(__name__)
 
 messages_router = APIRouter(prefix="/messages", tags=["messages"])
+
+# Amendment 8 (Section 8): the two doc types that actually have a
+# generated PDF today (build_estimate_pdf/build_quotation_pdf) -- the
+# only ones include_document=True can attach.
+_DOC_TYPES_WITH_PDF = (DocumentType.ESTIMATE, DocumentType.QUOTATION)
 
 # Same role split as attachments.py: Cost Sheet stays cost-gated,
 # Estimate/Quotation follow the document-editing roles (M.4).
@@ -43,13 +56,16 @@ def _enforce_internal_document_channel(db: Session, doc_type: DocumentType, chan
     WhatsApp; the API rejects any other recipient.' Unlike
     _enforce_client_consent (which only cares what the client agreed
     to), this is an absolute gate that applies regardless of role or
-    consent -- there is no opt-in that makes it acceptable to WhatsApp a
+    consent -- there is no opt-in that makes it acceptable to WhatsApp
+    (or, by the same reasoning, Telegram -- Amendment 8's Section 8 spec
+    keeps Cost Sheet client-external channels off the table entirely) a
     Cost Sheet or email it outside the company."""
     if doc_type not in _INTERNAL_DOC_TYPES:
         return
-    if channel == MessageChannel.WHATSAPP:
+    if channel in (MessageChannel.WHATSAPP, MessageChannel.TELEGRAM):
         raise HTTPException(
-            status_code=400, detail="Internal documents (Cost Sheet) may never be sent by WhatsApp (M.7.2 rule 7)"
+            status_code=400,
+            detail=f"Internal documents (Cost Sheet) may never be sent by {channel.value} (M.7.2 rule 7)",
         )
     domain = recipient.rsplit("@", 1)[-1].lower() if "@" in recipient else ""
     if domain not in get_internal_email_domains(db):
@@ -81,6 +97,11 @@ def _enforce_client_consent(db: Session, doc_type: DocumentType, doc_id: uuid.UU
         raise HTTPException(
             status_code=400,
             detail=f"Client '{client.name}' has not opted in to WhatsApp messages (M.7.2 rule 5)",
+        )
+    if channel == MessageChannel.TELEGRAM and not client.telegram_opt_in:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Client '{client.name}' has not opted in to Telegram messages (M.7.2 rule 5)",
         )
     if channel == MessageChannel.EMAIL and not client.email_opt_in:
         raise HTTPException(
@@ -133,6 +154,12 @@ class MessageCreate(BaseModel):
     subject: str | None = None
     body_note: str | None = None
     attachment_id: uuid.UUID | None = None
+    # Amendment 8 (Section 8): attach the document's own generated PDF
+    # (Estimate/Quotation only -- no PDF exists for any other doc_type).
+    # Ignored for email (still log-only) and irrelevant if attachment_id
+    # is also given (an explicit stored file always wins over the
+    # generated one).
+    include_document: bool = False
 
 
 class MessageOut(BaseModel):
@@ -148,9 +175,60 @@ class MessageOut(BaseModel):
     body_note: str | None
     attachment_id: uuid.UUID | None
     status: MessageStatus
+    provider_message_id: str | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+def _document_for_send(
+    doc_type: DocumentType, doc_id: uuid.UUID, db: Session, current_user
+) -> tuple[bytes, str] | None:
+    """Generates the Estimate/Quotation PDF fresh (never stored) for a
+    real WhatsApp/Telegram send. Returns (bytes, filename) or None if
+    this doc_type has no PDF."""
+    if doc_type == DocumentType.ESTIMATE:
+        buffer, filename = build_estimate_pdf(db, doc_id)
+        return buffer.getvalue(), filename
+    if doc_type == DocumentType.QUOTATION:
+        buffer, filename = build_quotation_pdf(db, doc_id, current_user)
+        return buffer.getvalue(), filename
+    return None
+
+
+def _dispatch_send(
+    message: Message, outbound_text: str, doc_bytes: bytes | None, doc_filename: str | None,
+) -> None:
+    """Amendment 8 (Section 8): the one real send attempt this
+    endpoint makes -- synchronous, matching this app's style everywhere
+    else (no background job queue exists). Mutates message.status /
+    message.provider_message_id in place; never raises -- a provider
+    failure is a FAILED row, not a 500, since the record itself (Part O
+    MESSAGES) should exist either way."""
+    try:
+        if message.channel == MessageChannel.WHATSAPP:
+            if doc_bytes:
+                provider_id = wa_gateway.send_media(
+                    message.recipient, "document", base64.b64encode(doc_bytes).decode(),
+                    doc_filename, "application/pdf", caption=outbound_text or None,
+                )
+            else:
+                provider_id = wa_gateway.send_text(message.recipient, outbound_text)
+        elif message.channel == MessageChannel.TELEGRAM:
+            if doc_bytes:
+                provider_id = telegram.send_document(
+                    message.recipient, doc_bytes, doc_filename, caption=outbound_text or None
+                )
+            else:
+                provider_id = telegram.send_text(message.recipient, outbound_text)
+        else:
+            return  # email: no provider wired up, stays RECORDED as before this amendment
+    except (wa_gateway.WaGatewayError, telegram.TelegramError) as exc:
+        logger.warning("Message send failed (channel=%s): %s", message.channel.value, exc)
+        message.status = MessageStatus.FAILED
+        return
+    message.status = MessageStatus.SENT
+    message.provider_message_id = provider_id
 
 
 @messages_router.post("", response_model=MessageOut, status_code=201)
@@ -159,27 +237,35 @@ def create_message(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
-    """Part O MESSAGES / M.7.2 rule 1. This is a manual send-tracking
-    record, not a real dispatch: no email or WhatsApp provider is wired
-    up in this build, so calling this endpoint logs that a PM/Sales/
-    Director sent the document themselves (by whatever means) -- it
-    never actually sends anything. status is always RECORDED. Repeatable
-    any number of times per document (a re-send, a WhatsApp follow-up to
-    an earlier email, etc.), independent of the document's own status-
-    transition endpoints (POST .../send).
+    """Part O MESSAGES / M.7.2 rule 1: 'Every send creates a MESSAGES
+    record.' Amendment 8 (Section 8) wired up real sending for WhatsApp
+    (wa-gateway) and Telegram (Bot API) -- the record is created either
+    way (a failed send is still logged, per M.7.2 rule 1), but for those
+    two channels this now actually attempts the send and reflects a real
+    outcome in `status`. Email is unchanged: no provider wired up, so it
+    stays a manual log entry (status=recorded).
 
     template_id (M.7.2 rule 6) references a real Director-managed
     MESSAGE_TEMPLATES row -- _resolve_template enforces the channel/
-    document-type match and, for WhatsApp, that Meta has actually
-    approved it. Its subject/body default subject/body_note when the
-    caller doesn't override them; the template's {placeholder} text is
-    not substituted (no real provider is wired up to consume the
-    rendered result -- see the docstring on MessageTemplate)."""
+    document-type match and, for WhatsApp, that this app's own approval
+    gate has been satisfied (Section 8 Decision C -- kept even though
+    wa-gateway isn't a Meta-approved BSP). Its subject/body default
+    subject/body_note when the caller doesn't override them. The stored
+    body_note keeps the literal {placeholder} template text unchanged;
+    only the text actually handed to a real provider is rendered
+    (render_placeholders), against the specific document being sent."""
     _require_doc_type_role(db, payload.doc_type, current_user)
-    _get_document_or_404(db, payload.doc_type, payload.doc_id)
+    document = _get_document_or_404(db, payload.doc_type, payload.doc_id)
     _enforce_client_consent(db, payload.doc_type, payload.doc_id, payload.channel)
     _enforce_internal_document_channel(db, payload.doc_type, payload.channel, payload.recipient)
 
+    if payload.include_document and payload.doc_type not in _DOC_TYPES_WITH_PDF:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{payload.doc_type.value} has no generated document to attach",
+        )
+
+    attachment = None
     if payload.attachment_id is not None:
         attachment = db.query(Attachment).filter(Attachment.id == payload.attachment_id).first()
         if not attachment:
@@ -209,6 +295,25 @@ def create_message(
         attachment_id=payload.attachment_id,
         status=MessageStatus.RECORDED,
     )
+
+    if payload.channel in (MessageChannel.WHATSAPP, MessageChannel.TELEGRAM):
+        client_id = _resolve_client_id(db, payload.doc_type, payload.doc_id)
+        client = db.query(Client).filter(Client.id == client_id).first() if client_id else None
+        default_text = f"Please find attached: {getattr(document, 'document_no', payload.doc_type.value)}"
+        outbound_text = render_placeholders(body_note or default_text, payload.doc_type, document, client)
+
+        doc_bytes: bytes | None = None
+        doc_filename: str | None = None
+        if attachment is not None:
+            path = Path(attachment.storage_path)
+            if path.exists():
+                doc_bytes = path.read_bytes()
+                doc_filename = attachment.original_filename
+        elif payload.include_document:
+            doc_bytes, doc_filename = _document_for_send(payload.doc_type, payload.doc_id, db, current_user)
+
+        _dispatch_send(message, outbound_text, doc_bytes, doc_filename)
+
     db.add(message)
     db.commit()
     db.refresh(message)
