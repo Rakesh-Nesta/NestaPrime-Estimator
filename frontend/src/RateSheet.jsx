@@ -30,6 +30,7 @@ const emptyForm = {
   unit: "",
   hsn_sac: "",
   rate: "",
+  gst_percent: "",
   vendor: "",
   city_of_quote: "",
   labour_category_id: "",
@@ -74,6 +75,7 @@ export default function RateSheet({ token, onBack }) {
         unit: form.unit,
         hsn_sac: form.hsn_sac,
         rate: Number(form.rate),
+        gst_percent: form.gst_percent === "" ? null : Number(form.gst_percent),
         vendor: form.vendor || null,
         city_of_quote: form.city_of_quote || null,
         labour_category_id: form.labour_category_id || null,
@@ -217,6 +219,12 @@ export default function RateSheet({ token, onBack }) {
           <Text label="Unit" value={form.unit} onChange={(v) => set("unit", v)} required />
           <Text label="HSN/SAC" value={form.hsn_sac} onChange={(v) => set("hsn_sac", v)} required />
           <Text label="Rate (Rs)" type="number" value={form.rate} onChange={(v) => set("rate", v)} required />
+          <Text
+            label="GST % (blank = global default)"
+            type="number"
+            value={form.gst_percent}
+            onChange={(v) => set("gst_percent", v)}
+          />
           <Text label="Vendor" value={form.vendor} onChange={(v) => set("vendor", v)} />
           <Text label="City of quote" value={form.city_of_quote} onChange={(v) => set("city_of_quote", v)} />
           <div className="col-span-2">
@@ -489,7 +497,8 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
         </span>
       </div>
       <p className="text-xs text-text-secondary">
-        {item.category} {item.spec && `· ${item.spec}`} · HSN/SAC {item.hsn_sac}
+        {item.category} {item.spec && `· ${item.spec}`} · HSN/SAC {item.hsn_sac} · GST{" "}
+        {item.gst_percent != null ? `${item.gst_percent}% (override)` : "default"}
       </p>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         {item.source === "ai" ? (

@@ -43,6 +43,31 @@ def test_new_rate_item_starts_manual_and_unverified(client, director_user):
     assert body["is_stale"] is False
 
 
+def test_gst_percent_defaults_to_none_meaning_use_global_rate(client, director_user):
+    """Note R1: null means 'use the Master Settings global GST rate' --
+    the pre-existing behaviour, unchanged for every item that doesn't need
+    an override."""
+    headers = _login(client, director_user)
+    res = client.post("/rate-items", json=RATE_ITEM_FIELDS, headers=headers)
+    assert res.status_code == 201, res.text
+    assert res.json()["gst_percent"] is None
+
+
+def test_gst_percent_override_can_be_set_and_updated(client, director_user):
+    """e.g. HSN 9506 sports-goods equipment is 5%, not the 18% default."""
+    headers = _login(client, director_user)
+    create_res = client.post(
+        "/rate-items", json={**RATE_ITEM_FIELDS, "hsn_sac": "9506", "gst_percent": 5.0}, headers=headers
+    )
+    assert create_res.status_code == 201, create_res.text
+    item_id = create_res.json()["id"]
+    assert create_res.json()["gst_percent"] == 5.0
+
+    update_res = client.patch(f"/rate-items/{item_id}", json={"gst_percent": None}, headers=headers)
+    assert update_res.status_code == 200, update_res.text
+    assert update_res.json()["gst_percent"] is None
+
+
 def test_confirming_a_rate_item_promotes_it_to_ai(client, director_user):
     """J.1: 'PM or Director confirms -> becomes AI rate.'"""
     headers = _login(client, director_user)
