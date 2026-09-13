@@ -113,6 +113,15 @@ export async function getProject(token, projectId) {
   return handle(res);
 }
 
+export async function updateProjectNotes(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/notes`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function getDashboard(token) {
   const res = await fetch(`${API_BASE}/dashboard`, { headers: authHeaders(token) });
   return handle(res);
@@ -938,6 +947,39 @@ export async function updateVendor(token, vendorId, payload) {
     body: JSON.stringify(payload),
   });
   return handle(res);
+}
+
+// --- Amendment 7: Products (a vendor's own catalog reference) ---
+
+export async function listProducts(token, vendorId) {
+  const res = await fetch(`${API_BASE}/vendors/${vendorId}/products`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createProduct(token, vendorId, payload) {
+  const res = await fetch(`${API_BASE}/vendors/${vendorId}/products`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateProduct(token, productId, payload) {
+  const res = await fetch(`${API_BASE}/products/${productId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deleteProduct(token, productId) {
+  const res = await fetch(`${API_BASE}/products/${productId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
 }
 
 export async function listPurchaseOrders(token, costSheetId) {

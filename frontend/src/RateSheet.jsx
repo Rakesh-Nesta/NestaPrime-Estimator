@@ -9,10 +9,12 @@ import {
   importRateItemsExcel,
   listLabourCategories,
   listRateItems,
+  listVendors,
   syncDraftLinesToMasterRate,
   updateRateItem,
   updateRateValue,
 } from "./api";
+import SelectWithOther from "./SelectWithOther";
 
 function downloadBlobAsFile(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -39,6 +41,7 @@ const emptyForm = {
 export default function RateSheet({ token, onBack }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [vendorNames, setVendorNames] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -47,12 +50,19 @@ export default function RateSheet({ token, onBack }) {
   const [importResult, setImportResult] = useState(null);
 
   function load() {
-    return Promise.all([listRateItems(token), listLabourCategories(token)]).then(
-      ([itemsRes, categoriesRes]) => {
-        setItems(itemsRes);
-        setCategories(categoriesRes);
-      }
-    );
+    return Promise.all([
+      listRateItems(token),
+      listLabourCategories(token),
+      // Amendment 7: Rate Sheet's vendor field is now a real picker sourced
+      // from the Vendor master. site_engineer can see Rate Sheet but not
+      // Vendors (PROCUREMENT_ROLES) -- a 403 here just falls back to the
+      // Others-only free-text mode SelectWithOther already supports.
+      listVendors(token).catch(() => []),
+    ]).then(([itemsRes, categoriesRes, vendorsRes]) => {
+      setItems(itemsRes);
+      setCategories(categoriesRes);
+      setVendorNames(vendorsRes.map((v) => v.name));
+    });
   }
 
   useEffect(() => {
@@ -141,6 +151,13 @@ export default function RateSheet({ token, onBack }) {
     return <p className="text-center text-text-secondary mt-10">Loading rate sheet…</p>;
   }
 
+  // Amendment 5's dropdown "Others" rule, scoped to a genuine reference
+  // list (not a business-logic enum): category names already in use on
+  // the Rate Sheet, so a new item picks an existing one -- keeping the
+  // sheet tidy instead of "Civil" vs "civil work" vs "Civil Works" drift
+  // -- with Others still open for a genuinely new category.
+  const existingCategories = [...new Set(items.map((i) => i.category))].sort();
+
   return (
     <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
       <div className="bg-surface shadow rounded-lg p-6">
@@ -213,7 +230,13 @@ export default function RateSheet({ token, onBack }) {
       <form onSubmit={handleSubmit} className="bg-surface shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-text-secondary">Add a rate item</h3>
         <div className="grid grid-cols-2 gap-3">
-          <Text label="Category" value={form.category} onChange={(v) => set("category", v)} required />
+          <SelectWithOther
+            label="Category"
+            value={form.category}
+            onChange={(v) => set("category", v)}
+            options={existingCategories}
+            required
+          />
           <Text label="Item name" value={form.item_name} onChange={(v) => set("item_name", v)} required />
           <Text label="Spec" value={form.spec} onChange={(v) => set("spec", v)} />
           <Text label="Unit" value={form.unit} onChange={(v) => set("unit", v)} required />
@@ -225,7 +248,7 @@ export default function RateSheet({ token, onBack }) {
             value={form.gst_percent}
             onChange={(v) => set("gst_percent", v)}
           />
-          <Text label="Vendor" value={form.vendor} onChange={(v) => set("vendor", v)} />
+          <SelectWithOther label="Vendor" value={form.vendor} onChange={(v) => set("vendor", v)} options={vendorNames} />
           <Text label="City of quote" value={form.city_of_quote} onChange={(v) => set("city_of_quote", v)} />
           <div className="col-span-2">
             <label className="block text-sm font-medium text-text-secondary">Labour category</label>
@@ -253,7 +276,7 @@ export default function RateSheet({ token, onBack }) {
         </button>
       </form>
 
-      <BulkActionsPanel token={token} categories={[...new Set(items.map((i) => i.category))].sort()} onChanged={load} />
+      <BulkActionsPanel token={token} categories={existingCategories} onChanged={load} />
 
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-3">Items ({items.length})</h3>

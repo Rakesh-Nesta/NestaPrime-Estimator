@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -156,6 +156,11 @@ class Project(Base):
     # T&C clauses on the Quotation PDF, so a blind-quoted price is never
     # handed to a client silently indistinguishable from a fully surveyed one.
     quick_setup: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Amendment 5 (Annexure 2): "+ Add Note" on Project Setup, Cost Sheet,
+    # and Estimate -- one note per project (not per screen), passed through
+    # to the Quotation PDF's "Special Remarks / T&C" section when non-empty.
+    custom_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False

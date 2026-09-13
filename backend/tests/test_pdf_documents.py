@@ -310,6 +310,58 @@ def test_quotation_pdf_line_amounts_sum_to_the_quotation_total(client, director_
 
 
 # ---------------------------------------------------------------------------
+# Amendment 5: Custom Notes on the Quotation PDF's "Special Remarks" section
+# ---------------------------------------------------------------------------
+
+
+def test_quotation_pdf_includes_custom_notes_as_special_remarks(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    client.patch(
+        f"/projects/{project_id}/notes",
+        json={"custom_notes": "Client wants matte finish, confirmed by phone."},
+        headers=headers,
+    )
+    quotation = _sent_quotation_from_project(client, headers, project_id)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    text = _pdf_text(res)
+    assert "Special Remarks" in text
+    assert "Client wants matte finish, confirmed by phone." in text
+
+
+def test_quotation_pdf_omits_special_remarks_when_no_notes(client, director_user):
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert "Special Remarks" not in _pdf_text(res)
+
+
+def test_quotation_pdf_escapes_special_characters_in_custom_notes(client, director_user):
+    """custom_notes is genuinely free-typed text, unlike every other string
+    interpolated into this PDF -- a stray '<' or '&' must not crash
+    ReportLab's mini-XML parser."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    client.patch(
+        f"/projects/{project_id}/notes",
+        json={"custom_notes": "Tolerance < 5% & confirm with site engineer.\nSecond line."},
+        headers=headers,
+    )
+    quotation = _sent_quotation_from_project(client, headers, project_id)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200, res.text
+    text = _pdf_text(res)
+    assert "Tolerance < 5% & confirm with site engineer." in text
+    assert "Second line." in text
+
+
+# ---------------------------------------------------------------------------
 # Amendment 2: Quick setup's blind-quoting assumptions on the Quotation PDF
 # ---------------------------------------------------------------------------
 

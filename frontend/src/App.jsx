@@ -2,6 +2,7 @@ import { useState } from "react";
 import { changePassword, getCurrentUser, getProject, login } from "./api";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
+import CustomNotesPanel from "./CustomNotesPanel";
 import Dashboard from "./Dashboard";
 import Documents from "./Documents";
 import Help from "./Help";
@@ -16,6 +17,7 @@ import SiteSurvey from "./SiteSurvey";
 import SportSelection from "./SportSelection";
 import SportsScopeAdmin from "./SportsScopeAdmin";
 import TenderMode from "./TenderMode";
+import VendorsAdmin from "./VendorsAdmin";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -29,7 +31,7 @@ export default function App() {
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
-  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests", "help"];
+  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests", "vendors_admin", "help"];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
   function goToTopLevel(target) {
@@ -115,6 +117,12 @@ export default function App() {
           { key: "clients_admin", label: "Clients" },
           { key: "reports", label: "Reports" },
           ...(user.role !== "sales" ? [{ key: "price_requests", label: "Price Requests" }] : []),
+          // Amendment 7: M.4 -- Sales/Site Engineer/CA have no reason to
+          // see vendor relationships or pricing, matching PROCUREMENT_ROLES
+          // server-side (backend/app/api/vendors.py).
+          ...(["pm", "director", "procurement"].includes(user.role)
+            ? [{ key: "vendors_admin", label: "Vendors" }]
+            : []),
         ],
       },
       {
@@ -230,13 +238,20 @@ export default function App() {
           <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-400 print:hidden">{error}</p>
         )}
         {activeProject && PROJECT_STAGE_SCREENS.includes(screen) && (
-          <ProjectBreadcrumb
-            project={activeProject}
-            screen={screen}
-            onDashboard={() => setScreen("dashboard")}
-            onSetup={() => setActiveProject(null)}
-            onStage={(stage) => setScreen(stage)}
-          />
+          <>
+            <ProjectBreadcrumb
+              project={activeProject}
+              screen={screen}
+              onDashboard={() => setScreen("dashboard")}
+              onSetup={() => setActiveProject(null)}
+              onStage={(stage) => setScreen(stage)}
+            />
+            <CustomNotesPanel
+              token={accessToken}
+              project={activeProject}
+              onNotesSaved={(updated) => setActiveProject(updated)}
+            />
+          </>
         )}
         {screen === "dashboard" && (
           <Dashboard
@@ -266,6 +281,9 @@ export default function App() {
         )}
         {screen === "price_requests" && user.role !== "sales" && (
           <PriceRequests token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "vendors_admin" && ["pm", "director", "procurement"].includes(user.role) && (
+          <VendorsAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "reports" && (
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />

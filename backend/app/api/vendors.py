@@ -7,9 +7,16 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
 from app.db.session import get_db
+from app.models.product import Product
 from app.models.vendor import Vendor
 
 vendors_router = APIRouter(prefix="/vendors", tags=["vendors"])
+# Separate top-level router (not nested under /vendors) for by-id product
+# operations -- /vendors/{vendor_id} (GET/PATCH) is a single-path-segment
+# pattern that would otherwise shadow /vendors/products/{id} in Starlette's
+# registration-order route matching ("products" parses as {vendor_id}
+# before ever reaching the product route).
+products_router = APIRouter(prefix="/products", tags=["products"])
 
 # M.4: "Edit consumption sheet, raise RFQ / PO" -- Sales/Site Engineer/CA
 # have no reason to see vendor relationships or pricing.
@@ -18,6 +25,7 @@ PROCUREMENT_ROLES = ("pm", "director", "procurement")
 
 class VendorCreate(BaseModel):
     name: str
+    vendor_code: str | None = None
     city: str | None = None
     category: str | None = None
     contact_name: str | None = None
@@ -34,6 +42,7 @@ class VendorCreate(BaseModel):
 
 class VendorUpdate(BaseModel):
     name: str | None = None
+    vendor_code: str | None = None
     city: str | None = None
     category: str | None = None
     contact_name: str | None = None
@@ -51,6 +60,7 @@ class VendorUpdate(BaseModel):
 class VendorOut(BaseModel):
     id: uuid.UUID
     name: str
+    vendor_code: str | None
     city: str | None
     category: str | None
     contact_name: str | None
@@ -115,3 +125,99 @@ def update_vendor(
     db.commit()
     db.refresh(vendor)
     return vendor
+
+
+# ---------------------------------------------------------------------------
+# Amendment 7: Products -- "products with approximate pricing under each
+# vendor." Nested under a vendor for create/list (a product always belongs
+# to exactly one vendor); update/delete address the product directly since
+# its vendor never changes after creation.
+# ---------------------------------------------------------------------------
+
+
+class ProductCreate(BaseModel):
+    name: str
+    spec: str | None = None
+    unit: str | None = None
+    approx_price: float | None = None
+    category: str | None = None
+    notes: str | None = None
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = None
+    spec: str | None = None
+    unit: str | None = None
+    approx_price: float | None = None
+    category: str | None = None
+    notes: str | None = None
+
+
+class ProductOut(BaseModel):
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    name: str
+    spec: str | None
+    unit: str | None
+    approx_price: float | None
+    category: str | None
+    notes: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@vendors_router.post("/{vendor_id}/products", response_model=ProductOut, status_code=201)
+def create_product(
+    vendor_id: uuid.UUID,
+    payload: ProductCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
+):
+    if not db.query(Vendor).filter(Vendor.id == vendor_id).first():
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    product = Product(vendor_id=vendor_id, **payload.model_dump())
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@vendors_router.get("/{vendor_id}/products", response_model=list[ProductOut])
+def list_products(
+    vendor_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
+):
+    if not db.query(Vendor).filter(Vendor.id == vendor_id).first():
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    return db.query(Product).filter(Product.vendor_id == vendor_id).order_by(Product.name).all()
+
+
+@products_router.patch("/{product_id}", response_model=ProductOut)
+def update_product(
+    product_id: uuid.UUID,
+    payload: ProductUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(product, field, value)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@products_router.delete("/{product_id}", status_code=204)
+def delete_product(
+    product_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    db.delete(product)
+    db.commit()
