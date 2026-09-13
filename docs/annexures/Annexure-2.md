@@ -147,6 +147,32 @@ relevant chapter (same discipline as this annexure).
 against real costs, tune rate tables where they diverge. Prerequisite for trusting every
 quotation the app produces.
 
+**Implemented 13 September 2026 — starter rate card:** a review of 23 real historical
+NestaPrime quotations (2021-2026) produced 20 clean, isolable ₹/unit rates (civil base
+prep, PP tile/wood/PVC/turf/EPDM flooring, SS railing, chain-link fencing, badminton pole
+equipment) seeded into `RateItem` as Manual/unverified entries (`backend/scripts/
+seed_rate_items.py`) — nothing here drives a real quotation until a PM/Director confirms
+each one from the Rate Sheet screen (J.1's own rule). HSN/SAC codes and GST% were sourced
+from CBIC's official service/goods classification (Notification 11/2017-CT(Rate)) and the
+September 2025 GST 2.0 rate notifications, not guessed. Three categories (asphalt
+sub-base, surface repair/prep, acrylic/synthetic court coating — the last being the most-
+used flooring type in the sample) are parked pending accountant sign-off: no confident
+official HSN/SAC match exists for them. Several more (LED floodlights, basketball/
+volleyball equipment "sets", the prefab steel shed, swimming pool civil work, the pool
+filtration 35%-of-civil formula, and the 84%-of-MRP equipment margin) were left out
+entirely rather than forced into a per-unit rate they don't actually have in the source
+data.
+
+This review also surfaced a real billing-accuracy gap, fixed as part of the same work:
+HSN 9506 sports-goods equipment is 5% GST under GST 2.0, not the flat 18% the app applied
+everywhere via one Master Settings value. `RateItem` now carries an optional per-item
+`gst_percent` override; Estimate pricing and real Quotation `gst_amount`/`quotation_total`
+both blend each sport's own cost-sheet lines into a cost-weighted effective rate instead
+of the flat global one (`app/api/pricing.py::effective_gst_rate_percent` /
+`cost_weighted_gst_rate_percent`) — a sport with no lines yet still falls back to the
+unchanged flat rate. "Recreate a past project and compare totals" (this Note's original
+scope) is still open as a separate, PM/Director-led exercise.
+
 **Note R2 — Backup & restore drill**: Quarterly: restore a Lightsail snapshot to a test
 instance and confirm app + data return correctly. A backup never restored is a hope, not
 a backup.

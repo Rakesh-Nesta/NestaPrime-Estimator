@@ -8,8 +8,9 @@ from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import ClientType
-from app.models.document import GstMode
+from app.models.document import CostSheetLine, GstMode
 from app.models.margin_policy import MarginPolicy, SportMarginPolicy
+from app.models.rate_item import RateItem
 
 margin_policies_router = APIRouter(prefix="/margin-policies", tags=["margin-policies"])
 sport_margin_policies_router = APIRouter(prefix="/sport-margin-policies", tags=["margin-policies"])
@@ -188,6 +189,82 @@ class PricingResult(BaseModel):
     gst_mode: GstMode
 
 
+def _line_gst_percent(line: CostSheetLine, rate_items_by_id: dict, default_gst_percent: float) -> float:
+    """A line's own GST rate is its RateItem's override (e.g. 5% for HSN
+    9506 sports goods under the Sept-2025 GST 2.0 schedule) when one is
+    set; every other line still uses the Master Settings global rate."""
+    if line.rate_item_id is not None:
+        rate_item = rate_items_by_id.get(line.rate_item_id)
+        if rate_item is not None and rate_item.gst_percent is not None:
+            return float(rate_item.gst_percent)
+    return default_gst_percent
+
+
+def effective_gst_rate_percent(
+    db: Session,
+    cost_sheet_id,
+    project_sport_id,
+    default_gst_percent: float,
+) -> float:
+    """Blends a sport's own cost-sheet lines into one cost-weighted GST
+    rate. Pricing still works off one aggregate cost figure per option,
+    not itemized per-line GST -- this only makes sure the rate that
+    aggregate is loaded at reflects what's actually in it, e.g. a sport
+    whose lines mix 18%-rated flooring/civil work with a 5%-rated
+    equipment line (RateItem.gst_percent). Falls back to the Master
+    Settings global rate when a sport has no rated lines yet."""
+    lines = (
+        db.query(CostSheetLine)
+        .filter(
+            CostSheetLine.cost_sheet_id == cost_sheet_id,
+            CostSheetLine.project_sport_id == project_sport_id,
+            CostSheetLine.rate.isnot(None),
+        )
+        .all()
+    )
+    if not lines:
+        return default_gst_percent
+
+    rate_item_ids = {line.rate_item_id for line in lines if line.rate_item_id is not None}
+    rate_items_by_id = {}
+    if rate_item_ids:
+        rate_items_by_id = {
+            item.id: item for item in db.query(RateItem).filter(RateItem.id.in_(rate_item_ids)).all()
+        }
+
+    total_cost = 0.0
+    weighted_gst = 0.0
+    for line in lines:
+        line_cost = float(line.rate) * float(line.quantity)
+        total_cost += line_cost
+        weighted_gst += line_cost * _line_gst_percent(line, rate_items_by_id, default_gst_percent)
+
+    if total_cost <= 0:
+        return default_gst_percent
+    return weighted_gst / total_cost
+
+
+def cost_weighted_gst_rate_percent(
+    db: Session,
+    cost_sheet_id,
+    options: list,
+    default_gst_percent: float,
+) -> float:
+    """Multi-sport analogue of effective_gst_rate_percent, mirroring
+    cost_weighted_floor_and_target's own cost-weighting: each included
+    EstimateOption's effective GST rate contributes weighted by its own
+    cost share. Duck-typed on `options` (needs .cost_for_option and
+    .project_sport_id) to avoid importing the documents-API module here."""
+    total_cost = sum(float(o.cost_for_option) for o in options)
+    if total_cost <= 0:
+        return default_gst_percent
+    return sum(
+        float(o.cost_for_option)
+        * effective_gst_rate_percent(db, cost_sheet_id, o.project_sport_id, default_gst_percent)
+        for o in options
+    ) / total_cost
+
+
 def compute_pricing(
     db: Session,
     cost: float,
@@ -196,6 +273,7 @@ def compute_pricing(
     discount_type: str | None,
     discount_value: float,
     gst_mode: GstMode = GstMode.EXCLUSIVE,
+    gst_rate_percent: float | None = None,
 ) -> PricingResult:
     """K.1 steps 7-12 + K.2/K.4, shared by /pricing/quote and the document
     state machine (Estimate options, Quotations) so both price identically.
@@ -222,7 +300,8 @@ def compute_pricing(
         raise HTTPException(status_code=400, detail="Target margin must be below 100%")
 
     target_price_ex_gst = cost / (1 - target / 100)
-    gst_rate_percent = get_gst_rate_percent(db)
+    if gst_rate_percent is None:
+        gst_rate_percent = get_gst_rate_percent(db)
 
     if gst_mode == GstMode.INCLUSIVE:
         target_price = target_price_ex_gst * (1 + gst_rate_percent / 100)

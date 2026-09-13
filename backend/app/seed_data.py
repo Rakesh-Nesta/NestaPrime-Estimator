@@ -303,3 +303,49 @@ SPORT_POLE_COUNTS_SEED = [
     ("swimming_pool_25m", 6),
     ("swimming_pool_50m", 6),
 ]
+
+# Note R1 -- starter rate card, sourced from a review of 23 real historical
+# NestaPrime quotations (2021-2026; see docs/annexures for the full working
+# and the "Claude outputs" reference spreadsheet). Every row here is a
+# *clean, isolable* per-unit rate from that review; lump-sum bundles that
+# don't decompose to a trustworthy per-unit figure (LED floodlights,
+# basketball/volleyball equipment "sets", the prefab steel shed, swimming
+# pool civil work, pool filtration's 35%-of-civil formula, the 84%-of-MRP
+# equipment margin) were deliberately left out rather than guessed. Three
+# more categories (asphalt sub-base, surface repair/prep, acrylic/synthetic
+# court coating) are parked pending accountant sign-off: no confident HSN/
+# SAC match exists in the official CBIC classification for them.
+#
+# HSN/SAC codes and GST% are from CBIC's official "Scheme of Classification
+# of Services" (Notification 11/2017-CT(Rate)) and the Sept-2025 GST 2.0
+# rate notifications (9/2025-IGST(Rate), 15/2025-CT(Rate)) -- not guessed.
+# gst_percent is None for everything on the standard 18% rate (uses the
+# Master Settings global default); HSN 9506 sports-goods equipment is
+# explicitly 5%, hence the override on the two pole rows.
+#
+# Seeded as Manual/unverified (RateItem's own default) -- per J.1, "unverified
+# rates never become defaults." Nothing here is usable on a real quotation
+# until a PM/Director reviews and confirms each item via the Rate Sheet
+# screen. (category, item_name, spec, unit, hsn_sac, rate, gst_percent)
+RATE_ITEM_SEED = [
+    ("Civil", "Cement/RCC base — full slab", "Badminton-type, incl. TMT/curing", "sqft", "995454", 92.0, None),
+    ("Civil", "Cement/RCC base — plastering-only", "Basketball-type, base prep only", "sqft", "995454", 69.0, None),
+    ("Civil", "Base preparation — specialty surface", "EPDM play-area base", "sqmt", "995454", 1615.0, None),
+    ("Civil", "Wall & drainage", "Toe wall + open drain", "rft", "995454", 150.0, None),
+    ("Flooring", "PP Modular Tile — component only", "Supply + install, no civil", "sqft", "3918", 116.0, None),
+    ("Flooring", "PP Modular Tile — full turnkey", "Incl. civil", "sqft", "3918", 175.0, None),
+    ("Flooring", "PP Interlocking Tile 15mm", "2026-era, GST-inclusive pricing", "sqft", "3918", 120.0, None),
+    ("Flooring", "Wood flooring — Teak", "20-22mm, domestic", "sqft", "4409", 395.0, None),
+    ("Flooring", "Wood flooring — Teak (imported)", "21mm, imported", "sqft", "4409", 410.0, None),
+    ("Flooring", "Wood flooring — Maple", "21mm, badminton", "sqft", "4409", 480.0, None),
+    ("Flooring", "Wood flooring — Maple (squash)", "Squash court", "sqft", "4409", 380.0, None),
+    ("Flooring", "PVC Vinyl Matt 4.5mm", "BWF-certified", "sqft", "3918", 235.0, None),
+    ("Flooring", "PVC Vinyl Matt 8mm", "BWF-certified", "sqft", "3918", 205.0, None),
+    ("Flooring", "Artificial grass 15mm", "Rest areas, 2026-era", "sqft", "5703", 98.0, None),
+    ("Flooring", "Artificial grass 50mm", "Football ground", "sqft", "5703", 140.0, None),
+    ("Flooring", "EPDM flooring 25mm", "19mm SBR + 6mm EPDM", "sqmt", "4016", 3498.0, None),
+    ("Structure", "SS pipe railing", None, "rft", "7308", 440.0, None),
+    ("Structure", "Chain-link fencing", "2\" mesh, 10ga, 10ft ht", "sqft", "7314", 120.0, None),
+    ("Equipment", "Badminton pole — standard", "Movable, w/ net", "pair", "9506", 17472.0, 5.0),
+    ("Equipment", "Badminton pole — premium", "Model 8129, heavy/wheels/competition", "pair", "9506", 40250.0, 5.0),
+]

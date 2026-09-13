@@ -46,6 +46,14 @@ class RateItem(Base):
     hsn_sac: Mapped[str] = mapped_column(String(20), nullable=False)
     rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
 
+    # Nullable override -- None means "use the Master Settings global GST
+    # rate," same as every line always did before this existed. Real
+    # example this exists for: HSN 9506 sports-goods equipment (badminton/
+    # basketball/volleyball poles etc.) is 5% under the Sept-2025 GST 2.0
+    # schedule, not the 18% that applies to civil/flooring/materials --
+    # without a per-item override there was no way to bill that correctly.
+    gst_percent: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+
     source: Mapped[RateSource] = mapped_column(
         Enum(RateSource, name="rate_source"), default=RateSource.MANUAL, nullable=False
     )

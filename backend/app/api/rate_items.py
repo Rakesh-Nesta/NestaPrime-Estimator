@@ -57,6 +57,10 @@ class RateItemCreate(BaseModel):
     unit: str
     hsn_sac: str
     rate: float
+    # Note R1: null means "use the Master Settings global GST rate," same
+    # as before this existed -- set only for an item whose real GST%
+    # genuinely differs (e.g. HSN 9506 sports goods at 5%, not 18%).
+    gst_percent: float | None = Field(default=None, ge=0, le=100)
     vendor: str | None = None
     city_of_quote: str | None = None
     labour_category_id: uuid.UUID | None = None
@@ -75,6 +79,7 @@ class RateItemOut(BaseModel):
     unit: str
     hsn_sac: str
     rate: float
+    gst_percent: float | None
     source: RateSource
     verified: bool
     vendor: str | None
@@ -149,6 +154,7 @@ def create_rate_item(
         unit=payload.unit,
         hsn_sac=payload.hsn_sac,
         rate=payload.rate,
+        gst_percent=payload.gst_percent,
         vendor=payload.vendor,
         city_of_quote=payload.city_of_quote,
         labour_category_id=payload.labour_category_id,
@@ -183,6 +189,7 @@ class RateItemUpdate(BaseModel):
     spec: str | None = None
     unit: str | None = None
     hsn_sac: str | None = None
+    gst_percent: float | None = Field(default=None, ge=0, le=100)
     vendor: str | None = None
     city_of_quote: str | None = None
     labour_category_id: uuid.UUID | None = None

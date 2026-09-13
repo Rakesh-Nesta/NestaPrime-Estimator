@@ -7,7 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
-from app.api.pricing import compute_pricing, cost_weighted_floor_and_target, effective_floor_and_target
+from app.api.pricing import (
+    compute_pricing,
+    cost_weighted_floor_and_target,
+    cost_weighted_gst_rate_percent,
+    effective_floor_and_target,
+    effective_gst_rate_percent,
+)
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.api.sports import (
     STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT,
@@ -1461,9 +1467,14 @@ def create_estimate(
         # K.2 / M.1: each option is priced at ITS OWN target margin -- a
         # sport-type floor override (Director-set) replaces the client
         # floor only for that sport, so options for different sports in
-        # the same Estimate can carry different targets.
+        # the same Estimate can carry different targets. GST is likewise
+        # blended from this sport's own cost-sheet lines (Note R1), not
+        # just the flat global rate.
+        option_gst_rate_percent = effective_gst_rate_percent(
+            db, cost_sheet.id, project_sport.id, gst_rate_percent
+        )
         price_low, price_high = _price_estimate_option(
-            db, policy, gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
+            db, policy, option_gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
         )
         option = EstimateOption(
             estimate_id=estimate.id,
@@ -1663,8 +1674,11 @@ def revise_estimate(
         if carried_over_unchanged:
             price_low, price_high = float(prior.price_low), float(prior.price_high)
         else:
+            option_gst_rate_percent = effective_gst_rate_percent(
+                db, new_revision.cost_sheet_id, project_sport.id, gst_rate_percent
+            )
             price_low, price_high = _price_estimate_option(
-                db, policy, gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
+                db, policy, option_gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
             )
 
         new_options.append(
@@ -1911,8 +1925,12 @@ def create_quotation(
     cost_total = sum(cost for cost, _ in cost_and_sport_ids)
     _validate_gst_mode(project, payload.gst_mode)
     floor, target = cost_weighted_floor_and_target(db, policy, cost_and_sport_ids)
+    gst_rate_percent = cost_weighted_gst_rate_percent(
+        db, cost_sheet.id, included_options, get_gst_rate_percent(db)
+    )
     pricing = compute_pricing(
-        db, cost_total, floor, target, payload.discount_type, payload.discount_value, gst_mode=payload.gst_mode
+        db, cost_total, floor, target, payload.discount_type, payload.discount_value,
+        gst_mode=payload.gst_mode, gst_rate_percent=gst_rate_percent,
     )
 
     quotation = Quotation(
@@ -2049,7 +2067,9 @@ def create_fast_track_quotation(
             status_code=400, detail="This client is blacklisted (Part O) -- new Quotations are blocked"
         )
     policy = _get_margin_policy(db, client.type)
-    gst_rate_percent = get_gst_rate_percent(db)
+    gst_rate_percent = effective_gst_rate_percent(
+        db, cost_sheet.id, project_sport.id, get_gst_rate_percent(db)
+    )
     price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
     price_low, price_high = _price_estimate_option(
         db, policy, gst_rate_percent, price_range_percent, project_sport, cost_total
@@ -2080,7 +2100,8 @@ def create_fast_track_quotation(
     _validate_gst_mode(project, payload.gst_mode)
     floor, target = cost_weighted_floor_and_target(db, policy, [(cost_total, project_sport.sport_id)])
     pricing = compute_pricing(
-        db, cost_total, floor, target, payload.discount_type, payload.discount_value, gst_mode=payload.gst_mode
+        db, cost_total, floor, target, payload.discount_type, payload.discount_value,
+        gst_mode=payload.gst_mode, gst_rate_percent=gst_rate_percent,
     )
 
     quotation = Quotation(
@@ -2210,8 +2231,15 @@ def revise_quotation(
         ]
         cost_total = sum(cost for cost, _ in cost_and_sport_ids)
         floor, target = cost_weighted_floor_and_target(db, policy, cost_and_sport_ids)
+        revise_cost_sheet_id = (
+            db.query(Estimate.cost_sheet_id).filter(Estimate.id == quotation.estimate_id).scalar()
+        )
+        gst_rate_percent = cost_weighted_gst_rate_percent(
+            db, revise_cost_sheet_id, included_options, get_gst_rate_percent(db)
+        )
         pricing = compute_pricing(
-            db, cost_total, floor, target, payload.discount_type, payload.discount_value, gst_mode=new_gst_mode
+            db, cost_total, floor, target, payload.discount_type, payload.discount_value,
+            gst_mode=new_gst_mode, gst_rate_percent=gst_rate_percent,
         )
 
     estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
