@@ -1,14 +1,53 @@
 import { useEffect, useState } from "react";
 import { generateReport, listReports, releaseReport } from "./api";
 
+// Builds the date string from the Date object's own LOCAL fields --
+// .toISOString() converts to UTC first, which silently shifts the date
+// back a day whenever the browser's timezone is ahead of UTC (e.g. IST).
+// That bug predates this preset feature (the old startOfMonthIso used
+// toISOString the same way) but presets computing the wrong boundary
+// defeats their whole point, so it's fixed here rather than carried over.
+function toIso(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return toIso(new Date());
 }
 
 function startOfMonthIso() {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return toIso(new Date(d.getFullYear(), d.getMonth(), 1));
 }
+
+function startOfWeekIso() {
+  // Monday as the week start (matches how the team's own work week runs).
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  return toIso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday));
+}
+
+function startOfYearIso() {
+  const d = new Date();
+  return toIso(new Date(d.getFullYear(), 0, 1));
+}
+
+// Amendment 6c: "reports for daily / weekly / monthly / full-year / custom ranges" --
+// custom already worked (period_from/period_to are free-form on the existing
+// generate endpoint); these presets just compute the two dates so a user doesn't
+// have to pick calendar boundaries by hand every time. Custom keeps today's
+// manual date-pickers as the fallback.
+const PERIOD_PRESETS = {
+  today: { label: "Today", from: todayIso },
+  this_week: { label: "This Week", from: startOfWeekIso },
+  this_month: { label: "This Month", from: startOfMonthIso },
+  this_year: { label: "This Year", from: startOfYearIso },
+  custom: { label: "Custom", from: null },
+};
 
 export default function Reports({ token, role, onBack }) {
   const [reports, setReports] = useState([]);
@@ -17,8 +56,18 @@ export default function Reports({ token, role, onBack }) {
   const [expandedId, setExpandedId] = useState(null);
 
   const [reportType, setReportType] = useState("pipeline");
+  const [periodPreset, setPeriodPreset] = useState("this_month");
   const [periodFrom, setPeriodFrom] = useState(startOfMonthIso());
   const [periodTo, setPeriodTo] = useState(todayIso());
+
+  function handlePresetChange(preset) {
+    setPeriodPreset(preset);
+    const config = PERIOD_PRESETS[preset];
+    if (config.from) {
+      setPeriodFrom(config.from());
+      setPeriodTo(todayIso());
+    }
+  }
 
   const canSeeMargin = role === "pm" || role === "director";
   const canSeeOverrideSummary = role === "director";
@@ -76,7 +125,7 @@ export default function Reports({ token, role, onBack }) {
 
       <form onSubmit={handleGenerate} className="bg-surface shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-text-secondary">Generate a report</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-text-secondary">Type</label>
             <select
@@ -90,12 +139,31 @@ export default function Reports({ token, role, onBack }) {
             </select>
           </div>
           <div>
+            <label className="block text-sm font-medium text-text-secondary">Period</label>
+            <select
+              value={periodPreset}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+            >
+              {Object.entries(PERIOD_PRESETS).map(([key, { label }]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
             <label className="block text-sm font-medium text-text-secondary">Period from</label>
             <input
               type="date"
               required
               value={periodFrom}
-              onChange={(e) => setPeriodFrom(e.target.value)}
+              onChange={(e) => {
+                setPeriodFrom(e.target.value);
+                setPeriodPreset("custom");
+              }}
               className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
             />
           </div>
@@ -105,7 +173,10 @@ export default function Reports({ token, role, onBack }) {
               type="date"
               required
               value={periodTo}
-              onChange={(e) => setPeriodTo(e.target.value)}
+              onChange={(e) => {
+                setPeriodTo(e.target.value);
+                setPeriodPreset("custom");
+              }}
               className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
             />
           </div>
