@@ -14,6 +14,7 @@ quotation_total, all already GST-inclusive, client-facing numbers.
 import io
 import uuid
 from pathlib import Path
+from xml.sax.saxutils import escape as _xml_escape
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -796,6 +797,21 @@ def get_quotation_pdf(
         Paragraph("&bull; " + term, styles["Normal"])
         for term in _starter_terms(db, project.tender_mode, project.quick_setup)
     )
+
+    # Amendment 5's Custom Notes component: unstructured remarks a Sales/PM/
+    # Director user added on Project Setup, Cost Sheet, or Estimate (one
+    # field on the Project, not per-screen) -- only rendered when actually
+    # set, right after the fixed T&C list per the amendment's own "Special
+    # Remarks / T&C" wording.
+    if project.custom_notes:
+        story.append(Paragraph("Special Remarks", styles["SectionHeading"]))
+        # Escaped -- this is genuinely free-typed text (unlike every other
+        # Paragraph() call in this file, which interpolates derived/enum
+        # strings), so a stray '<' or '&' would otherwise break ReportLab's
+        # mini-XML parser. <br/> preserves the textarea's own line breaks,
+        # which Paragraph collapses like HTML by default.
+        notes_html = _xml_escape(project.custom_notes).replace("\n", "<br/>")
+        story.append(Paragraph(notes_html, styles["Normal"]))
 
     validity_note = (
         f"Valid until {quotation.sent_at.date().isoformat()} (30 days from sending)."

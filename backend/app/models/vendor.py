@@ -23,6 +23,12 @@ class Vendor(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Amendment 7 (Annexure 2): "vendor lists with vendor codes" -- not in
+    # the original Part O VENDOR_MASTER blueprint quoted above, added by
+    # this later amendment. Nullable/non-unique-constrained on purpose:
+    # existing vendors predate this field and a code is a Procurement
+    # convenience label, not a system identifier (vendors.id already is).
+    vendor_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(200), nullable=True)

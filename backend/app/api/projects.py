@@ -103,6 +103,7 @@ class ProjectOut(BaseModel):
     unit_system: UnitSystem
     package: Package
     quick_setup: bool
+    custom_notes: str | None
     safe_bearing_capacity: float | None
     existing_building_clear_height_ft: float | None
     tender_mode: bool
@@ -191,4 +192,28 @@ def get_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    return _to_out(project)
+
+
+class ProjectNotesUpdate(BaseModel):
+    custom_notes: str | None = None
+
+
+@router.patch("/{project_id}/notes", response_model=ProjectOut)
+def update_project_notes(
+    project_id: uuid.UUID,
+    payload: ProjectNotesUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    """Amendment 5's Custom Notes component -- one note per PROJECT, not
+    per screen: the same "+ Add Note" button on Project Setup, Cost Sheet,
+    and Estimate all read/write this single field, so a note added on one
+    screen is visible from the other two."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.custom_notes = payload.custom_notes
+    db.commit()
+    db.refresh(project)
     return _to_out(project)
