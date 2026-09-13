@@ -269,7 +269,7 @@ export default function App() {
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "help" && (
-          <Help onBack={() => setScreen(preNavScreen)} />
+          <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
           <ProjectSetup
