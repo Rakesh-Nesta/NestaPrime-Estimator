@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { listClients, updateClientConsent, updateClientFlags } from "./api";
 
-export default function ClientsAdmin({ token, onBack }) {
+export default function ClientsAdmin({ token, role, onBack }) {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const canEditFlags = role === "director";
 
   function load() {
     return listClients(token).then(setClients);
@@ -57,7 +58,8 @@ export default function ClientsAdmin({ token, onBack }) {
         </div>
         <p className="text-xs text-text-secondary mt-1">
           Part O: "overdue_flag (blocks new Quotation release until Director clears), blacklist_flag (blocks new
-          Estimates)." Director-only.
+          Estimates)." Overdue/Blacklisted are Director-only (enforced below, not just server-side); consent
+          toggles are open to Sales/PM/Director.
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
@@ -70,18 +72,26 @@ export default function ClientsAdmin({ token, onBack }) {
               <span className="text-xs text-text-secondary">({c.type})</span>
             </span>
             <div className="flex items-center gap-4 text-xs">
-              <label className="flex items-center gap-1">
+              <label
+                className={`flex items-center gap-1 ${!canEditFlags ? "opacity-50" : ""}`}
+                title={canEditFlags ? undefined : "Director only"}
+              >
                 <input
                   type="checkbox"
                   checked={c.overdue_flag}
+                  disabled={!canEditFlags}
                   onChange={(e) => toggleFlag(c.id, "overdue_flag", e.target.checked)}
                 />
                 Overdue
               </label>
-              <label className="flex items-center gap-1">
+              <label
+                className={`flex items-center gap-1 ${!canEditFlags ? "opacity-50" : ""}`}
+                title={canEditFlags ? undefined : "Director only"}
+              >
                 <input
                   type="checkbox"
                   checked={c.blacklist_flag}
+                  disabled={!canEditFlags}
                   onChange={(e) => toggleFlag(c.id, "blacklist_flag", e.target.checked)}
                 />
                 Blacklisted

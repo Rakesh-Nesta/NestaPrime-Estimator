@@ -100,11 +100,10 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Pricing Calculator",
-    what: "A standalone what-if margin/GST calculator, reachable by every role from Daily Work — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate.",
+    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from Daily Work (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate.",
     fields: ["Cost incl. contingency (Rs)", "Client type", "Discount type (None/Percent/Amount) + value"],
     whenMissing: "There's nothing to fill beyond the cost figure and client type — everything else is optional.",
-    watch:
-      "This screen is genuinely open to every role today, including Sales — treat any note elsewhere describing it as PM/Director-only as aspirational, not something the app currently enforces.",
+    watch: null,
   },
   {
     screen: "Reports",
@@ -123,7 +122,7 @@ export const FULL_HANDBOOK = [
     fields: ["Overdue (blocks new Quotation release)", "Blacklisted (blocks new Estimates)", "WhatsApp / Email consent"],
     whenMissing: "Nothing here is required — all four are simple on/off toggles.",
     watch:
-      "Every toggle here saves instantly on click, with no confirmation step — including un-blacklisting a client. This screen is also open to every role today, not Director-only as its own on-screen text suggests; treat that claim as aspirational until it's actually fixed.",
+      "Every toggle here saves instantly on click, with no confirmation step. Overdue and Blacklisted are Director-only (greyed out for other roles); WhatsApp/Email consent can be toggled by Sales, PM, or Director.",
   },
   {
     screen: "Master Settings",

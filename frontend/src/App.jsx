@@ -102,7 +102,9 @@ export default function App() {
         label: "Daily Work",
         items: [
           { key: "dashboard", label: "Dashboard" },
-          { key: "pricing", label: "Pricing Calculator" },
+          // K.3: /pricing/quote is PM/Director only server-side -- Sales
+          // saw this nav item and hit a dead-end 403 before this hid it.
+          ...(user.role !== "sales" ? [{ key: "pricing", label: "Pricing Calculator" }] : []),
           { key: "rates", label: "Rate Sheet" },
           { key: "help", label: "Help" },
         ],
@@ -247,7 +249,7 @@ export default function App() {
         {screen === "rates" && (
           <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "pricing" && (
+        {screen === "pricing" && user.role !== "sales" && (
           <PricingCalculator token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "settings" && (
@@ -260,7 +262,7 @@ export default function App() {
           <AuditLogView token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "clients_admin" && (
-          <ClientsAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
+          <ClientsAdmin token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "price_requests" && user.role !== "sales" && (
           <PriceRequests token={accessToken} onBack={() => setScreen(preNavScreen)} />
