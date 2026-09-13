@@ -1,0 +1,4 @@
+# Shell scripts run on the Linux production server -- a CRLF shebang line
+# (`#!/usr/bin/env bash\r`) fails outright there, so force LF regardless
+# of what a Windows checkout's core.autocrlf would otherwise do.
+*.sh text eol=lf
