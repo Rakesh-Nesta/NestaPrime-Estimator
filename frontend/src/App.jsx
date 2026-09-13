@@ -2,6 +2,7 @@ import { useState } from "react";
 import { changePassword, getCurrentUser, getProject, login } from "./api";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
+import CrossSellAdmin from "./CrossSellAdmin";
 import CustomNotesPanel from "./CustomNotesPanel";
 import Dashboard from "./Dashboard";
 import Documents from "./Documents";
@@ -31,7 +32,7 @@ export default function App() {
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
-  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests", "vendors_admin", "help"];
+  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests", "vendors_admin", "cross_sell_admin", "help"];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
   function goToTopLevel(target) {
@@ -130,6 +131,7 @@ export default function App() {
         items: [
           { key: "settings", label: "Master Settings" },
           { key: "sports_scope_admin", label: "Sports & Scope Admin" },
+          ...(user.role === "director" ? [{ key: "cross_sell_admin", label: "Cross-Sell Add-ons" }] : []),
           ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log" }] : []),
         ],
       },
@@ -284,6 +286,9 @@ export default function App() {
         )}
         {screen === "vendors_admin" && ["pm", "director", "procurement"].includes(user.role) && (
           <VendorsAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "cross_sell_admin" && user.role === "director" && (
+          <CrossSellAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "reports" && (
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />

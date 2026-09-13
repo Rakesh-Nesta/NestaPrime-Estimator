@@ -349,3 +349,52 @@ RATE_ITEM_SEED = [
     ("Equipment", "Badminton pole — standard", "Movable, w/ net", "pair", "9506", 17472.0, 5.0),
     ("Equipment", "Badminton pole — premium", "Model 8129, heavy/wheels/competition", "pair", "9506", 40250.0, 5.0),
 ]
+
+# Amendment 3 (Annexure 2), Section 7 -- "Complete Your Facility" cross-sell
+# starter catalog. Director decision (Section-7-specs.md): seed only
+# Fencing with real pricing (Note R1's chain-link rate, Rs 120/sqft --
+# the same real historical figure already in RATE_ITEM_SEED above);
+# Lighting/Seating/AMC have no defensible reference data anywhere in the
+# 23 historical quotations reviewed for Note R1, so they're recorded as
+# real catalog rows (sport-tagged, ready to use) with cost=None --
+# inactive until a PM/Director enters a real cost, never fabricated for
+# a client-facing document.
+#
+# Fencing's margin_percent (20.0) is a borrowed placeholder -- the middle
+# of MARGIN_POLICY_SEED's general floor+target range -- not a real
+# Director-set figure for this specific add-on; flagged here so it's
+# easy to find and correct via the Cross-Sell admin screen rather than
+# silently treated as authoritative.
+#
+# (name, category, description, cost, unit, margin_percent, all_sports,
+#  is_active, sport_keys) -- sport_keys is a tuple of Sport.key values
+# this add-on is suggested for; ignored when all_sports is True.
+CROSS_SELL_ADDON_SEED = [
+    (
+        "Perimeter chain-link fencing", "fencing",
+        "2\" mesh, 10ga, 10ft height -- Note R1 historical rate.",
+        120.0, "sqft", 20.0, False, True,
+        (
+            "basketball_outdoor", "volleyball_outdoor", "tennis", "padel", "pickleball",
+            "football_11", "football_7", "football_5_futsal", "box_cricket", "kabaddi",
+        ),
+    ),
+    (
+        "LED floodlight package", "lighting",
+        "Court/ground floodlighting -- pending real cost (Note R1: every historical quote "
+        "bundled fixtures/poles/wiring together, no isolated per-fixture rate).",
+        None, None, None, True, False, (),
+    ),
+    (
+        "Spectator seating", "seating",
+        "Bleacher/stand seating -- pending real cost (no reference data in the 23 "
+        "historical quotations reviewed for Note R1).",
+        None, None, None, True, False, (),
+    ),
+    (
+        "Annual Maintenance Contract (AMC)", "amc",
+        "Recurring upkeep contract -- pending real cost (AMC exists today only as an "
+        "unpriced Additional Scope checklist item, Part I).",
+        None, None, None, True, False, (),
+    ),
+]
