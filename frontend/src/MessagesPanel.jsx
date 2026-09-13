@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { createMessage, listMessages, listMessageTemplates } from "./api";
 
+// Amendment 8 (Section 8): WhatsApp (wa-gateway) and Telegram (Bot API)
+// are real sends now; email still has no provider wired up.
+const REAL_SEND_CHANNELS = ["whatsapp", "telegram"];
+const DOC_TYPES_WITH_PDF = ["estimate", "quotation"];
+
+const STATUS_STYLE = {
+  recorded: "text-text-secondary",
+  sent: "text-green-400",
+  delivered: "text-green-400",
+  failed: "text-red-400",
+};
+
 export default function MessagesPanel({ token, docType, docId }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -10,8 +22,12 @@ export default function MessagesPanel({ token, docType, docId }) {
   const [templateId, setTemplateId] = useState("");
   const [subject, setSubject] = useState("");
   const [note, setNote] = useState("");
+  const [includeDocument, setIncludeDocument] = useState(false);
   const [sending, setSending] = useState(false);
   const [templates, setTemplates] = useState([]);
+
+  const isRealSend = REAL_SEND_CHANNELS.includes(channel);
+  const canIncludeDocument = isRealSend && DOC_TYPES_WITH_PDF.includes(docType);
 
   function load() {
     return listMessages(token, docType, docId)
@@ -50,11 +66,13 @@ export default function MessagesPanel({ token, docType, docId }) {
       await createMessage(token, {
         docType, docId, channel, recipient, templateId: templateId || undefined,
         subject: subject || undefined, bodyNote: note || undefined,
+        includeDocument: canIncludeDocument && includeDocument,
       });
       setRecipient("");
       setTemplateId("");
       setSubject("");
       setNote("");
+      setIncludeDocument(false);
       await load();
     } catch (err) {
       setError(err.message);
@@ -70,17 +88,19 @@ export default function MessagesPanel({ token, docType, docId }) {
       <div>
         <p className="text-xs font-semibold text-text-secondary">Messages (M.7.2)</p>
         <p className="text-[11px] text-text-secondary">
-          This app has no email/WhatsApp provider wired up -- logging a message here records that you sent this
-          document yourself (by whatever means), for an audit trail. It does not actually send anything.
+          {isRealSend
+            ? "Amendment 8: this actually sends via the company's WhatsApp/Telegram integration -- real delivery status below, never a status this app can't verify (see Section 8 spec)."
+            : "Email has no provider wired up -- logging a message here records that you sent this document yourself (by whatever means), for an audit trail. It does not actually send anything."}
         </p>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
-      {messages.length === 0 && <p className="text-xs text-text-secondary">No messages logged yet.</p>}
+      {messages.length === 0 && <p className="text-xs text-text-secondary">No messages yet.</p>}
       {messages.map((m) => (
         <div key={m.id} className="flex flex-wrap items-center gap-1 text-xs bg-surface rounded px-2 py-1 border border-border-dark">
           <span className="font-medium">{m.channel}</span>
           <span>&rarr; {m.recipient}</span>
           {m.subject && <span className="text-text-secondary">· {m.subject}</span>}
+          <span className={STATUS_STYLE[m.status] || "text-text-secondary"}>· {m.status}</span>
           <span className="text-text-secondary">· {new Date(m.created_at).toLocaleString()}</span>
         </div>
       ))}
@@ -89,6 +109,7 @@ export default function MessagesPanel({ token, docType, docId }) {
         <select value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs">
           <option value="email">email</option>
           <option value="whatsapp">whatsapp</option>
+          <option value="telegram">telegram</option>
         </select>
         <select
           value={templateId}
@@ -107,7 +128,7 @@ export default function MessagesPanel({ token, docType, docId }) {
         <input
           value={recipient}
           onChange={(e) => setRecipient(e.target.value)}
-          placeholder="Recipient (email or phone)"
+          placeholder={channel === "telegram" ? "Telegram chat id" : "Recipient (email or phone)"}
           required
           className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs w-48"
         />
@@ -120,15 +141,21 @@ export default function MessagesPanel({ token, docType, docId }) {
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Note (optional)"
+          placeholder={isRealSend ? "Message text ({client_name}, {amount}, {validity}...)" : "Note (optional)"}
           className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs flex-1 min-w-[8rem]"
         />
+        {canIncludeDocument && (
+          <label className="flex items-center gap-1 text-xs text-text-secondary">
+            <input type="checkbox" checked={includeDocument} onChange={(e) => setIncludeDocument(e.target.checked)} />
+            Attach {docType} PDF
+          </label>
+        )}
         <button
           type="submit"
           disabled={!recipient || sending}
           className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover disabled:opacity-50"
         >
-          {sending ? "Logging…" : "Log sent message"}
+          {sending ? (isRealSend ? "Sending…" : "Logging…") : isRealSend ? "Send" : "Log sent message"}
         </button>
       </form>
     </div>

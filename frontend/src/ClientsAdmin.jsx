@@ -5,6 +5,7 @@ export default function ClientsAdmin({ token, role, onBack }) {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [chatIdDrafts, setChatIdDrafts] = useState({});
   const canEditFlags = role === "director";
 
   function load() {
@@ -33,8 +34,18 @@ export default function ClientsAdmin({ token, role, onBack }) {
     try {
       await updateClientConsent(token, clientId, {
         [field]: value,
-        ...(value ? { consent_date: new Date().toISOString().slice(0, 10) } : {}),
+        ...(value && field !== "telegram_opt_in" ? { consent_date: new Date().toISOString().slice(0, 10) } : {}),
       });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function saveTelegramChatId(clientId) {
+    setError("");
+    try {
+      await updateClientConsent(token, clientId, { telegram_chat_id: chatIdDrafts[clientId] || null });
       await load();
     } catch (err) {
       setError(err.message);
@@ -113,6 +124,28 @@ export default function ClientsAdmin({ token, role, onBack }) {
                   />
                   Email opt-in
                 </label>
+                <label
+                  className="flex items-center gap-1"
+                  title="Amendment 8: a bot can only message a chat that has messaged it first"
+                >
+                  <input
+                    type="checkbox"
+                    checked={c.telegram_opt_in}
+                    onChange={(e) => toggleConsent(c.id, "telegram_opt_in", e.target.checked)}
+                  />
+                  Telegram opt-in
+                </label>
+                <span className="flex items-center gap-1">
+                  <input
+                    value={chatIdDrafts[c.id] ?? c.telegram_chat_id ?? ""}
+                    onChange={(e) => setChatIdDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
+                    placeholder="Telegram chat id"
+                    className="w-28 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
+                  />
+                  <button onClick={() => saveTelegramChatId(c.id)} className="text-gold hover:underline">
+                    Save
+                  </button>
+                </span>
               </span>
             </div>
           </div>

@@ -59,6 +59,12 @@ class ClientCreate(BaseModel):
     whatsapp_opt_in: bool = False
     email_opt_in: bool = True
     consent_date: date | None = None
+    # Amendment 8 (Section 8): Telegram, same opt-out-by-default
+    # discipline as WhatsApp. chat_id is rarely known at creation time
+    # (see Client.telegram_chat_id's own docstring) but accepted here in
+    # case it already is.
+    telegram_opt_in: bool = False
+    telegram_chat_id: str | None = None
 
 
 class ClientFlagsUpdate(BaseModel):
@@ -70,6 +76,8 @@ class ClientConsentUpdate(BaseModel):
     whatsapp_opt_in: bool | None = None
     email_opt_in: bool | None = None
     consent_date: date | None = None
+    telegram_opt_in: bool | None = None
+    telegram_chat_id: str | None = None
 
 
 class ClientOut(BaseModel):
@@ -85,6 +93,8 @@ class ClientOut(BaseModel):
     whatsapp_opt_in: bool
     email_opt_in: bool
     consent_date: date | None
+    telegram_opt_in: bool
+    telegram_chat_id: str | None
 
     model_config = ConfigDict(from_attributes=True)
 

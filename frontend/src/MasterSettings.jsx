@@ -903,6 +903,7 @@ function MessageTemplatesCard({ token }) {
               >
                 <option value="email">email</option>
                 <option value="whatsapp">whatsapp</option>
+                <option value="telegram">telegram</option>
               </select>
             </div>
             <div>

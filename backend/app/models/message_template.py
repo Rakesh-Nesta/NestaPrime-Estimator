@@ -32,21 +32,25 @@ class MessageTemplate(Base):
     nullable: some templates (a payment reminder, a generic vendor
     follow-up) aren't tied to one specific document type.
 
-    No real email/WhatsApp provider is wired up in this build (see
-    Message's own docstring) -- sending is still a PM's own manual
-    action outside the app, with nothing that would ever consume a
-    rendered placeholder. So this library supplies the Meta-approved
-    wording and its approval gate, not live substitution: {client_name} /
-    {quotation_number} / {amount} / {validity} stay literal placeholder
-    text in body for the sender to fill in by hand -- the same honesty as
-    every other feature this codebase leaves manual when the automatable
-    part needs infrastructure this build doesn't have.
+    Amendment 8 (Section 8): WhatsApp and Telegram sends now render
+    {client_name} / {quotation_number} / {estimate_number} /
+    {document_number} / {amount} / {validity} against the real document
+    at send time (see app/services/message_rendering.py) -- body itself
+    still stores the literal placeholder text as the master template
+    wording, unchanged by any one send. Email keeps today's behaviour
+    (no provider, no rendering, sending is still a PM's own manual
+    action outside the app).
 
-    whatsapp_template_status only applies when channel is WHATSAPP (Meta
-    approval has no email equivalent); it stays null for an email
-    template. version increments on every subject/body edit; editing a
-    submitted or approved WhatsApp template's content resets its status
-    back to draft, since Meta's approval is tied to specific wording."""
+    whatsapp_template_status only applies when channel is WHATSAPP.
+    wa-gateway (the WhatsApp integration this build uses) is not a
+    Meta-approved BSP, so Meta itself imposes no approval requirement on
+    what it sends -- this gate is kept anyway as the app's own internal
+    content-quality control (Section 8, Decision C), independent of
+    what WhatsApp's own rules require. It stays null for an email or
+    Telegram template (Telegram has no equivalent approval concept).
+    version increments on every subject/body edit; editing a submitted
+    or approved WhatsApp template's content resets its status back to
+    draft, since the approval was tied to specific wording."""
 
     __tablename__ = "message_templates"
 

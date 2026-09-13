@@ -31,6 +31,16 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       ACCESS_TOKEN_EXPIRE_MINUTES: 480
       ENVIRONMENT: production
+      # Amendment 8 (Section 8): the company's self-hosted WhatsApp
+      # backend, deployed separately on this same host (see wa-gateway's
+      # own docker-compose.yml) -- reached over loopback, same pattern as
+      # this backend container itself only binding 127.0.0.1. All four
+      # blank (unset in the host .env) disables real WhatsApp/Telegram
+      # sending -- Messages fall back to a fast FAILED instead of hanging.
+      WA_GATEWAY_BASE_URL: ${WA_GATEWAY_BASE_URL:-}
+      WA_GATEWAY_API_KEY: ${WA_GATEWAY_API_KEY:-}
+      WA_GATEWAY_WEBHOOK_SECRET: ${WA_GATEWAY_WEBHOOK_SECRET:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     # Bound to localhost only -- the public-facing side is the host's own
     # nginx (deploy/nginx/nestaprime.conf), which reverse-proxies /api/
     # here. The backend container is never directly internet-reachable.

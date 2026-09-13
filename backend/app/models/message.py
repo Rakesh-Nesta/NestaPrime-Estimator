@@ -13,14 +13,20 @@ from app.models.setting import DocumentType
 class MessageChannel(str, enum.Enum):
     EMAIL = "email"
     WHATSAPP = "whatsapp"
+    TELEGRAM = "telegram"
 
 
 class MessageStatus(str, enum.Enum):
-    """Only RECORDED is ever written by this build. SENT/DELIVERED/FAILED
-    are reserved for when a real email/WhatsApp provider integration
-    (SMTP, or a WhatsApp Business API BSP like Gupshup/Interakt) lands
-    and can report back an actual delivery outcome -- see Message's own
-    docstring."""
+    """Amendment 8 (Section 8): WhatsApp (via the self-hosted wa-gateway)
+    and Telegram (via the Bot API) are real, wired-up sends -- RECORDED
+    for a create with no send attempt (email, still log-only, unchanged),
+    SENT once the provider accepts it, FAILED on a provider/network
+    error. DELIVERED stays unused: wa-gateway only ever confirms
+    "sent" (Baileys' delivery/read receipts aren't exposed), and
+    Telegram's Bot API gives no delivery/read signal for outbound
+    messages either -- so this build never claims a delivery status it
+    can't actually verify. The value is kept defined for a future
+    provider (e.g. a real WhatsApp BSP) that can report it truthfully."""
 
     RECORDED = "recorded"
     SENT = "sent"
@@ -32,14 +38,14 @@ class Message(Base):
     """Part O MESSAGES / M.7.2 rule 1: 'Every send creates a MESSAGES
     record: document id and revision, channel, recipient, sender,
     template used, attachment hash..., provider message id, delivery
-    status.' This build has no real email/WhatsApp provider wired up --
-    no SMTP account, no WhatsApp Business API (Gupshup/Interakt)
-    integration -- so every row here is a manually confirmed 'this was
-    sent' record (status=recorded) rather than a provider-verified
-    delivery receipt. provider_message_id is intentionally not modelled
-    since nothing ever populates it; status never advances past
-    RECORDED. doc_type/doc_id is the same polymorphic reference pattern
-    Attachment uses (Cost Sheet, Estimate or Quotation)."""
+    status.' Amendment 8 (Section 8) wired up real sending for WhatsApp
+    (self-hosted wa-gateway) and Telegram (Bot API) -- status/
+    provider_message_id are populated for real for those two channels.
+    Email has no provider wired up (no SMTP account) and stays exactly
+    as before: every email row is a manually confirmed 'this was sent'
+    record (status=recorded), never a provider-verified receipt.
+    doc_type/doc_id is the same polymorphic reference pattern Attachment
+    uses (Cost Sheet, Estimate or Quotation)."""
 
     __tablename__ = "messages"
 
@@ -72,5 +78,10 @@ class Message(Base):
     status: Mapped[MessageStatus] = mapped_column(
         Enum(MessageStatus, name="message_status"), default=MessageStatus.RECORDED, nullable=False
     )
+    # The provider's own id for this send (WhatsApp message id via
+    # wa-gateway, Telegram's message_id) -- null for email (no provider)
+    # and for a WhatsApp/Telegram send that FAILED before the provider
+    # ever returned one.
+    provider_message_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)

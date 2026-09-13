@@ -60,6 +60,15 @@ class Client(Base):
     email_opt_in: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     consent_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
+    # Amendment 8 (Section 8): Telegram has no phone-number addressing --
+    # a bot can only message a chat that has messaged it first, so
+    # telegram_chat_id is discovered after the fact (the client starts a
+    # chat with the bot; staff records the id here), not entered at
+    # client-creation time like phone/email. Same opt-out-by-default
+    # discipline as whatsapp_opt_in.
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telegram_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
