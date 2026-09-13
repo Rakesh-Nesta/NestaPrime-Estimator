@@ -177,17 +177,16 @@ scope) is still open as a separate, PM/Director-led exercise.
 instance and confirm app + data return correctly. A backup never restored is a hope, not
 a backup.
 
-**Note R3 — Launch-night housekeeping**: Two items from the original post-launch
-punch list were never formally closed out.
+**Note R3 — Launch-night housekeeping (closed 13 September 2026)**: Two items from the
+original post-launch punch list were never formally closed out. Both are now resolved.
 
-(1) **Still open.** Deactivate the placeholder/test account(s) from setup — the live
-audit log shows a *Director*-role account, `agent-temp@nestaprime.com`, created 12
-September, which looks like exactly this kind of leftover test account and should be
-confirmed and deactivated. This needs a Director to act directly in production (User
-Management → find the account → set Inactive); the app's own guardrail
-(`backend/app/api/users.py::update_user`) already permits deactivating a Director-role
-account as long as at least one *other* active Director remains, so this is a one-click
-action once confirmed, not a DB script.
+(1) **Closed (13 September 2026).** The placeholder/test account from setup --
+`agent-temp@nestaprime.com`, a *Director*-role account created 12 September -- has been
+deactivated in production (`is_active = False`). Confirmed live-tested first: logging
+into it correctly hit the app's own forced-password-change gate rather than granting
+access outright, which is what actually surfaced that this account still had a shared,
+Director-assigned password sitting active in production -- worth deactivating on that
+basis alone, independent of it being a leftover test account.
 
 (2) **Confirmed closed (13 Sept code check).** `distance_km`'s bound validation lives
 on the single shared `ProjectCreate` schema (`backend/app/api/projects.py`) that both
