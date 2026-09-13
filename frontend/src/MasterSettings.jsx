@@ -16,6 +16,7 @@ import {
   updateUser,
   uploadCompanyLogo,
 } from "./api";
+import RolePermissionsViewer from "./RolePermissionsViewer";
 
 const USER_ROLES = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"];
 
@@ -209,11 +210,27 @@ export default function MasterSettings({ token, onBack, currentUser }) {
               User management
             </button>
           )}
+          {currentUser?.role === "director" && (
+            <button
+              onClick={() => setActiveTab("permissions")}
+              className={`text-sm px-3 py-2 border-b-2 -mb-px ${
+                activeTab === "permissions" ? "border-gold text-gold font-medium" : "border-transparent text-text-secondary hover:text-text-secondary"
+              }`}
+            >
+              Role & Permissions
+            </button>
+          )}
         </div>
       </div>
 
       {activeTab === "users" && currentUser?.role === "director" && (
         <UserManagementTab token={token} currentUser={currentUser} />
+      )}
+
+      {activeTab === "permissions" && currentUser?.role === "director" && (
+        <div className="bg-surface shadow rounded-lg p-6">
+          <RolePermissionsViewer />
+        </div>
       )}
 
       {activeTab === "settings" && (
