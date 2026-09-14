@@ -33,6 +33,7 @@ from app.api import (
     pricing,
     projects,
     purchase_orders,
+    quotations_admin,
     rate_items,
     regional_multipliers,
     reports,
@@ -98,6 +99,11 @@ app.include_router(tender.tender_calc_router)
 app.include_router(tender.l1_view_router)
 app.include_router(documents.cost_sheets_router)
 app.include_router(documents.estimates_router)
+# quotations_admin registered before documents.quotations_router: both define
+# a /quotations/... path, and Starlette matches in registration order, so
+# GET /quotations/export must be added before GET /quotations/{quotation_id}
+# or "export" gets swallowed as a quotation_id (422 uuid-parsing error).
+app.include_router(quotations_admin.quotations_admin_router)
 app.include_router(documents.quotations_router)
 app.include_router(schedule.schedule_router)
 app.include_router(settings.settings_router)

@@ -1658,3 +1658,31 @@ export async function updateFieldSetting(token, fieldKey, state) {
   });
   return handle(res);
 }
+
+// --- Amendment 6b (Section 9): Director-only, cross-project quotations review ---
+
+function _allQuotationsParams({ status, projectId, clientId, dateFrom, dateTo } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (projectId) params.set("project_id", projectId);
+  if (clientId) params.set("client_id", clientId);
+  if (dateFrom) params.set("date_from", dateFrom);
+  if (dateTo) params.set("date_to", dateTo);
+  return params.toString();
+}
+
+export async function listAllQuotations(token, filters = {}) {
+  const qs = _allQuotationsParams(filters);
+  const res = await fetch(`${API_BASE}/quotations${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function downloadAllQuotationsCsvBlob(token, filters = {}) {
+  const qs = _allQuotationsParams(filters);
+  const res = await fetch(`${API_BASE}/quotations/export${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}

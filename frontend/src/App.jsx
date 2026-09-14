@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { changePassword, getCurrentUser, getProject, login } from "./api";
+import AllQuotations from "./AllQuotations";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
 import CrossSellAdmin from "./CrossSellAdmin";
@@ -32,7 +33,7 @@ export default function App() {
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
-  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "price_requests", "vendors_admin", "cross_sell_admin", "help"];
+  const TOP_LEVEL_SCREENS = ["dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help"];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
   function goToTopLevel(target) {
@@ -133,6 +134,12 @@ export default function App() {
           { key: "sports_scope_admin", label: "Sports & Scope Admin" },
           ...(user.role === "director" ? [{ key: "cross_sell_admin", label: "Cross-Sell Add-ons" }] : []),
           ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log" }] : []),
+          // Amendment 6b (Section 9): "admin reviews all quotations" --
+          // same Director-only gate as Audit Log (K.3 restricts the
+          // cost/margin figures this screen shows to PM/Director; this
+          // is the stricter Director-only tier, matching Margin
+          // Performance's own gate for the same figures).
+          ...(user.role === "director" ? [{ key: "quotations_admin", label: "All Quotations" }] : []),
         ],
       },
     ];
@@ -277,6 +284,13 @@ export default function App() {
         )}
         {screen === "audit_log" && user.role === "director" && (
           <AuditLogView token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "quotations_admin" && user.role === "director" && (
+          <AllQuotations
+            token={accessToken}
+            onOpenProject={handleOpenProject}
+            onBack={() => setScreen(preNavScreen)}
+          />
         )}
         {screen === "clients_admin" && (
           <ClientsAdmin token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
