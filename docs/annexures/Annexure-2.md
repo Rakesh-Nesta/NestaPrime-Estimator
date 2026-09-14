@@ -170,8 +170,68 @@ everywhere via one Master Settings value. `RateItem` now carries an optional per
 both blend each sport's own cost-sheet lines into a cost-weighted effective rate instead
 of the flat global one (`app/api/pricing.py::effective_gst_rate_percent` /
 `cost_weighted_gst_rate_percent`) — a sport with no lines yet still falls back to the
-unchanged flat rate. "Recreate a past project and compare totals" (this Note's original
-scope) is still open as a separate, PM/Director-led exercise.
+unchanged flat rate.
+
+**Completed 14 September 2026 — recreate & compare:** "Recreate a past project and
+compare totals" (this Note's original scope) is now done. Two real, closed FY 22–23
+projects were rebuilt end-to-end in the live app (Project Setup → Cost Sheet → Estimate →
+Quotation), sourced from the accounts team's own project-wise expense workbook, both
+Government clients (Tender Mode auto-on per B.2):
+
+- **Indian Army, Mathura — outdoor Basketball court.** Real accounts: material ₹8,93,169 +
+  labour ₹1,84,267 + site logistics ₹76,698 = ₹11,54,134 cost; sold at ₹12,96,610 (ex-GST,
+  **11.0% margin** — below the app's own 12% Government floor); ₹15,30,000 incl. GST.
+  Recreated as Manual Lines split into material-only rates with an explicit labour
+  category per line (Civil/base/site prep, MS fabrication & erection, Acrylic/PU, Turf
+  laying, Electrical) rather than one blended amount, so each category's assumed % could
+  be checked individually — the site-logistics ₹76,698 was deliberately left out of the
+  lines since K.1's own 6% site-establishment step already models that layer. App-computed
+  cost sheet: **₹14,63,408.06** (+26.8% / ₹3,09,274 over real cost — company overhead
+  recovery 10%, DLP reserve 1%, BOCW cess 1%, per-package contingency, and a ₹50,000
+  Government-only structural sign-off line (E.5) the real project never itemized, on top
+  of the labour-% divergences below). Quotation at the policy target margin (15% —
+  Government floor 12% + 3% competitive gap): **₹20,31,554.72 incl. GST**, +32.8% /
+  ₹5,01,554.72 over the real ₹15,30,000.
+- **NHAI, Noida — Badminton PU court.** Real accounts: ₹4,63,786.50 cost; sold at
+  ₹6,01,594 (ex-GST, **22.9% margin** — well above the app's 15% target); ₹7,10,000 incl.
+  GST. Recreated as one material-only Manual Line (PU flooring, Acrylic/PU labour
+  category). App-computed cost sheet: **₹6,05,320.56** (+30.5% / ₹1,41,534.06 over real,
+  same overhead-layer causes as above, no structural sign-off line this time as it's a
+  smaller building-status). Quotation at the same 15% target margin: **₹8,40,327.37 incl.
+  GST**, +18.4% / ₹1,30,327.37 over the real ₹7,10,000.
+
+**What diverges and what it means:**
+1. **Margin policy vs. real outcomes.** The app applies one flat 15% target to every
+   competitive-segment Government client regardless of project. Real margins on these two
+   varied enormously (11.0% vs. 22.9%) — Mathura's real price was actually *below* the
+   app's own 12% floor, meaning the app would never have let that historical deal through
+   at the price it was actually won at. This is a policy question for the Director, not a
+   bug: either the floor is right and that 2022 deal was underpriced, or the floor is set
+   too high for competitive Government bids of this kind.
+2. **Labour-category % assumptions, checked against Mathura's real split:** Civil/base/site
+   prep assumed 30% vs. 21.85% real (too high); MS fabrication & erection assumed 22% vs.
+   6.4% real for basketball-pole *installation* specifically (likely fine for genuine
+   fabrication work, too high for installing a pre-fabricated pole+board set — these may
+   need splitting into two categories); Acrylic/PU assumed 20% vs. 22.7% real (close);
+   Turf laying assumed 12% vs. 25.4% real (assumption roughly half of real — the largest
+   gap found); Electrical assumed 25% vs. 31.4% real (somewhat low). Site-establishment's
+   flat 6% landed close to Mathura's real ~6.6% logistics ratio — no change indicated
+   there.
+3. **Rate-table gaps, independently reconfirmed.** Neither project could be built with a
+   seeded `RateItem` rate — asphalt base, acrylic/PU court coating, and basketball
+   pole+board equipment all had to go through Manual Line, exactly the three categories
+   the 13 September rate-card review already parked pending accountant sign-off. Two
+   independent data sources (23 historical quotations, and now these two full project
+   rebuilds) agree on the same gap.
+4. **The ₹50,000 structural sign-off line (E.5)** has no line-item equivalent in either
+   real project's accounts — a genuine, disclosed difference in scope between what the
+   app now requires for Government/Tender work and what was actually billed in 2022–23,
+   not a computation error.
+
+No rate-table or percentage change has been made off the back of this alone — per Annexure
+2's own Change Process, any resulting tuning (labour-category %, the margin floor, or
+adding the three parked rates once sign-off exists) needs its own Director-approved spec
+before implementation.
 
 **Note R2 — Backup & restore drill**: Quarterly: restore a Lightsail snapshot to a test
 instance and confirm app + data return correctly. A backup never restored is a hope, not
