@@ -63,22 +63,22 @@ range works the same way; clicking a row opens that project's Documents screen a
 matching quotation; a Sales or PM-role user does not see this nav item at all (same
 gate as Master Settings/Audit Log).
 
-### One open decision — needs Director input before implementation
+### Decision — Director-approved (14 September 2026)
 
 **Decision A — does this screen need its own export (CSV/PDF), or is browse-and-drill
-enough for this wave?** The registered scope says "reviews," not "exports." Proposing
-**browse-and-drill only this wave** (Recommended) — Margin Performance (6c) already
-covers the exportable-report use case; adding export here would duplicate that path.
-Export can be added later as its own small amendment if a real need shows up.
+enough for this wave?** **Director decision: add CSV/PDF export this wave too** (not the
+Recommended browse-and-drill-only option). The table gets its own export control on top
+of the acceptance criteria above — same filtered result set the screen is currently
+showing (status/project/client/date), not a separate unfiltered dump. This is additive
+to §2 of the proposed spec, not a replacement for it.
 
 ---
 
 ## Approval
 
-Amendment 6b: ☐ Approved ☐ Changes ☐ Later
-Decision A (export): ☐ Browse-and-drill only, no export (Recommended) ☐ Add CSV/PDF
-export this wave too
+Amendment 6b: ☑ Approved
+Decision A (export): ☑ Add CSV/PDF export this wave too
 
-Director Name: ______________________ Signature: ______________________ Date: ____________
+Director Name: ______________________ Signature: ______________________ Date: 14 September 2026
 
 Prepared by: R. Patni (with AI development assistance) | Date: 14 September 2026
