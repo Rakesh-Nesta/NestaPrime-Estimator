@@ -140,6 +140,17 @@ language). PDF + printable; also lives inside the app under a "Help" button.
 **Maintenance**: Handbook version-numbered; every shipped amendment wave updates the
 relevant chapter (same discipline as this annexure).
 
+### Amendment No. 11 — Rate Card & Margin Policy Tuning (from Note R1's Findings)
+**Registered 14 September 2026.** Note R1's own completed exercise (see its "Completed
+14 September 2026 — recreate & compare" entry below) produced three concrete,
+evidence-backed candidates for tuning, each still parked behind Annexure 2's own Change
+Process ("any resulting tuning ... needs its own Director-approved spec before
+implementation"): (1) the three rate-table gaps (asphalt base, acrylic/PU court coating,
+basketball pole+board) reconfirmed by two independent data sources; (2) five
+labour-category % assumptions checked against one real project's actual material/labour
+split; (3) the flat 15% Government-competitive margin target diverging sharply from two
+real projects' actual achieved margins (11.0% and 22.9%). Spec to follow.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
