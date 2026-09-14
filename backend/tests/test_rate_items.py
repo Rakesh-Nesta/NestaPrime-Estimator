@@ -20,14 +20,18 @@ RATE_ITEM_FIELDS = {
 }
 
 
-def test_labour_categories_lists_all_nine_with_defaults(client, director_user):
+def test_labour_categories_lists_all_ten_with_defaults(client, director_user):
+    """Amendment 11 Part B1: "equipment_installation_prefab" split out of
+    MS fabrication & erection, so the count moved from 9 to 10."""
     headers = _login(client, director_user)
     res = client.get("/labour-categories", headers=headers)
     assert res.status_code == 200
     categories = res.json()
-    assert len(categories) == 9
+    assert len(categories) == 10
     blended = next(c for c in categories if c["key"] == "blended_fallback")
     assert blended["default_percent"] == 22.0
+    prefab = next(c for c in categories if c["key"] == "equipment_installation_prefab")
+    assert prefab["default_percent"] == 8.0
 
 
 def test_new_rate_item_starts_manual_and_unverified(client, director_user):

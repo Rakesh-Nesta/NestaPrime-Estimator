@@ -186,6 +186,15 @@ LABOUR_CATEGORIES_SEED = [
     ("netting", "Netting", 15.0),
     ("pool_mep", "Pool MEP", 25.0),
     ("blended_fallback", "Blended fallback", 22.0),
+    # Amendment 11 Part B1 (Section-10-specs.md, Director-approved 14 Sept
+    # 2026): split out of "MS fabrication & erection" -- Note R1's Mathura
+    # rebuild found installing a pre-fabricated basketball pole+board set
+    # costs 6.4% real labour, not 22%. 22% stays correct for genuine
+    # fabrication-from-stock work; this new category covers bolt-down/
+    # wire-up installation of equipment that arrives pre-made. 8.0% sits
+    # above the single observed 6.4% data point deliberately (N=1) rather
+    # than adopting that figure as a new default outright.
+    ("equipment_installation_prefab", "Equipment installation (pre-fab)", 8.0),
 ]
 
 # K.2 — margin floor per client type + whether that type is a "competitive
@@ -348,6 +357,22 @@ RATE_ITEM_SEED = [
     ("Structure", "Chain-link fencing", "2\" mesh, 10ga, 10ft ht", "sqft", "7314", 120.0, None),
     ("Equipment", "Badminton pole — standard", "Movable, w/ net", "pair", "9506", 17472.0, 5.0),
     ("Equipment", "Badminton pole — premium", "Model 8129, heavy/wheels/competition", "pair", "9506", 40250.0, 5.0),
+    # Amendment 11 Part A (Section-10-specs.md, Director-approved 14 Sept
+    # 2026): the three categories parked above ("pending accountant
+    # sign-off") plus Note R1's own 14 Sept recreate-and-compare exercise
+    # independently reconfirming the same gap from real project rebuilds.
+    # rate=None ("awaiting rate") -- real, HSN/SAC-classified catalog rows,
+    # visible on the Rate Sheet, but no defensible Rs/unit figure exists
+    # yet: the real cost data gathered (Mathura's Ashphalt Material
+    # Rs 3,47,423, Acrylic Material Rs 2,47,000, BB Pole with Transport
+    # Rs 78,300) are lump sums without the underlying quantities (coated
+    # sqft, base sqmt, pole count) needed to derive a trustworthy per-unit
+    # rate -- fabricating one would be worse than leaving the gap visible.
+    # Cannot be confirmed into an AI rate until a PM/Director enters a
+    # real, quantity-backed number via the Rate Sheet screen.
+    ("Civil", "Asphalt base course", "Compacted, incl. binder — pending real rate", "sqmt", "995454", None, None),
+    ("Flooring", "Acrylic/PU court coating", "3-8 coats, thickness/system varies — pending real rate", "sqft", "3918", None, None),
+    ("Equipment", "Basketball pole & board", "Standard, w/ transport — pending real rate", "set", "9506", None, 5.0),
 ]
 
 # Amendment 3 (Annexure 2), Section 7 -- "Complete Your Facility" cross-sell
