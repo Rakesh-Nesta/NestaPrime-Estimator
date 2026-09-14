@@ -111,14 +111,16 @@ yet) — not a silent default drift.
 
 ---
 
-## Approval
+## Approval — Director-approved (14 September 2026)
 
-Part A (three rate rows, null rate, awaiting-rate state): ☐ Approved ☐ Changes ☐ Later
-Part B1 (split pre-fab installation labour category): ☐ Approved ☐ Changes ☐ Later
-Part B2 (flag 4 categories, no default change yet): ☐ Approved ☐ Changes ☐ Later
-Part C (margin policy): ☐ Keep 15% flat ☐ Lower floor/target ☐ Flat + log divergence
-for review ☐ Later
+Part A (three rate rows, null rate, awaiting-rate state): ☑ Approved
+Part B1 (split pre-fab installation labour category): ☑ Approved
+Part B2 (flag 4 categories, no default change yet): ☑ Approved
+Part C (margin policy): ☑ Keep 15% flat -- no change. Mathura is treated as a
+historically underpriced 2022 deal, not evidence the floor/target is wrong; Noida stands
+as the policy working as intended. No `MarginPolicy`/`SportMarginPolicy` change, and no
+override-review flagging mechanism requested at this time.
 
-Director Name: ______________________ Signature: ______________________ Date: ____________
+Director Name: ______________________ Signature: ______________________ Date: 14 September 2026
 
 Prepared by: R. Patni (with AI development assistance) | Date: 14 September 2026
