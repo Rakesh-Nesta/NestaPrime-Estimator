@@ -16,6 +16,7 @@ from app.api import (
     dashboard,
     documents,
     exports,
+    field_settings,
     flooring,
     gym,
     hubs,
@@ -118,6 +119,7 @@ app.include_router(overheads.overheads_router)
 app.include_router(overheads.vehicle_classes_router)
 app.include_router(package_contents.router)
 app.include_router(exports.exports_router)
+app.include_router(field_settings.field_settings_router)
 app.include_router(attachments.attachments_router)
 app.include_router(audit_log.audit_log_router)
 app.include_router(messages.messages_router)

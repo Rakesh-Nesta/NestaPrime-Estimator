@@ -5,6 +5,7 @@ import {
   createProject,
   getClientTypeDefaults,
   listClients,
+  listFieldSettings,
   listHubs,
   listRegionalMultipliers,
   listSports,
@@ -84,13 +85,24 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
   // Amendment 2: Quick is the default -- 5 fields, blind-quoting defaults
   // for everything else. Detailed is today's full form, unchanged.
   const [mode, setMode] = useState("quick"); // "quick" | "detailed"
+  // Amendment 5 Phase 2: field_key -> "compulsory" | "optional" | "hidden".
+  // A field with no entry yet (still loading, or the Director never set
+  // it) is treated as compulsory -- today's real behavior.
+  const [fieldSettings, setFieldSettings] = useState({});
 
   useEffect(() => {
     listClients(token).then(setClients).catch(() => {});
     listRegionalMultipliers(token).then(setMultipliers).catch(() => {});
     listHubs(token).then(setHubs).catch(() => {});
     listSports(token).then(setSports).catch(() => {});
+    listFieldSettings(token)
+      .then((rows) => setFieldSettings(Object.fromEntries(rows.map((r) => [r.field_key, r.state]))))
+      .catch(() => {});
   }, [token]);
+
+  function fieldState(key) {
+    return fieldSettings[key] || "compulsory";
+  }
 
   function set(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -210,10 +222,10 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         hub_id: form.hubId || null,
         distance_km: form.distanceKm ? Number(form.distanceKm) : null,
         site_condition: form.siteCondition,
-        soil_type: form.soilType,
+        soil_type: form.soilType || null,
         building_status: form.buildingStatus,
-        site_access: form.siteAccess,
-        power_available: form.powerAvailable,
+        site_access: form.siteAccess || null,
+        power_available: form.powerAvailable || null,
         water_available: form.waterAvailable,
         number_of_courts: Number(form.numberOfCourts),
         unit_system: form.unitSystem,
@@ -470,14 +482,24 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
           options={hubs.map((h) => [h.id, `${h.name} (${h.city}, ${h.state_code})`])}
           placeholder={hubs.length ? "Select a hub…" : "No hubs configured yet (Q.1)"}
         />
-        <NumberField
-          label="Distance from hub (km)"
-          value={form.distanceKm}
-          onChange={(v) => set("distanceKm", v)}
-          hint="Phase 1: manual entry from the selected hub -- PIN-code lookup is a later integration"
-        />
+        {fieldState("distance_km") !== "hidden" && (
+          <NumberField
+            label="Distance from hub (km)"
+            value={form.distanceKm}
+            onChange={(v) => set("distanceKm", v)}
+            hint="Phase 1: manual entry from the selected hub -- PIN-code lookup is a later integration"
+          />
+        )}
         <Select label="Site condition" value={form.siteCondition} onChange={(v) => set("siteCondition", v)} options={SITE_CONDITIONS} />
-        <Select label="Soil type" value={form.soilType} onChange={(v) => set("soilType", v)} options={SOIL_TYPES} />
+        {fieldState("soil_type") !== "hidden" && (
+          <Select
+            label="Soil type"
+            value={form.soilType}
+            onChange={(v) => set("soilType", v)}
+            options={SOIL_TYPES}
+            placeholder={fieldState("soil_type") === "optional" ? "None" : undefined}
+          />
+        )}
         <Select label="Building status" value={form.buildingStatus} onChange={(v) => set("buildingStatus", v)} options={BUILDING_STATUSES} />
         {isExistingBuilding && (
           <NumberField
@@ -486,17 +508,35 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
             onChange={(v) => set("existingBuildingClearHeightFt", v)}
           />
         )}
-        <Select label="Site access" value={form.siteAccess} onChange={(v) => set("siteAccess", v)} options={SITE_ACCESS_OPTIONS} />
+        {fieldState("site_access") !== "hidden" && (
+          <Select
+            label="Site access"
+            value={form.siteAccess}
+            onChange={(v) => set("siteAccess", v)}
+            options={SITE_ACCESS_OPTIONS}
+            placeholder={fieldState("site_access") === "optional" ? "None" : undefined}
+          />
+        )}
       </fieldset>
 
       <fieldset className="space-y-3 border-t pt-4">
         <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Services & scope</legend>
-        <Select label="Power available" value={form.powerAvailable} onChange={(v) => set("powerAvailable", v)} options={POWER_OPTIONS} />
+        {fieldState("power_available") !== "hidden" && (
+          <Select
+            label="Power available"
+            value={form.powerAvailable}
+            onChange={(v) => set("powerAvailable", v)}
+            options={POWER_OPTIONS}
+            placeholder={fieldState("power_available") === "optional" ? "None" : undefined}
+          />
+        )}
         <label className="flex items-center gap-2 text-sm text-text-secondary">
           <input type="checkbox" checked={form.waterAvailable} onChange={(e) => set("waterAvailable", e.target.checked)} />
           Water available
         </label>
-        <NumberField label="Number of courts" value={form.numberOfCourts} onChange={(v) => set("numberOfCourts", v)} min={1} />
+        {fieldState("number_of_courts") !== "hidden" && (
+          <NumberField label="Number of courts" value={form.numberOfCourts} onChange={(v) => set("numberOfCourts", v)} min={1} />
+        )}
         <Select label="Unit system" value={form.unitSystem} onChange={(v) => set("unitSystem", v)} options={[["feet", "Feet"], ["metres", "Metres"]]} />
         <Select label="Package" value={form.package} onChange={(v) => set("package", v)} options={PACKAGES} />
         {form.clientMode === "existing" && typeDefaults?.package && (

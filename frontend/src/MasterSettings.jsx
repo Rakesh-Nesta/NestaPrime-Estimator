@@ -8,10 +8,12 @@ import {
   exportSettingsBlob,
   getCompanyLogoMeta,
   importSettingsExcel,
+  listFieldSettings,
   listMessageTemplates,
   listSettings,
   listUsers,
   resetUserPassword,
+  updateFieldSetting,
   updateMessageTemplate,
   updateUser,
   uploadCompanyLogo,
@@ -318,6 +320,8 @@ export default function MasterSettings({ token, onBack, currentUser }) {
       </div>
 
       <MessageTemplatesCard token={token} />
+
+      <FieldSettingsCard token={token} />
 
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-3">Current settings ({settings.length})</h3>
@@ -697,6 +701,80 @@ const DOC_TYPES = [
 
 function emptyTemplateForm() {
   return { document_type: "", channel: "email", name: "", subject: "", body: "", language: "en" };
+}
+
+const FIELD_LABELS = {
+  soil_type: "Soil type",
+  distance_km: "Distance from hub (km)",
+  number_of_courts: "Number of courts",
+  site_access: "Site access",
+  power_available: "Power available",
+};
+const FIELD_STATES = ["compulsory", "optional", "hidden"];
+
+function FieldSettingsCard({ token }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [savingKey, setSavingKey] = useState(null);
+
+  function load() {
+    return listFieldSettings(token).then(setRows);
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function handleChange(fieldKey, state) {
+    setError("");
+    setSavingKey(fieldKey);
+    try {
+      await updateFieldSetting(token, fieldKey, state);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <h3 className="text-sm font-semibold text-text-secondary mb-1">Field settings</h3>
+      <p className="text-xs text-text-secondary mb-2">
+        Amendment 5 Phase 2: New Project Setup fields the Director can make Optional (a real "None" becomes
+        selectable) or Hidden (removed from the form, uses its default) -- Compulsory matches today's behaviour and
+        is the default for every field until changed here.
+      </p>
+      {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.field_key} className="flex items-center justify-between border border-border-dark rounded px-3 py-2 text-sm">
+            <span>{FIELD_LABELS[r.field_key] || r.field_key}</span>
+            <select
+              value={r.state}
+              disabled={savingKey === r.field_key}
+              onChange={(e) => handleChange(r.field_key, e.target.value)}
+              className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm disabled:opacity-50"
+            >
+              {FIELD_STATES.map((s) => (
+                <option key={s} value={s}>
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function MessageTemplatesCard({ token }) {

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.clients import _default_package
+from app.api.field_settings import get_field_state
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client, ClientType
@@ -64,10 +65,17 @@ class ProjectCreate(BaseModel):
     # friendly 422 a bad form value should produce.
     distance_km: float | None = Field(default=None, ge=0, le=99999.9)
     site_condition: SiteCondition
-    soil_type: SoilType
+    # Amendment 5 Phase 2: these three can be omitted when a Director has
+    # marked the field Optional or Hidden on New Project Setup (see
+    # app/api/field_settings.py) -- create_project() below still 422s if
+    # one is missing while its own field-setting says Compulsory
+    # (today's default for all three, unchanged unless a Director opts
+    # one down), so the *effective* requiredness is enforced there, not
+    # by this schema alone.
+    soil_type: SoilType | None = None
     building_status: BuildingStatus
-    site_access: SiteAccess
-    power_available: PowerAvailable
+    site_access: SiteAccess | None = None
+    power_available: PowerAvailable | None = None
     water_available: bool
     number_of_courts: int = 1
     unit_system: UnitSystem = UnitSystem.FEET
@@ -94,10 +102,10 @@ class ProjectOut(BaseModel):
     hub_id: uuid.UUID | None
     distance_km: float | None
     site_condition: SiteCondition
-    soil_type: SoilType
+    soil_type: SoilType | None
     building_status: BuildingStatus
-    site_access: SiteAccess
-    power_available: PowerAvailable
+    site_access: SiteAccess | None
+    power_available: PowerAvailable | None
     water_available: bool
     number_of_courts: int
     unit_system: UnitSystem
@@ -142,6 +150,21 @@ def create_project(
     client = db.query(Client).filter(Client.id == payload.client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+
+    # Amendment 5 Phase 2 (Section 6): soil_type/site_access/
+    # power_available are the three governed fields this app can
+    # actually block on (distance_km/number_of_courts are already
+    # nullable/defaulted, so a field-setting only affects whether New
+    # Project Setup shows them, not whether the API accepts their
+    # absence). A field with no FieldSetting row is COMPULSORY --
+    # today's real behavior, unchanged until a Director opts it down.
+    for field_key, value in (
+        ("soil_type", payload.soil_type),
+        ("site_access", payload.site_access),
+        ("power_available", payload.power_available),
+    ):
+        if value is None and get_field_state(db, field_key) == "compulsory":
+            raise HTTPException(status_code=422, detail=f"'{field_key}' is required")
 
     if payload.hub_id is not None and not db.query(Hub).filter(Hub.id == payload.hub_id).first():
         raise HTTPException(status_code=404, detail="Hub not found")
