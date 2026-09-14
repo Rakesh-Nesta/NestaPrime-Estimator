@@ -112,7 +112,12 @@ class Project(Base):
     site_condition: Mapped[SiteCondition] = mapped_column(
         Enum(SiteCondition, name="site_condition"), nullable=False
     )
-    soil_type: Mapped[SoilType] = mapped_column(Enum(SoilType, name="soil_type"), nullable=False)
+    # Amendment 5 Phase 2 (Section 6): nullable now that a Director can
+    # mark this field Optional or Hidden on New Project Setup
+    # (app/api/field_settings.py enforces the actual "required unless a
+    # field-setting says otherwise" rule at the API layer -- this column
+    # just needs to be able to hold the absence).
+    soil_type: Mapped[SoilType | None] = mapped_column(Enum(SoilType, name="soil_type"), nullable=True)
 
     # #6 Project-default building status. Asked again per sport in Module 1
     # (a multi-sport project can mix statuses); this is just the default.
@@ -120,11 +125,12 @@ class Project(Base):
         Enum(BuildingStatus, name="building_status"), nullable=False
     )
 
-    site_access: Mapped[SiteAccess] = mapped_column(
-        Enum(SiteAccess, name="site_access"), nullable=False
+    # Amendment 5 Phase 2: nullable, same reasoning as soil_type above.
+    site_access: Mapped[SiteAccess | None] = mapped_column(
+        Enum(SiteAccess, name="site_access"), nullable=True
     )
-    power_available: Mapped[PowerAvailable] = mapped_column(
-        Enum(PowerAvailable, name="power_available"), nullable=False
+    power_available: Mapped[PowerAvailable | None] = mapped_column(
+        Enum(PowerAvailable, name="power_available"), nullable=True
     )
     water_available: Mapped[bool] = mapped_column(Boolean, nullable=False)  # #9
 

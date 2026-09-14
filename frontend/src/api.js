@@ -1640,3 +1640,21 @@ export async function removeEstimateOptionAddon(token, rowId) {
   });
   if (!res.ok && res.status !== 204) return handle(res);
 }
+
+// Amendment 5 Phase 2 (Section 6): "admin sets each field compulsory/
+// optional/hidden from Master Settings" -- New Project Setup's governed
+// fields.
+
+export async function listFieldSettings(token) {
+  const res = await fetch(`${API_BASE}/field-settings`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function updateFieldSetting(token, fieldKey, state) {
+  const res = await fetch(`${API_BASE}/field-settings/${fieldKey}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
+  });
+  return handle(res);
+}

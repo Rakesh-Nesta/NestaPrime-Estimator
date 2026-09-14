@@ -452,7 +452,14 @@ def add_drainage_takeoff(
                 project_sport_id=payload.project_sport_id,
                 work_package=WorkPackage.CIVIL,
                 category="Drainage",
-                item_name=f"Sub-surface perforated pipe @ {spacing_m}m c/c ({project.soil_type.value})",
+                # Amendment 5 Phase 2: soil_type can now be null (a
+                # Director may mark it Optional/Hidden on New Project
+                # Setup) -- describe it honestly rather than crash on
+                # .value when it was never recorded.
+                item_name=(
+                    f"Sub-surface perforated pipe @ {spacing_m}m c/c "
+                    f"({project.soil_type.value if project.soil_type else 'soil type not recorded'})"
+                ),
                 unit="m",
                 quantity=round(subsurface_pipe_m, 2),
                 rate=payload.subsurface_pipe_rate_per_m,
