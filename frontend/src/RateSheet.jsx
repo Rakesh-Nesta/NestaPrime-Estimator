@@ -84,7 +84,10 @@ export default function RateSheet({ token, onBack }) {
         spec: form.spec || null,
         unit: form.unit,
         hsn_sac: form.hsn_sac,
-        rate: Number(form.rate),
+        // Amendment 11 Part A: a blank rate creates an "awaiting rate" item
+        // -- a real catalog entry with no defensible Rs/unit figure yet,
+        // never a fabricated number.
+        rate: form.rate === "" ? null : Number(form.rate),
         gst_percent: form.gst_percent === "" ? null : Number(form.gst_percent),
         vendor: form.vendor || null,
         city_of_quote: form.city_of_quote || null,
@@ -241,7 +244,12 @@ export default function RateSheet({ token, onBack }) {
           <Text label="Spec" value={form.spec} onChange={(v) => set("spec", v)} />
           <Text label="Unit" value={form.unit} onChange={(v) => set("unit", v)} required />
           <Text label="HSN/SAC" value={form.hsn_sac} onChange={(v) => set("hsn_sac", v)} required />
-          <Text label="Rate (Rs)" type="number" value={form.rate} onChange={(v) => set("rate", v)} required />
+          <Text
+            label="Rate (Rs, blank = awaiting rate)"
+            type="number"
+            value={form.rate}
+            onChange={(v) => set("rate", v)}
+          />
           <Text
             label="GST % (blank = global default)"
             type="number"
@@ -516,7 +524,13 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
           {item.is_commodity_watched && <span className="ml-1 text-amber-400" title="Commodity watched">★</span>}
         </span>
         <span className="text-text-secondary">
-          Rs {item.rate} / {item.unit}
+          {item.rate != null ? (
+            <>
+              Rs {item.rate} / {item.unit}
+            </>
+          ) : (
+            <span className="text-amber-400">Awaiting rate</span>
+          )}
         </span>
       </div>
       <p className="text-xs text-text-secondary">
@@ -532,10 +546,13 @@ function RateItemRow({ token, item, onConfirm, onToggleWatch, onChanged }) {
         ) : (
           <span className="text-xs bg-surface-raised text-text-secondary rounded px-1.5 py-0.5">Manual · Unverified</span>
         )}
-        {item.source === "manual" && (
+        {item.source === "manual" && item.rate != null && (
           <button onClick={onConfirm} className="text-xs text-gold hover:underline">
             Confirm &rarr; AI rate
           </button>
+        )}
+        {item.source === "manual" && item.rate == null && (
+          <span className="text-xs text-text-secondary italic">Enter a rate below to confirm</span>
         )}
         <button onClick={onToggleWatch} className="text-xs text-amber-400 hover:underline">
           {item.is_commodity_watched ? "Unwatch (commodity alert)" : "Watch (commodity alert)"}

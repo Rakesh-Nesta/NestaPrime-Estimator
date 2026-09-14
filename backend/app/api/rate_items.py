@@ -56,7 +56,9 @@ class RateItemCreate(BaseModel):
     spec: str | None = None
     unit: str
     hsn_sac: str
-    rate: float
+    # Amendment 11 Part A: null means "awaiting rate" -- a real catalog
+    # entry with no defensible Rs/unit figure yet (Section-10-specs.md).
+    rate: float | None = None
     # Note R1: null means "use the Master Settings global GST rate," same
     # as before this existed -- set only for an item whose real GST%
     # genuinely differs (e.g. HSN 9506 sports goods at 5%, not 18%).
@@ -78,7 +80,7 @@ class RateItemOut(BaseModel):
     spec: str | None
     unit: str
     hsn_sac: str
-    rate: float
+    rate: float | None
     gst_percent: float | None
     source: RateSource
     verified: bool
@@ -164,17 +166,21 @@ def create_rate_item(
     db.commit()
     db.refresh(item)
 
-    db.add(RateHistory(
-        rate_item_id=item.id,
-        rate=payload.rate,
-        effective_from=date.today(),
-        effective_to=None,
-        vendor_id=payload.vendor_id,
-        project_id=payload.project_id,
-        changed_by_id=current_user.id,
-        reason=payload.reason or "Initial rate",
-    ))
-    db.commit()
+    # Amendment 11 Part A: an "awaiting rate" item (rate=None) has no real
+    # rate value yet, so there's nothing to open a RATE_HISTORY row for --
+    # the first row is written when POST .../rate sets the first real rate.
+    if payload.rate is not None:
+        db.add(RateHistory(
+            rate_item_id=item.id,
+            rate=payload.rate,
+            effective_from=date.today(),
+            effective_to=None,
+            vendor_id=payload.vendor_id,
+            project_id=payload.project_id,
+            changed_by_id=current_user.id,
+            reason=payload.reason or "Initial rate",
+        ))
+        db.commit()
     return _to_out(db, item)
 
 
@@ -229,6 +235,11 @@ def confirm_rate_item(
 
     if item.source == RateSource.AI:
         raise HTTPException(status_code=400, detail="Rate item is already an AI (confirmed) rate")
+    if item.rate is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot confirm an awaiting-rate item -- enter a real rate via POST .../rate first",
+        )
 
     item.source = RateSource.AI
     item.verified = True
@@ -351,7 +362,12 @@ def update_rate_value(
         raise HTTPException(status_code=404, detail="Rate item not found")
     _validate_vendor_and_project(db, payload.vendor_id, payload.project_id)
 
-    previous_rate = float(item.rate)
+    # Amendment 11 Part A: previous_rate is None for an awaiting-rate item
+    # (item.rate started life as NULL) -- this call is exactly how such an
+    # item gets its first real rate, so there's no "matches the current
+    # rate" case and no prior value to compare a commodity-alert move
+    # against below.
+    previous_rate = float(item.rate) if item.rate is not None else None
     if payload.rate == previous_rate:
         raise HTTPException(status_code=422, detail="New rate matches the current rate -- nothing to change")
 
@@ -382,7 +398,7 @@ def update_rate_value(
     db.refresh(item)
 
     alert = None
-    if item.is_commodity_watched and previous_rate > 0:
+    if item.is_commodity_watched and previous_rate is not None and previous_rate > 0:
         percent_move = (payload.rate - previous_rate) / previous_rate * 100
         threshold = _commodity_alert_threshold_percent(db)
         if abs(percent_move) >= threshold:
@@ -421,6 +437,8 @@ def sync_draft_lines_to_master_rate(
     item = db.query(RateItem).filter(RateItem.id == rate_item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Rate item not found")
+    if item.rate is None:
+        raise HTTPException(status_code=400, detail="Cannot sync from an awaiting-rate item -- it has no rate yet")
 
     lines = (
         db.query(CostSheetLine)
@@ -522,6 +540,10 @@ def bulk_update_rate_items(
     results: list[RateItemWithAlertOut] = []
 
     for item in items:
+        # Amendment 11 Part A: an awaiting-rate item has nothing to apply a
+        # % change to -- skipped exactly like the existing zero-rate case.
+        if item.rate is None:
+            continue
         previous_rate = float(item.rate)
         if previous_rate == 0:
             continue
@@ -607,7 +629,8 @@ def export_rate_items(
     for item in items:
         ws.append(
             [
-                item.category, item.item_name, item.spec, item.unit, item.hsn_sac, float(item.rate),
+                item.category, item.item_name, item.spec, item.unit, item.hsn_sac,
+                float(item.rate) if item.rate is not None else None,
                 item.vendor, item.city_of_quote, labour_category_key_by_id.get(item.labour_category_id),
                 item.is_commodity_watched, item.source.value, item.verified,
             ]
@@ -705,9 +728,11 @@ def import_rate_items(
             if not unit:
                 raise ValueError("Unit is required")
             hsn_sac = str(hsn_sac_cell).strip() if hsn_sac_cell not in (None, "") else ""
-            if rate_cell in (None, ""):
-                raise ValueError("Rate is required")
-            rate = float(rate_cell)
+            # Amendment 11 Part A: a blank Rate cell means "awaiting rate"
+            # on a new row, or "leave the rate untouched" on an existing
+            # one -- never an error. This is also what keeps export-then-
+            # reimport of an awaiting-rate item a true no-op.
+            rate = float(rate_cell) if rate_cell not in (None, "") else None
             vendor = str(vendor_cell).strip() if vendor_cell not in (None, "") else None
             city_of_quote = str(city_cell).strip() if city_cell not in (None, "") else None
             labour_category_id = None
@@ -732,16 +757,17 @@ def import_rate_items(
             )
             db.add(item)
             db.flush()
-            db.add(RateHistory(
-                rate_item_id=item.id, rate=rate, effective_from=date.today(), effective_to=None,
-                changed_by_id=current_user.id, reason=_RATE_ITEM_IMPORT_DEFAULT_REASON,
-            ))
+            if rate is not None:
+                db.add(RateHistory(
+                    rate_item_id=item.id, rate=rate, effective_from=date.today(), effective_to=None,
+                    changed_by_id=current_user.id, reason=_RATE_ITEM_IMPORT_DEFAULT_REASON,
+                ))
             existing_by_key[(category, item_name, spec)] = item
             created.append(item)
             continue
 
-        previous_rate = float(existing.rate)
-        if rate != previous_rate:
+        previous_rate = float(existing.rate) if existing.rate is not None else None
+        if rate is not None and rate != previous_rate:
             open_row = (
                 db.query(RateHistory)
                 .filter(RateHistory.rate_item_id == existing.id, RateHistory.effective_to.is_(None))

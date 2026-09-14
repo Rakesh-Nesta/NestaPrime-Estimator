@@ -44,7 +44,14 @@ class RateItem(Base):
     spec: Mapped[str | None] = mapped_column(String(300), nullable=True)
     unit: Mapped[str] = mapped_column(String(20), nullable=False)
     hsn_sac: Mapped[str] = mapped_column(String(20), nullable=False)
-    rate: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    # Amendment 11 (Section 10): null means "awaiting rate" -- the item is
+    # a real, visible catalog entry (sport/category-tagged, HSN/SAC
+    # classified) but has no defensible Rs/unit figure yet. Mirrors the
+    # CROSS_SELL_ADDON_SEED cost=None precedent (Section 7): present and
+    # ready to use, never a fabricated placeholder number. An awaiting-
+    # rate item cannot be confirmed into an AI rate (rate_items.py) until
+    # a PM/Director enters a real value via POST .../rate.
+    rate: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     # Nullable override -- None means "use the Master Settings global GST
     # rate," same as every line always did before this existed. Real
