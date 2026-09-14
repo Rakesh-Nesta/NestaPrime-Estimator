@@ -149,7 +149,21 @@ implementation"): (1) the three rate-table gaps (asphalt base, acrylic/PU court 
 basketball pole+board) reconfirmed by two independent data sources; (2) five
 labour-category % assumptions checked against one real project's actual material/labour
 split; (3) the flat 15% Government-competitive margin target diverging sharply from two
-real projects' actual achieved margins (11.0% and 22.9%). Spec to follow.
+real projects' actual achieved margins (11.0% and 22.9%).
+
+**Implemented 14 September 2026 (Parts A & B1):** per the Director-approved
+[Section-10-specs.md](Section-10-specs.md), `RateItem.rate` is now nullable -- the three
+parked items (asphalt base, acrylic/PU court coating, basketball pole+board) are seeded
+as real, HSN/SAC-classified catalog rows with `rate=null` ("awaiting rate"), visible on
+the Rate Sheet but not confirmable into an AI rate until a PM/Director enters a real,
+quantity-backed number. A new "Equipment installation (pre-fab)" labour category (8%
+default) was split out of "MS fabrication & erection" (22%) for the genuine
+6.4%-real-vs-22%-assumed gap found on Mathura's basketball pole installation. **Parts B2
+and C were Director decisions, not code changes:** the other four labour-category %
+assumptions are flagged for validation against future Note R1 project rebuilds rather
+than moved off a single data point, and the flat 15% Government-competitive margin
+target stays unchanged (Mathura's 2022 price is treated as historically underpriced, not
+evidence the policy is wrong).
 
 ## Register Notes (non-software, business-process)
 
