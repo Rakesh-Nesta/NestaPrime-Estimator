@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import AttachmentsPanel from "./AttachmentsPanel";
 import ClientSignatoriesPanel from "./ClientSignatoriesPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
+import CoverNotePanel from "./CoverNotePanel";
 import MessagesPanel from "./MessagesPanel";
 import {
   addCostSheetLine,
@@ -966,6 +967,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
   const [fastTrackPackage, setFastTrackPackage] = useState("standard");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
+  const [openCoverNoteFor, setOpenCoverNoteFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
   const [rejectFormFor, setRejectFormFor] = useState(null);
@@ -1039,6 +1041,7 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
     await rejectQuotation(token, id, { reason_category: reasonCategory, note });
     setRejectFormFor(null);
   });
+  const handleCoverNoteSaved = onAction(async () => {});
   const handleRevise = onAction(async (quotation) => {
     const draft = reviseDrafts[quotation.id] || {};
     // The API can revise onto any option set; this form keeps whatever
@@ -1155,6 +1158,12 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
               </button>
             )}
             <button
+              onClick={() => setOpenCoverNoteFor(openCoverNoteFor === q.id ? null : q.id)}
+              className="text-text-secondary hover:underline"
+            >
+              {openCoverNoteFor === q.id ? "Hide cover note" : "Cover Note"}
+            </button>
+            <button
               onClick={() => setOpenAttachmentsFor(openAttachmentsFor === q.id ? null : q.id)}
               className="text-text-secondary hover:underline"
             >
@@ -1256,6 +1265,9 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
                 Create revision
               </button>
             </div>
+          )}
+          {openCoverNoteFor === q.id && (
+            <CoverNotePanel token={token} quotation={q} onSaved={handleCoverNoteSaved} />
           )}
           {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
           {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}

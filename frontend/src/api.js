@@ -708,6 +708,24 @@ export async function releaseQuotation(token, quotationId) {
   return handle(res);
 }
 
+// Amendment 13 (Section 12): AI-drafted, always human-reviewed before saving.
+export async function draftQuotationCoverNote(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/draft-cover-note`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function updateQuotationCoverNote(token, quotationId, coverNote) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/cover-note`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ cover_note: coverNote }),
+  });
+  return handle(res);
+}
+
 export async function rejectQuotation(token, quotationId, payload) {
   const res = await fetch(`${API_BASE}/quotations/${quotationId}/reject`, {
     method: "POST",

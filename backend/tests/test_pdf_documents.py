@@ -310,6 +310,36 @@ def test_quotation_pdf_line_amounts_sum_to_the_quotation_total(client, director_
 
 
 # ---------------------------------------------------------------------------
+# Amendment 13 (Section 12): cover_note on the Quotation PDF
+# ---------------------------------------------------------------------------
+
+
+def test_quotation_pdf_shows_cover_note_when_set(client, director_user):
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+    client.patch(
+        f"/quotations/{quotation['id']}/cover-note",
+        json={"cover_note": "We're excited to help build your new badminton facility."},
+        headers=headers,
+    )
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+    assert "We're excited to help build your new badminton facility." in text
+
+
+def test_quotation_pdf_omits_cover_note_section_when_unset(client, director_user):
+    """Additive only -- an unused cover_note changes nothing about
+    today's PDF."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    assert res.content[:4] == b"%PDF"
+
+
+# ---------------------------------------------------------------------------
 # Amendment 5: Custom Notes on the Quotation PDF's "Special Remarks" section
 # ---------------------------------------------------------------------------
 
