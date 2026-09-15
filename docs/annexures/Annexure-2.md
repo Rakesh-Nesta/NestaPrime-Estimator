@@ -258,6 +258,43 @@ No rate-table or percentage change has been made off the back of this alone — 
 adding the three parked rates once sign-off exists) needs its own Director-approved spec
 before implementation.
 
+**Additional validation — Bathinda, 15 September 2026 (Amendment 11 Part B2's own
+follow-up):** recreated a third real project, "Badminton Shed Construction, Bhatinda"
+(private/commercial client — no client identity was recorded in the source accounts,
+unlike Mathura/Noida's named Government clients), from the same expense workbook.
+Bathinda's accounts are structurally different from Mathura/Noida: costs are recorded as
+**all-in contractor payments** (material and labour bundled per vendor) rather than
+separately itemized Material/Labour line pairs — a genuine, disclosed limitation. Most
+lines couldn't be split into a clean material-only Manual Line rate without either
+fabricating a split or accepting a known labour double-count (a Manual Line's rate is
+always treated as material-only, with the app adding its own labour % on top); one line
+(₹2,78,194, an explicitly-labelled "Civil + Labour" contractor payment) was entered as-is
+with this double-counting risk flagged, and two smaller electrical-adjacent lines carry
+the same lower-confidence risk (one of them itself contaminated with unrelated "glass
+door" scope).
+
+One genuinely clean comparison did emerge: Shakir Labour Charges (₹1,72,300, pure
+labour) against the steel structure material (Garg Steel + Suraj Steel, ₹7,06,904) gives
+a real MS fabrication & erection ratio of **24.4%** — close to the 22% default, and a
+useful second, independent confirmation that 22% is reasonably calibrated for genuine
+erection/fabrication work, as distinct from the 6.4% pre-fab-*installation* ratio
+Mathura's basketball pole found (exactly why Amendment 11 Part B1 split that into its
+own category rather than moving 22%).
+
+App-computed cost: ₹17,00,570.07 (+32.55% / ₹4,17,578.07 over real ₹12,82,992) — higher
+than Mathura (+26.8%) and Noida (+30.5%), consistent with the known double-counting on
+the mixed-category lines on top of the usual overhead-layer markup. App-computed
+quotation total (Standard package, Corporate client type, Tender Mode off, GST-inclusive):
+₹24,47,161.81 at an 18.0% margin, vs. real ₹17,71,000 at a 14.5% real margin (+38.2% /
+₹6,76,161.81 over real).
+
+No turf-heavy or cleanly-itemized-electrical project was found among this workbook's
+remaining sheets (Shishukunj is pure accessories procurement with no labour split at
+all), so **Turf laying's 12%-vs-25.4% gap remains the largest unvalidated finding** —
+still open per Part B2, pending a future project with genuinely separated
+material/labour accounts. No rate-table or percentage change has been made off the back
+of this addendum either, same Change Process discipline as above.
+
 **Note R2 — Backup & restore drill**: Quarterly: restore a Lightsail snapshot to a test
 instance and confirm app + data return correctly. A backup never restored is a hope, not
 a backup.
