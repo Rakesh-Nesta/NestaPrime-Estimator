@@ -33,5 +33,12 @@ class Settings(BaseSettings):
     # Same "blank = not configured, fail fast" discipline as wa-gateway.
     telegram_bot_token: str = ""
 
+    # Amendment 13 (Section 12): AI-assisted drafting (quotation cover
+    # notes, message drafts, report summaries) -- always a human-reviewed
+    # draft, never auto-sent. Same "blank = not configured, fail fast"
+    # discipline as wa-gateway/telegram above.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-5"
+
 
 settings = Settings()

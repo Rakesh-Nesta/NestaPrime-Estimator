@@ -173,7 +173,23 @@ drill-through -- there is no screen anywhere in the app to browse the full list 
 any of them, only a short "Recent projects" list; (2) the Director's top nav carries 10
 flat items, more than are used day to day. Director supplied a target navigation
 structure (grouped: Dashboard / Quotation / Projects / Client / Vendor / Tools / Reports
-/ Admin) to replace both. Spec to follow.
+/ Admin) to replace both. Spec: `docs/annexures/Section-11-specs.md`.
+
+**Implemented 15 September 2026** (PR #57, deployed to production same day -- see
+`docs/ops/deploy-log.md`): new All Projects / All Estimates screens; `status_group`
+presets on the existing All Quotations screen; every Dashboard tile now drills through
+to the right filtered screen; nav regrouped into Dashboard / Quotation / Projects /
+Client / Vendor / Tools / Reports / Admin / Education dropdown menus; standalone "+ Add
+Client" form; basic calculator under Tools; Education placeholder screen; hover motion
+extended to Dashboard tiles, list rows, and nav items.
+
+### Amendment No. 13 — AI-Assisted Content (Quotation Narrative, Client Messages, Report Summaries)
+**Registered 15 September 2026 (Director instruction).** Following Amendment 12:
+*"after that we will work on result meaning quotation format, and content, messages,
+reports etc. idea is maximum utilization of AI in content side."* Director confirmed the
+scope covers all three areas (quotation content, client messages, report summaries) and
+that AI-drafted content must always be human-reviewed before it is sent or saved as
+final -- no auto-send. Spec to follow.
 
 ## Register Notes (non-software, business-process)
 
