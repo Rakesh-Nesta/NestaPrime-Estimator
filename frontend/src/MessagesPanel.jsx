@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createMessage, listMessages, listMessageTemplates } from "./api";
+import { createMessage, draftMessage, listMessages, listMessageTemplates } from "./api";
 
 // Amendment 8 (Section 8): WhatsApp (wa-gateway) and Telegram (Bot API)
 // are real sends now; email still has no provider wired up.
@@ -25,6 +25,8 @@ export default function MessagesPanel({ token, docType, docId }) {
   const [includeDocument, setIncludeDocument] = useState(false);
   const [sending, setSending] = useState(false);
   const [templates, setTemplates] = useState([]);
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState("");
 
   const isRealSend = REAL_SEND_CHANNELS.includes(channel);
   const canIncludeDocument = isRealSend && DOC_TYPES_WITH_PDF.includes(docType);
@@ -81,6 +83,19 @@ export default function MessagesPanel({ token, docType, docId }) {
     }
   }
 
+  async function handleDraftWithAi() {
+    setDraftError("");
+    setDrafting(true);
+    try {
+      const { draft } = await draftMessage(token, { docType, docId, channel });
+      setNote(draft);
+    } catch (err) {
+      setDraftError(err.message);
+    } finally {
+      setDrafting(false);
+    }
+  }
+
   if (loading) return <p className="text-xs text-text-secondary">Loading messages…</p>;
 
   return (
@@ -94,6 +109,7 @@ export default function MessagesPanel({ token, docType, docId }) {
         </p>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
+      {draftError && <p className="text-xs text-red-400">{draftError}</p>}
       {messages.length === 0 && <p className="text-xs text-text-secondary">No messages yet.</p>}
       {messages.map((m) => (
         <div key={m.id} className="flex flex-wrap items-center gap-1 text-xs bg-surface rounded px-2 py-1 border border-border-dark">
@@ -144,6 +160,14 @@ export default function MessagesPanel({ token, docType, docId }) {
           placeholder={isRealSend ? "Message text ({client_name}, {amount}, {validity}...)" : "Note (optional)"}
           className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs flex-1 min-w-[8rem]"
         />
+        <button
+          type="button"
+          onClick={handleDraftWithAi}
+          disabled={drafting}
+          className="text-xs bg-surface text-gold border border-gold/40 rounded px-2 py-1 hover:bg-gold/10 hover:-translate-y-0.5 transition-all duration-250 ease-out disabled:opacity-50"
+        >
+          {drafting ? "Drafting…" : "Draft with AI"}
+        </button>
         {canIncludeDocument && (
           <label className="flex items-center gap-1 text-xs text-text-secondary">
             <input type="checkbox" checked={includeDocument} onChange={(e) => setIncludeDocument(e.target.checked)} />

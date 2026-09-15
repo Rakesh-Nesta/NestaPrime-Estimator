@@ -18,7 +18,7 @@ from app.models.client import Client
 from app.models.message import Message, MessageChannel, MessageStatus
 from app.models.message_template import MessageTemplate, WhatsappTemplateStatus
 from app.models.setting import DocumentType
-from app.services import telegram, wa_gateway
+from app.services import ai_content, telegram, wa_gateway
 from app.services.message_rendering import render_placeholders
 
 logger = logging.getLogger(__name__)
@@ -229,6 +229,59 @@ def _dispatch_send(
         return
     message.status = MessageStatus.SENT
     message.provider_message_id = provider_id
+
+
+class MessageDraftRequest(BaseModel):
+    doc_type: DocumentType
+    doc_id: uuid.UUID
+    channel: MessageChannel
+
+
+class MessageDraftOut(BaseModel):
+    draft: str
+
+
+@messages_router.post("/draft", response_model=MessageDraftOut)
+def draft_message(
+    payload: MessageDraftRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    """Amendment 13 (Section 12): returns a suggested message -- never
+    saved, never sent, by this endpoint. Pre-fills the existing note
+    field; the person still reviews/edits it and clicks the existing
+    Send button themselves, same review-then-send shape the note field
+    already had before this amendment. M.7.2 consent/internal-document
+    gates aren't checked here -- drafting text never reaches the client,
+    only a real POST /messages send does, and those gates still apply
+    there unchanged."""
+    _require_doc_type_role(db, payload.doc_type, current_user)
+    document = _get_document_or_404(db, payload.doc_type, payload.doc_id)
+    client_id = _resolve_client_id(db, payload.doc_type, payload.doc_id)
+    client = db.query(Client).filter(Client.id == client_id).first() if client_id else None
+
+    details = [f"Document: {payload.doc_type.value} {getattr(document, 'document_no', '')}".strip()]
+    if client is not None:
+        details.append(f"Client: {client.name}")
+    if payload.doc_type == DocumentType.QUOTATION and getattr(document, "quotation_total", None) is not None:
+        details.append(f"Amount (incl. GST): Rs {float(document.quotation_total):,.0f}")
+    expires_at = getattr(document, "expires_at", None)
+    if expires_at is not None:
+        details.append(f"Valid until: {expires_at.date().isoformat()}")
+
+    tone = "short and casual-professional, suitable for WhatsApp/Telegram" if payload.channel in (
+        MessageChannel.WHATSAPP, MessageChannel.TELEGRAM
+    ) else "professional, suitable for email"
+    prompt = (
+        f"Write a brief client-facing message ({tone}) to accompany the document below. "
+        "No greeting placeholder, no sign-off, no subject line -- just the message body, plain text, "
+        "2-4 sentences.\n\n" + "\n".join(details)
+    )
+    try:
+        draft = ai_content.generate_text(prompt)
+    except ai_content.AiContentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return MessageDraftOut(draft=draft)
 
 
 @messages_router.post("", response_model=MessageOut, status_code=201)
