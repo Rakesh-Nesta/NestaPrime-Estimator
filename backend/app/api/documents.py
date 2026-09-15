@@ -14,6 +14,7 @@ from app.api.pricing import (
     effective_floor_and_target,
     effective_gst_rate_percent,
 )
+from app.api.reports import _sports_for_quotation
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.api.sports import (
     STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT,
@@ -48,6 +49,7 @@ from app.models.rate_item import LabourCategory, RateSource
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.setting import DocumentType, Override
 from app.models.sport import ProjectSport
+from app.services import ai_content
 
 # M.3: quotations at or above this value (or any Government/Tender deal)
 # require Formal evidence before Won, not just Informal.
@@ -1832,6 +1834,7 @@ class QuotationOut(BaseModel):
     sent_at: datetime | None
     expires_at: datetime | None
     won_lost_reason: str | None
+    cover_note: str | None
     created_by_id: uuid.UUID
     created_at: datetime
     cost_basis_rebase_required: bool = False  # derived, M.2 rule 4
@@ -2339,6 +2342,65 @@ def get_quotation(
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
     return _quotation_to_out(db, quotation, current_user.role.value)
+
+
+class QuotationCoverNoteUpdate(BaseModel):
+    cover_note: str | None = None
+
+
+@quotations_router.patch("/quotations/{quotation_id}/cover-note", response_model=QuotationOut)
+def update_quotation_cover_note(
+    quotation_id: uuid.UUID,
+    payload: QuotationCoverNoteUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    """Amendment 13 (Section 12): always a human save -- whether the text
+    came from "Draft with AI" (below) or was typed by hand, saving is the
+    same explicit review-then-save action either way."""
+    quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    quotation.cover_note = payload.cover_note
+    db.commit()
+    db.refresh(quotation)
+    return _quotation_to_out(db, quotation, current_user.role.value)
+
+
+class QuotationCoverNoteDraftOut(BaseModel):
+    draft: str
+
+
+@quotations_router.post("/quotations/{quotation_id}/draft-cover-note", response_model=QuotationCoverNoteDraftOut)
+def draft_quotation_cover_note(
+    quotation_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    """Returns a suggested cover_note -- never saved by this endpoint.
+    The person still has to review it and PATCH .../cover-note themselves
+    to keep it, same as typing one by hand."""
+    quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    project = db.query(Project).filter(Project.id == quotation.project_id).first()
+    client = db.query(Client).filter(Client.id == project.client_id).first()
+    sports = ", ".join(_sports_for_quotation(db, quotation.id)) or "the covered sport(s)"
+    prompt = (
+        "Write a short, warm, professional 2-3 sentence introduction paragraph for a sports "
+        "infrastructure quotation. No greeting, no sign-off, no placeholders -- just the "
+        "paragraph itself, plain text.\n\n"
+        f"Client: {client.name}\n"
+        f"City: {project.city}\n"
+        f"Sport(s): {sports}\n"
+        f"Package: {project.package.value}\n"
+        f"Quotation total (incl. GST): Rs {float(quotation.quotation_total):,.0f}"
+    )
+    try:
+        draft = ai_content.generate_text(prompt)
+    except ai_content.AiContentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return QuotationCoverNoteDraftOut(draft=draft)
 
 
 @quotations_router.post("/quotations/{quotation_id}/release", response_model=QuotationOut)

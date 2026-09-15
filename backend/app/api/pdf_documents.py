@@ -640,6 +640,16 @@ def build_quotation_pdf(db: Session, quotation_id: uuid.UUID, current_user) -> t
         Spacer(1, 5 * mm),
     ]
 
+    # Amendment 13 (Section 12): an optional, always human-reviewed
+    # introduction paragraph -- additive only, renders nothing when
+    # unset, so an unused cover_note changes today's PDF not at all.
+    # Escaped for the same reason as project.custom_notes below (genuinely
+    # free-typed text, not a derived/enum string).
+    if quotation.cover_note:
+        cover_note_html = _xml_escape(quotation.cover_note).replace("\n", "<br/>")
+        story.append(Paragraph(cover_note_html, styles["Normal"]))
+        story.append(Spacer(1, 4 * mm))
+
     if project.tender_mode:
         # Part L: "BOQ-style itemised schedule (item no., description,
         # unit, qty, rate, amount) instead of packages; DSR/SOR reference

@@ -400,6 +400,10 @@ class Quotation(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at: Mapped[date | None] = mapped_column(DateTime, nullable=True)
     won_lost_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Amendment 13 (Section 12): an optional, AI-draftable, always
+    # human-edited introduction paragraph -- renders in the PDF right
+    # after the header if set. Blank changes nothing about today's PDF.
+    cover_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
