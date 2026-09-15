@@ -127,6 +127,25 @@ export async function getDashboard(token) {
   return handle(res);
 }
 
+// Amendment 12 (Section 11): drill-downs behind the Dashboard's own tiles.
+export async function listProjects(token, { search, status } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/projects${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listAllEstimates(token, { search, status } = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/estimates${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 export async function listRegionalMultipliers(token) {
   const res = await fetch(`${API_BASE}/regional-multipliers`, { headers: authHeaders(token) });
   return handle(res);
@@ -1661,9 +1680,10 @@ export async function updateFieldSetting(token, fieldKey, state) {
 
 // --- Amendment 6b (Section 9): Director-only, cross-project quotations review ---
 
-function _allQuotationsParams({ status, projectId, clientId, dateFrom, dateTo } = {}) {
+function _allQuotationsParams({ status, statusGroup, projectId, clientId, dateFrom, dateTo } = {}) {
   const params = new URLSearchParams();
   if (status) params.set("status", status);
+  else if (statusGroup) params.set("status_group", statusGroup);
   if (projectId) params.set("project_id", projectId);
   if (clientId) params.set("client_id", clientId);
   if (dateFrom) params.set("date_from", dateFrom);

@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
-import { listClients, updateClientConsent, updateClientFlags } from "./api";
+import { createClient, listClients, updateClientConsent, updateClientFlags } from "./api";
+
+const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
+const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "" };
+const canCreateClient = (role) => ["sales", "pm", "director"].includes(role);
 
 export default function ClientsAdmin({ token, role, onBack }) {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [chatIdDrafts, setChatIdDrafts] = useState({});
+  const [form, setForm] = useState(emptyClientForm);
+  const [submitting, setSubmitting] = useState(false);
   const canEditFlags = role === "director";
 
   function load() {
@@ -18,6 +24,31 @@ export default function ClientsAdmin({ token, role, onBack }) {
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  function setField(field, value) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleCreateClient(e) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      await createClient(token, {
+        name: form.name,
+        type: form.type,
+        contact_name: form.contact_name || null,
+        phone: form.phone || null,
+        email: form.email || null,
+      });
+      setForm(emptyClientForm);
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function toggleFlag(clientId, field, value) {
     setError("");
@@ -74,6 +105,72 @@ export default function ClientsAdmin({ token, role, onBack }) {
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
+
+      {canCreateClient(role) && (
+        <form onSubmit={handleCreateClient} className="bg-surface shadow rounded-lg p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-text-secondary">Add a client</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Name</label>
+              <input
+                type="text"
+                required
+                value={form.name}
+                onChange={(e) => setField("name", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Type</label>
+              <select
+                value={form.type}
+                onChange={(e) => setField("type", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              >
+                {CLIENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Contact name</label>
+              <input
+                type="text"
+                value={form.contact_name}
+                onChange={(e) => setField("contact_name", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Phone</label>
+              <input
+                type="text"
+                value={form.phone}
+                onChange={(e) => setField("phone", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-text-secondary">Email</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setField("email", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover hover:-translate-y-0.5 transition-all duration-250 ease-out disabled:opacity-50"
+          >
+            {submitting ? "Saving…" : "Save client"}
+          </button>
+        </form>
+      )}
 
       <div className="bg-surface shadow rounded-lg p-6 space-y-2">
         {clients.map((c) => (
