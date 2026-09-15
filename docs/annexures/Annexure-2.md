@@ -295,6 +295,20 @@ still open per Part B2, pending a future project with genuinely separated
 material/labour accounts. No rate-table or percentage change has been made off the back
 of this addendum either, same Change Process discipline as above.
 
+**Turf validation attempt, 15 September 2026 -- no usable data found.** Searched for a
+real turf project's actual expense breakdown to close the gap above. Neither
+"Turf Ujjain.xlsx" (the path first given) nor "Turf Cost Sheet.pdf/docx" (a payment-
+receipt tracker for a different, unrelated "Indore Turf Project" -- dates and amounts
+received from the client, no cost breakdown at all) existed or helped. One file,
+"Cricket_Turf_Spec_BOQ_Corrected.docx", does contain a full line-item cost breakdown for
+a cricket turf build -- but it is explicitly an *indicative market-rate estimate*
+("budgetary... based on current Tier-2-city wholesale/contractor pricing... not a
+substitute for vendor quotations," per its own disclaimer), not a real project's actual
+accounts, so it was **not used** -- treating it as real data would have broken the same
+"never fabricate numbers" discipline this whole exercise depends on. Turf laying's gap
+stays unvalidated; closing it needs a genuine historical project's real cost records,
+not a market-rate estimate, whenever one surfaces.
+
 **Note R2 — Backup & restore drill**: Quarterly: restore a Lightsail snapshot to a test
 instance and confirm app + data return correctly. A backup never restored is a hope, not
 a backup.
