@@ -130,8 +130,21 @@ export default function App() {
       {
         label: "Admin",
         items: [
-          { key: "settings", label: "Master Settings" },
-          { key: "sports_scope_admin", label: "Sports & Scope Admin" },
+          // Master Settings' core /settings read is PM/Director only
+          // server-side (backend/app/api/settings.py READ_ROLES); Sales
+          // saw this nav item, and the K.1 percentage list silently 403'd
+          // and just never appeared -- same dead-end pattern Pricing
+          // Calculator already had fixed above.
+          ...(user.role !== "sales" ? [{ key: "settings", label: "Master Settings" }] : []),
+          // Sports & Scope Admin aggregates several master-data lists;
+          // Netting grades / Vehicle classes specifically exclude Sales
+          // server-side (backend/app/api/structures.py,
+          // overheads.py NETTING_CATALOG_READ_ROLES /
+          // VEHICLE_CLASS_READ_ROLES -- PM/Director/Procurement/Site
+          // Engineer only), so Sales got every list on the page failing
+          // with "Role 'sales' is not permitted" instead of the working
+          // sport/scope-item dropdowns those same roles use elsewhere.
+          ...(user.role !== "sales" ? [{ key: "sports_scope_admin", label: "Sports & Scope Admin" }] : []),
           ...(user.role === "director" ? [{ key: "cross_sell_admin", label: "Cross-Sell Add-ons" }] : []),
           ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log" }] : []),
           // Amendment 6b (Section 9): "admin reviews all quotations" --
@@ -276,10 +289,10 @@ export default function App() {
         {screen === "pricing" && user.role !== "sales" && (
           <PricingCalculator token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "settings" && (
+        {screen === "settings" && user.role !== "sales" && (
           <MasterSettings token={accessToken} currentUser={user} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "sports_scope_admin" && (
+        {screen === "sports_scope_admin" && user.role !== "sales" && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "audit_log" && user.role === "director" && (
