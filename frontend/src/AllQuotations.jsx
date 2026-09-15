@@ -20,9 +20,14 @@ const STATUS_OPTIONS = ["draft", "released", "sent", "won", "lost", "expired", "
 // simple text search over the already-loaded rows rather than a separate
 // project/client picker, since a Director scanning "everything right now"
 // is the primary use case, not a saved per-project filter.
-export default function AllQuotations({ token, onOpenProject, onBack }) {
+// Amendment 12 (Section 11): "Pending Quotation" / "Old Quotation" nav
+// shortcuts land here with an initialStatusGroup preset instead of a
+// single status -- an explicit status pick in the dropdown still wins
+// over it, matching the backend's own status_group precedence rule.
+export default function AllQuotations({ token, initialStatusGroup = "", onOpenProject, onBack }) {
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState("");
+  const [statusGroup, setStatusGroup] = useState(initialStatusGroup);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
@@ -32,6 +37,7 @@ export default function AllQuotations({ token, onOpenProject, onBack }) {
   function load() {
     return listAllQuotations(token, {
       status: status || undefined,
+      statusGroup: statusGroup || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
     }).then(setRows);
@@ -43,13 +49,14 @@ export default function AllQuotations({ token, onOpenProject, onBack }) {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, status, dateFrom, dateTo]);
+  }, [token, status, statusGroup, dateFrom, dateTo]);
 
   async function handleExport() {
     setError("");
     try {
       const blob = await downloadAllQuotationsCsvBlob(token, {
         status: status || undefined,
+        statusGroup: statusGroup || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
       });
@@ -97,9 +104,32 @@ export default function AllQuotations({ token, onOpenProject, onBack }) {
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
         <div className="flex flex-wrap items-center gap-2 mt-3">
+          <div className="flex items-center gap-1.5 text-xs">
+            {[
+              { key: "", label: "All" },
+              { key: "pending", label: "Pending" },
+              { key: "old", label: "Old" },
+            ].map((g) => (
+              <button
+                key={g.key}
+                onClick={() => {
+                  setStatus("");
+                  setStatusGroup(g.key);
+                }}
+                className={`uppercase tracking-wide px-2.5 py-1.5 rounded-full hover:-translate-y-0.5 transition-all duration-250 ease-out ${
+                  statusGroup === g.key ? "bg-gold text-base font-semibold" : "bg-surface-raised text-text-secondary"
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setStatusGroup("");
+            }}
             className="rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
           >
             <option value="">All statuses</option>

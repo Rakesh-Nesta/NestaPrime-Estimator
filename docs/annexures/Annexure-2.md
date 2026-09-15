@@ -165,6 +165,16 @@ than moved off a single data point, and the flat 15% Government-competitive marg
 target stays unchanged (Mathura's 2022 price is treated as historically underpriced, not
 evidence the policy is wrong).
 
+### Amendment No. 12 — Dashboard Drill-Down & Navigation Restructure
+**Registered 15 September 2026 (Director instruction, real-usage feedback).** Two
+confirmed problems with the current Dashboard/nav: (1) the Dashboard's summary tiles
+(Open Projects, Pending Estimates, Pending Quotations) are static numbers with no
+drill-through -- there is no screen anywhere in the app to browse the full list behind
+any of them, only a short "Recent projects" list; (2) the Director's top nav carries 10
+flat items, more than are used day to day. Director supplied a target navigation
+structure (grouped: Dashboard / Quotation / Projects / Client / Vendor / Tools / Reports
+/ Admin) to replace both. Spec to follow.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

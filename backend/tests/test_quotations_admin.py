@@ -161,6 +161,44 @@ def test_filter_by_status(client, director_user):
     assert quotation["document_no"] not in {r["document_no"] for r in won}
 
 
+def test_status_group_pending_matches_dashboard_definition(client, director_user):
+    """Amendment 12 (Section 11): 'Pending Quotation' nav shortcut --
+    status_group=pending must match dashboard.py's own DRAFT/RELEASED/
+    SENT definition exactly, and never include a WON one."""
+    headers = _director_headers(client, director_user)
+    _project, released = _quotation_for_new_project(client, headers, "Status Group Pending Client")
+
+    pending = client.get("/quotations", params={"status_group": "pending"}, headers=headers).json()
+    assert released["document_no"] in {r["document_no"] for r in pending}
+
+    client.post(f"/quotations/{released['id']}/send", headers=headers)
+    won_res = client.post(
+        f"/quotations/{released['id']}/mark-won",
+        json={"waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert won_res.status_code == 200, won_res.text
+
+    pending_after = client.get("/quotations", params={"status_group": "pending"}, headers=headers).json()
+    assert released["document_no"] not in {r["document_no"] for r in pending_after}
+
+    old_after = client.get("/quotations", params={"status_group": "old"}, headers=headers).json()
+    assert released["document_no"] in {r["document_no"] for r in old_after}
+
+
+def test_explicit_status_takes_priority_over_status_group(client, director_user):
+    headers = _director_headers(client, director_user)
+    _project, quotation = _quotation_for_new_project(client, headers, "Status Priority Client")
+
+    # status=released with a contradictory status_group=old -- explicit
+    # status should win, matching a single-select dropdown UI's own
+    # expectation that a concrete choice always overrides a quick filter.
+    res = client.get(
+        "/quotations", params={"status": "released", "status_group": "old"}, headers=headers
+    ).json()
+    assert quotation["document_no"] in {r["document_no"] for r in res}
+
+
 # ---------------------------------------------------------------------------
 # GET /quotations/export
 # ---------------------------------------------------------------------------

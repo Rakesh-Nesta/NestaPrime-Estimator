@@ -48,9 +48,26 @@ class QuotationSummaryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Amendment 12 (Section 11): "Pending Quotation" / "Old Quotation" nav
+# shortcuts reuse this same screen with a preset status_group instead of
+# a single status -- matching dashboard.py's own "pending" definition
+# exactly (DRAFT/RELEASED/SENT), so the drill-down's row count matches
+# what the Dashboard tile showed. "old" = every terminal status.
+STATUS_GROUPS = {
+    "pending": (QuotationStatus.DRAFT, QuotationStatus.RELEASED, QuotationStatus.SENT),
+    "old": (
+        QuotationStatus.WON,
+        QuotationStatus.LOST,
+        QuotationStatus.EXPIRED,
+        QuotationStatus.SUPERSEDED,
+    ),
+}
+
+
 def _filtered_query(
     db: Session,
     status: QuotationStatus | None,
+    status_group: str | None,
     project_id: uuid.UUID | None,
     client_id: uuid.UUID | None,
     date_from: date | None,
@@ -66,6 +83,8 @@ def _filtered_query(
     )
     if status:
         query = query.filter(Quotation.status == status)
+    elif status_group in STATUS_GROUPS:
+        query = query.filter(Quotation.status.in_(STATUS_GROUPS[status_group]))
     if project_id:
         query = query.filter(Quotation.project_id == project_id)
     if client_id:
@@ -100,6 +119,7 @@ def _to_summary(db: Session, quotation: Quotation, project: Project, client: Cli
 @quotations_admin_router.get("/quotations", response_model=list[QuotationSummaryOut])
 def list_all_quotations(
     status: QuotationStatus | None = None,
+    status_group: str | None = None,
     project_id: uuid.UUID | None = None,
     client_id: uuid.UUID | None = None,
     date_from: date | None = None,
@@ -107,7 +127,7 @@ def list_all_quotations(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ROLES)),
 ):
-    rows = _filtered_query(db, status, project_id, client_id, date_from, date_to).all()
+    rows = _filtered_query(db, status, status_group, project_id, client_id, date_from, date_to).all()
     out = []
     for q in rows:
         project = db.query(Project).filter(Project.id == q.project_id).first()
@@ -119,6 +139,7 @@ def list_all_quotations(
 @quotations_admin_router.get("/quotations/export")
 def export_all_quotations(
     status: QuotationStatus | None = None,
+    status_group: str | None = None,
     project_id: uuid.UUID | None = None,
     client_id: uuid.UUID | None = None,
     date_from: date | None = None,
@@ -134,7 +155,7 @@ def export_all_quotations(
     per-quotation PDF already exists (GET /quotations/{id}/pdf, unaffected
     by this endpoint); this is the bulk/tabular counterpart, not a
     replacement for it."""
-    rows = _filtered_query(db, status, project_id, client_id, date_from, date_to).all()
+    rows = _filtered_query(db, status, status_group, project_id, client_id, date_from, date_to).all()
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)

@@ -10,6 +10,7 @@ from app.api.field_settings import get_field_state
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client, ClientType
+from app.models.document import Quotation, QuotationStatus
 from app.models.hub import Hub
 from app.models.project import (
     BuildingStatus,
@@ -216,6 +217,82 @@ def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return _to_out(project)
+
+
+class ProjectSummaryOut(BaseModel):
+    """Amendment 12 (Section 11): the Dashboard's 'Open Projects' /
+    'Quotation-winning projects' tiles had no screen behind them at all --
+    only a 5-row 'Recent projects' list. status here mirrors dashboard.py's
+    own open/won/lost vocabulary exactly, so a drill-down's count matches
+    what the tile itself showed."""
+
+    id: uuid.UUID
+    project_no: str
+    client_name: str
+    city: str
+    status: str  # "open" | "won" | "lost"
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("", response_model=list[ProjectSummaryOut])
+def list_projects(
+    search: str | None = None,
+    status: str | None = None,  # "open" | "won" | "lost"
+    db: Session = Depends(get_db),
+    current_user=Depends(
+        require_roles("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
+    ),
+):
+    won_project_ids = (
+        db.query(Quotation.project_id).filter(Quotation.status == QuotationStatus.WON).distinct()
+    )
+    lost_project_ids = (
+        db.query(Quotation.project_id).filter(Quotation.status == QuotationStatus.LOST).distinct()
+    )
+    closed_project_ids = (
+        db.query(Quotation.project_id)
+        .filter(Quotation.status.in_([QuotationStatus.WON, QuotationStatus.LOST]))
+        .distinct()
+    )
+
+    query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
+    if search:
+        needle = f"%{search}%"
+        query = query.filter(
+            (Project.project_no.ilike(needle)) | (Client.name.ilike(needle))
+        )
+    if status == "open":
+        query = query.filter(~Project.id.in_(closed_project_ids))
+    elif status == "won":
+        query = query.filter(Project.id.in_(won_project_ids))
+    elif status == "lost":
+        query = query.filter(Project.id.in_(lost_project_ids))
+
+    rows = query.order_by(Project.created_at.desc()).all()
+    won_ids = {pid for (pid,) in won_project_ids.all()}
+    lost_ids = {pid for (pid,) in lost_project_ids.all()}
+
+    out = []
+    for project, client_name in rows:
+        if project.id in won_ids:
+            row_status = "won"
+        elif project.id in lost_ids:
+            row_status = "lost"
+        else:
+            row_status = "open"
+        out.append(
+            ProjectSummaryOut(
+                id=project.id,
+                project_no=project.project_no,
+                client_name=client_name,
+                city=project.city,
+                status=row_status,
+                created_at=project.created_at,
+            )
+        )
+    return out
 
 
 class ProjectNotesUpdate(BaseModel):

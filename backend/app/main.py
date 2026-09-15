@@ -15,6 +15,7 @@ from app.api import (
     cross_sell,
     dashboard,
     documents,
+    estimates_admin,
     exports,
     field_settings,
     flooring,
@@ -99,6 +100,7 @@ app.include_router(tender.tender_calc_router)
 app.include_router(tender.l1_view_router)
 app.include_router(documents.cost_sheets_router)
 app.include_router(documents.estimates_router)
+app.include_router(estimates_admin.estimates_admin_router)
 # quotations_admin registered before documents.quotations_router: both define
 # a /quotations/... path, and Starlette matches in registration order, so
 # GET /quotations/export must be added before GET /quotations/{quotation_id}
