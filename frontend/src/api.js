@@ -1418,6 +1418,16 @@ export async function listMessages(token, docType, docId) {
   return handle(res);
 }
 
+// Amendment 13 (Section 12): AI-drafted, always human-reviewed before sending.
+export async function draftMessage(token, { docType, docId, channel }) {
+  const res = await fetch(`${API_BASE}/messages/draft`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_type: docType, doc_id: docId, channel }),
+  });
+  return handle(res);
+}
+
 export async function createMessage(token, { docType, docId, channel, recipient, templateKey, templateId, subject, bodyNote, attachmentId, includeDocument }) {
   const res = await fetch(`${API_BASE}/messages`, {
     method: "POST",
