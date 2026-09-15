@@ -16,4 +16,4 @@ fixed it.
 
 | Date | Run by | pg_dump drill (`restore_drill.sh`) | Instance-snapshot drill | Notes |
 |---|---|---|---|---|
-| | | ☐ Pass ☐ Fail | ☐ Pass ☐ Fail ☐ Skipped (annual, not this quarter) | |
+| 2026-09-15 | R. Patni (with AI development assistance) | ☑ Pass | ☑ Skipped (no Lightsail/AWS console access from this session -- annual, not this quarter) | `backup_db.sh` produced a 72K gzip-integrity-checked dump of the live dev database; `restore_drill.sh` restored it into a throwaway, isolated `postgres:16` container and tore it down cleanly. Every one of 55 tables came back with its real row count intact (`users`=6, `sports`=31, `rate_items`=27 -- including the 3 awaiting-rate items and the new pre-fab labour category from Amendment 11, confirming that schema change round-trips through a real dump/restore correctly). No corruption, no empty tables, no manual fixes needed. |
