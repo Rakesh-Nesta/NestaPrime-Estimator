@@ -109,7 +109,12 @@ export default function App() {
           // K.3: /pricing/quote is PM/Director only server-side -- Sales
           // saw this nav item and hit a dead-end 403 before this hid it.
           ...(user.role !== "sales" ? [{ key: "pricing", label: "Pricing Calculator" }] : []),
-          { key: "rates", label: "Rate Sheet" },
+          // GET /rate-items is PM/Director/Procurement/Site Engineer only
+          // server-side (backend/app/api/rate_items.py READ_ROLES) -- Sales
+          // saw this nav item and every rate silently 403'd, same dead-end
+          // pattern as Pricing Calculator above and Master Settings/Sports
+          // & Scope Admin in the Admin group below.
+          ...(user.role !== "sales" ? [{ key: "rates", label: "Rate Sheet" }] : []),
           { key: "help", label: "Help" },
         ],
       },
@@ -283,7 +288,7 @@ export default function App() {
             onOpenProject={handleOpenProject}
           />
         )}
-        {screen === "rates" && (
+        {screen === "rates" && user.role !== "sales" && (
           <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "pricing" && user.role !== "sales" && (
