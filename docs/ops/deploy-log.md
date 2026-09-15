@@ -47,3 +47,33 @@ re-verified against a real Sales account *on production* (deliberately --
 creating a throwaway account there would leave visible clutter in real
 dashboard/report data); the deployed bundle is byte-identical to the one
 already verified locally as a real Sales-role account before merging PR #54.
+
+---
+
+## 2026-09-15 -- seed data fix: Amendment 11's rate card was never seeded on production
+
+**Run by:** R. Patni (with AI development assistance)
+**Not a code deploy** -- found while running Note R2's restore drill against real
+production data for the first time (see `restore-drill-log.md`'s second 2026-09-15
+entry). The earlier deploy's database *migration* (`rate_items.rate` nullable) had
+gone out correctly, but its two one-off seed scripts never had -- production still
+had the pre-Amendment-11 rate card (9 labour categories, 20 rate items) despite the
+schema supporting the new ones.
+
+**Fix:** ran both scripts directly against the production backend container:
+```
+docker compose -f docker-compose.prod.yml exec -T -e PYTHONPATH=/app backend python scripts/seed_labour_categories.py
+docker compose -f docker-compose.prod.yml exec -T -e PYTHONPATH=/app backend python scripts/seed_rate_items.py
+```
+Both are re-run-safe (skip anything that already exists by key/natural key), so this
+carries the same no-risk profile as the migrations themselves.
+
+**Verification:** `SELECT count(*) FROM labour_categories` -> 10 (was 9),
+`SELECT count(*) FROM rate_items` -> 23 (was 20) -- both now match local dev exactly.
+
+**Lesson for future deploys:** `deploy/README.md`'s "Redeploying after a code change"
+section doesn't mention one-off seed scripts at all -- worth remembering that a new
+Alembic migration landing cleanly says nothing about whether a PR that also added
+seed data actually got that data onto production. Every future PR that adds a
+`scripts/seed_*.py` call should have that call added to the deploy checklist, not left
+to be caught by the next quarterly drill.

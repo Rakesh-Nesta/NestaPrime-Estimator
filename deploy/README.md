@@ -191,7 +191,22 @@ sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/
 sudo chmod -R 755 /var/www/nestaprime
 ```
 
-No need to redo steps 2, 4, or 6 -- secrets, seed data, and the nginx config all persist.
+No need to redo steps 2, 4, or 6 -- secrets, the *original* seed data (Part 4's reference
+data and first Director account), and the nginx config all persist.
+
+**But check whether this specific PR added a new one-off seed script or new rows to an
+existing seed constant.** A migration landing cleanly (it runs automatically on backend
+container start) says nothing about whether a PR's `scripts/seed_*.py` also ran --
+that's a separate, manual step this redeploy sequence does not do for you. Found the
+hard way on 2026-09-15 (see `docs/ops/deploy-log.md`): Amendment 11's schema migration
+went out fine, but its seed data (`seed_labour_categories.py`, `seed_rate_items.py`)
+sat unrun on production for hours until a restore drill caught it. If the PR touched
+`app/seed_data.py` or added a `scripts/seed_*.py` call, run it now:
+```bash
+docker compose -f docker-compose.prod.yml exec -T -e PYTHONPATH=/app backend python scripts/seed_<name>.py
+```
+Every script here is re-run-safe (skips anything that already exists by its natural
+key), so running one that turns out not to be needed is harmless.
 
 ## Backups & restore drill (Note R2)
 
