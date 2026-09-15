@@ -77,3 +77,19 @@ Alembic migration landing cleanly says nothing about whether a PR that also adde
 seed data actually got that data onto production. Every future PR that adds a
 `scripts/seed_*.py` call should have that call added to the deploy checklist, not left
 to be caught by the next quarterly drill.
+
+---
+
+## 2026-09-15 -- PR #57: Amendment 12, dashboard drill-down & nav restructure
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `00c4379` -> `b93a153`
+**No Alembic migrations** -- Amendment 12 added only new API routes/read
+endpoints (`GET /projects`, `GET /estimates`, `status_group` on `GET
+/quotations`) and frontend screens/nav, no schema changes.
+
+Backend rebuilt (`docker compose -f docker-compose.prod.yml up -d --build
+backend`) and frontend rebuilt/exported with `VITE_API_URL=http://65.1.234.78/api`,
+copied into `/var/www/nestaprime/dist/`.
+
+**Smoke test:** `/health` -> `{"status":"ok"}` (200). Frontend root -> 200.
