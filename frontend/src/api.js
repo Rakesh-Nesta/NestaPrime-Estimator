@@ -916,6 +916,24 @@ export async function summarizeReport(token, reportId) {
   return handle(res);
 }
 
+export async function exportReportBlob(token, reportId) {
+  const res = await fetch(`${API_BASE}/reports/${reportId}/export`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+export async function exportReportPdfBlob(token, reportId) {
+  const res = await fetch(`${API_BASE}/reports/${reportId}/pdf`, { headers: authHeaders(token) });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Export failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 // --- Parts D/E/F/G.5/H/J.2: Cost Sheet take-off engines ---
 
 export async function listCostSheetLines(token, costSheetId) {

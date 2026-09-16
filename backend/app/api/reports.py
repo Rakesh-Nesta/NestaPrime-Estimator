@@ -1,10 +1,14 @@
 import hashlib
+import io
 import json
 import uuid
 from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from openpyxl import Workbook
 from pydantic import BaseModel, ConfigDict
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
@@ -15,6 +19,8 @@ from app.models.setting import Override
 from app.models.sport import ProjectSport, Sport
 from app.models.user import User
 from app.services import ai_content
+from app.xlsx_utils import xlsx_header_row as _header_row
+from app.xlsx_utils import xlsx_response as _xlsx_response
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -369,6 +375,268 @@ def summarize_report(
     except ai_content.AiContentError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return ReportSummaryOut(summary=summary)
+
+
+def _pipeline_to_xlsx(wb: Workbook, content: dict) -> None:
+    est = content.get("estimates", {})
+    ws = wb.active
+    ws.title = "Summary"
+    _header_row(ws, ["Metric", "Value"])
+    ws.append(["Period from", content.get("period_from")])
+    ws.append(["Period to", content.get("period_to")])
+    ws.append(["Estimates created", est.get("created", 0)])
+    ws.append(["Estimates sent", est.get("sent", 0)])
+    quo = content.get("quotations_released_in_period", {})
+    ws.append(["Quotations released", quo.get("count", 0)])
+    ws.append(["Total amount", quo.get("total_amount", 0)])
+
+    ws2 = wb.create_sheet("Rejected by reason")
+    _header_row(ws2, ["Reason", "Count"])
+    for reason, count in est.get("rejected_by_reason", {}).items():
+        ws2.append([reason, count])
+
+    ws3 = wb.create_sheet("Quotations by sport")
+    _header_row(ws3, ["Sport", "Count", "Total amount"])
+    for sport, row in quo.get("by_sport", {}).items():
+        ws3.append([sport, row.get("count", 0), row.get("total_amount", 0)])
+
+    ws4 = wb.create_sheet("Quotations by status")
+    _header_row(ws4, ["Status", "Count"])
+    for status, count in quo.get("by_status", {}).items():
+        ws4.append([status, count])
+
+    ws5 = wb.create_sheet("Quotations by released by")
+    _header_row(ws5, ["Released by", "Count", "Total amount"])
+    for user_name, row in quo.get("by_released_by", {}).items():
+        ws5.append([user_name, row.get("count", 0), row.get("total_amount", 0)])
+
+
+def _margin_to_xlsx(wb: Workbook, content: dict) -> None:
+    ws = wb.active
+    ws.title = "Quotations"
+    _header_row(
+        ws,
+        [
+            "Document no.", "Project ID", "Cost total", "Selling (ex GST)", "Discount", "Selling after discount",
+            "Margin %", "Floor margin %", "Below floor", "Cost basis unverified", "Released at", "Released by",
+        ],
+    )
+    for q in content.get("quotations", []):
+        ws.append(
+            [
+                q.get("document_no"), q.get("project_id"), q.get("cost_total"), q.get("selling_price_ex_gst"),
+                q.get("discount_amount"), q.get("selling_after_discount"), q.get("margin_percent"),
+                q.get("floor_margin_percent"), q.get("below_floor"), q.get("cost_basis_unverified"),
+                q.get("released_at"), q.get("released_by"),
+            ]
+        )
+
+    summary = content.get("summary", {})
+    ws2 = wb.create_sheet("Summary")
+    _header_row(ws2, ["Metric", "Value"])
+    ws2.append(["Period from", content.get("period_from")])
+    ws2.append(["Period to", content.get("period_to")])
+    ws2.append(["Count", summary.get("count", 0)])
+    ws2.append(["Total cost", summary.get("total_cost", 0)])
+    ws2.append(["Total selling", summary.get("total_selling", 0)])
+    ws2.append(["Average margin %", summary.get("average_margin_percent")])
+    ws2.append(["Below floor count", summary.get("below_floor_count", 0)])
+
+
+def _override_summary_to_xlsx(wb: Workbook, content: dict) -> None:
+    ws = wb.active
+    ws.title = "Overrides"
+    _header_row(ws, ["Setting key", "Override count", "Most common value", "Document types"])
+    for row in content.get("rows", []):
+        ws.append(
+            [
+                row.get("setting_key"), row.get("override_count"), row.get("most_common_override_value"),
+                ", ".join(row.get("document_types", [])),
+            ]
+        )
+
+    ws2 = wb.create_sheet("Summary")
+    _header_row(ws2, ["Metric", "Value"])
+    ws2.append(["Period from", content.get("period_from")])
+    ws2.append(["Period to", content.get("period_to")])
+    ws2.append(["Total overrides", content.get("total_overrides", 0)])
+
+
+_XLSX_BUILDERS = {
+    ReportType.PIPELINE: _pipeline_to_xlsx,
+    ReportType.MARGIN: _margin_to_xlsx,
+    ReportType.OVERRIDE_SUMMARY: _override_summary_to_xlsx,
+}
+
+
+@router.get("/{report_id}/export")
+def export_report(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ALL_REPORT_ROLES)),
+):
+    """A formatted Excel workbook over this report's own content --
+    same gate as GET .../{report_id}. This is the report's real,
+    shareable form; the on-screen raw JSON view is an internal debugging
+    aid, not something meant to be handed to anyone."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if current_user.role.value not in VISIBLE_ROLES[report.report_type]:
+        raise HTTPException(status_code=403, detail="This role cannot view this report type")
+
+    wb = Workbook()
+    _XLSX_BUILDERS[report.report_type](wb, report.content)
+    filename = f"{report.report_type.value}_{report.period_from.isoformat()}_{report.period_to.isoformat()}.xlsx"
+    return _xlsx_response(wb, filename)
+
+
+def _kv_table(styles, rows: list[tuple]) -> Table:
+    from app.api.pdf_documents import _TABLE_GRID  # local: avoids a circular import at module load time
+
+    data = [[Paragraph(str(k), styles["Normal"]), Paragraph(str(v), styles["Normal"])] for k, v in rows]
+    t = Table(data, colWidths=[60 * mm, 100 * mm])
+    t.setStyle(_TABLE_GRID)
+    return t
+
+
+def _rows_table(styles, headers: list[str], rows: list[list]) -> Table:
+    from app.api.pdf_documents import _TABLE_GRID  # local: avoids a circular import at module load time
+
+    data = [[Paragraph(h, styles["Normal"]) for h in headers]]
+    for row in rows:
+        data.append([Paragraph(str(cell), styles["Normal"]) for cell in row])
+    t = Table(data, repeatRows=1)
+    t.setStyle(_TABLE_GRID)
+    return t
+
+
+def _pipeline_to_pdf_story(styles, content: dict) -> list:
+    est = content.get("estimates", {})
+    quo = content.get("quotations_released_in_period", {})
+    story = [
+        _kv_table(
+            styles,
+            [
+                ("Period", f"{content.get('period_from')} to {content.get('period_to')}"),
+                ("Estimates created", est.get("created", 0)),
+                ("Estimates sent", est.get("sent", 0)),
+                ("Quotations released", quo.get("count", 0)),
+                ("Total amount", quo.get("total_amount", 0)),
+            ],
+        ),
+        Spacer(1, 6 * mm),
+    ]
+    if quo.get("by_sport"):
+        story.append(Paragraph("Quotations by sport", styles["SectionHeading"]))
+        story.append(
+            _rows_table(
+                styles, ["Sport", "Count", "Total amount"],
+                [[s, r.get("count", 0), r.get("total_amount", 0)] for s, r in quo["by_sport"].items()],
+            )
+        )
+        story.append(Spacer(1, 4 * mm))
+    if est.get("rejected_by_reason"):
+        story.append(Paragraph("Estimates rejected by reason", styles["SectionHeading"]))
+        story.append(_rows_table(styles, ["Reason", "Count"], list(est["rejected_by_reason"].items())))
+    return story
+
+
+def _margin_to_pdf_story(styles, content: dict) -> list:
+    summary = content.get("summary", {})
+    story = [
+        _kv_table(
+            styles,
+            [
+                ("Period", f"{content.get('period_from')} to {content.get('period_to')}"),
+                ("Count", summary.get("count", 0)),
+                ("Total cost", summary.get("total_cost", 0)),
+                ("Total selling", summary.get("total_selling", 0)),
+                ("Average margin %", summary.get("average_margin_percent")),
+                ("Below floor count", summary.get("below_floor_count", 0)),
+            ],
+        ),
+        Spacer(1, 6 * mm),
+    ]
+    quotations = content.get("quotations", [])
+    if quotations:
+        story.append(Paragraph("Quotations", styles["SectionHeading"]))
+        story.append(
+            _rows_table(
+                styles, ["Document no.", "Margin %", "Below floor", "Selling after discount"],
+                [
+                    [q.get("document_no"), q.get("margin_percent"), q.get("below_floor"), q.get("selling_after_discount")]
+                    for q in quotations
+                ],
+            )
+        )
+    return story
+
+
+def _override_summary_to_pdf_story(styles, content: dict) -> list:
+    story = [
+        _kv_table(
+            styles,
+            [
+                ("Period", f"{content.get('period_from')} to {content.get('period_to')}"),
+                ("Total overrides", content.get("total_overrides", 0)),
+            ],
+        ),
+        Spacer(1, 6 * mm),
+    ]
+    rows = content.get("rows", [])
+    if rows:
+        story.append(Paragraph("Overrides by setting", styles["SectionHeading"]))
+        story.append(
+            _rows_table(
+                styles, ["Setting key", "Override count", "Most common value", "Document types"],
+                [
+                    [r.get("setting_key"), r.get("override_count"), r.get("most_common_override_value"),
+                     ", ".join(r.get("document_types", []))]
+                    for r in rows
+                ],
+            )
+        )
+    return story
+
+
+_PDF_BUILDERS = {
+    ReportType.PIPELINE: _pipeline_to_pdf_story,
+    ReportType.MARGIN: _margin_to_pdf_story,
+    ReportType.OVERRIDE_SUMMARY: _override_summary_to_pdf_story,
+}
+
+
+@router.get("/{report_id}/pdf")
+def export_report_pdf(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ALL_REPORT_ROLES)),
+):
+    """A formatted PDF over this report's own content -- same gate and
+    same "this is the shareable form, not the raw JSON" reasoning as
+    GET .../export (Excel)."""
+    from app.api.pdf_documents import _pdf_response, _styles  # local: avoids a circular import at module load time
+
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if current_user.role.value not in VISIBLE_ROLES[report.report_type]:
+        raise HTTPException(status_code=403, detail="This role cannot view this report type")
+
+    styles = _styles()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=(210 * mm, 297 * mm), topMargin=15 * mm, bottomMargin=15 * mm)
+    title = f"{report.report_type.value.replace('_', ' ').title()} Report"
+    story = [
+        Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
+        Paragraph(title, styles["DocTitle"]),
+        Spacer(1, 4 * mm),
+        *_PDF_BUILDERS[report.report_type](styles, report.content),
+    ]
+    doc.build(story)
+    filename = f"{report.report_type.value}_{report.period_from.isoformat()}_{report.period_to.isoformat()}.pdf"
+    return _pdf_response(buffer, filename)
 
 
 @router.post("/{report_id}/release", response_model=ReportOut)
