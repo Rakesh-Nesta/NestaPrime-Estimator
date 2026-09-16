@@ -11,6 +11,27 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-16 -- PR #73: handbook v3 (Section 13, closes the Amendment 10 gap)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `3c00e24` -> `dd26828`
+**Frontend-only** -- no backend rebuild, no migrations.
+
+Annexure 2 v1.11's register reconciliation (PRs #70-#72) found the in-app handbook
+hadn't been updated since PR #34 (13 Sept), despite Amendments 11-13 shipping seven
+new/updated screens since. Section 13's approved spec closed that gap: 7 new Full
+Handbook entries (All Projects, All Estimates, All Quotations, Vendors Admin, Price
+Requests, Cross-Sell Admin, Sports & Scope Admin), updated Documents/Reports entries
+(AI cover note, AI summary, Excel/PDF export), the register's own named Hindi terms
+woven into Quick Start and the Estimator Guide, and a version bump to v3. Frontend
+rebuilt and redeployed the same session.
+
+**Smoke test:** `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/` -> `200`.
+Handbook content itself was already verified in-browser (Director role, local dev)
+before merge -- all 19 entries and both role guides render correctly.
+
+---
+
 ## 2026-09-16 -- PR #68: replace raw JSON report view with Excel/PDF export
 
 **Run by:** R. Patni (with AI development assistance)
