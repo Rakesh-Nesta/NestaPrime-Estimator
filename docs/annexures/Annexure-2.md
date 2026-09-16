@@ -189,7 +189,20 @@ extended to Dashboard tiles, list rows, and nav items.
 reports etc. idea is maximum utilization of AI in content side."* Director confirmed the
 scope covers all three areas (quotation content, client messages, report summaries) and
 that AI-drafted content must always be human-reviewed before it is sent or saved as
-final -- no auto-send. Spec to follow.
+final -- no auto-send. Spec: `docs/annexures/Section-12-specs.md`.
+
+**Implemented 16 September 2026** (PRs #59-#62, four small PRs per the approved build
+order, each squash-merged after a green CI run): new `app/services/ai_content.py`
+(Anthropic/Claude client, same blank-key-fails-fast discipline as wa_gateway.py/
+telegram.py -- `ANTHROPIC_API_KEY` unset in every environment so far, including
+production, so every "Draft with AI" / "Generate summary" button currently reports
+"not configured" rather than doing anything, which is itself the graceful-degradation
+behaviour Decision A called for); optional AI-draftable `Quotation.cover_note`,
+rendered in the PDF only when set (#60); a "Draft with AI" button pre-filling the
+existing Messages note field, no new send path (#61); an on-demand, never-persisted
+"Generate summary" over each report's own already-computed content, inheriting that
+report's own role gate (#62). Not yet deployed to production -- awaiting a Director-
+supplied Anthropic API key (Decision A) before there's anything live to smoke-test.
 
 ## Register Notes (non-software, business-process)
 
