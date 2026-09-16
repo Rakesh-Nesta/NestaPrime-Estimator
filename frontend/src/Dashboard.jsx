@@ -60,12 +60,21 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
     <div className="max-w-4xl mx-auto mt-8 mb-10 space-y-6 px-4">
       <div className="flex items-center justify-between">
         <h2 className="font-heading font-bold text-text-primary text-lg">Dashboard</h2>
-        <button
-          onClick={onNewProject}
-          className="text-xs uppercase tracking-wider bg-gold hover:bg-gold-hover text-base rounded px-4 py-2 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
-        >
-          + New project
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onDrillDown("reports", {})}
+            title="Pinned for quick access"
+            className="text-xs uppercase tracking-wider bg-surface border border-gold/40 text-gold hover:bg-gold/10 rounded px-4 py-2 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+          >
+            📌 Reports
+          </button>
+          <button
+            onClick={onNewProject}
+            className="text-xs uppercase tracking-wider bg-gold hover:bg-gold-hover text-base rounded px-4 py-2 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+          >
+            + New project
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
