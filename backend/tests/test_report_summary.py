@@ -69,9 +69,13 @@ def test_summary_not_found(client, director_user):
     assert res.status_code == 404
 
 
-def test_summary_not_configured_fails_fast(client, director_user):
-    """No monkeypatch -- ANTHROPIC_API_KEY is unset in the test
-    environment, so this must fail immediately with a clear 503."""
+def test_summary_not_configured_fails_fast(client, director_user, monkeypatch):
+    """Forces the key unset regardless of the real environment's own
+    .env (a dev/local .env may carry a real ANTHROPIC_API_KEY for manual
+    testing) -- this must fail immediately with a clear 503 either way."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
     headers = _director_headers(client, director_user)
     report_id = _pipeline_report(client, headers)
 

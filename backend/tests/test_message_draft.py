@@ -86,9 +86,13 @@ def test_draft_message_requires_auth(client):
     assert res.status_code == 401
 
 
-def test_draft_message_not_configured_fails_fast(client, director_user):
-    """No monkeypatch -- ANTHROPIC_API_KEY is unset in the test
-    environment, so this must fail immediately with a clear 503."""
+def test_draft_message_not_configured_fails_fast(client, director_user, monkeypatch):
+    """Forces the key unset regardless of the real environment's own
+    .env (a dev/local .env may carry a real ANTHROPIC_API_KEY for manual
+    testing) -- this must fail immediately with a clear 503 either way."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
     headers = _director_headers(client, director_user)
     estimate_id = _client_facing_estimate(client, headers)
 

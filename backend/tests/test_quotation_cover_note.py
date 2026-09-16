@@ -123,10 +123,14 @@ def test_cover_note_can_be_cleared_back_to_null(client, director_user):
     assert res.json()["cover_note"] is None
 
 
-def test_draft_cover_note_not_configured_fails_fast(client, director_user):
-    """No monkeypatch -- ANTHROPIC_API_KEY is unset in the test
-    environment, so the real ai_content.generate_text runs and must fail
+def test_draft_cover_note_not_configured_fails_fast(client, director_user, monkeypatch):
+    """Forces the key unset regardless of the real environment's own
+    .env (a dev/local .env may carry a real ANTHROPIC_API_KEY for manual
+    testing) -- the real ai_content.generate_text must still fail
     immediately with a clear 503, never a hang or a 500."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
     headers = _director_headers(client, director_user)
     quotation_id = _quotation_for_new_project(client, headers)
 

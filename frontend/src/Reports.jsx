@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { generateReport, listReports, releaseReport, summarizeReport } from "./api";
+import { exportReportBlob, exportReportPdfBlob, generateReport, listReports, releaseReport, summarizeReport } from "./api";
+
+function downloadBlobAsFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // Builds the date string from the Date object's own LOCAL fields --
 // .toISOString() converts to UTC first, which silently shifts the date
@@ -99,6 +108,26 @@ export default function Reports({ token, role, onBack }) {
     try {
       await releaseReport(token, reportId);
       await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleExportExcel(report) {
+    setError("");
+    try {
+      const blob = await exportReportBlob(token, report.id);
+      downloadBlobAsFile(blob, `${report.report_type}_${report.period_from}_${report.period_to}.xlsx`);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleExportPdf(report) {
+    setError("");
+    try {
+      const blob = await exportReportPdfBlob(token, report.id);
+      downloadBlobAsFile(blob, `${report.report_type}_${report.period_from}_${report.period_to}.pdf`);
     } catch (err) {
       setError(err.message);
     }
@@ -256,6 +285,18 @@ export default function Reports({ token, role, onBack }) {
                         ? "Regenerate summary"
                         : "Generate summary"}
                     </button>
+                    <button
+                      onClick={() => handleExportExcel(r)}
+                      className="text-xs bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover hover:-translate-y-0.5 transition-all duration-250 ease-out"
+                    >
+                      Download Excel
+                    </button>
+                    <button
+                      onClick={() => handleExportPdf(r)}
+                      className="text-xs bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover hover:-translate-y-0.5 transition-all duration-250 ease-out"
+                    >
+                      Download PDF
+                    </button>
                   </div>
                   {summaryError && <p className="text-xs text-red-400 mt-1">{summaryError}</p>}
                   {summaries[r.id] && (
@@ -263,9 +304,6 @@ export default function Reports({ token, role, onBack }) {
                       {summaries[r.id]}
                     </p>
                   )}
-                  <pre className="mt-2 bg-surface-raised rounded p-2 text-xs overflow-x-auto">
-                    {JSON.stringify(r.content, null, 2)}
-                  </pre>
                 </>
               )}
             </div>
