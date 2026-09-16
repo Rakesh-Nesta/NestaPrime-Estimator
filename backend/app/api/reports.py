@@ -14,6 +14,7 @@ from app.models.report import Report, ReportStatus, ReportType
 from app.models.setting import Override
 from app.models.sport import ProjectSport, Sport
 from app.models.user import User
+from app.services import ai_content
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -333,6 +334,41 @@ def get_report(
     if current_user.role.value not in VISIBLE_ROLES[report.report_type]:
         raise HTTPException(status_code=403, detail="This role cannot view this report type")
     return report
+
+
+class ReportSummaryOut(BaseModel):
+    summary: str
+
+
+@router.post("/{report_id}/summary", response_model=ReportSummaryOut)
+def summarize_report(
+    report_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ALL_REPORT_ROLES)),
+):
+    """Amendment 13 (Section 12): a narrative paragraph over this
+    report's own already-computed content -- never persisted, never
+    changes what's stored or exported. Same gate as GET .../{report_id}
+    (T.2 rule 3: role gate matches the underlying data), since a summary
+    reveals nothing the report itself doesn't already show."""
+    report = db.query(Report).filter(Report.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if current_user.role.value not in VISIBLE_ROLES[report.report_type]:
+        raise HTTPException(status_code=403, detail="This role cannot view this report type")
+
+    prompt = (
+        f"Write a brief narrative summary (3-5 sentences, plain text, no headings) of this "
+        f"{report.report_type.value.replace('_', ' ')} report for {report.period_from.isoformat()} to "
+        f"{report.period_to.isoformat()}, suitable for a Director to forward as-is. Call out anything "
+        "that stands out (e.g. below-floor margins, a concentration of overrides, a slow period) -- "
+        "don't just restate every number.\n\n" + json.dumps(report.content)
+    )
+    try:
+        summary = ai_content.generate_text(prompt, max_tokens=500)
+    except ai_content.AiContentError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return ReportSummaryOut(summary=summary)
 
 
 @router.post("/{report_id}/release", response_model=ReportOut)

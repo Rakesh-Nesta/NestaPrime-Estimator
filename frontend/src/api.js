@@ -906,6 +906,16 @@ export async function releaseReport(token, reportId) {
   return handle(res);
 }
 
+// Amendment 13 (Section 12): on-demand, never persisted -- a read-only
+// convenience layer over the report's own already-computed content.
+export async function summarizeReport(token, reportId) {
+  const res = await fetch(`${API_BASE}/reports/${reportId}/summary`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 // --- Parts D/E/F/G.5/H/J.2: Cost Sheet take-off engines ---
 
 export async function listCostSheetLines(token, costSheetId) {

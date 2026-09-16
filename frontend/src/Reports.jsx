@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { generateReport, listReports, releaseReport } from "./api";
+import { generateReport, listReports, releaseReport, summarizeReport } from "./api";
 
 // Builds the date string from the Date object's own LOCAL fields --
 // .toISOString() converts to UTC first, which silently shifts the date
@@ -54,6 +54,9 @@ export default function Reports({ token, role, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [summaries, setSummaries] = useState({}); // reportId -> text
+  const [summarizingId, setSummarizingId] = useState(null);
+  const [summaryError, setSummaryError] = useState("");
 
   const [reportType, setReportType] = useState("pipeline");
   const [periodPreset, setPeriodPreset] = useState("this_month");
@@ -98,6 +101,19 @@ export default function Reports({ token, role, onBack }) {
       await load();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function handleSummarize(reportId) {
+    setSummaryError("");
+    setSummarizingId(reportId);
+    try {
+      const { summary } = await summarizeReport(token, reportId);
+      setSummaries((s) => ({ ...s, [reportId]: summary }));
+    } catch (err) {
+      setSummaryError(err.message);
+    } finally {
+      setSummarizingId(null);
     }
   }
 
@@ -227,9 +243,30 @@ export default function Reports({ token, role, onBack }) {
                 source: {r.source_tables} · hash {r.file_hash.slice(0, 12)}…
               </p>
               {expandedId === r.id && (
-                <pre className="mt-2 bg-surface-raised rounded p-2 text-xs overflow-x-auto">
-                  {JSON.stringify(r.content, null, 2)}
-                </pre>
+                <>
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={() => handleSummarize(r.id)}
+                      disabled={summarizingId === r.id}
+                      className="text-xs bg-surface-raised text-gold border border-gold/40 rounded px-2 py-1 hover:bg-gold/10 hover:-translate-y-0.5 transition-all duration-250 ease-out disabled:opacity-50"
+                    >
+                      {summarizingId === r.id
+                        ? "Summarizing…"
+                        : summaries[r.id]
+                        ? "Regenerate summary"
+                        : "Generate summary"}
+                    </button>
+                  </div>
+                  {summaryError && <p className="text-xs text-red-400 mt-1">{summaryError}</p>}
+                  {summaries[r.id] && (
+                    <p className="mt-2 bg-gold/5 border border-gold/20 rounded p-2 text-xs text-text-primary">
+                      {summaries[r.id]}
+                    </p>
+                  )}
+                  <pre className="mt-2 bg-surface-raised rounded p-2 text-xs overflow-x-auto">
+                    {JSON.stringify(r.content, null, 2)}
+                  </pre>
+                </>
               )}
             </div>
           ))}
