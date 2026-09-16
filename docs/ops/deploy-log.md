@@ -11,6 +11,26 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-16 -- PR #68: replace raw JSON report view with Excel/PDF export
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `c496625` -> `a1ac9dd`
+
+Director reviewed the Reports screen and asked that the raw JSON debug dump be
+replaced with proper exportable files -- both Excel and PDF, not just one.
+Backend and frontend both rebuilt: two new report endpoints
+(`GET /reports/{id}/export` for `.xlsx`, `GET /reports/{id}/pdf`), each gated
+identically to `GET /reports/{id}` (`VISIBLE_ROLES[report.report_type]`), and
+`Reports.jsx` now offers "Download Excel"/"Download PDF" buttons instead of
+the `<pre>{JSON.stringify(...)}</pre>` block. No schema changes -- no new
+Alembic migration to apply.
+
+**Smoke test:** `/health` -> `{"status":"ok"}`. Frontend root -> 200. Backend
+startup logs showed both gunicorn workers starting cleanly with no migration
+step (expected, since this PR carries no schema change).
+
+---
+
 ## 2026-09-15 -- 16 commits / 8 PRs (#38-#53): cross-sell, WhatsApp/Telegram, backup infra, field settings, All Quotations, Amendment 11
 
 **Run by:** R. Patni (with AI development assistance)
