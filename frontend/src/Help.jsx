@@ -9,6 +9,10 @@ import { DIRECTOR_ADMIN_GUIDE, ESTIMATOR_GUIDE, FAQ, FULL_HANDBOOK } from "./han
 // breadcrumb), and each "watch out for" line is drawn from an actual gap
 // this session found live, not invented -- so a new estimator hears it once
 // here instead of hitting it cold on a real project.
+//
+// v3 (Section 13, 16 Sept 2026): Full Handbook tab is now current with
+// Amendments 11-13's screens -- see handbookData.js's own top comment for
+// the full list of what changed.
 const STEPS = [
   {
     n: 1,
@@ -44,7 +48,8 @@ const STEPS = [
     n: 4,
     title: "Documents",
     body: "Build the Cost Sheet from take-off (Structures, Base, Flooring, Lighting, " +
-      "etc.), or add lines manually. Verify it once it's ready, then create the Estimate.",
+      "etc.) -- every line is labour (mazdoori) and material (saaman) -- or add lines " +
+      "manually. Verify it once it's ready, then create the Estimate.",
     watch: "The Rate Sheet may be empty for a rate you need -- if so, there's no app-" +
       "provided market rate yet, and entering a correct one is on you until a real rate " +
       "card is loaded (Note R1). Check with a PM/Director before guessing on anything " +
@@ -54,7 +59,7 @@ const STEPS = [
     n: 5,
     title: "Quotation",
     body: "Once an Estimate option is Client-approved (or demand-received), create the " +
-      "Quotation, release it, send it, and track it through to Won or Lost.",
+      "Quotation, release it, send it, and track this dhanda through to Won or Lost.",
     watch: null,
   },
 ];
@@ -163,7 +168,7 @@ export default function Help({ role, onBack }) {
           <BrandHeader />
           <h1 className="font-heading font-bold text-text-primary text-2xl mt-3 print:text-black">Full Handbook</h1>
           <p className="text-sm text-text-secondary mt-1 print:text-gray-700">
-            Amendment 10 (User Handbook) · Section 5 · v2 — every screen, what it does, and what to do
+            Amendment 10 (User Handbook) · Section 13 · v3 — every screen, what it does, and what to do
             when the client hasn't given you the data.
           </p>
           <div className="mt-6 space-y-6">

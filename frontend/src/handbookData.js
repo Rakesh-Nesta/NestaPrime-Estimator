@@ -6,6 +6,18 @@
 // project data reviewed for Note R1 ("the Ujjain Pickleball job"), the
 // real Ujjain job on record (a squash court, RK Bansal School, Dec 2022) is
 // used instead, per Director decision (13 Sept 2026).
+//
+// v3 (Section 13, 16 Sept 2026, Director-approved): closes the gap Annexure-2
+// v1.11's register reconciliation found -- this file hadn't been touched
+// since v2 (13 Sept) despite Amendments 11-13 shipping seven new/updated
+// screens since. Added: All Projects, All Estimates, All Quotations, Vendors
+// Admin, Price Requests, Cross-Sell Admin, Sports & Scope Admin; updated the
+// now-stale Documents (AI cover note, Messages) and Reports (AI summary,
+// Excel/PDF export) entries; wove in the register's own named Hindi terms
+// (labour/mazdoori, material/saaman, dhanda) into the Quick Start and
+// Estimator Guide. Messages Panel and Purchase Orders are documented as
+// sub-bullets on their parent screen rather than standalone entries, since
+// neither is independently nav-reachable (Director decision, Section 13).
 
 export const FULL_HANDBOOK = [
   {
@@ -73,18 +85,43 @@ export const FULL_HANDBOOK = [
       "Unverified rates never become defaults for a new Cost Sheet line — someone still has to type it in or confirm it first. A rate flagged \"commodity watched\" (e.g. steel, turf) triggers an alert when its price moves past the configured threshold since it was last confirmed.",
   },
   {
+    screen: "Vendors Admin",
+    what: "Vendor master list (PM/Director/procurement) with each vendor's nested product catalog underneath it — approximate pricing for planning, not a locked quote.",
+    fields: [
+      "Vendor — name (required), vendor code, city, category, contact name/phone/email, GSTIN, payment terms",
+      "Product (per vendor) — name (required), spec, unit, approx price (Rs), category",
+    ],
+    whenMissing:
+      "Only a vendor's name and a product's name are required — everything else, including vendor code, can be filled in later (vendor code is editable inline right on the list after creation).",
+    watch:
+      "These product prices are explicitly approximate planning figures, not a vendor-confirmed quote — for a real, current rate, use Price Requests instead. There's no delete for a vendor itself, only for individual products under it.",
+  },
+  {
+    screen: "Price Requests",
+    what: "Ask vendors for a current price on specific Rate Sheet items (over WhatsApp/Email), log what they actually replied, then apply that reply to the master Rate Sheet or a specific Cost Sheet line.",
+    fields: [
+      "Request — one or more Rate Sheet items, one or more vendors, channel(s) (WhatsApp/Email), required-by date, requested validity (days)",
+      "Reply (per vendor, per item) — the vendor's raw reply text (required); rate, unit, GST basis, and validity are all auto-proposed from that text and overridable",
+    ],
+    whenMissing:
+      "Everything except the raw reply text is optional and auto-parsed from what the vendor actually wrote — typing \"Rs 68/kg ex-GST, valid 15 days\" as the raw reply is often enough on its own.",
+    watch:
+      "No real WhatsApp/email provider sends these requests — both the send and the reply are manually recorded, not automated. \"Use for master rate\" creates the item exactly like typing a new Rate Sheet entry by hand — Manual and Unverified — a PM/Director still has to confirm it separately before it becomes a trusted default. \"Use for this line\" needs the target Cost Sheet line's ID typed into a plain text box, not picked from a list — easy to mistype.",
+  },
+  {
     screen: "Cost Sheet Builder",
     what: "Build the real, internal cost of the project — one tab per work package (Structures, Base, Flooring, Lighting, HVAC, Pool, and 13 more), each with its own take-off calculator. PM/Director only see real rates here; Sales works in a separate Rate-blind mode (see the Estimator Guide).",
     fields: [
       "Each tab needs the relevant Project Sport plus that package's own inputs — e.g. Structures needs Type, section, wall thickness, build L/W/height, foundation depth and either a netting grade or a manual rate; Flooring (acrylic) needs surface type, coats and rate/sqft/coat; Lighting needs target lux, fixture wattage/count and cable/panel rates.",
       "\"Manual line\" — for anything with no dedicated calculator: work package, category, item, unit, quantity, rate, optional labour category.",
+      "Purchase Orders (PM/Director/procurement) — a panel on this same screen to raise a PO against consumption lines: vendor, one or more lines with quantity/rate (pre-filled from the line, overridable), optional delivery date and e-way bill number; goods receipt is recorded per line afterwards.",
     ],
     whenMissing:
       "A green recommendation banner (drawn from Sport Selection's own Base/Structure/Flooring/Lighting suggestions) offers a one-click \"Use recommendation\" fill on several tabs — use it as a starting point when you don't have a specific spec yet, then adjust.",
     example:
       "Worked example — Ujjain squash court (RK Bansal School, Dec 2022, a real project on record): flooring was 672 sqft of maple wood at Rs 380/sqft = Rs 2,55,360; the surrounding wall system was 1,200 sqft of hard plaster + paint at Rs 175/sqft = Rs 2,10,000; one soundboard accessory at Rs 17,000. GST at 18% (itemized separately, not folded into the rate) added Rs 86,825 — a stated grand total of Rs 5,69,185. This is exactly the shape a Cost Sheet's Flooring, Structure, and Accessories tabs would produce for a similar single-court squash project today.",
     watch:
-      "\"Verify Cost Sheet\" is one-way from this screen — once verified, every take-off tab disappears and no more lines can be added, removed, or recomputed here. Rework happens back on the Documents screen (Reject → returns to Draft), not by re-opening this one. A Resurfacing/Repair project won't show Structures/Base/Drainage tabs at all — that's by design (B.1), not a missing feature.",
+      "\"Verify Cost Sheet\" is one-way from this screen — once verified, every take-off tab disappears and no more lines can be added, removed, or recomputed here. Rework happens back on the Documents screen (Reject → returns to Draft), not by re-opening this one. A Resurfacing/Repair project won't show Structures/Base/Drainage tabs at all — that's by design (B.1), not a missing feature. On Purchase Orders: a Cost Sheet line can only be on one open PO at a time; \"Issue\" only works from Draft and can't be undone; a PO can still be cancelled even after it's partially received, which drops the remaining un-received balance — it's blocked only once fully Received.",
   },
   {
     screen: "Documents — Estimate, Quotation & Work Order",
@@ -92,29 +129,76 @@ export const FULL_HANDBOOK = [
     fields: [
       "Estimate: Sport + Package (Budget/Standard/Premium) + a cost figure per option — one option per submit, several options can exist side by side for the client to compare.",
       "Quotation: pick the Estimate, an optional discount, and (Tender Mode only) whether GST is quoted exclusive or inclusive of the base price.",
+      "Cover Note (Quotation) — \"Draft with AI\" proposes an opening paragraph from the project's own details; a human always reviews and explicitly saves it before it appears on the Quotation PDF, exactly like the AI draft never auto-sends anywhere else in the app.",
+      "Messages (on Cost Sheet/Estimate/Quotation rows) — a panel to send or log outbound communication about that document: channel (Email/WhatsApp/Telegram), template, recipient (required), subject, message text, and a \"Draft with AI\" button that proposes the message text for you to review before sending.",
     ],
     whenMissing:
       "If the Cost Sheet situation is genuinely too small to justify a full Estimate (a Resurfacing/Repair job under the Director's fast-track threshold), \"Fast-track\" skips straight from a Verified Cost Sheet to an auto-approved Estimate and Quotation in one step.",
     watch:
-      "Release and Send are two separate, sequential steps — a Quotation can't jump straight from Draft to Sent. Won/Lost can only be marked from \"Sent,\" never from \"Released.\" If the underlying Cost Sheet changes after an Estimate or Quotation already exists, nothing updates automatically — the Estimate flags \"rebase required\" and you have to click Rebase yourself before releasing again. Revising a Sent Quotation can change its discount, GST basis, or pricing — it can't add or drop sports; that needs a new Quotation.",
+      "Release and Send are two separate, sequential steps — a Quotation can't jump straight from Draft to Sent. Won/Lost can only be marked from \"Sent,\" never from \"Released.\" If the underlying Cost Sheet changes after an Estimate or Quotation already exists, nothing updates automatically — the Estimate flags \"rebase required\" and you have to click Rebase yourself before releasing again. Revising a Sent Quotation can change its discount, GST basis, or pricing — it can't add or drop sports; that needs a new Quotation. On Messages: WhatsApp and Telegram are real sends with genuine delivery status; Email has no provider wired up, so \"sending\" an email just logs that it was sent — it delivers nothing. A send can still fail even after you fill and submit the form, if the client hasn't opted in to that channel (see Clients) or a WhatsApp template isn't yet Meta-approved.",
+  },
+  {
+    screen: "All Projects",
+    what: "Cross-project browse list — every project in the system, filterable by Open/Won/Lost, with a search box for project number or client name.",
+    fields: ["Status filter (All/Open/Won/Lost)", "Search (project number or client name)"],
+    whenMissing:
+      "Nothing to fill in — this is a read-only browse/filter screen. It's also reachable pre-filtered: clicking a Dashboard tile like \"Open Projects\" opens this screen already set to that status.",
+    watch:
+      "A project's Won/Lost status here is computed live from its Quotations, not stored on the project itself — it changes automatically the moment a Quotation's own status changes, with nothing to update by hand.",
+  },
+  {
+    screen: "All Estimates",
+    what: "Cross-project Estimate list, filterable by status (Draft/Sent/Won/Lost/Expired/Superseded) — the same shape as All Projects and All Quotations.",
+    fields: ["Status filter", "Search (project number or client name)"],
+    whenMissing: "Nothing required — read-only browse/filter, same as All Projects.",
+    watch:
+      "Open to every role that can see Estimates at all (Sales through site_engineer), not Director-only — an Estimate only ever shows the client-facing price range, never the underlying cost, so it doesn't need the stricter gate All Quotations has.",
+  },
+  {
+    screen: "All Quotations",
+    what: "Director-only, cross-project Quotation register — every Quotation across every project, with CSV export and a per-row PDF download. This is Amendment 6b's \"review all quotations\" screen.",
+    fields: [
+      "Status filter, or the quicker All / Pending / Old group pills (Pending = draft+released+sent; Old = every finished status) — picking an exact status overrides the group pill",
+      "Date from / Date to — filters on when the Quotation was created, not when it was released or sent",
+      "Search (project number or client name)",
+      "Export CSV — same filters, downloads the full filtered list as a spreadsheet",
+    ],
+    whenMissing: "All filters are optional and combine together — leave everything blank to see every Quotation.",
+    watch:
+      "This is the one cross-project list that shows real cost and margin figures, including a red \"(below floor)\" flag — that's exactly why it's Director-only, stricter than the single-project Documents screen Sales/PM can also see. The date filter is on creation date, not the date it was actually released or sent.",
+  },
+  {
+    screen: "Cross-Sell Admin",
+    what: "Catalog management for the \"Complete Your Facility\" add-ons suggested at the Estimate step (lighting, fencing, seating, AMC, other) — separate from the suggestion picker itself, which lives on the Documents screen.",
+    fields: [
+      "Name (required), category, description, unit, cost (Rs), margin %",
+      "\"Suggest for all sports\" checkbox, or specific sport tags if left unchecked",
+      "Active/Inactive toggle, per add-on",
+    ],
+    whenMissing:
+      "Only name and category are required to save a draft add-on — but cost and margin must both be filled in before it can be switched Active; the Activate control stays disabled with a tooltip until both are set.",
+    watch:
+      "Creating or editing is Director-only (PM can view the catalog read-only). Deactivating an add-on never deletes it — it just stops appearing as a live suggestion at the Estimate step.",
   },
   {
     screen: "Pricing Calculator",
-    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from Daily Work (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate.",
+    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from Daily Work (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate. (For quick arithmetic that doesn't need margin/GST logic at all, a plain +/-/×/÷/% calculator lives under Tools instead, open to every role.)",
     fields: ["Cost incl. contingency (Rs)", "Client type", "Discount type (None/Percent/Amount) + value"],
     whenMissing: "There's nothing to fill beyond the cost figure and client type — everything else is optional.",
     watch: null,
   },
   {
     screen: "Reports",
-    what: "Generate a computed, hash-verified snapshot report (Pipeline / Margin / Override Summary) over a period, then Release it once it's ready to stand as the official record for that range.",
+    what: "Generate a computed, hash-verified snapshot report (Pipeline / Margin / Override Summary) over a period, then Release it once it's ready to stand as the official record for that range. Pinned as a Dashboard shortcut for quick access.",
     fields: [
       "Report type (Pipeline — all roles except site_engineer/procurement; Margin — PM/Director; Override Summary — Director only)",
       "Period — Today / This Week / This Month / This Year, or Custom with manual start/end dates",
+      "Generate/Regenerate summary — a \"Draft with AI\" style button that writes a narrative paragraph over the report's own already-computed content; never persisted, regenerate any time",
+      "Download Excel / Download PDF — the report's real, shareable form; there's no on-screen raw data view any more",
     ],
     whenMissing: "There's nothing optional to skip here — type and period are both required to generate.",
     watch:
-      "Re-running the same period creates a brand-new report rather than editing the old one — every generated report is a frozen, hash-verified snapshot of that moment, by design (T.2).",
+      "Re-running the same period creates a brand-new report rather than editing the old one — every generated report is a frozen, hash-verified snapshot of that moment, by design (T.2). The AI summary is generated fresh each time you click it and isn't saved anywhere — if you need it again later, regenerate it.",
   },
   {
     screen: "Clients",
@@ -130,6 +214,20 @@ export const FULL_HANDBOOK = [
     fields: ["Varies by setting — each is a versioned value, editable only by the Director; PM can view but not edit."],
     whenMissing: "Every setting ships with a sensible default (see Q.1/Q.2) — nothing here blocks daily work if left untouched.",
     watch: "Editing a setting creates a new version effective from today — it never rewrites a document that already froze the old value.",
+  },
+  {
+    screen: "Sports & Scope Admin",
+    what: "Director-only master-data configuration for the catalogs everything else in the app draws from — Sports, Scope items, margin-floor overrides, package contents, hubs, accessory catalog, netting grades, vehicle classes, flooring guides, and lighting standards, each its own tab.",
+    fields: [
+      "Sports — key (required, permanent once set), name, category, playing/build dimensions, min clear height, governing body, active/inactive",
+      "Scope items — key (required, permanent once set), group, name",
+      "Margin floor overrides — per-sport floor % that replaces the client-type default when set (e.g. Pool 15%, PEB 14%)",
+      "Package contents — per sport × tier (Budget/Standard/Premium): flooring/structure/lighting text, scope bullets, warranty years",
+    ],
+    whenMissing:
+      "Most descriptive fields are optional — only a Sport or Scope item's key is required, and it's worth getting right the first time: it can't be changed once created.",
+    watch:
+      "\"Deactivate\" everywhere on this screen is a soft toggle, not a delete — it retires an item without breaking any existing project that already references it. A brand-new sport gets no Base/Structure/Flooring/Lighting recommendation on the Cost Sheet until someone separately extends the recommendation tables for its key — adding the sport here alone isn't enough to make the one-click \"Use recommendation\" fill work for it elsewhere in the app.",
   },
   {
     screen: "Audit Log",
@@ -153,7 +251,7 @@ export const ESTIMATOR_GUIDE = {
     {
       title: "2. Cost Sheet — what Sales actually sees",
       body:
-        "Sales never sees real cost or margin figures (K.3) — this is enforced by the server, not just hidden in the browser. Instead of the full Cost Sheet Builder, Sales works in Rate-blind mode: propose a line (work package, category, item, unit, quantity) with no rate field at all — it isn't hidden, it's simply not there. A PM or Director later fills in the rate for each pending line you've proposed. If you need to attach a vendor's quote as reference, use the Attachments panel on the same screen.",
+        "Sales never sees real cost or margin figures (K.3) — this is enforced by the server, not just hidden in the browser. Instead of the full Cost Sheet Builder, Sales works in Rate-blind mode: propose a line (work package, category, item, unit, quantity) with no rate field at all — it isn't hidden, it's simply not there. A PM or Director later fills in the rate for each pending line you've proposed (that rate, and the labour/mazdoori split behind it, is exactly what Rate-blind mode keeps out of Sales' view). If you need to attach a vendor's quote as reference, use the Attachments panel on the same screen.",
     },
     {
       title: "3. Estimate",
@@ -163,12 +261,17 @@ export const ESTIMATOR_GUIDE = {
     {
       title: "4. Quotation",
       body:
-        "Once at least one option is client-approved, create the Quotation, then Release and Send it as two separate steps. Track it to Won or Lost from \"Sent\" — not from \"Released.\" A Won quotation hands off to a PM/Director for the Work Order stage.",
+        "Once at least one option is client-approved, create the Quotation, then Release and Send it as two separate steps. Track it to Won or Lost from \"Sent\" — not from \"Released.\" A Won quotation hands off to a PM/Director for the Work Order stage. A Quotation can also carry an AI-drafted Cover Note — you always review and save it yourself before it appears on the client's PDF, it's never sent on its own.",
     },
     {
       title: "5. Rate Sheet — what to do when a rate is missing",
       body:
-        "If the Rate Sheet has nothing for a material or item you need, there's no app-provided market rate yet. Flag it to a PM/Director rather than guessing on anything large — they can enter and confirm a real rate, or point you to the historical rate reference if one exists for that category.",
+        "If the Rate Sheet has nothing for a material (saaman) or item you need, there's no app-provided market rate yet. Flag it to a PM/Director rather than guessing on anything large — they can enter and confirm a real rate, or point you to the historical rate reference if one exists for that category.",
+    },
+    {
+      title: "6. Messages — talking to the client from inside the app",
+      body:
+        "From any Cost Sheet, Estimate, or Quotation row, open Messages to send or log a note to the client over Email, WhatsApp, or Telegram. \"Draft with AI\" proposes the message text for you to read and edit before it goes — nothing is ever sent without you clicking Send yourself. A send can fail even after you submit the form if the client hasn't opted in to that channel (check Clients) — that's not a bug, it's the consent flag doing its job.",
     },
   ],
 };
@@ -198,9 +301,24 @@ export const DIRECTOR_ADMIN_GUIDE = {
         "Master Settings → Role & Permissions shows exactly what each role can currently see/do, mirrored from the backend's real access checks. It's read-only by design — some rules (cost/margin visibility, Director-only release gates, the Director-count guardrail above) are deliberately not adjustable from any screen.",
     },
     {
+      title: "All Quotations — reviewing every quotation, not just one project's",
+      body:
+        "The cross-project register (Amendment 6b): filter by status or the quicker All/Pending/Old pills, plus a date range on when each Quotation was created. This is the one cross-project list that shows real cost and margin figures, including a below-floor flag — Export CSV for anything you want to review or hand off outside the app.",
+    },
+    {
+      title: "Vendors Admin & Price Requests — the procurement bridge",
+      body:
+        "Vendors Admin holds the vendor master and each vendor's approximate product pricing (planning-only, not a locked quote). Price Requests is where you actually go for a current, vendor-confirmed rate — request over WhatsApp/Email, log the vendor's raw reply, and apply it either to the master Rate Sheet (as a new Manual/Unverified item you still have to confirm) or straight onto a specific Cost Sheet line.",
+    },
+    {
+      title: "Sports & Scope Admin",
+      body:
+        "The master-data catalogs everything else in the app draws from — Sports, Scope items, margin-floor overrides, package contents, hubs, accessory catalog, netting grades, vehicle classes, and more, each its own tab. A Sport or Scope item's key is permanent once set, so double-check it before saving. \"Deactivate\" is always a soft toggle, never a delete.",
+    },
+    {
       title: "Reports",
       body:
-        "Pipeline is visible to Sales too (no cost data); Margin is PM/Director only; Override Summary (below-floor pricing overrides) is Director only, as is releasing any Draft report to make it the official record for that period.",
+        "Pipeline is visible to Sales too (no cost data); Margin is PM/Director only; Override Summary (below-floor pricing overrides) is Director only, as is releasing any Draft report to make it the official record for that period. Every report can generate an AI summary and export to Excel or PDF for sharing outside the app — nothing is shown as raw on-screen data any more.",
     },
     {
       title: "Master Settings",
