@@ -93,3 +93,45 @@ backend`) and frontend rebuilt/exported with `VITE_API_URL=http://65.1.234.78/ap
 copied into `/var/www/nestaprime/dist/`.
 
 **Smoke test:** `/health` -> `{"status":"ok"}` (200). Frontend root -> 200.
+
+**Correction (16 September 2026):** this entry was wrong -- `git status` on
+2026-09-16 found production's checkout still sitting at `56789d4` (PR #54, one
+commit *before* PR #55 even), meaning `git pull` either wasn't actually run
+during this deploy or ran in the wrong directory/session. The build/smoke-test
+steps above ran against stale code despite reporting success; the health check
+and frontend-200 checks pass regardless of which commit is deployed, so they
+didn't catch it. Amendment 12 did not actually reach production until the
+2026-09-16 entry below, which pulled it in along with Amendment 13. Lesson:
+smoke tests need to check *which commit* is live (e.g. a `/health` response
+carrying a git SHA, or `git rev-parse HEAD` on the server checked against the
+merge commit), not just that the server responds.
+
+---
+
+## 2026-09-16 -- PRs #55-#63: Amendment 12 (dashboard/nav) + Amendment 13 (AI-assisted content), all in one deploy
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `56789d4` -> `748d627`
+
+Production's checkout was found still on `56789d4` (see the correction above) --
+this deploy is really "catch production up to `main`", which happens to bring
+two amendments' worth of work at once: Amendment 12 (dashboard drill-down/nav
+restructure, PR #57) and all four parts of Amendment 13 (AI-assisted content:
+shared `ai_content.py` service #59, Quotation `cover_note` #60, message drafts
+#61, report summaries #62), plus the deploy-log/register bookkeeping PRs
+(#55, #58, #63).
+
+**One new Alembic migration** (`5f6c4a6134d6 -> ecaaa65ec8d4`, adds
+`quotations.cover_note`) -- confirms the database itself was already current
+with Amendment 11's migration despite the code checkout lagging, i.e. the
+DB and the git checkout had drifted independently. Applied cleanly, both
+gunicorn workers started without error.
+
+Confirmed before deploying that `ANTHROPIC_API_KEY` is unset on the server's
+`.env` (Decision A from `docs/annexures/Section-12-specs.md` -- a Director-
+supplied key is still pending) -- every "Draft with AI" / "Generate summary"
+button added by Amendment 13 reports "AI drafting is not configured" rather
+than hanging or erroring, same graceful-degradation discipline as
+WhatsApp/Telegram's own unset keys.
+
+**Smoke test:** `/health` -> `{"status":"ok"}` (200). Frontend root -> 200.
