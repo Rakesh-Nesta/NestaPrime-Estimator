@@ -130,13 +130,18 @@ v3."
 
 ## Approval
 
-Amendment 10 (handbook v3 — new screens, stale-entry updates, Hindi terms): ☐ Approved
-☐ Changes ☐ Later
+Amendment 10 (handbook v3 — new screens, stale-entry updates, Hindi terms): ☑ Approved —
+"approve the handbook spec, answer the open decisions" (16 September 2026)
 
-Open items needing a Director answer before/alongside implementation:
-1. Messages Panel / Purchase Orders as sub-bullets vs. standalone Full Handbook entries.
-2. Hindi terms — register's three named terms only, or broader/different team vocabulary.
-3. Education / secondary panels / Tools calculator — confirm out of scope for this wave.
+Decision 1 (Messages Panel / Purchase Orders): ☑ Resolved as proposed — sub-bullets on
+their parent screen's existing entry (Documents, Cost Sheet Builder), not standalone
+Full Handbook sections.
+Decision 2 (Hindi terms — scope): ☑ Resolved as proposed — the register's own three
+named terms only (labour/mazdoori, material/saaman, dhanda), applied to the Quick Start
+and Estimator Guide sections.
+Decision 3 (Education / secondary panels / Tools calculator): ☑ Resolved as proposed —
+out of scope for this wave, except a one-line mention of the basic calculator under the
+Tools reference in the relevant guide.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
