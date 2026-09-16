@@ -1,10 +1,23 @@
 # Annexure 2 — Proposed Amendments to the NestaPrime Estimator Application
 
-**Version 1.10 | Date: 12 September 2026 | Status: DRAFT — Pending Director Approval**
+**Version 1.11 | Date: 16 September 2026 | Status: DRAFT — Pending Director Approval**
 
 Source: `Annexure-2_NestaPrime-Estimator_Amendments.docx`, prepared by R. Patni (with AI
 development assistance). Committed here as the governing change register — see
 [`README.md`](../../README.md) for how it fits into the rest of the project record.
+
+**v1.11 changes (16 September, register reconciled against shipped code):** Amendments
+1–10 were recorded in v1.10 as entirely unimplemented ("nothing in this version has been
+implemented"), but that stopped being true almost immediately — by 12–14 September, PRs
+#23–#47 had already shipped real, working implementations for most of them without the
+register being updated to say so. This pass checked each of Amendments 1, 2, 3, 5, 6, 7,
+8, 9, 10 against the actual codebase (file-by-file, with `git log` PR/date evidence) and
+records the true status under each entry below: **fully implemented** — 1, 3, 6, 7, 9;
+**partially implemented**, with the specific gap named — 2, 5, 8, 10. No code changed in
+this pass; this is a documentation correction only, same discipline as the deploy-log
+corrections recorded in `docs/ops/deploy-log.md`. (Amendment 4 already carries its own
+accurate status further below and wasn't part of this check; Amendments 11–13 were
+already correctly marked.)
 
 **v1.10 changes (12 September, review session 2):** Amendment No. 4 expanded with
 acceptance criteria confirmed live on production, plus refinements found while
@@ -12,8 +25,7 @@ reviewing the dashboard and nav with a sales-rep workflow in mind (project searc
 per-client project list, naming clarity, plain-language activity feed, admin/user
 role separation). Amendment No. 5 expanded to absorb the 12 September parking-lot
 item (Director decision: merge, not a new amendment). Note R3 added for two
-launch-night housekeeping items that never got a formal home. Nothing in this
-version has been implemented — recording only, per the Change Process below.
+launch-night housekeeping items that never got a formal home.
 
 ---
 
@@ -39,14 +51,31 @@ Dark premium theme, gold `#c9a227` accents, animated sport-tile selection with c
 diagram, subtle motion (0.2–0.3s). "The user is not bored and wants to work." Frontend
 styling only.
 
+**Implemented 12 September 2026 (PRs #25, #26):** the gold token (`--color-gold:
+#c9a227`) is defined in `frontend/src/index.css`; `SportSelection.jsx`'s `CourtDiagram`
+renders an inline SVG scaled to the sport's real playing dimensions, and sport-tile/button
+transitions use `duration-200`/`duration-250` — inside the spec's 0.2–0.3s range.
+
 ### Amendment No. 2 — Simplified "New Project Setup" Form
 Blind-quoting principle: 5 required fields (Client · Sport · City · Dimensions · Base
 scope/status); soil type, distance, court count, site access, power/water removed (→
 T&C); Quick vs Detailed modes.
 
+**Partially implemented 12 September 2026 (PR #23):** `ProjectSetup.jsx` has a working
+Quick/Detailed mode toggle (Quick by default, auto-forced to Detailed for Government
+clients); soil_type/site_access/power_available are hidden or optional in Quick mode via
+field settings rather than moved to T&C text. **Gap:** Quick mode asks only 4 fields, not
+5 — Dimensions is shown as read-only informational text, not something the user actually
+enters in Quick mode.
+
 ### Amendment No. 3 — "Complete Your Facility" Cross-Sell at Estimate Step
 At the Estimate step, suggest 4–5 sport-matched add-ons (lighting, fencing, seating, AMC)
 with prices and own margins; one-tap add; never forced.
+
+**Implemented 13 September 2026 (PR #39, spec PR #38):** `backend/app/api/cross_sell.py`
+returns up to 5 sport-matched add-ons (lighting/fencing/seating/AMC/other), each carrying
+its own cost/margin; `Documents.jsx`'s `OptionAddons` renders them inside the Estimate
+option UI with one-tap add/remove, cost/margin stripped for the Sales role. Never forced.
 
 ### Amendment No. 4 — Main Dashboard + Guided Navigation
 Business-summary dashboard; link back to dashboard from every section; guided step-path
@@ -102,22 +131,60 @@ amendment, not a separate one):**
   remarks; persisted on the Project record; passed through to the Quotation PDF
   under "Special Remarks / T&C".
 
+**Partially implemented 13–14 September 2026 (PR #37 Phase 1, PR #44 Phase 2):**
+`field_setting.py`/`field_settings.py` give the Director compulsory/optional/hidden
+control from Master Settings; `SelectWithOther.jsx` implements the "Others" rule
+correctly; `CustomNotesPanel.jsx` is a real reusable "+ Add Note" component feeding the
+Quotation PDF's Special Remarks section. **Gaps:** field-settings governance is scoped to
+only 5 fields (soil_type, distance_km, number_of_courts, site_access, power_available),
+not "every field"; the "Others" rule is wired into just 2 dropdowns (Category, Vendor in
+`RateSheet.jsx`), not every dropdown in the app; a "None" option is only confirmed on
+those same 5 governed fields, not app-wide.
+
 ### Amendment No. 6 — User Rights Management + Reporting & Oversight
 6a: role-based permissions (what each role can see/do). 6b: admin reviews all quotations
 and daily activity. 6c: reports for daily / weekly / monthly / full-year / custom ranges.
 
+**Implemented 13–14 September 2026:** 6a — `RolePermissionsViewer.jsx`, a read-only
+mirror of the backend's `require_roles()` gates (PR #33, 13 Sept). 6b —
+`AllQuotations.jsx`, Director-only cross-project browse with CSV/PDF export (PR #47, 14
+Sept), plus the pre-existing Director-only `audit_log.py` for daily activity. 6c —
+`Reports.jsx`'s `PERIOD_PRESETS` (today/this_week/this_month/this_year/custom) matches
+the spec exactly (PR #32, 13 Sept).
+
 ### Amendment No. 7 — Vendor & Product Master
 Vendor lists with vendor codes; products with approximate pricing under each vendor;
 feeds rate sheet and price-update requests.
+
+**Implemented 13 September 2026 (PR #37):** `models/vendor.py` (vendor_code, city,
+category, GSTIN, reliability score) and `models/product.py` (per-vendor approx_price);
+`VendorsAdmin.jsx` is a real Vendor Master screen with nested product management.
+**Nuance:** the feed into the rate sheet is indirect — it happens through vendor
+price-request replies (`price_requests.py`'s `use_vendor_reply()` writes the vendor onto
+a `RateItem`), not a direct link from `Product.approx_price` onto a rate item.
 
 ### Amendment No. 8 — Communication & Integrations (WhatsApp, Email, Telegram)
 Document sharing and messaging from the app with delivery status. Opportunity:
 investigate the company's existing wa-gateway server before any paid BSP. Telegram
 easiest to start. Largest build; after Amendments 1–7.
 
+**Partially implemented 13 September 2026 (PR #41 — title itself scopes to WhatsApp +
+Telegram only):** `services/wa_gateway.py` and `services/telegram.py` make real
+provider calls; `models/message.py`'s `MessageStatus` (RECORDED/SENT/DELIVERED/FAILED)
+tracks real SENT/FAILED status, reconciled via `wa_gateway_webhook.py`. **Gap: Email was
+never built** — the model's own docstring states no SMTP provider is wired up; an email
+"send" is just a manually confirmed record, never provider-verified. `DELIVERED` status
+is defined but neither provider actually sets it (no delivery-receipt API from either).
+
 ### Amendment No. 9 — Flexible Court Sizing
 Standard sizes become configurable suggestions per sport — adjustable smaller/larger per
 project; admin-editable (links to No. 5).
+
+**Implemented 12 September 2026 (PR #24):** `SportSelection.jsx`'s `CourtSize` accepts
+the standard size with one click or reveals L/W inputs via "Customize size," floored
+server-side at federation playing dimensions. **Nuance:** per-project override is
+confirmed; a separate Master Settings control letting the Director edit the *baseline*
+standard suggestion itself (as opposed to a project's override of it) wasn't found.
 
 ### Amendment No. 10 — User Handbook (Guide for the Team)
 **Why (Director)**: "One of the most important things" — a handbook the team can learn
@@ -139,6 +206,19 @@ language). PDF + printable; also lives inside the app under a "Help" button.
 
 **Maintenance**: Handbook version-numbered; every shipped amendment wave updates the
 relevant chapter (same discipline as this annexure).
+
+**Partially implemented 12–13 September 2026 (PR #27 Quick Start, PR #34 full handbook
+v2) — this is the largest gap found in this reconciliation pass:** `Help.jsx` +
+`handbookData.js` deliver the Quick Start card, a 12-screen full handbook, separate
+Estimator/Director guides, and an FAQ with exactly the spec'd 20 questions, reachable via
+an in-app Help button, with a browser print/save-as-PDF option. **Gaps:** (1) Hindi terms
+are entirely absent, despite the spec explicitly calling for them; (2) the maintenance
+rule this amendment itself sets — "every shipped amendment wave updates the relevant
+chapter" — has not been followed since PR #34: Amendments 11, 12, and 13 (14–16
+September) all shipped without any handbook update, so the handbook's 12-screen list is
+now missing All Quotations, Vendors Admin, Messages Panel, Price Requests, Purchase
+Orders, and Cross-Sell Admin. Bringing the handbook current is real, undone work — not a
+documentation-only fix like the rest of this reconciliation pass.
 
 ### Amendment No. 11 — Rate Card & Margin Policy Tuning (from Note R1's Findings)
 **Registered 14 September 2026.** Note R1's own completed exercise (see its "Completed
@@ -392,6 +472,14 @@ fix, both paths covered.
 No calendar commitment (no "Week N" deadlines) -- work proceeds in small sections, each
 shipped through the full branch → PR → tests → merge → deploy cycle before the next
 starts. The order below is the priority, not a schedule.
+
+**Superseded, kept for the historical record (v1.11 reconciliation):** the actual build
+order (PRs #23–#47, 12–14 September) shipped every section below out of order relative
+to this table — Section 7 (cross-sell) and Section 8 (integrations) landed *before*
+Section 6 (customizable fields + vendor master), for example. All eight sections are now
+implemented (see the Amendment entries above for exact status and gaps), except Note R2's
+restore drill, which is ongoing by design. This table is left as-is rather than rewritten
+to match what actually happened.
 
 | Section | Amendments / Notes | Why this order |
 |---|---|---|
