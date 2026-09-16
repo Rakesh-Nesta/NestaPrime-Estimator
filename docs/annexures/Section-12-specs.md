@@ -98,9 +98,10 @@ required fields or changes its output when AI content isn't used.
 ## Approval
 
 Amendment 13 overall: ☑ Approved -- "approved, use squash merges as listed" (15 September 2026)
-Decision A (Anthropic API key): ☐ Confirmed ☐ Not yet -- key not yet supplied; building
-proceeds with the fail-fast pattern (graceful no-op until a key is set), so this isn't a
-build blocker, only an end-to-end-testing blocker
+Decision A (Anthropic API key): ☑ Confirmed -- key supplied and verified working on both
+local dev and production (16 September 2026, see `docs/ops/deploy-log.md`); a real
+Claude response confirmed end-to-end in the Cover Note UI and via a direct production
+sanity check
 Decision B (build order): ☑ Confirmed as listed -- shared service → Cover Note → message
 drafts → report summaries, each its own PR, squash-merged
 
