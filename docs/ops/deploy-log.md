@@ -173,3 +173,17 @@ copy-pasted command block if the display/relay path might mask it -- use an
 interactive prompt (`read -r -p`, or an editor) so the value goes straight
 from the user's own paste into the shell, with no rendering step in between
 that could substitute a masked display string for the real bytes.
+
+---
+
+## 2026-09-16 -- pinned Reports shortcut on the Dashboard
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `748d627` -> `c496625`
+**Frontend-only** -- no backend rebuild, no migrations.
+
+Director asked to pin the Reports screen for quick access -- adds a small
+"📌 Reports" button next to "+ New project" on the Dashboard, jumping
+straight to Reports without opening the Reports nav dropdown.
+
+**Smoke test:** frontend root -> 200.
