@@ -135,3 +135,41 @@ than hanging or erroring, same graceful-degradation discipline as
 WhatsApp/Telegram's own unset keys.
 
 **Smoke test:** `/health` -> `{"status":"ok"}` (200). Frontend root -> 200.
+
+---
+
+## 2026-09-16 -- Decision A resolved: ANTHROPIC_API_KEY configured on production
+
+**Run by:** R. Patni (with AI development assistance)
+**Not a code deploy** -- Director supplied the Anthropic API key; this closes
+out `docs/annexures/Section-12-specs.md`'s Decision A, the one item blocking
+Amendment 13 from actually working (as opposed to gracefully declining).
+
+**First attempt corrupted the key**: `echo '...' >> backend/.env` wrote the
+literal Unicode bullet character (U+2022) in place of the key -- whatever
+displayed/relayed the command to the terminal had auto-masked the
+secret-looking string, and the masked *display* is what got typed, not the
+real value. Confirmed via `cat -A backend/.env`, which showed `M-bM-^@M-"`
+(bullet's UTF-8 bytes) repeated in place of the key. First `generate_text`
+call failed with `UnicodeEncodeError` building the `x-api-key` header, not
+`AiContentError` -- a genuinely different failure mode than "not configured",
+worth recognizing next time.
+
+**Fix:** removed the bad line (`sed -i '/^ANTHROPIC_API_KEY=/d' backend/.env`),
+then wrote the key via an interactive `read -r -p` prompt instead of a
+copy-pasted command -- typed/pasted directly into the live SSH session rather
+than through any rendering layer that could mask it. Verified ASCII-clean
+with `grep ... | grep -qP '^[\x00-\x7F]+$'` before rebuilding, deliberately
+without re-printing the key.
+
+**Verification:** rebuilt the backend, then ran `ai_content.generate_text(...)`
+directly inside the production container -- `SUCCESS: hello`, a real Claude
+response. Amendment 13's three AI-content surfaces (Quotation cover note,
+message drafts, report summaries) are now fully live, not just gracefully
+declining.
+
+**Lesson for future secret entry:** never hand a secret to a user through a
+copy-pasted command block if the display/relay path might mask it -- use an
+interactive prompt (`read -r -p`, or an editor) so the value goes straight
+from the user's own paste into the shell, with no rendering step in between
+that could substitute a masked display string for the real bytes.
