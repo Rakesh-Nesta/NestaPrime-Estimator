@@ -11,6 +11,26 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-17 -- PR #75: embed Quotation photo attachments into the generated PDF
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `6f2effa` -> `f121866` (also carried forward PR #74's docs-only commit,
+`dd26828` -> `6f2effa`, not yet pulled on production until this deploy)
+**Backend-only** -- no frontend rebuild, no migrations.
+
+The Quotation's existing Attachments panel let users attach images, but the generated
+PDF never included them -- real quotations sent today carry a site layout diagram or 3D
+render for client clarity, which the app's PDF had no way to show. Any non-superseded
+photo-tagged attachment on a Quotation now renders under a "Reference Images" heading in
+its PDF, scaled to fit; a corrupt/unreadable file is skipped rather than breaking
+generation. Full backend suite: 1112 passed locally before merge (1 unrelated,
+pre-existing test-DB contamination error, confirmed clean in isolation) and CI green.
+
+**Smoke test:** `curl -s http://127.0.0.1:8000/health` -> `{"status":"ok"}`. Backend
+container rebuilt and started cleanly, no migration step (expected, no schema change).
+
+---
+
 ## 2026-09-16 -- PR #73: handbook v3 (Section 13, closes the Amendment 10 gap)
 
 **Run by:** R. Patni (with AI development assistance)
