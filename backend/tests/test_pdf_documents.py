@@ -339,6 +339,69 @@ def test_quotation_pdf_omits_cover_note_section_when_unset(client, director_user
     assert res.content[:4] == b"%PDF"
 
 
+def _png_bytes() -> bytes:
+    from PIL import Image as PILImage
+
+    buf = io.BytesIO()
+    PILImage.new("RGB", (4, 4), color=(200, 50, 50)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_quotation_pdf_includes_a_photo_attachment(client, director_user):
+    """A photo-tagged attachment uploaded via the Quotation's existing
+    Attachments panel now actually appears in the client-facing PDF --
+    previously it could be attached but never made it into the PDF at
+    all."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.post(
+        "/attachments",
+        data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
+        files={"file": ("site-layout.png", _png_bytes(), "image/png")},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    text = _pdf_text(res)
+    assert "Reference Images" in text
+
+
+def test_quotation_pdf_omits_reference_images_section_when_no_photos(client, director_user):
+    """Additive only -- a Quotation with no photo attachments renders
+    exactly as before."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    text = _pdf_text(res)
+    assert "Reference Images" not in text
+
+
+def test_quotation_pdf_skips_a_corrupt_photo_attachment_without_crashing(client, director_user):
+    """Mirrors _product_image_flowable's own documented behavior: a
+    photo-tagged attachment that isn't actually a readable image is
+    silently left out rather than breaking PDF generation."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.post(
+        "/attachments",
+        data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
+        files={"file": ("not-really-a-photo.png", b"this is not a real png file", "image/png")},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    assert res.content[:4] == b"%PDF"
+    assert "Reference Images" not in _pdf_text(res)
+
+
 # ---------------------------------------------------------------------------
 # Amendment 5: Custom Notes on the Quotation PDF's "Special Remarks" section
 # ---------------------------------------------------------------------------
