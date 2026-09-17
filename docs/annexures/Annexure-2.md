@@ -284,6 +284,30 @@ existing Messages note field, no new send path (#61); an on-demand, never-persis
 report's own role gate (#62). Not yet deployed to production -- awaiting a Director-
 supplied Anthropic API key (Decision A) before there's anything live to smoke-test.
 
+**Update 16-17 September 2026:** Decision A resolved (real key configured and verified
+on production, PR #65). Two follow-on refinements shipped after this entry was written:
+a pinned Reports shortcut on the Dashboard (PR #66) and the Reports screen's raw JSON
+debug view replaced with real Excel/PDF export plus the AI summary button (PR #68) --
+Director instruction: *"in this no need to show backend process and report in excel or
+pdf form only,"* then *"add pdf also."* See `docs/ops/deploy-log.md` for both deploys.
+
+### Amendment No. 14 — Customizable Document Templates (Quotation, Estimate, Reports)
+**Registered 17 September 2026 (Director instruction, following up on Amendment 13).**
+Director asked whether the Quotation/Report/Cost Sheet PDFs could be changed to match
+the company's actual real-world quotation format -- shared three real samples (a facility
+layout diagram, and two branded "Budgetary/Technical Quotation" documents with a company
+header, Project/Client Details, Scope of Work and Technical Specification tables, an
+Approved Brands & Makes table, Payment/Commercial terms, Exclusions, and signed-off
+blocks) -- *"why i am asking this because in present scenario we send quotation with
+image for more clarity attached some samples."* Narrowed on follow-up to the concrete,
+immediate pain point -- *"forget about content we need image attach in quotation or u
+give me space for that i can attach things in quotation"* -- which shipped directly as
+its own small feature (PR #75/#76, Quotation PDFs now embed any photo-tagged attachment
+under a "Reference Images" heading). This amendment covers the remaining, broader ask:
+letting the Director edit the PDFs' company details and boilerplate legal text from a
+settings screen, without a developer, for future wording changes. Spec:
+`docs/annexures/Section-14-specs.md`.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
