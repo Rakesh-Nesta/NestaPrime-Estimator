@@ -11,6 +11,28 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-17 -- PR #78: customizable Quotation company details and T&C/warranty text
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `3fce868` -> `d3bb3f5` (also carried forward PR #76/#77's docs-only
+commits not yet pulled on production until this deploy)
+**Backend + frontend** -- one new Alembic migration (auto-applied on container start).
+
+Section 14 (approved spec): a labeled Company Details panel in Master Settings over
+data that already fed the Quotation PDF (legal name, PAN, GSTIN, bank details), plus a
+genuinely new capability -- the 8 T&C clauses and 5-row warranty table, previously
+hardcoded Python strings with no settings path, are now Director-editable with a live
+preview before saving. Migration widens `settings.value` (200->text) and
+`audit_log_entries.old_value`/`new_value` (500->text) -- both hit their old limits
+against real T&C-length text during local verification, fixed before this shipped.
+Full backend suite: 1122 passed locally before merge; CI green.
+
+**Smoke test:** `curl -s http://127.0.0.1:8000/health` -> `{"status":"ok"}`; frontend
+root -> 200. Backend container built and started cleanly (a failed migration would have
+kept the container from starting at all).
+
+---
+
 ## 2026-09-17 -- PR #75: embed Quotation photo attachments into the generated PDF
 
 **Run by:** R. Patni (with AI development assistance)
