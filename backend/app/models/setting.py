@@ -73,7 +73,10 @@ class Setting(Base):
     # null for GLOBAL. Combined with key, identifies one setting "line".
     scope_value: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    value: Mapped[str] = mapped_column(String(200), nullable=False)  # stored as text, parsed by the caller
+    # Section 14: widened from String(200) -- the Quotation T&C clauses and
+    # warranty table now live here too, well past 200 chars. Plain scalar
+    # settings (GST rate, validity days, etc.) still fit comfortably.
+    value: Mapped[str] = mapped_column(Text, nullable=False)  # stored as text, parsed by the caller
     unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
