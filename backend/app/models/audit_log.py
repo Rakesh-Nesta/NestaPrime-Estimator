@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -63,8 +63,12 @@ class AuditLogEntry(Base):
     document_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     document_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     field: Mapped[str] = mapped_column(String(100), nullable=False)
-    old_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    new_value: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Section 14: widened from String(500) -- a Setting's value can now
+    # carry the Quotation's whole T&C/warranty-table text, well past 500
+    # chars. Every other audited field (short enum/numeric values) still
+    # fits comfortably.
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     session_id: Mapped[str | None] = mapped_column(String(100), nullable=True)

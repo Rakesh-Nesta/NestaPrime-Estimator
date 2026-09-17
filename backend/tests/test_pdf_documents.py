@@ -1,4 +1,5 @@
 import io
+import json
 
 from pypdf import PdfReader
 
@@ -400,6 +401,141 @@ def test_quotation_pdf_skips_a_corrupt_photo_attachment_without_crashing(client,
     assert res.status_code == 200
     assert res.content[:4] == b"%PDF"
     assert "Reference Images" not in _pdf_text(res)
+
+
+# ---------------------------------------------------------------------------
+# Section 14: customizable Quotation T&C / warranty table
+# ---------------------------------------------------------------------------
+
+
+def test_quotation_pdf_shows_default_terms_when_unset(client, director_user):
+    """Baseline -- nothing about today's PDF changes until a Director
+    actually edits the setting."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+    assert "Validity: 30 days from the date of this quotation." in text
+    assert "Flooring / turf" in text
+
+
+def test_quotation_pdf_uses_custom_terms_when_set(client, director_user):
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.post(
+        "/settings",
+        json={"key": "quotation_terms_and_conditions", "value": json.dumps(["A brand-new custom term."])},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+    assert "A brand-new custom term." in text
+    assert "Validity: 30 days from the date of this quotation." not in text
+
+
+def test_quotation_pdf_uses_custom_warranty_table_when_set(client, director_user):
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.post(
+        "/settings",
+        json={
+            "key": "quotation_warranty_table",
+            "value": json.dumps([["Court surface", "Manufacturer-backed, 7 years"]]),
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    text = _pdf_text(res)
+    assert "Court surface" in text
+    assert "Flooring / turf" not in text
+
+
+def test_quotation_pdf_ignores_malformed_terms_setting(client, director_user):
+    """A Director-typo'd (non-JSON) value degrades to the default rather
+    than crashing PDF generation for every Quotation."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.post(
+        "/settings",
+        json={"key": "quotation_terms_and_conditions", "value": "not valid json at all"},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200
+    assert "Validity: 30 days from the date of this quotation." in _pdf_text(res)
+
+
+def test_preview_pdf_shows_draft_terms_without_saving(client, director_user):
+    """The Section 14 live-preview step -- draft text renders in the
+    preview PDF, but the real Quotation PDF (and the underlying Setting)
+    are completely untouched."""
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    res = client.post(
+        f"/quotations/{quotation['id']}/preview-pdf",
+        json={"terms": ["Draft-only term, never saved."]},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.content[:4] == b"%PDF"
+    assert "Draft-only term, never saved." in _pdf_text(res)
+
+    real_pdf = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    real_text = _pdf_text(real_pdf)
+    assert "Draft-only term, never saved." not in real_text
+    assert "Validity: 30 days from the date of this quotation." in real_text
+
+    settings_res = client.get("/settings", headers=headers)
+    assert all(s["key"] != "quotation_terms_and_conditions" for s in settings_res.json())
+
+
+def test_preview_pdf_requires_director_role(client, director_user, db_session):
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+
+    sales_headers = _sales_headers(client, db_session)
+    res = client.post(
+        f"/quotations/{quotation['id']}/preview-pdf", json={"terms": ["x"]}, headers=sales_headers
+    )
+    assert res.status_code == 403
+
+
+def test_template_defaults_returns_hardcoded_defaults_when_unset(client, director_user):
+    headers = _director_headers(client, director_user)
+    res = client.get("/quotation-template-defaults", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert "Validity: 30 days from the date of this quotation." in body["terms"]
+    assert ["Flooring / turf", "Manufacturer-backed"] in body["warranty_table"]
+
+
+def test_template_defaults_reflects_a_saved_override(client, director_user):
+    headers = _director_headers(client, director_user)
+    client.post(
+        "/settings",
+        json={"key": "quotation_terms_and_conditions", "value": json.dumps(["Only term."])},
+        headers=headers,
+    )
+
+    res = client.get("/quotation-template-defaults", headers=headers)
+    assert res.json()["terms"] == ["Only term."]
+
+
+def test_template_defaults_requires_pm_or_director(client, director_user, db_session):
+    sales_headers = _sales_headers(client, db_session)
+    res = client.get("/quotation-template-defaults", headers=sales_headers)
+    assert res.status_code == 403
 
 
 # ---------------------------------------------------------------------------

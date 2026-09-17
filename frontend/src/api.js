@@ -1577,6 +1577,26 @@ export async function downloadQuotationPdfBlob(token, quotationId) {
   return res.blob();
 }
 
+export async function getQuotationTemplateDefaults(token) {
+  const res = await fetch(`${API_BASE}/quotation-template-defaults`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+// Section 14: renders draft (unsaved) T&C/warranty-table text against a
+// real Quotation's own data -- never writes anything to the database.
+export async function previewQuotationTemplateBlob(token, quotationId, { terms, warrantyTable } = {}) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/preview-pdf`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ terms: terms ?? null, warranty_table: warrantyTable ?? null }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Preview failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 export async function listAuditLog(token, { documentType, documentId } = {}) {
   const params = new URLSearchParams();
   if (documentType) params.set("document_type", documentType);

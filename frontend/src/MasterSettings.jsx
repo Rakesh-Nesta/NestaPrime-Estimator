@@ -7,11 +7,14 @@ import {
   downloadCompanyLogoBlob,
   exportSettingsBlob,
   getCompanyLogoMeta,
+  getQuotationTemplateDefaults,
   importSettingsExcel,
+  listAllQuotations,
   listFieldSettings,
   listMessageTemplates,
   listSettings,
   listUsers,
+  previewQuotationTemplateBlob,
   resetUserPassword,
   updateFieldSetting,
   updateMessageTemplate,
@@ -269,6 +272,8 @@ export default function MasterSettings({ token, onBack, currentUser }) {
         </div>
       </div>
 
+      <CompanyDetailsCard token={token} />
+
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-1">Excel export / import</h3>
         <p className="text-xs text-text-secondary mb-3">
@@ -318,6 +323,8 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           </div>
         )}
       </div>
+
+      <QuotationTemplateCard token={token} />
 
       <MessageTemplatesCard token={token} />
 
@@ -772,6 +779,284 @@ function FieldSettingsCard({ token }) {
             </select>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const COMPANY_DETAIL_FIELDS = [
+  { key: "company_legal_name", label: "Legal name" },
+  { key: "company_pan", label: "PAN" },
+  { key: "company_gstin", label: "GSTIN" },
+  { key: "company_registered_office_city", label: "Registered office city" },
+  { key: "company_bank_name", label: "Bank name" },
+  { key: "company_bank_account_name", label: "Bank account name" },
+  { key: "company_bank_account_number", label: "Bank account number" },
+  { key: "company_bank_ifsc", label: "Bank IFSC" },
+];
+
+function CompanyDetailsCard({ token }) {
+  const [values, setValues] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMessage, setSavedMessage] = useState("");
+
+  function load() {
+    return listSettings(token).then((rows) => {
+      const next = {};
+      for (const f of COMPANY_DETAIL_FIELDS) {
+        const row = rows.find((r) => r.key === f.key);
+        next[f.key] = row ? row.value : "";
+      }
+      setValues(next);
+    });
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function handleSave() {
+    setError("");
+    setSavedMessage("");
+    setSaving(true);
+    try {
+      await Promise.all(
+        COMPANY_DETAIL_FIELDS.map((f) =>
+          createSettingVersion(token, {
+            key: f.key,
+            value: values[f.key] || "",
+            reason: "Edited via Master Settings (Section 14)",
+          })
+        )
+      );
+      await load();
+      setSavedMessage("Saved -- these details now print on every Quotation PDF.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <h3 className="text-sm font-semibold text-text-secondary mb-1">Company details</h3>
+      <p className="text-xs text-text-secondary mb-2">
+        Part O COMPANY / Section 14: these already fed the Quotation PDF before this panel existed -- they just had
+        to be set through the raw "Add a new setting" key/value form below. This is the same data, with real labels.
+        A blank field is simply omitted from the PDF, never printed as placeholder text.
+      </p>
+      {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+      {savedMessage && <p className="text-xs text-green-400 mb-2">{savedMessage}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        {COMPANY_DETAIL_FIELDS.map((f) => (
+          <div key={f.key}>
+            <label className="block text-xs font-medium text-text-secondary mb-1">{f.label}</label>
+            <input
+              value={values[f.key] || ""}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              className="w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
+            />
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="text-xs bg-gold text-base rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save changes"}
+      </button>
+    </div>
+  );
+}
+
+function QuotationTemplateCard({ token }) {
+  const [termsText, setTermsText] = useState("");
+  const [warrantyRows, setWarrantyRows] = useState([]);
+  const [quotations, setQuotations] = useState([]);
+  const [previewQuotationId, setPreviewQuotationId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedMessage, setSavedMessage] = useState("");
+
+  function load() {
+    return Promise.all([getQuotationTemplateDefaults(token), listAllQuotations(token)]).then(
+      ([defaults, allQuotations]) => {
+        setTermsText(defaults.terms.join("\n"));
+        setWarrantyRows(defaults.warranty_table.map(([item, basis]) => ({ item, basis })));
+        setQuotations(allQuotations);
+        if (allQuotations.length > 0) setPreviewQuotationId(allQuotations[0].id);
+      }
+    );
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    load()
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  function currentTerms() {
+    return termsText.split("\n").map((t) => t.trim()).filter(Boolean);
+  }
+
+  function currentWarrantyTable() {
+    return warrantyRows.filter((r) => r.item.trim() && r.basis.trim()).map((r) => [r.item.trim(), r.basis.trim()]);
+  }
+
+  function updateWarrantyRow(index, field, value) {
+    setWarrantyRows((rows) => rows.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  }
+
+  function addWarrantyRow() {
+    setWarrantyRows((rows) => [...rows, { item: "", basis: "" }]);
+  }
+
+  function removeWarrantyRow(index) {
+    setWarrantyRows((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  async function handlePreview() {
+    setError("");
+    setSavedMessage("");
+    if (!previewQuotationId) {
+      setError("No Quotation exists yet to preview against -- create one first.");
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const blob = await previewQuotationTemplateBlob(token, previewQuotationId, {
+        terms: currentTerms(),
+        warrantyTable: currentWarrantyTable(),
+      });
+      // window.open() after an await is routinely popup-blocked (the
+      // user-activation gesture from the click has already expired by
+      // the time the fetch resolves) -- downloading instead matches
+      // every other generated PDF/export in this app and is never
+      // blocked, since it's a plain anchor click, not a new window.
+      downloadBlobAsFile(blob, "quotation-template-preview.pdf");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function handleSave() {
+    setError("");
+    setSavedMessage("");
+    setSaving(true);
+    try {
+      await createSettingVersion(token, {
+        key: "quotation_terms_and_conditions",
+        value: JSON.stringify(currentTerms()),
+        reason: "Edited via Master Settings (Section 14)",
+      });
+      await createSettingVersion(token, {
+        key: "quotation_warranty_table",
+        value: JSON.stringify(currentWarrantyTable()),
+        reason: "Edited via Master Settings (Section 14)",
+      });
+      await load();
+      setSavedMessage("Saved -- new Quotation PDFs will use this wording from now on.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <h3 className="text-sm font-semibold text-text-secondary mb-1">Quotation terms &amp; warranty</h3>
+      <p className="text-xs text-text-secondary mb-2">
+        Section 14: the Quotation PDF's own T&amp;C clauses and warranty table, Director-editable -- seeded below
+        with today's actual wording, so nothing on the PDF changes until you save an edit here. Always preview
+        before saving; a Quotation already sent is unaffected either way (each PDF is built live at download time).
+      </p>
+      {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+      {savedMessage && <p className="text-xs text-green-400 mb-2">{savedMessage}</p>}
+
+      <div>
+        <label className="block text-xs font-medium text-text-secondary mb-1">Terms &amp; conditions (one per line)</label>
+        <textarea
+          value={termsText}
+          onChange={(e) => setTermsText(e.target.value)}
+          rows={8}
+          className="w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm font-mono"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-text-secondary mb-1">Warranty table</label>
+        <div className="space-y-1.5">
+          {warrantyRows.map((row, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                value={row.item}
+                onChange={(e) => updateWarrantyRow(i, "item", e.target.value)}
+                placeholder="Item"
+                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
+              />
+              <input
+                value={row.basis}
+                onChange={(e) => updateWarrantyRow(i, "basis", e.target.value)}
+                placeholder="Basis"
+                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
+              />
+              <button onClick={() => removeWarrantyRow(i)} className="text-xs text-red-400 hover:underline">
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+        <button onClick={addWarrantyRow} className="text-xs text-gold hover:underline mt-1.5">
+          + Add row
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <select
+          value={previewQuotationId}
+          onChange={(e) => setPreviewQuotationId(e.target.value)}
+          className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-xs flex-1"
+        >
+          {quotations.length === 0 && <option value="">No Quotations exist yet</option>}
+          {quotations.map((q) => (
+            <option key={q.id} value={q.id}>
+              {q.document_no} -- {q.project_no} -- {q.client_name}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={handlePreview}
+          disabled={previewing || !previewQuotationId}
+          className="text-xs bg-surface-raised text-gold border border-gold/40 rounded px-3 py-1.5 hover:bg-gold/10 disabled:opacity-50"
+        >
+          {previewing ? "Rendering…" : "Preview"}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="text-xs bg-gold text-base rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save changes"}
+        </button>
       </div>
     </div>
   );

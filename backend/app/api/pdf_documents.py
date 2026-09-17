@@ -12,11 +12,13 @@ quotation_total, all already GST-inclusive, client-facing numbers.
 """
 
 import io
+import json
 import uuid
 from pathlib import Path
 from xml.sax.saxutils import escape as _xml_escape
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from PIL import Image as PILImage
 from reportlab.lib import colors
@@ -88,7 +90,47 @@ _QUICK_SETUP_ASSUMPTION_TERMS = [
 ]
 
 
-def _starter_terms(db: Session, tender_mode: bool = False, quick_setup: bool = False) -> list[str]:
+QUOTATION_TERMS_SETTING_KEY = "quotation_terms_and_conditions"
+QUOTATION_WARRANTY_TABLE_SETTING_KEY = "quotation_warranty_table"
+
+
+def _current_quotation_terms(db: Session) -> list[str]:
+    """Section 14: the 8 T&C clauses below become Director-editable via
+    Master Settings, stored as a JSON list under QUOTATION_TERMS_SETTING_KEY
+    -- unset is not the same as "no terms," it's "no override yet," so an
+    unconfigured or unparseable value falls back to today's exact wording
+    rather than printing nothing."""
+    raw = get_current_setting_value(db, QUOTATION_TERMS_SETTING_KEY)
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and all(isinstance(t, str) for t in parsed):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return list(_STARTER_TERMS_FIXED)
+
+
+def _current_warranty_table(db: Session) -> list[tuple[str, str]]:
+    """Section 14: same override pattern as _current_quotation_terms, for
+    the item/basis warranty table."""
+    raw = get_current_setting_value(db, QUOTATION_WARRANTY_TABLE_SETTING_KEY)
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and all(isinstance(row, list) and len(row) == 2 for row in parsed):
+                return [(row[0], row[1]) for row in parsed]
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return list(WARRANTY_TABLE)
+
+
+def _starter_terms(
+    db: Session,
+    tender_mode: bool = False,
+    quick_setup: bool = False,
+    terms_override: list[str] | None = None,
+) -> list[str]:
     """Appendix B's jurisdiction clause names 'NestaPrime's registered
     office city' -- Part O's COMPANY master carries that city as a real
     field, not a fixed string, so it's substituted in here whenever a
@@ -107,8 +149,12 @@ def _starter_terms(db: Session, tender_mode: bool = False, quick_setup: bool = F
     rather than a real site fact, and that assumption has to reach the
     client on the document the price is actually quoted on, not just
     live invisibly in the database."""
-    terms = list(_STARTER_TERMS_FIXED)
-    if tender_mode:
+    terms = list(terms_override) if terms_override is not None else _current_quotation_terms(db)
+    # Index 3 is only "the warranty clause" for today's own fixed wording --
+    # if a Director has edited the terms via Section 14, this best-effort
+    # substitution simply does nothing when its exact source text no longer
+    # matches, rather than raising on an IndexError or a bad guess.
+    if tender_mode and len(terms) > 3:
         terms[3] = terms[3].replace(
             "A warranty reserve of 1% of the contract value is held internally.",
             "A DLP (defect-liability period) reserve of 1% of the contract value is held internally "
@@ -621,11 +667,23 @@ def _granular_boq_rows_for_sport(
     return rows
 
 
-def build_quotation_pdf(db: Session, quotation_id: uuid.UUID, current_user) -> tuple[io.BytesIO, str]:
+def build_quotation_pdf(
+    db: Session,
+    quotation_id: uuid.UUID,
+    current_user,
+    terms_override: list[str] | None = None,
+    warranty_table_override: list[tuple[str, str]] | None = None,
+) -> tuple[io.BytesIO, str]:
     """Amendment 8 (Section 8): see build_estimate_pdf's own docstring.
     current_user is threaded through to the internal get_schedule() call
     below (called directly as a plain function here, not through
-    FastAPI's own dependency injection, so it needs a real value)."""
+    FastAPI's own dependency injection, so it needs a real value).
+
+    terms_override/warranty_table_override (Section 14): only ever passed
+    by the preview endpoint below, to render unsaved draft text against a
+    real Quotation's data without writing anything to the database. The
+    real download endpoint never passes these -- it always reads whatever
+    is currently saved via _current_quotation_terms/_current_warranty_table."""
     quotation = _get_quotation(db, quotation_id)
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -840,7 +898,8 @@ def build_quotation_pdf(db: Session, quotation_id: uuid.UUID, current_user) -> t
     warranty_years = _warranty_years(db, client.type if client else None)
     duration_text = f"{warranty_years} year(s)" if warranty_years is not None else "Not yet configured (Q.1)"
     warranty_rows = [["Item", "Basis", "Duration"]] + [
-        [item, basis, duration_text] for item, basis in WARRANTY_TABLE
+        [item, basis, duration_text]
+        for item, basis in (warranty_table_override or _current_warranty_table(db))
     ]
     warranty_table = Table(warranty_rows, colWidths=[65 * mm, 70 * mm, 40 * mm])
     warranty_table.setStyle(_TABLE_GRID)
@@ -860,7 +919,7 @@ def build_quotation_pdf(db: Session, quotation_id: uuid.UUID, current_user) -> t
     story.append(Paragraph("Terms &amp; conditions", styles["SectionHeading"]))
     story.extend(
         Paragraph("&bull; " + term, styles["Normal"])
-        for term in _starter_terms(db, project.tender_mode, project.quick_setup)
+        for term in _starter_terms(db, project.tender_mode, project.quick_setup, terms_override=terms_override)
     )
 
     # Amendment 5's Custom Notes component: unstructured remarks a Sales/PM/
@@ -902,3 +961,50 @@ def get_quotation_pdf(
 ):
     buffer, filename = build_quotation_pdf(db, quotation_id, current_user)
     return _pdf_response(buffer, filename)
+
+
+@pdf_documents_router.get("/quotation-template-defaults")
+def get_quotation_template_defaults(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("pm", "director")),
+):
+    """Section 14: the Master Settings editor's starting point -- whatever
+    is currently effective (a saved override, or today's hardcoded
+    default), never a separately maintained copy that could drift from
+    what the PDF actually prints. Same read gate as Master Settings itself
+    (settings.py's READ_ROLES) -- PM can view, Director can edit.
+
+    Deliberately NOT nested under /quotations/... -- documents.py's
+    GET /quotations/{quotation_id} is registered on an earlier router, so
+    a literal /quotations/template-defaults would be swallowed by that
+    path param (and fail parsing "template-defaults" as a UUID) before
+    ever reaching this route."""
+    return {
+        "terms": _current_quotation_terms(db),
+        "warranty_table": [list(row) for row in _current_warranty_table(db)],
+    }
+
+
+class QuotationTemplatePreviewRequest(BaseModel):
+    # Section 14: unsaved draft text from the Master Settings editor --
+    # never written anywhere, only rendered against a real Quotation's
+    # other data so the Director can see the result before saving.
+    terms: list[str] | None = None
+    warranty_table: list[tuple[str, str]] | None = None
+
+
+@pdf_documents_router.post("/quotations/{quotation_id}/preview-pdf")
+def preview_quotation_pdf_template(
+    quotation_id: uuid.UUID,
+    payload: QuotationTemplatePreviewRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("director")),
+):
+    """Section 14: same Director-only gate as Master Settings itself
+    (settings.py's WRITE_ROLES) -- this is the live-preview step the
+    approved spec requires before a T&C/warranty-table edit is saved."""
+    buffer, filename = build_quotation_pdf(
+        db, quotation_id, current_user,
+        terms_override=payload.terms, warranty_table_override=payload.warranty_table,
+    )
+    return _pdf_response(buffer, f"preview-{filename}")
