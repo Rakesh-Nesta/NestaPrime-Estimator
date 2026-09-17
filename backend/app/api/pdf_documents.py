@@ -243,6 +243,44 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         return ""
 
 
+def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: float, max_height: float) -> list:
+    """Every non-superseded photo-tagged attachment on this Quotation
+    (uploaded via the existing Attachments panel -- Documents.jsx already
+    renders it on the Quotation row, doc_type="quotation") -- e.g. a site
+    layout diagram or a 3D facility render, the kind of image real
+    quotations are sent with today for client clarity but the PDF itself
+    never included. Same scale-to-fit/graceful-skip pattern as
+    _product_image_flowable above; a corrupt or unreadable file is simply
+    left out rather than breaking PDF generation for the whole document."""
+    attachments = (
+        db.query(Attachment)
+        .filter(
+            Attachment.doc_type == DocumentType.QUOTATION,
+            Attachment.doc_id == quotation_id,
+            Attachment.tag == AttachmentTag.PHOTO,
+            Attachment.superseded_by_id.is_(None),
+        )
+        .order_by(Attachment.uploaded_at.asc())
+        .all()
+    )
+    flowables: list = []
+    for attachment in attachments:
+        path = Path(attachment.storage_path)
+        if not path.exists():
+            continue
+        try:
+            with PILImage.open(path) as pil_image:
+                pil_image.load()
+            reader = ImageReader(str(path))
+            original_width, original_height = reader.getSize()
+            scale = min(max_width / original_width, max_height / original_height)
+            flowables.append(Image(str(path), width=original_width * scale, height=original_height * scale))
+            flowables.append(Spacer(1, 3 * mm))
+        except Exception:
+            continue
+    return flowables
+
+
 def _company_logo_flowable(db: Session, max_width: float, max_height: float):
     """R.0: 'Logo (SVG/PNG) ... for PDF.' Only a PNG logo can actually be
     embedded here -- reportlab's Image flowable (and the Pillow decode
@@ -649,6 +687,16 @@ def build_quotation_pdf(db: Session, quotation_id: uuid.UUID, current_user) -> t
         cover_note_html = _xml_escape(quotation.cover_note).replace("\n", "<br/>")
         story.append(Paragraph(cover_note_html, styles["Normal"]))
         story.append(Spacer(1, 4 * mm))
+
+    # Reference images (site layout diagrams, 3D renders) uploaded via the
+    # Quotation's own Attachments panel -- attaching already worked, but
+    # nothing on this screen ever made it into the actual client-facing
+    # PDF until now.
+    photo_flowables = _quotation_photo_flowables(db, quotation.id, 160 * mm, 100 * mm)
+    if photo_flowables:
+        story.append(Paragraph("Reference Images", styles["SectionHeading"]))
+        story.extend(photo_flowables)
+        story.append(Spacer(1, 2 * mm))
 
     if project.tender_mode:
         # Part L: "BOQ-style itemised schedule (item no., description,
