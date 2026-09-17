@@ -105,7 +105,12 @@ fields today.
 ## Approval
 
 Amendment 14 (customizable Quotation company details + T&C/warranty text, Tiers 1–2):
-☐ Approved ☐ Changes ☐ Later
+☑ Approved — "approve as proposed, all three decisions" (17 September 2026)
+
+Decision 1 (scope — Quotation PDF only): ☑ Confirmed as proposed.
+Decision 2 (depth — company-details panel + editable T&C/warranty text; full layout/
+color/font control out of scope for this wave): ☑ Confirmed as proposed.
+Decision 3 (live preview before saving a text-block edit): ☑ Confirmed as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
