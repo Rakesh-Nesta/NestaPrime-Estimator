@@ -58,3 +58,41 @@ def generate_text(prompt: str, max_tokens: int = 400) -> str:
         return "".join(block["text"] for block in body["content"] if block.get("type") == "text").strip()
     except (KeyError, TypeError) as exc:
         raise AiContentError(f"AI drafting returned an unexpected response shape: {body}") from exc
+
+
+def generate_chat_reply(system: str, messages: list[dict[str, str]], max_tokens: int = 600) -> str:
+    """Section 15: the Education assistant's only real difference from
+    generate_text above -- a system prompt (the grounding reference
+    material) and a real multi-turn messages array, both of which the
+    Anthropic Messages API already accepts and generate_text simply
+    never exposed, since nothing needed them before this. Every other
+    caller (Cover Note, message drafts, report summaries) keeps using
+    generate_text unchanged -- this is additive, not a replacement.
+    messages is [{"role": "user"|"assistant", "content": str}, ...],
+    already in the exact shape the API expects."""
+    _require_configured()
+    try:
+        res = httpx.post(
+            ANTHROPIC_API_URL,
+            json={
+                "model": settings.anthropic_model,
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": messages,
+            },
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": ANTHROPIC_API_VERSION,
+                "content-type": "application/json",
+            },
+            timeout=30,
+        )
+    except httpx.HTTPError as exc:
+        raise AiContentError(f"AI chat request failed: {exc}") from exc
+    if res.status_code != 200:
+        raise AiContentError(f"AI chat returned {res.status_code}: {res.text[:200]}")
+    body = res.json()
+    try:
+        return "".join(block["text"] for block in body["content"] if block.get("type") == "text").strip()
+    except (KeyError, TypeError) as exc:
+        raise AiContentError(f"AI chat returned an unexpected response shape: {body}") from exc

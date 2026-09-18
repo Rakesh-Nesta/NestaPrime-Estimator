@@ -15,6 +15,7 @@ from app.api import (
     cross_sell,
     dashboard,
     documents,
+    education,
     estimates_admin,
     exports,
     field_settings,
@@ -143,6 +144,7 @@ app.include_router(site_surveys.site_surveys_router)
 app.include_router(purchase_orders.purchase_orders_router)
 app.include_router(work_orders.work_orders_router)
 app.include_router(skip_requests.skip_requests_router)
+app.include_router(education.education_router)
 
 
 @app.get("/health")
