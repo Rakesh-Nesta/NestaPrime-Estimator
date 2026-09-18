@@ -8,7 +8,9 @@ import {
   createVehicleClass,
   deleteSportMarginPolicy,
   deleteSportPoleCount,
+  draftConstructionSequence,
   listAccessoryCatalog,
+  listConstructionSequence,
   listFlooringGuides,
   listHubs,
   listLightingLuxStandards,
@@ -19,6 +21,7 @@ import {
   listSportPoleCounts,
   listSports,
   listVehicleClasses,
+  saveConstructionSequence,
   updateAccessoryCatalogItem,
   updateHub,
   updateNettingGrade,
@@ -60,6 +63,22 @@ function emptyLuxStandardForm() {
   return { lux_practice: "", lux_match: "", lux_tournament: "" };
 }
 
+// Section 18 (Amendment 16 Part 2): fixed six phases, same order
+// everywhere -- CONSTRUCTION_PHASES drives both the admin form and the
+// Build Guide display.
+const CONSTRUCTION_PHASES = [
+  { key: "site_prep", label: "Site preparation" },
+  { key: "sub_base", label: "Sub-base" },
+  { key: "flooring", label: "Flooring" },
+  { key: "structure_fixtures", label: "Structure & fixtures" },
+  { key: "lighting", label: "Lighting" },
+  { key: "accessories_finishing", label: "Accessories & finishing" },
+];
+
+function emptyConstructionSequenceForm() {
+  return Object.fromEntries(CONSTRUCTION_PHASES.map((p) => [p.key, ""]));
+}
+
 function emptySportForm() {
   return {
     key: "", display_order: "", name: "", category: "outdoor", playing_dims: "", build_dims: "",
@@ -95,6 +114,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
   const [flooringGuides, setFlooringGuides] = useState([]);
   const [luxStandards, setLuxStandards] = useState([]);
   const [poleCounts, setPoleCounts] = useState([]);
+  const [constructionSequence, setConstructionSequence] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -104,7 +124,8 @@ export default function SportsScopeAdmin({ token, onBack }) {
       listPackageContents(token), listHubs(token, true), listAccessoryCatalog(token, undefined, true),
       listNettingGrades(token, true), listVehicleClasses(token, true),
       listFlooringGuides(token), listLightingLuxStandards(token), listSportPoleCounts(token),
-    ]).then(([s, i, m, p, h, a, n, v, fg, lux, pole]) => {
+      listConstructionSequence(token),
+    ]).then(([s, i, m, p, h, a, n, v, fg, lux, pole, cs]) => {
       setSports(s);
       setScopeItems(i);
       setSportMarginPolicies(m);
@@ -116,6 +137,7 @@ export default function SportsScopeAdmin({ token, onBack }) {
       setFlooringGuides(fg);
       setLuxStandards(lux);
       setPoleCounts(pole);
+      setConstructionSequence(cs);
     });
   }
 
@@ -222,6 +244,12 @@ export default function SportsScopeAdmin({ token, onBack }) {
           >
             Lighting standards ({luxStandards.length + poleCounts.length})
           </button>
+          <button
+            onClick={() => setTab("construction_sequence")}
+            className={`text-sm rounded px-3 py-1 ${tab === "construction_sequence" ? "bg-gold text-base" : "bg-surface-raised text-text-secondary"}`}
+          >
+            Construction sequence ({constructionSequence.length})
+          </button>
         </div>
       </div>
 
@@ -253,6 +281,14 @@ export default function SportsScopeAdmin({ token, onBack }) {
           sports={sports}
           luxStandards={luxStandards}
           poleCounts={poleCounts}
+          onAction={withErrorHandling}
+        />
+      )}
+      {tab === "construction_sequence" && (
+        <ConstructionSequenceTab
+          token={token}
+          sports={sports}
+          constructionSequence={constructionSequence}
           onAction={withErrorHandling}
         />
       )}
@@ -1424,6 +1460,118 @@ function FlooringGuidesTab({ token, sports, flooringGuides, onAction }) {
                   onChange={(v) => setEditForm((f) => ({ ...f, rationale: v }))}
                   required
                 />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSave(sport.id)}
+                    className="bg-gold text-base text-xs rounded px-3 py-1 hover:bg-gold-hover"
+                  >
+                    Save
+                  </button>
+                  <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary hover:underline">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ConstructionSequenceTab({ token, sports, constructionSequence, onAction }) {
+  const [editingId, setEditingId] = useState(null); // sport_id
+  const [editForm, setEditForm] = useState(emptyConstructionSequenceForm());
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState("");
+
+  const stepsBySportId = {};
+  for (const step of constructionSequence) {
+    (stepsBySportId[step.sport_id] ??= {})[step.phase] = step.description;
+  }
+
+  function startEdit(sportId) {
+    const existing = stepsBySportId[sportId] || {};
+    setEditingId(sportId);
+    setDraftError("");
+    setEditForm({ ...emptyConstructionSequenceForm(), ...existing });
+  }
+
+  const handleDraftWithAi = async (sportId) => {
+    setDraftError("");
+    setDrafting(true);
+    try {
+      const { steps } = await draftConstructionSequence(token, sportId);
+      setEditForm((f) => ({ ...f, ...Object.fromEntries(steps.map((s) => [s.phase, s.description])) }));
+    } catch (err) {
+      setDraftError(err.message);
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const handleSave = onAction(async (sportId) => {
+    const steps = CONSTRUCTION_PHASES.filter((p) => editForm[p.key].trim()).map((p) => ({
+      phase: p.key,
+      description: editForm[p.key].trim(),
+    }));
+    await saveConstructionSequence(token, sportId, steps);
+    setEditingId(null);
+  });
+
+  return (
+    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
+      <p className="text-xs text-text-secondary">
+        Section 18 (Amendment 16 Part 2): the physical build order for this sport, one description per fixed
+        phase. "Draft with AI" grounds a suggestion in this sport's own real dimensions/accessory/flooring/package
+        data -- nothing is saved until you review it and click Save, same as a drafted cover note or client
+        message never auto-sends. A sport with no phases saved shows no Construction Sequence section in the
+        Build Guide at all.
+      </p>
+      {sports.map((sport) => {
+        const steps = stepsBySportId[sport.id] || {};
+        const savedCount = CONSTRUCTION_PHASES.filter((p) => steps[p.key]).length;
+        return (
+          <div key={sport.id} className="border border-border-dark rounded p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">
+                {sport.name} <span className="text-text-secondary text-xs font-normal">({sport.key})</span>
+              </p>
+              <button
+                onClick={() => startEdit(sport.id)}
+                className={`text-xs rounded px-3 py-1 border ${
+                  savedCount > 0 ? "border-gold bg-gold-muted text-gold-hover" : "border-border-dark text-text-secondary"
+                }`}
+              >
+                {savedCount > 0 ? `Edit (${savedCount}/6 set)` : "Not set"}
+              </button>
+            </div>
+            {editingId === sport.id && (
+              <div className="border border-gold bg-gold-muted rounded p-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gold">Editing {sport.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleDraftWithAi(sport.id)}
+                    disabled={drafting}
+                    className="text-xs bg-surface text-gold border border-gold/40 rounded px-2 py-1 hover:bg-gold/10 disabled:opacity-50"
+                  >
+                    {drafting ? "Drafting…" : "Draft with AI"}
+                  </button>
+                </div>
+                {draftError && <p className="text-xs text-red-400">{draftError}</p>}
+                {CONSTRUCTION_PHASES.map((p) => (
+                  <label key={p.key} className="text-xs text-text-secondary space-y-0.5 block">
+                    {p.label}
+                    <textarea
+                      value={editForm[p.key]}
+                      onChange={(e) => setEditForm((f) => ({ ...f, [p.key]: e.target.value }))}
+                      rows={2}
+                      className="mt-0.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
+                    />
+                  </label>
+                ))}
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleSave(sport.id)}

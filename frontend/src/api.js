@@ -438,6 +438,29 @@ export async function upsertFlooringGuide(token, sportId, payload) {
   return handle(res);
 }
 
+export async function listConstructionSequence(token, sportId) {
+  const params = sportId ? `?sport_id=${sportId}` : "";
+  const res = await fetch(`${API_BASE}/construction-sequence${params}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function saveConstructionSequence(token, sportId, steps) {
+  const res = await fetch(`${API_BASE}/construction-sequence/${sportId}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ steps }),
+  });
+  return handle(res);
+}
+
+export async function draftConstructionSequence(token, sportId) {
+  const res = await fetch(`${API_BASE}/construction-sequence/draft/${sportId}`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 export async function listLightingLuxStandards(token) {
   const res = await fetch(`${API_BASE}/lighting-standards/lux`, { headers: authHeaders(token) });
   return handle(res);
