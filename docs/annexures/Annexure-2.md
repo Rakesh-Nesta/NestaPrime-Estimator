@@ -179,6 +179,23 @@ is defined but neither provider actually sets it (no delivery-receipt API from e
 **Continued 18 September 2026 (Director instruction):** *"Amendment 8, add real email
 sending."* Spec for closing the Email gap named above: `docs/annexures/Section-17-specs.md`.
 
+**Implemented 18 September 2026 (PR #89):** `services/email_gateway.py` closes the Email
+gap named above — a thin SMTP client matching the exact `wa_gateway.py`/`telegram.py`
+pattern (blank `SMTP_*` config fails fast, a send failure sets `Message.status = failed`
+immediately, no retries/queueing). `create_message()`'s real-send dispatch now covers all
+three channels. Live browser verification (SMTP still unconfigured) surfaced a real
+frontend gap missed in the initial implementation — `MessagesPanel.jsx` still hard-coded
+email as a provider-less, log-only channel (banner text claimed email "does not actually
+send anything"; the "Attach PDF" checkbox was hidden for email) — fixed in the same PR
+before merge. Full backend suite: 1132 passed; CI green; deployed to production and
+smoke-tested the same day (`docs/ops/deploy-log.md`). `DELIVERED` status remains defined
+but unset by any of the three providers, unchanged from the note above — SMTP, like
+WhatsApp/Telegram, has no delivery-receipt API to confirm it. **Not yet end-to-end
+testable:** real `SMTP_*` credentials are still the Director's to supply (Decision 1's
+two-step flow, same as the Anthropic API key) — until then, every real email send fails
+fast with a clean `failed` status rather than doing anything, which is itself correct,
+expected behaviour, not a bug.
+
 ### Amendment No. 9 — Flexible Court Sizing
 Standard sizes become configurable suggestions per sport — adjustable smaller/larger per
 project; admin-editable (links to No. 5).
