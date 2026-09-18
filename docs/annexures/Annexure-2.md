@@ -117,6 +117,27 @@ set"; today's nav bar has inconsistent spacing (Clients/Reports/Price Requests s
 tighter than the rest of the row) — moot once this amendment replaces the nav, worth
 a direct fix only if this amendment slips.
 
+**Verified 18 September 2026 (re-checked against current code, not assumed from this
+entry's own older text):** four of the five 12 Sept findings are now closed, mostly as
+a side effect of Amendment 12's nav/dashboard restructure rather than direct fixes to
+this amendment: a real "Log out" control exists in the nav; `AllProjects.jsx` plus the
+Dashboard's drill-through give a genuine project browse-and-reopen path; "Back to
+project" is now a "↩ Resume {project_no}" button (`App.jsx`) that returns to the exact
+project-stage screen with `activeProject` state intact, not a blank New Project Setup
+form; User Management is reachable at Admin → Master Settings → "User management" tab
+(Director-only). **Still open:** the Clients page itself still has no per-client
+project list — `ClientsAdmin.jsx` shows only flags/consent controls, nothing
+project-related; finding a client's projects today means going to Projects and typing
+the client's name into free text, not clicking through from the client itself. This is
+exactly the "specific half" the 12 Sept refinement above predicted a dashboard-only fix
+wouldn't close.
+
+**Continued 18 September 2026:** Director asked to check Amendment 4's five findings
+against current code ("check Amendment 4's items"); given the verification above,
+confirmed proceeding with both closing this entry and registering the one remaining gap
+("yes, both"). Spec for closing the per-client project list, named above:
+`docs/annexures/Section-19-specs.md`.
+
 ### Amendment No. 5 — Customizable Forms: Admin Controls Compulsory Fields
 Every dropdown gets a "None" option; admin sets each field compulsory/optional/hidden
 from Master Settings. Phase 1: None options + dashboard. Phase 2: field-settings panel.
