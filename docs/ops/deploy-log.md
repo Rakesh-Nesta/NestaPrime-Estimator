@@ -11,6 +11,48 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PRs #90-#93: deploy-log/register bookkeeping, Section 18
+(construction sequence)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `7dc946e` -> `315d4c6` (one deploy caught up four merges at once --
+PRs #90 and #91 were docs-only bookkeeping with no server impact, #92 was the Section
+18 spec approval, also docs-only; #93 is the actual code)
+**Backend + frontend** -- one new Alembic migration (`construction_sequence_steps`,
+auto-applied on container start).
+
+The real reason for this deploy: PR #93, closing Amendment 16 Part 2 -- the
+construction-sequence content the Section 16 spec explicitly deferred as genuinely new
+content rather than something assembled from existing data. New
+`ConstructionSequenceStep` table (one row per sport x fixed phase: site prep, sub-base,
+flooring, structure/fixtures, lighting, accessories/finishing), authored through the
+same AI-draft-then-Director-review pattern Amendment 13 established for Cover Notes and
+client messages -- drafting never persists, only an explicit Director save does. Sports
+& Scope Admin gained a "Construction sequence" tab; the Build Guide screen gained a
+Construction Sequence section with a standing safety disclaimer; the Education chat's
+grounding extends automatically through the existing client-side `sportContext` string,
+no backend change needed for that part. 14 new backend tests; full backend suite run
+locally alongside CI, both clean.
+
+Live-verified with a real Anthropic call before this PR was even opened: drafted
+badminton's six-phase sequence grounded in its actual dimensions/flooring/package data,
+saved it, confirmed it rendered correctly on the Build Guide in fixed phase order with
+the disclaimer, and confirmed the Education chat's own answer to a live question stayed
+consistent with the saved sequence, disclaimer included.
+
+**First smoke-test attempt's curl output wasn't visible in the terminal screenshot
+provided** -- asked for confirmation rather than assume success, per the standing
+discipline that an unconfirmed smoke test isn't a deploy. Second paste confirmed it.
+
+**Smoke test:** `curl http://65.1.234.78/api/health` -> `{"status":"ok"}`. Full
+git-pull/docker-build/frontend-export transcript reviewed before logging this entry --
+`git pull` correctly showed `Updating 7dc946e..315d4c6` with every expected file
+(`construction_sequence_step.py`, `construction_sequence.py`, the migration, the three
+frontend files), backend container built and started (`Healthy`/`Started`), frontend
+export build completed cleanly (733.49kB copied to `/var/www/nestaprime/dist/`).
+
+---
+
 ## 2026-09-18 -- PR #89: Section 17, real email sending via SMTP
 
 **Run by:** R. Patni (with AI development assistance)
