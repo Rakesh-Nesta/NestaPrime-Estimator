@@ -308,6 +308,25 @@ letting the Director edit the PDFs' company details and boilerplate legal text f
 settings screen, without a developer, for future wording changes. Spec:
 `docs/annexures/Section-14-specs.md`.
 
+**Implemented 17 September 2026** (PR #78, deployed to production same day -- see
+`docs/ops/deploy-log.md`): Master Settings gained a "Company details" panel (labeled
+form over the 8 company-identity keys that already fed the Quotation PDF) and a
+"Quotation terms & warranty" editor -- the 8 T&C clauses and 5-row warranty table,
+previously hardcoded Python strings with no settings path, are now Director-editable
+with a live preview against a real Quotation before saving. Scope stayed Quotation-only
+and Tiers 1-2 only, per the approved spec's resolved open decisions; full layout/color/
+font control (Tier 3) remains an explicitly out-of-scope possible future wave.
+
+### Amendment No. 15 — Education Tab AI Assistant
+**Registered 18 September 2026 (Director instruction).** Amendment 12 reserved an
+"Education" nav slot ("Coming soon" placeholder) with no content ever specified beyond
+the original ask to "describe... which points cover in education part." Director asked
+*"can we connect any agent like chatgpt in this app in education tab"* -- clarified that
+this should reuse the app's own existing Anthropic integration (Amendment 13's
+`app/services/ai_content.py`, already powering Cover Notes, message drafts, and report
+summaries) rather than adding a separate ChatGPT/OpenAI connection: *"no ChatGPT --
+draft the Education assistant spec."* Spec: `docs/annexures/Section-15-specs.md`.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
