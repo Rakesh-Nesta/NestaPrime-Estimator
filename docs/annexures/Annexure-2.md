@@ -138,6 +138,13 @@ confirmed proceeding with both closing this entry and registering the one remain
 ("yes, both"). Spec for closing the per-client project list, named above:
 `docs/annexures/Section-19-specs.md`.
 
+**Implemented 18 September 2026 (PR #96, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** `GET /projects` gained an additive `client_id` filter;
+`ClientsAdmin.jsx` gained a collapsed-by-default "Projects" expand per client row,
+reusing `AllProjects.jsx`'s own row shape rather than redesigning it. Pure data-wiring,
+no new tables -- `Project.client_id` already existed and already drove real Cost
+Sheets. Amendment 4 is now fully closed, all five original findings accounted for.
+
 ### Amendment No. 5 — Customizable Forms: Admin Controls Compulsory Fields
 Every dropdown gets a "None" option; admin sets each field compulsory/optional/hidden
 from Master Settings. Phase 1: None options + dashboard. Phase 2: field-settings panel.

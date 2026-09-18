@@ -11,6 +11,45 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PRs #94-#96: deploy-log bookkeeping, Amendment 4 verification,
+Section 19 (per-client project list)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `315d4c6` -> `0c4558c` (PR #94 was docs-only bookkeeping with no
+server impact; #95 was the Section 19 spec approval plus an Amendment 4 register
+verification, also docs-only; #96 is the actual code)
+**Backend + frontend** -- no migrations.
+
+Closes the one item from Amendment 4's 12 September findings that Amendment 12's
+nav/dashboard restructure never touched: re-checking all five findings against current
+code (not the register's own older text) confirmed four were already fixed as a side
+effect of that restructure, and one remained genuinely open -- the Clients screen had
+no per-client project list. `GET /projects` gained an additive `client_id` filter (same
+role gate, combines with the existing `search`/`status` filters); `ClientsAdmin.jsx`
+gained a collapsed-by-default "Projects" expand per client row, reusing
+`AllProjects.jsx`'s own row shape rather than redesigning it. Pure data-wiring, no new
+tables -- `Project.client_id` already existed and already drove real Cost Sheets. 3 new
+backend tests (client_id scoping, combining with status, empty-list for a client with
+no projects yet).
+
+**One test-DB contamination incident caught and handled correctly during this work:**
+running the new test file directly collided with a concurrent full-suite run already
+using the same test database, producing 5 unrelated `test_users.py` failures
+("relation does not exist") in that full-suite run. Diagnosed as contamination, not a
+regression, by re-running the affected files in isolation (25/25 passed) once nothing
+else was using the database, then re-running the full suite cleanly with no concurrent
+runs -- exactly the discipline this project has followed since an earlier session first
+hit this failure mode.
+
+**Smoke test:** `curl http://65.1.234.78/api/health` -> `{"status":"ok"}`. Full
+git-pull/docker-build/frontend-export transcript reviewed before logging this entry --
+`git pull` correctly showed `Updating 315d4c6..0c4558c` with every expected file
+(`projects.py`, `test_projects_list.py`, `App.jsx`, `ClientsAdmin.jsx`, `api.js`),
+backend container built and started (`Healthy`/`Started`), frontend export build
+completed cleanly (735.10kB copied to `/var/www/nestaprime/dist/`).
+
+---
+
 ## 2026-09-18 -- PRs #90-#93: deploy-log/register bookkeeping, Section 18
 (construction sequence)
 
