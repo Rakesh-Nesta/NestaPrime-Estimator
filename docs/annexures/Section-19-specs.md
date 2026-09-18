@@ -71,10 +71,11 @@ are unchanged.
 
 Amendment 4 continuation (per-client project list — `GET /projects` gains a
 `client_id` filter, `ClientsAdmin.jsx` gains an expandable per-client project list
-reusing `AllProjects.jsx`'s row shape): ☐ Pending Director approval.
+reusing `AllProjects.jsx`'s row shape): ☑ Approved — "approve as proposed, both
+decisions" (18 September 2026)
 
-Decision 1 (expand-in-place, not a separate screen): ☐ Pending.
-Decision 2 (collapsed by default): ☐ Pending.
+Decision 1 (expand-in-place, not a separate screen): ☑ Resolved as proposed.
+Decision 2 (collapsed by default): ☑ Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
