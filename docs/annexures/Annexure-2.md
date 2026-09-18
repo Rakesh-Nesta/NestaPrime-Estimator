@@ -377,6 +377,18 @@ physically built) is real, separate, new content that doesn't exist anywhere in 
 yet, and is deferred to a later wave rather than invented now. Spec:
 `docs/annexures/Section-16-specs.md`.
 
+**Implemented 18 September 2026 (Part 1 only, PR #86, deployed to production same day --
+see `docs/ops/deploy-log.md`):** `SportBuildGuide.jsx` assembles the real, already-verified
+per-sport accessory/flooring/package-tier data that already drives real Cost Sheets -- no
+new content authored, no new backend endpoints. Confirmed live: `basketball_indoor`/
+`basketball_outdoor` are genuinely separate catalog entries, and a follow-up chat question
+about flooring gave an answer that exactly matched the Build Guide's own data for that
+sport. Part 2 (construction sequence) remained deferred as planned.
+
+**Continued 18 September 2026 (Director instruction):** *"build the construction sequence
+for the Sport Build Guide."* Spec for Part 2, named above: `docs/annexures/
+Section-18-specs.md`.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
