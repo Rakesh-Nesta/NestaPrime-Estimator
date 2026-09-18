@@ -11,6 +11,32 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PRs #84-#86: deploy-log correction, Section 16 spec + approval,
+Sport Build Guide
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `d89323e` -> `ee69919` (confirmed matching -- production's own
+`git pull` started exactly at `d89323e`, the commit the previous deploy correctly left
+it at, closing the loop on that earlier correction)
+**Frontend-only** -- no backend rebuild, no migrations.
+
+The actual reason for this deploy: PR #86, Section 16's Sport Build Guide. Director's
+own new-hire scenario (a Sales person clueless on what a basketball court needs)
+surfaced the gap live-testing the Education chat. `SportBuildGuide.jsx` assembles the
+real, already-verified per-sport accessory/flooring/package-tier data that already
+drives real Cost Sheets -- no new content authored, no new backend endpoints. Confirmed
+live: `basketball_indoor`/`basketball_outdoor` are genuinely separate catalog entries,
+and a follow-up chat question about flooring gave an answer that exactly matched the
+Build Guide's own data for that sport. Also carries forward PR #84 (deploy-log
+correction) and PR #85 (Section 16 spec + approval, docs-only) -- neither changes the
+running app.
+
+**Smoke test:** `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/` -> `200`.
+Full git pull/docker build transcript reviewed before logging this entry, not just the
+smoke-test line -- per the lesson recorded in the correction above.
+
+---
+
 ## 2026-09-18 -- PRs #79-#83: register/handbook cleanup, Section 15 spec + approval,
 Education tab AI assistant
 
