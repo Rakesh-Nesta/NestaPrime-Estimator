@@ -389,6 +389,18 @@ sport. Part 2 (construction sequence) remained deferred as planned.
 for the Sport Build Guide."* Spec for Part 2, named above: `docs/annexures/
 Section-18-specs.md`.
 
+**Implemented 18 September 2026 (Part 2, PR #93, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** new `ConstructionSequenceStep` table, one row per sport x
+fixed phase (site prep, sub-base, flooring, structure/fixtures, lighting,
+accessories/finishing), authored via the same AI-draft-then-Director-review pattern as
+Amendment 13's Cover Notes -- drafting never persists, only an explicit Director save
+does. Build Guide screen gained a Construction Sequence section (standing safety
+disclaimer, shown only for sports with saved steps); Education chat's grounding extends
+automatically through the existing client-side data assembly. Live-verified with a real
+Anthropic call: drafted, saved, and cross-checked badminton's sequence against the Build
+Guide display and the chat assistant's own answer -- all three agreed, disclaimer
+included. Amendment 16 (both parts) is now fully closed.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
