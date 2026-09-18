@@ -1782,3 +1782,14 @@ export async function downloadAllQuotationsCsvBlob(token, filters = {}) {
   }
   return res.blob();
 }
+
+// --- Section 15 (Amendment 15): Education tab AI assistant ---
+
+export async function askEducationAssistant(token, { question, context, history }) {
+  const res = await fetch(`${API_BASE}/education/ask`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ question, context, history: history || [] }),
+  });
+  return handle(res);
+}

@@ -407,7 +407,7 @@ export default function App() {
           <SimpleCalculator onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "education" && (
-          <Education onBack={() => setScreen(preNavScreen)} />
+          <Education token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "rates" && user.role !== "sales" && (
           <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
