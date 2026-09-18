@@ -1,17 +1,20 @@
-"""Amendment 8 (Section 8): real WhatsApp (wa-gateway) / Telegram sending,
-delivery status, placeholder rendering, and the wa-gateway webhook.
+"""Amendment 8 (Section 8) + its Section 17 continuation: real WhatsApp
+(wa-gateway) / Telegram / Email (SMTP) sending, delivery status,
+placeholder rendering, and the wa-gateway webhook.
 
 Every provider call is monkeypatched -- no network access in tests, same
 discipline as the rest of this suite. Monkeypatching the functions
 imported into app.api.messages (not the ones in app.services.wa_gateway/
-telegram) matches how `from app.services import telegram, wa_gateway`
-resolves calls through that module reference.
+telegram/email_gateway) matches how `from app.services import
+email_gateway, telegram, wa_gateway` resolves calls through that module
+reference.
 """
 
 from app.api import messages as messages_api
 from app.config import settings
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from app.services.email_gateway import EmailGatewayError
 from app.services.telegram import TelegramError
 from app.services.wa_gateway import WaGatewayError
 
@@ -470,13 +473,57 @@ def test_wa_gateway_webhook_ignores_other_event_types(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Email is unaffected by this amendment
+# Email (Section 17) -- success / failure / not configured / attachment
 # ---------------------------------------------------------------------------
 
 
-def test_email_channel_still_stays_log_only(client, director_user):
-    """Email got no provider in Section 8 (Decision A) -- unchanged
-    behaviour from before this amendment."""
+def test_email_send_success_sets_sent_status(client, director_user, monkeypatch):
+    """Client.email_opt_in defaults True (an opt-out model, unlike
+    WhatsApp/Telegram's opt-in default), so no consent helper is needed
+    here the way _opt_in_whatsapp/_opt_in_telegram are."""
+    headers = _director_headers(client, director_user)
+    _, _, estimate_id = _client_facing_estimate(client, headers)
+
+    monkeypatch.setattr(messages_api.email_gateway, "send_email", lambda *a, **kw: None)
+
+    res = client.post(
+        "/messages",
+        json={
+            "doc_type": "estimate", "doc_id": estimate_id, "channel": "email",
+            "recipient": "client@example.com", "subject": "Your estimate", "body_note": "Please find it attached.",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["status"] == "sent"
+    # SMTP gives no provider message id the way wa-gateway/Telegram's own APIs do.
+    assert body["provider_message_id"] is None
+
+
+def test_email_send_failure_sets_failed_status(client, director_user, monkeypatch):
+    headers = _director_headers(client, director_user)
+    _, _, estimate_id = _client_facing_estimate(client, headers)
+
+    def _boom(to, subject, body, attachment_bytes=None, attachment_filename=None):
+        raise EmailGatewayError("SMTP authentication failed")
+
+    monkeypatch.setattr(messages_api.email_gateway, "send_email", _boom)
+
+    res = client.post(
+        "/messages",
+        json={"doc_type": "estimate", "doc_id": estimate_id, "channel": "email", "recipient": "client@example.com"},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["status"] == "failed"
+
+
+def test_email_not_configured_fails_fast_without_network(client, director_user):
+    """No monkeypatch here -- the real app.services.email_gateway.send_email
+    runs, and with SMTP_HOST/USERNAME/PASSWORD unset in the test
+    environment it must fail immediately (EmailGatewayError), never
+    attempt a real SMTP connection."""
     headers = _director_headers(client, director_user)
     _, _, estimate_id = _client_facing_estimate(client, headers)
 
@@ -486,5 +533,47 @@ def test_email_channel_still_stays_log_only(client, director_user):
         headers=headers,
     )
     assert res.status_code == 201, res.text
-    assert res.json()["status"] == "recorded"
-    assert res.json()["provider_message_id"] is None
+    assert res.json()["status"] == "failed"
+
+
+def test_email_requires_client_consent(client, director_user, db_session):
+    """Same M.7.2 rule 5 gate as WhatsApp/Telegram, but email defaults
+    opted-in -- this test explicitly opts a client out first."""
+    headers = _director_headers(client, director_user)
+    client_id, _, estimate_id = _client_facing_estimate(client, headers)
+    res = client.patch(f"/clients/{client_id}/consent", json={"email_opt_in": False}, headers=headers)
+    assert res.status_code == 200, res.text
+
+    res = client.post(
+        "/messages",
+        json={"doc_type": "estimate", "doc_id": estimate_id, "channel": "email", "recipient": "client@example.com"},
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "email" in res.json()["detail"].lower()
+
+
+def test_include_document_sends_the_generated_pdf_via_email(client, director_user, monkeypatch):
+    headers = _director_headers(client, director_user)
+    _, _, estimate_id = _client_facing_estimate(client, headers)
+
+    captured = {}
+
+    def _fake_send_email(to, subject, body, attachment_bytes=None, attachment_filename=None):
+        captured["attachment_bytes"] = attachment_bytes
+        captured["attachment_filename"] = attachment_filename
+
+    monkeypatch.setattr(messages_api.email_gateway, "send_email", _fake_send_email)
+
+    res = client.post(
+        "/messages",
+        json={
+            "doc_type": "estimate", "doc_id": estimate_id, "channel": "email",
+            "recipient": "client@example.com", "include_document": True,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["status"] == "sent"
+    assert captured["attachment_bytes"] is not None
+    assert captured["attachment_filename"].endswith(".pdf")

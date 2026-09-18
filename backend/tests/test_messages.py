@@ -1,3 +1,4 @@
+from app.api import messages as messages_api
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 
@@ -85,11 +86,16 @@ def _log_message(client, headers, doc_type, doc_id, **overrides):
 # ---------------------------------------------------------------------------
 
 
-def test_log_and_list_a_message(client, director_user):
+def test_log_and_list_a_message(client, director_user, monkeypatch):
     """Cost Sheet is an internal document (M.7.2 rule 7), so the
     recipient must be on the internal-domain list -- test.local, the
     domain of the director_user fixture itself, since no explicit
-    internal_email_domains Setting is configured in this test."""
+    internal_email_domains Setting is configured in this test. Email now
+    really sends (Section 17), so the provider call is monkeypatched --
+    this test is about the internal-domain gate and the stored fields,
+    not dispatch mechanics, which test_email_gateway_integration.py
+    covers directly."""
+    monkeypatch.setattr(messages_api.email_gateway, "send_email", lambda *a, **kw: None)
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)
 
@@ -101,7 +107,7 @@ def test_log_and_list_a_message(client, director_user):
     body = res.json()
     assert body["channel"] == "email"
     assert body["recipient"] == "ops@test.local"
-    assert body["status"] == "recorded"
+    assert body["status"] == "sent"
     assert body["subject"] == "Cost sheet shared"
 
     listed = client.get(
