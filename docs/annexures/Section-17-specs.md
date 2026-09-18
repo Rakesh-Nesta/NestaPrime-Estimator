@@ -91,7 +91,15 @@ WhatsApp/Telegram behavior is completely unchanged.
 
 ## Approval
 
-Amendment 8 continuation (real email sending via SMTP): ☐ Approved ☐ Changes ☐ Later
+Amendment 8 continuation (real email sending via SMTP): ☑ Approved — "approve as
+proposed, all three decisions" (18 September 2026)
+
+Decision 1 (SMTP account): ☑ Confirmed SMTP as the approach; the Director will supply
+real host/port/username/password before this can actually send -- same two-step flow
+as Amendment 13's own Anthropic key (build the service layer now, wire in real
+credentials once supplied).
+Decision 2 (SMTP over a dedicated vendor API): ☑ Resolved as proposed.
+Decision 3 (plain-text email, matching WhatsApp/Telegram): ☑ Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
