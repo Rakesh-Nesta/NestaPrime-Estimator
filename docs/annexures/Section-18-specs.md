@@ -104,12 +104,12 @@ Director save, matching Amendment 13's no-auto-send rule.
 
 Amendment 16, Part 2 (Construction Sequence — six-phase `ConstructionSequenceStep`
 table, AI-draft-then-Director-review authoring, Build Guide display + chat grounding):
-☐ Pending Director approval.
+☑ Approved — "approve as proposed, all four decisions" (18 September 2026)
 
-Decision 1 (fixed six phases): ☐ Pending.
-Decision 2 (ship now, author sports incrementally): ☐ Pending.
-Decision 3 (disclaimer wording): ☐ Pending.
-Decision 4 (AI-draft-then-review authoring): ☐ Pending.
+Decision 1 (fixed six phases): ☑ Resolved as proposed.
+Decision 2 (ship now, author sports incrementally): ☑ Resolved as proposed.
+Decision 3 (disclaimer wording as written): ☑ Resolved as proposed.
+Decision 4 (AI-draft-then-review authoring): ☑ Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
