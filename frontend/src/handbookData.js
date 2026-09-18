@@ -18,6 +18,12 @@
 // Estimator Guide. Messages Panel and Purchase Orders are documented as
 // sub-bullets on their parent screen rather than standalone entries, since
 // neither is independently nav-reachable (Director decision, Section 13).
+//
+// 18 Sept 2026: Master Settings entry updated for Section 14 (Company
+// details panel, Quotation terms & warranty editor) -- caught during a
+// session review of what was left open, same discipline v3 itself exists
+// to enforce; not treated as a new full version bump since it's a single
+// entry's content, not a new wave of screens.
 
 export const FULL_HANDBOOK = [
   {
@@ -211,9 +217,13 @@ export const FULL_HANDBOOK = [
   {
     screen: "Master Settings",
     what: "Director-only. Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, User Management, and the Role & Permissions viewer (Section 5).",
-    fields: ["Varies by setting — each is a versioned value, editable only by the Director; PM can view but not edit."],
-    whenMissing: "Every setting ships with a sensible default (see Q.1/Q.2) — nothing here blocks daily work if left untouched.",
-    watch: "Editing a setting creates a new version effective from today — it never rewrites a document that already froze the old value.",
+    fields: [
+      "Varies by setting — each is a versioned value, editable only by the Director; PM can view but not edit.",
+      "Company details (Section 14) — a labeled panel for the company identity/bank fields (legal name, PAN, GSTIN, registered office city, bank details) that print on the Quotation PDF — the same underlying Settings the raw key/value form below always could edit, just with real labels now.",
+      "Quotation terms & warranty (Section 14) — the Quotation PDF's own T&C clauses and warranty table, editable as plain text; \"Preview\" renders the draft against a real Quotation before you save, so a wording mistake is caught before it's live on every future Quotation.",
+    ],
+    whenMissing: "Every setting ships with a sensible default (see Q.1/Q.2) — nothing here blocks daily work if left untouched. The T&C/warranty editor is seeded with today's actual PDF wording, so leaving it alone changes nothing.",
+    watch: "Editing a setting creates a new version effective from today — it never rewrites a document that already froze the old value. Always use Preview before saving a T&C/warranty change — there's no undo beyond editing it again.",
   },
   {
     screen: "Sports & Scope Admin",
