@@ -327,6 +327,36 @@ this should reuse the app's own existing Anthropic integration (Amendment 13's
 summaries) rather than adding a separate ChatGPT/OpenAI connection: *"no ChatGPT --
 draft the Education assistant spec."* Spec: `docs/annexures/Section-15-specs.md`.
 
+**Implemented 18 September 2026** (PR #83, deployed to production same day -- see
+`docs/ops/deploy-log.md`): `ai_content.generate_chat_reply()` (a small additive,
+multi-turn extension alongside the existing single-turn `generate_text`), `POST
+/education/ask` (open to every role, matching Education's own nav visibility), and
+`Education.jsx` as a real chat panel grounded only in the handbook -- no live app data.
+Verified live on production: a real question about badminton federation dimensions
+correctly triggered "I don't know, check Sport Selection" rather than inventing a
+number, confirming the no-guessing guardrail works as designed.
+
+### Amendment No. 16 — Sport Build Guide (Education)
+**Registered 18 September 2026 (Director instruction, following up live-testing
+Amendment 15).** Director's own scenario: *"my new sales person is completely clueless
+for how to create quotation... [if a] customer says we want one basketball court for
+school but other information not with sales person... what things need for basketball
+court creation at scratch to ready to play base, flooring, lighting, pole, ring... this
+is the hand holding for sales person to increases his efficiency and decrease the
+error."* Checking the app's own data first (not guessed): a real, Director-verified,
+per-sport build reference already exists across four tables that already drive real
+Cost Sheets -- `Sport` (dimensions, indoor/outdoor -- confirmed `basketball_indoor` and
+`basketball_outdoor` are already separate catalog rows, exactly the "two separate lists"
+split asked for), `AccessoryCatalogItem` (item + qty per sport), `FlooringGuide`
+(primary/secondary/budget spec + rationale per sport), `PackageContent`
+(structure/lighting description per sport x tier), plus `GET /lighting-standards/lux`
+and `/pole-counts`. None of it reaches Education today. Director confirmed: build the
+structured "Build Guide" screen first, assembled from this existing verified data (no
+new content authored); step-by-step construction *sequence* (the order things are
+physically built) is real, separate, new content that doesn't exist anywhere in the app
+yet, and is deferred to a later wave rather than invented now. Spec:
+`docs/annexures/Section-16-specs.md`.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
