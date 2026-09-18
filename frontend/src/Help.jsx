@@ -13,6 +13,10 @@ import { DIRECTOR_ADMIN_GUIDE, ESTIMATOR_GUIDE, FAQ, FULL_HANDBOOK } from "./han
 // v3 (Section 13, 16 Sept 2026): Full Handbook tab is now current with
 // Amendments 11-13's screens -- see handbookData.js's own top comment for
 // the full list of what changed.
+//
+// v4 (Section 20, 18 Sept 2026): both tabs' version labels below bumped
+// together -- see handbookData.js's own top comment for what changed
+// (an Education chapter, three corrected passages, two small tag-alongs).
 const STEPS = [
   {
     n: 1,
@@ -139,7 +143,7 @@ export default function Help({ role, onBack }) {
             Quick Start — the 5-step daily path
           </h1>
           <p className="text-sm text-text-secondary mt-1 print:text-gray-700">
-            Amendment 10 (User Handbook) · Section 4 · v1
+            Amendment 10 (User Handbook) · Section 4 · v4
           </p>
 
           <ol className="mt-6 space-y-5">
@@ -168,7 +172,7 @@ export default function Help({ role, onBack }) {
           <BrandHeader />
           <h1 className="font-heading font-bold text-text-primary text-2xl mt-3 print:text-black">Full Handbook</h1>
           <p className="text-sm text-text-secondary mt-1 print:text-gray-700">
-            Amendment 10 (User Handbook) · Section 13 · v3 — every screen, what it does, and what to do
+            Amendment 10 (User Handbook) · Section 13 · v4 — every screen, what it does, and what to do
             when the client hasn't given you the data.
           </p>
           <div className="mt-6 space-y-6">

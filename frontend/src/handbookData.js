@@ -24,6 +24,21 @@
 // session review of what was left open, same discipline v3 itself exists
 // to enforce; not treated as a new full version bump since it's a single
 // entry's content, not a new wave of screens.
+//
+// v4 (Section 20, 18 Sept 2026, Director-approved): closes the gap
+// Annexure-2's Amendment 10 continuation found -- Education (Amendment
+// 15's Chat assistant, Amendment 16's Sport Build Guide and Section 18's
+// Construction Sequence) had never been documented, and three passages
+// were describing pre-fix behavior: Documents claimed email "delivers
+// nothing" (superseded by Section 17's real SMTP sending), and both the
+// Clients chapter and FAQ Q18 still described the per-client project
+// list as missing (superseded by Section 19). Added the Education
+// chapter, fixed all three stale passages, and folded in two small
+// related items (Sports & Scope Admin's field list now names the
+// Construction Sequence tab; this file's own version label in Help.jsx
+// updated 3->4). Simple Calculator, Tender Mode, and Amendment 11/14's
+// smaller content gaps were explicitly scoped out of this pass (Director
+// decision, Section 20) -- not forgotten, on record as still open.
 
 export const FULL_HANDBOOK = [
   {
@@ -141,7 +156,7 @@ export const FULL_HANDBOOK = [
     whenMissing:
       "If the Cost Sheet situation is genuinely too small to justify a full Estimate (a Resurfacing/Repair job under the Director's fast-track threshold), \"Fast-track\" skips straight from a Verified Cost Sheet to an auto-approved Estimate and Quotation in one step.",
     watch:
-      "Release and Send are two separate, sequential steps — a Quotation can't jump straight from Draft to Sent. Won/Lost can only be marked from \"Sent,\" never from \"Released.\" If the underlying Cost Sheet changes after an Estimate or Quotation already exists, nothing updates automatically — the Estimate flags \"rebase required\" and you have to click Rebase yourself before releasing again. Revising a Sent Quotation can change its discount, GST basis, or pricing — it can't add or drop sports; that needs a new Quotation. On Messages: WhatsApp and Telegram are real sends with genuine delivery status; Email has no provider wired up, so \"sending\" an email just logs that it was sent — it delivers nothing. A send can still fail even after you fill and submit the form, if the client hasn't opted in to that channel (see Clients) or a WhatsApp template isn't yet Meta-approved.",
+      "Release and Send are two separate, sequential steps — a Quotation can't jump straight from Draft to Sent. Won/Lost can only be marked from \"Sent,\" never from \"Released.\" If the underlying Cost Sheet changes after an Estimate or Quotation already exists, nothing updates automatically — the Estimate flags \"rebase required\" and you have to click Rebase yourself before releasing again. Revising a Sent Quotation can change its discount, GST basis, or pricing — it can't add or drop sports; that needs a new Quotation. On Messages: WhatsApp, Telegram, and Email (Section 17) are all real sends now — a failure shows as a clear Failed status immediately, never a false success. None of the three can confirm actual delivery, only that the provider accepted the send, so \"Delivered\" stays unused by design. A send can still fail even after you fill and submit the form, if the client hasn't opted in to that channel (see Clients) or a WhatsApp template isn't yet Meta-approved.",
   },
   {
     screen: "All Projects",
@@ -208,11 +223,14 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Clients",
-    what: "Toggle two operational flags (Overdue, Blacklisted) and two consent flags (WhatsApp opt-in, Email opt-in) on an existing client. New clients are created inline from Project Setup, not here.",
-    fields: ["Overdue (blocks new Quotation release)", "Blacklisted (blocks new Estimates)", "WhatsApp / Email consent"],
-    whenMissing: "Nothing here is required — all four are simple on/off toggles.",
+    what: "Toggle two operational flags (Overdue, Blacklisted) and two consent flags (WhatsApp opt-in, Email opt-in) on an existing client, and (Section 19) see that client's own projects without leaving the screen. New clients are created inline from Project Setup, not here.",
+    fields: [
+      "Overdue (blocks new Quotation release)", "Blacklisted (blocks new Estimates)", "WhatsApp / Email consent",
+      "\"▸ Projects\" (Section 19) — collapsed by default per client; expanding it lists exactly that client's own projects with status and an \"Open →\" link, the same row shape as All Projects",
+    ],
+    whenMissing: "Nothing here is required — all four flags are simple on/off toggles, and \"Projects\" stays collapsed until you click it.",
     watch:
-      "Every toggle here saves instantly on click, with no confirmation step. Overdue and Blacklisted are Director-only (greyed out for other roles); WhatsApp/Email consent can be toggled by Sales, PM, or Director.",
+      "Every toggle here saves instantly on click, with no confirmation step. Overdue and Blacklisted are Director-only (greyed out for other roles); WhatsApp/Email consent can be toggled by Sales, PM, or Director. A client with no projects yet shows \"No projects yet\" when expanded, not an empty list with no explanation.",
   },
   {
     screen: "Master Settings",
@@ -233,6 +251,7 @@ export const FULL_HANDBOOK = [
       "Scope items — key (required, permanent once set), group, name",
       "Margin floor overrides — per-sport floor % that replaces the client-type default when set (e.g. Pool 15%, PEB 14%)",
       "Package contents — per sport × tier (Budget/Standard/Premium): flooring/structure/lighting text, scope bullets, warranty years",
+      "Construction sequence (Section 18) — six fixed phases per sport (site prep, sub-base, flooring, structure/fixtures, lighting, accessories/finishing); \"Draft with AI\" proposes text from that sport's own real data, a human always reviews and explicitly saves it, same as a Cover Note draft never auto-publishing",
     ],
     whenMissing:
       "Most descriptive fields are optional — only a Sport or Scope item's key is required, and it's worth getting right the first time: it can't be changed once created.",
@@ -245,6 +264,19 @@ export const FULL_HANDBOOK = [
     fields: ["Document type filter (Estimate / Estimate option / Quotation / Skip request / Vendor price request / Site survey / Master Setting)"],
     whenMissing: "Filtering is by document type only — there's no date range or user filter; export the CSV and search it yourself for anything more specific.",
     watch: null,
+  },
+  {
+    screen: "Education",
+    what: "Two tabs, open to every role including ca_tax (unlike Sports & Scope Admin, whose own catalog data feeds the second tab here): Chat, a Q&A assistant grounded only in this handbook (Amendment 15); and Build Guide, a structured per-sport reference assembled from the same real data Sports & Scope Admin manages (Amendment 16).",
+    fields: [
+      "Chat — ask anything about how to use the app; answers come only from this handbook's own content, never live project/client/pricing data",
+      "Build Guide — pick a sport (Indoor/Outdoor shown as separate entries where a sport has both) to see its dimensions, accessory list, flooring recommendation, and package-tier structure/lighting/scope, exactly as Sports & Scope Admin has them set",
+      "Build Guide's Construction Sequence section (Section 18) — six fixed phases (site prep, sub-base, flooring, structure/fixtures, lighting, accessories/finishing) with a standing disclaimer, shown only for a sport a Director has actually authored one for",
+    ],
+    whenMissing:
+      "A sport with no flooring guide, no package content, or no construction sequence saved simply shows nothing for that section — never an invented answer or a placeholder implying content exists when it doesn't.",
+    watch:
+      "Chat will say \"I don't know\" rather than guess when the handbook doesn't cover something — that's by design, not a bug. Selecting a sport in Build Guide also feeds Chat's own grounding, so a freeform question about that sport and the structured screen never disagree. The Construction Sequence disclaimer (\"confirm against site conditions with a qualified site engineer before execution\") is real — it's general guidance, not a site-specific method statement, even when it reads as specific to your sport.",
   },
 ];
 
@@ -413,8 +445,8 @@ export const FAQ = [
     a: "That item's price (e.g. steel, turf) is flagged for tracking, and moved past the Director-configured alert threshold since it was last confirmed — worth reviewing before it's used on a new Cost Sheet line.",
   },
   {
-    q: "Why is there no per-client project list on the Clients screen?",
-    a: "There isn't one today, despite the register describing it as part of Amendment 4 — this remains a gap. Use the Dashboard's Recent Projects list or project search to find an existing project instead.",
+    q: "How do I see a client's own projects?",
+    a: "On the Clients screen, expand \"▸ Projects\" under that client (Section 19) — no need to go to Dashboard or search by name. The Dashboard's Recent Projects list and Projects → All Projects search still work too, for browsing across every client at once.",
   },
   {
     q: "Is the Pricing Calculator the same as a real Estimate?",
