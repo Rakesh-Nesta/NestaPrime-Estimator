@@ -256,17 +256,37 @@ language). PDF + printable; also lives inside the app under a "Help" button.
 relevant chapter (same discipline as this annexure).
 
 **Partially implemented 12–13 September 2026 (PR #27 Quick Start, PR #34 full handbook
-v2) — this is the largest gap found in this reconciliation pass:** `Help.jsx` +
-`handbookData.js` deliver the Quick Start card, a 12-screen full handbook, separate
-Estimator/Director guides, and an FAQ with exactly the spec'd 20 questions, reachable via
-an in-app Help button, with a browser print/save-as-PDF option. **Gaps:** (1) Hindi terms
-are entirely absent, despite the spec explicitly calling for them; (2) the maintenance
-rule this amendment itself sets — "every shipped amendment wave updates the relevant
-chapter" — has not been followed since PR #34: Amendments 11, 12, and 13 (14–16
-September) all shipped without any handbook update, so the handbook's 12-screen list is
-now missing All Quotations, Vendors Admin, Messages Panel, Price Requests, Purchase
-Orders, and Cross-Sell Admin. Bringing the handbook current is real, undone work — not a
+v2):** `Help.jsx` + `handbookData.js` deliver the Quick Start card, a 12-screen full
+handbook, separate Estimator/Director guides, and an FAQ with exactly the spec'd 20
+questions, reachable via an in-app Help button, with a browser print/save-as-PDF
+option. **Gaps found in this reconciliation pass:** (1) Hindi terms are entirely
+absent, despite the spec explicitly calling for them; (2) the maintenance rule this
+amendment itself sets — "every shipped amendment wave updates the relevant chapter" —
+has not been followed since PR #34: Amendments 11, 12, and 13 (14–16 September) all
+shipped without any handbook update, so the handbook's 12-screen list is now missing
+All Quotations, Vendors Admin, Messages Panel, Price Requests, Purchase Orders, and
+Cross-Sell Admin. Bringing the handbook current is real, undone work — not a
 documentation-only fix like the rest of this reconciliation pass.
+
+**Closed (mostly) 16 September 2026 — handbook v3, undated in this register at the
+time it shipped:** `handbookData.js`'s own changelog (not this register) records a v3
+pass that closed both gaps above: All Projects, All Estimates, All Quotations, Vendors
+Admin, Price Requests, Cross-Sell Admin, and Sports & Scope Admin were all added as
+chapters (19 total, not 12); Hindi/Hinglish terms (*mazdoori*, *saaman*, *dhanda*) are
+now woven through the Quick Start card, the full handbook, and the Estimator guide. An
+undated 18 September touch-up also updated the Master Settings chapter for Section
+14's Company Details/T&C editor. This register entry was never updated to reflect
+either pass — corrected now, 18 September 2026, on re-verification against the actual
+code rather than trusting this entry's own older text (same discipline used for
+Amendments 4, 8, and 16 earlier today).
+
+**Verified 18 September 2026 — what's actually still open, now that the above is
+corrected:** three genuinely undocumented chapters (Education's Chat assistant and
+Sport Build Guide, Amendment 15; the Build Guide's Construction Sequence section,
+Section 18) and three now-stale passages describing pre-fix behavior (Documents
+chapter still claims email "delivers nothing," superseded by Section 17; the Clients
+chapter and FAQ Q18 both still describe the per-client project list as missing,
+superseded by Section 19). Spec for closing these: `docs/annexures/Section-20-specs.md`.
 
 ### Amendment No. 11 — Rate Card & Margin Policy Tuning (from Note R1's Findings)
 **Registered 14 September 2026.** Note R1's own completed exercise (see its "Completed
