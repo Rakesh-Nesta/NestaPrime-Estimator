@@ -176,6 +176,9 @@ never built** — the model's own docstring states no SMTP provider is wired up;
 "send" is just a manually confirmed record, never provider-verified. `DELIVERED` status
 is defined but neither provider actually sets it (no delivery-receipt API from either).
 
+**Continued 18 September 2026 (Director instruction):** *"Amendment 8, add real email
+sending."* Spec for closing the Email gap named above: `docs/annexures/Section-17-specs.md`.
+
 ### Amendment No. 9 — Flexible Court Sizing
 Standard sizes become configurable suggestions per sport — adjustable smaller/larger per
 project; admin-editable (links to No. 5).
