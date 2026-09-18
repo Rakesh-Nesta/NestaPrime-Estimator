@@ -12,6 +12,7 @@ from app.api import (
     client_signatories,
     clients,
     company,
+    construction_sequence,
     cross_sell,
     dashboard,
     documents,
@@ -122,6 +123,7 @@ app.include_router(gym.gym_router)
 app.include_router(pool.pool_router)
 app.include_router(accessories.accessories_router)
 app.include_router(accessories.accessory_catalog_router)
+app.include_router(construction_sequence.construction_sequence_router)
 app.include_router(athletics.athletics_router)
 app.include_router(play_equipment.play_equipment_router)
 app.include_router(overheads.overheads_router)

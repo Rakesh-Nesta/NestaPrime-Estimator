@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listAccessoryCatalog, listFlooringGuides, listPackageContents, listSports } from "./api";
+import { listAccessoryCatalog, listConstructionSequence, listFlooringGuides, listPackageContents, listSports } from "./api";
 
 // Section 16 (Amendment 16): assembles the real, already-verified per-sport
 // build reference (accessories, flooring, package-tier descriptions) that
@@ -11,7 +11,23 @@ import { listAccessoryCatalog, listFlooringGuides, listPackageContents, listSpor
 const PACKAGE_TIER_ORDER = ["budget", "standard", "premium"];
 const PACKAGE_TIER_LABELS = { budget: "Budget", standard: "Standard", premium: "Premium" };
 
-function summarizeForChat(sport, accessories, flooringGuide, packageContents) {
+// Section 18 (Amendment 16 Part 2): same six fixed phases as
+// SportsScopeAdmin.jsx's CONSTRUCTION_PHASES -- kept as a small local
+// duplicate rather than a shared import, same pattern as PACKAGE_TIER_*
+// above already being duplicated per file in this app.
+const CONSTRUCTION_PHASE_ORDER = ["site_prep", "sub_base", "flooring", "structure_fixtures", "lighting", "accessories_finishing"];
+const CONSTRUCTION_PHASE_LABELS = {
+  site_prep: "Site preparation",
+  sub_base: "Sub-base",
+  flooring: "Flooring",
+  structure_fixtures: "Structure & fixtures",
+  lighting: "Lighting",
+  accessories_finishing: "Accessories & finishing",
+};
+const CONSTRUCTION_SEQUENCE_DISCLAIMER =
+  "General build sequence -- confirm against site conditions with a qualified site engineer before execution.";
+
+function summarizeForChat(sport, accessories, flooringGuide, packageContents, constructionSteps) {
   const lines = [`\n\n=== Build Guide: ${sport.name} (${sport.category}) ===`];
   lines.push(`Playing dimensions: ${sport.playing_dims}. Build dimensions: ${sport.build_dims}.`);
   if (accessories.length) {
@@ -36,6 +52,13 @@ function summarizeForChat(sport, accessories, flooringGuide, packageContents) {
         (pc.warranty_years ? ` Warranty: ${pc.warranty_years} years.` : "")
     );
   }
+  if (constructionSteps.length) {
+    lines.push(
+      "Construction sequence -- " +
+        constructionSteps.map((s) => `${CONSTRUCTION_PHASE_LABELS[s.phase]}: ${s.description}`).join(" ") +
+        ` (${CONSTRUCTION_SEQUENCE_DISCLAIMER})`
+    );
+  }
   return lines.join("\n");
 }
 
@@ -48,6 +71,7 @@ export default function SportBuildGuide({ token, onSportDataChange }) {
   const [accessories, setAccessories] = useState([]);
   const [flooringGuide, setFlooringGuide] = useState(null);
   const [packageContents, setPackageContents] = useState([]);
+  const [constructionSteps, setConstructionSteps] = useState([]);
 
   useEffect(() => {
     listSports(token)
@@ -68,13 +92,15 @@ export default function SportBuildGuide({ token, onSportDataChange }) {
       listAccessoryCatalog(token, sportId),
       listFlooringGuides(token, sportId),
       listPackageContents(token, sportId),
+      listConstructionSequence(token, sportId),
     ])
-      .then(([acc, floor, pkg]) => {
+      .then(([acc, floor, pkg, steps]) => {
         setAccessories(acc);
         setFlooringGuide(floor[0] || null);
         setPackageContents(pkg);
+        setConstructionSteps(steps);
         const sport = sports.find((s) => s.id === sportId);
-        if (sport) onSportDataChange?.(summarizeForChat(sport, acc, floor[0] || null, pkg));
+        if (sport) onSportDataChange?.(summarizeForChat(sport, acc, floor[0] || null, pkg, steps));
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoadingGuide(false));
@@ -174,10 +200,26 @@ export default function SportBuildGuide({ token, onSportDataChange }) {
             )}
           </div>
 
-          <p className="text-[11px] text-text-secondary bg-surface-raised border border-border-dark rounded px-2 py-1.5">
-            Physical build sequence (the order things are actually constructed) isn't covered here yet -- ask a
-            PM/Director, or check with the site team.
-          </p>
+          {constructionSteps.length > 0 && (
+            <div className="border border-border-dark rounded p-3">
+              <h3 className="font-heading font-semibold text-text-primary text-sm">Construction sequence</h3>
+              <ol className="text-sm text-text-secondary mt-1 list-decimal list-inside space-y-1">
+                {CONSTRUCTION_PHASE_ORDER.map((phase) => {
+                  const step = constructionSteps.find((s) => s.phase === phase);
+                  if (!step) return null;
+                  return (
+                    <li key={phase}>
+                      <span className="font-medium text-text-primary">{CONSTRUCTION_PHASE_LABELS[phase]}:</span>{" "}
+                      {step.description}
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="text-[11px] text-text-secondary bg-surface-raised border border-border-dark rounded px-2 py-1.5 mt-2">
+                {CONSTRUCTION_SEQUENCE_DISCLAIMER}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
