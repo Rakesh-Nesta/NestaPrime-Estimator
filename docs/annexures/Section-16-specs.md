@@ -114,7 +114,14 @@ chat.
 ## Approval
 
 Amendment 16 (Sport Build Guide, Part 1 -- existing-data assembly, chat + structured
-screen both): ☐ Approved ☐ Changes ☐ Later
+screen both): ☑ Approved — "approve as proposed, all three decisions" (18 September 2026)
+
+Decision 1 (role gate matches the underlying data -- sales/pm/director/procurement/
+site_engineer, not ca_tax): ☑ Resolved as proposed.
+Decision 2 (lighting -- `PackageContent.lighting_description` only for this wave, raw
+lux/pole-count standards deferred): ☑ Resolved as proposed.
+Decision 3 (Part 2 -- construction sequence -- stays deferred to a later wave): ☑
+Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
