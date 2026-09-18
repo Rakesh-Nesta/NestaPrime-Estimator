@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
-import { createClient, listClients, updateClientConsent, updateClientFlags } from "./api";
+import { createClient, listClients, listProjects, updateClientConsent, updateClientFlags } from "./api";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
 const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "" };
 const canCreateClient = (role) => ["sales", "pm", "director"].includes(role);
 
-export default function ClientsAdmin({ token, role, onBack }) {
+// Section 19 (Amendment 4 continuation): reuses AllProjects.jsx's own status
+// pill colors, kept as a small local duplicate rather than a shared import,
+// same pattern already used for other small per-file constant maps.
+const STATUS_PILL_STYLE = {
+  open: "bg-gold/10 text-gold",
+  won: "bg-green-500/10 text-green-400",
+  lost: "bg-red-500/10 text-red-400",
+};
+
+export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -13,6 +22,29 @@ export default function ClientsAdmin({ token, role, onBack }) {
   const [form, setForm] = useState(emptyClientForm);
   const [submitting, setSubmitting] = useState(false);
   const canEditFlags = role === "director";
+
+  const [expandedClientId, setExpandedClientId] = useState(null);
+  const [projectsByClient, setProjectsByClient] = useState({});
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
+  async function toggleProjects(clientId) {
+    if (expandedClientId === clientId) {
+      setExpandedClientId(null);
+      return;
+    }
+    setExpandedClientId(clientId);
+    if (!projectsByClient[clientId]) {
+      setLoadingProjects(true);
+      try {
+        const rows = await listProjects(token, { client_id: clientId });
+        setProjectsByClient((m) => ({ ...m, [clientId]: rows }));
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoadingProjects(false);
+      }
+    }
+  }
 
   function load() {
     return listClients(token).then(setClients);
@@ -174,7 +206,8 @@ export default function ClientsAdmin({ token, role, onBack }) {
 
       <div className="bg-surface shadow rounded-lg p-6 space-y-2">
         {clients.map((c) => (
-          <div key={c.id} className="flex items-center justify-between border border-border-dark rounded px-3 py-2 text-sm">
+          <div key={c.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
+          <div className="flex items-center justify-between">
             <span>
               <span className="font-medium">{c.name}</span>{" "}
               <span className="text-xs text-text-secondary">({c.type})</span>
@@ -246,6 +279,43 @@ export default function ClientsAdmin({ token, role, onBack }) {
               </span>
             </div>
           </div>
+
+          <div>
+            <button onClick={() => toggleProjects(c.id)} className="text-xs text-gold hover:underline">
+              {expandedClientId === c.id ? "▾ Hide projects" : "▸ Projects"}
+            </button>
+            {expandedClientId === c.id && (
+              <div className="mt-2 border-t border-border-dark pt-2 space-y-1">
+                {loadingProjects && !projectsByClient[c.id] ? (
+                  <p className="text-xs text-text-secondary">Loading projects…</p>
+                ) : (projectsByClient[c.id] || []).length === 0 ? (
+                  <p className="text-xs text-text-secondary">No projects yet.</p>
+                ) : (
+                  projectsByClient[c.id].map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => onOpenProject(p.id)}
+                      className="w-full text-left flex items-center justify-between text-xs rounded px-2 py-1 hover:bg-surface-raised transition-all duration-250 ease-out"
+                    >
+                      <span>
+                        <span className="font-mono text-text-primary">{p.project_no}</span>{" "}
+                        <span className="text-text-secondary">· {p.city}</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${STATUS_PILL_STYLE[p.status] || ""}`}
+                        >
+                          {p.status}
+                        </span>
+                        <span className="text-gold">Open →</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
         ))}
         {clients.length === 0 && <p className="text-sm text-text-secondary">No clients yet.</p>}
       </div>
