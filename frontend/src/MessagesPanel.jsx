@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { createMessage, draftMessage, listMessages, listMessageTemplates } from "./api";
 
-// Amendment 8 (Section 8): WhatsApp (wa-gateway) and Telegram (Bot API)
-// are real sends now; email still has no provider wired up.
-const REAL_SEND_CHANNELS = ["whatsapp", "telegram"];
+// Amendment 8 (Sections 8 and 17): WhatsApp (wa-gateway), Telegram (Bot API)
+// and Email (SMTP) are all real sends now.
+const REAL_SEND_CHANNELS = ["whatsapp", "telegram", "email"];
 const DOC_TYPES_WITH_PDF = ["estimate", "quotation"];
 
 const STATUS_STYLE = {
@@ -104,8 +104,8 @@ export default function MessagesPanel({ token, docType, docId }) {
         <p className="text-xs font-semibold text-text-secondary">Messages (M.7.2)</p>
         <p className="text-[11px] text-text-secondary">
           {isRealSend
-            ? "Amendment 8: this actually sends via the company's WhatsApp/Telegram integration -- real delivery status below, never a status this app can't verify (see Section 8 spec)."
-            : "Email has no provider wired up -- logging a message here records that you sent this document yourself (by whatever means), for an audit trail. It does not actually send anything."}
+            ? "Amendment 8: this actually sends via the company's WhatsApp/Telegram/Email integration -- real delivery status below, never a status this app can't verify (see Section 8 and Section 17 specs)."
+            : "This channel has no provider wired up -- logging a message here records that you sent this document yourself (by whatever means), for an audit trail. It does not actually send anything."}
         </p>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}

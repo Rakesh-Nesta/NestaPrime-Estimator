@@ -17,16 +17,19 @@ class MessageChannel(str, enum.Enum):
 
 
 class MessageStatus(str, enum.Enum):
-    """Amendment 8 (Section 8): WhatsApp (via the self-hosted wa-gateway)
-    and Telegram (via the Bot API) are real, wired-up sends -- RECORDED
-    for a create with no send attempt (email, still log-only, unchanged),
-    SENT once the provider accepts it, FAILED on a provider/network
-    error. DELIVERED stays unused: wa-gateway only ever confirms
-    "sent" (Baileys' delivery/read receipts aren't exposed), and
-    Telegram's Bot API gives no delivery/read signal for outbound
-    messages either -- so this build never claims a delivery status it
-    can't actually verify. The value is kept defined for a future
-    provider (e.g. a real WhatsApp BSP) that can report it truthfully."""
+    """Amendment 8 (Section 8) + its Section 17 continuation: WhatsApp
+    (via the self-hosted wa-gateway), Telegram (via the Bot API), and
+    email (via real SMTP) are all real, wired-up sends -- RECORDED for a
+    create with no send attempt at all (only possible now if a channel's
+    provider genuinely isn't configured, same fail-fast pattern as every
+    AI integration in this app), SENT once the provider accepts it,
+    FAILED on a provider/network error. DELIVERED stays unused: none of
+    the three providers expose a delivery/read receipt this app can
+    verify (wa-gateway only ever confirms "sent" via Baileys; Telegram's
+    Bot API gives no outbound delivery signal; a successful SMTP send
+    only means the mail server accepted it for relay) -- so this build
+    never claims a delivery status it can't actually verify. The value
+    is kept defined for a future provider that can report it truthfully."""
 
     RECORDED = "recorded"
     SENT = "sent"

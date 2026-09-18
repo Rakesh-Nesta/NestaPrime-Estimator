@@ -40,5 +40,18 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
 
+    # Amendment 8 continuation (Section 17): real email sending via SMTP
+    # -- any real mailbox (Google Workspace, Microsoft 365, a
+    # transactional relay account) works, no vendor-specific client.
+    # Same "blank = not configured, fail fast" discipline as wa-gateway/
+    # telegram/Anthropic above -- app/services/email_gateway.py treats an
+    # empty host/username/password as "not configured."
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_address: str = ""
+    smtp_use_tls: bool = True
+
 
 settings = Settings()

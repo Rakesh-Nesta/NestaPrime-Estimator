@@ -18,7 +18,7 @@ from app.models.client import Client
 from app.models.message import Message, MessageChannel, MessageStatus
 from app.models.message_template import MessageTemplate, WhatsappTemplateStatus
 from app.models.setting import DocumentType
-from app.services import ai_content, telegram, wa_gateway
+from app.services import ai_content, email_gateway, telegram, wa_gateway
 from app.services.message_rendering import render_placeholders
 
 logger = logging.getLogger(__name__)
@@ -154,11 +154,11 @@ class MessageCreate(BaseModel):
     subject: str | None = None
     body_note: str | None = None
     attachment_id: uuid.UUID | None = None
-    # Amendment 8 (Section 8): attach the document's own generated PDF
-    # (Estimate/Quotation only -- no PDF exists for any other doc_type).
-    # Ignored for email (still log-only) and irrelevant if attachment_id
-    # is also given (an explicit stored file always wins over the
-    # generated one).
+    # Amendment 8 (Section 8), Section 17: attach the document's own
+    # generated PDF (Estimate/Quotation only -- no PDF exists for any
+    # other doc_type). Works the same for WhatsApp, Telegram, and email
+    # alike; irrelevant if attachment_id is also given (an explicit
+    # stored file always wins over the generated one).
     include_document: bool = False
 
 
@@ -222,8 +222,18 @@ def _dispatch_send(
             else:
                 provider_id = telegram.send_text(message.recipient, outbound_text)
         else:
-            return  # email: no provider wired up, stays RECORDED as before this amendment
-    except (wa_gateway.WaGatewayError, telegram.TelegramError) as exc:
+            # Section 17 (Amendment 8 continuation): real SMTP send.
+            # Subject falls back to the document reference, same as the
+            # body already falls back to default_text below when
+            # body_note is unset -- an email genuinely needs a subject
+            # line, unlike WhatsApp/Telegram.
+            subject = message.subject or f"{message.doc_type.value.replace('_', ' ').title()} document"
+            email_gateway.send_email(
+                message.recipient, subject, outbound_text,
+                attachment_bytes=doc_bytes, attachment_filename=doc_filename,
+            )
+            provider_id = None
+    except (wa_gateway.WaGatewayError, telegram.TelegramError, email_gateway.EmailGatewayError) as exc:
         logger.warning("Message send failed (channel=%s): %s", message.channel.value, exc)
         message.status = MessageStatus.FAILED
         return
@@ -349,7 +359,14 @@ def create_message(
         status=MessageStatus.RECORDED,
     )
 
-    if payload.channel in (MessageChannel.WHATSAPP, MessageChannel.TELEGRAM):
+    if payload.channel in (MessageChannel.WHATSAPP, MessageChannel.TELEGRAM, MessageChannel.EMAIL):
+        # Section 17 (Amendment 8 continuation): email joined WhatsApp/
+        # Telegram here once email_gateway.py existed to actually send
+        # it -- before that, this whole block (and therefore
+        # _dispatch_send) never ran for email at all, so it stayed
+        # RECORDED no matter what. _enforce_client_consent/
+        # _enforce_internal_document_channel above already gate email
+        # specifically and are unchanged by this.
         client_id = _resolve_client_id(db, payload.doc_type, payload.doc_id)
         client = db.query(Client).filter(Client.id == client_id).first() if client_id else None
         default_text = f"Please find attached: {getattr(document, 'document_no', payload.doc_type.value)}"
