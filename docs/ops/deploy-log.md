@@ -11,6 +11,44 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PR #89: Section 17, real email sending via SMTP
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `ee69919` -> `7dc946e`
+**Backend + frontend** -- no migrations.
+
+Closes the Email gap named in Amendment 8 (spec: PR #88, `docs/annexures/Section-17-specs.md`):
+WhatsApp and Telegram already sent real messages via their own providers; Email only ever
+logged a manual "recorded" status. New `backend/app/services/email_gateway.py` is a thin SMTP
+client matching the exact `wa_gateway.py`/`telegram.py` pattern -- blank `SMTP_*` config fails
+fast, a send failure sets `Message.status = failed` immediately, no retries/queueing. Live
+browser verification (SMTP still unconfigured, as expected -- real credentials are the
+Director's to supply later, same two-step flow as the Anthropic key) surfaced a real frontend
+gap missed in the initial implementation: `MessagesPanel.jsx` still hard-coded email as a
+provider-less, log-only channel, so the banner claimed email "does not actually send anything"
+(now false) and the "Attach PDF" checkbox was hidden for email even though the backend supports
+`include_document` uniformly across all three channels. Fixed in the same PR before merge.
+Full backend suite: 1132 passed. HawkScan DAST was not run against this change -- no
+`HAWK_API_KEY` and no interactive browser session available in this environment; reviewed the
+new SMTP code manually instead (`smtplib`/`MIMEText` handle header encoding, no raw
+string-concatenation into headers from user-controlled subject/recipient, so no obvious
+SMTP header-injection path).
+
+**First deploy attempt failed silently** -- commands were run from `~` instead of
+`~/NestaPrime-Estimator`, so `git pull`, the backend rebuild, and the frontend build all
+errored ("not a git repository", config/path not found), yet the smoke-test curl still
+returned `{"status":"ok"}` because the *previous* deploy's containers were still running.
+Caught before logging anything, per the standing discipline of requiring the full
+git-pull/docker-build transcript, not just the curl result. Second attempt, run from the
+correct directory, showed the real fast-forward (`ee69919..7dc946e`, all expected files
+including `email_gateway.py` and `MessagesPanel.jsx`), a clean backend rebuild and container
+restart, and a clean frontend export build (728.42kB copied to `/var/www/nestaprime/dist/`).
+
+**Smoke test:** `curl http://65.1.234.78/api/health` -> `{"status":"ok"}`. Full git
+pull/docker build/frontend export transcript reviewed before logging this entry.
+
+---
+
 ## 2026-09-18 -- PRs #84-#86: deploy-log correction, Section 16 spec + approval,
 Sport Build Guide
 
