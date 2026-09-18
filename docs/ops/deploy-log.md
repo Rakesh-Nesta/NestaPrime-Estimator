@@ -11,6 +11,23 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PR #80: register/handbook cleanup + Section 15 registration
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `5b09315` -> `dd285e5`
+**Frontend-only** -- no backend rebuild, no migrations.
+
+Docs-only register/handbook fixes bundled with one real frontend content change:
+`handbookData.js`'s Master Settings entry now mentions the two Section 14 panels
+(Company Details, Quotation terms & warranty), closing a gap found during a session
+review. Also adds Annexure-2.md's missing "Implemented" note for Amendment 14, and
+registers Amendment 15 (Education tab AI assistant) with its draft spec -- neither of
+those two changes affect the running app.
+
+**Smoke test:** `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/` -> `200`.
+
+---
+
 ## 2026-09-17 -- PR #78: customizable Quotation company details and T&C/warranty text
 
 **Run by:** R. Patni (with AI development assistance)
