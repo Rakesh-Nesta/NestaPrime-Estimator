@@ -11,6 +11,38 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PRs #98-#99: Amendment 10 correction, Section 20 (handbook
+currency pass)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `0c4558c` -> `e3d9845` (PR #98 was the Section 20 spec approval plus
+a correction to Amendment 10's stale register entry, docs-only; #99 is the actual
+content)
+**Frontend-only** -- no backend rebuild, no migrations.
+
+**A real error in this session's own work, caught and corrected before it cost
+anything:** the session initially described the handbook as its "largest gap" on the
+roadmap, based on Amendment 10's own register text. Re-verifying against the actual
+`frontend/src/handbookData.js` found a prior v3 pass (16 September) had already closed
+most of it -- All Quotations, Vendors Admin, Price Requests, Cross-Sell Admin, and
+Hindi/Hinglish terms were all already present; the register was simply never updated to
+say so. Corrected the register first, then scoped and shipped the real remaining gap:
+a new Education chapter (Amendment 15's Chat assistant, Amendment 16's Sport Build
+Guide including Section 18's Construction Sequence -- never documented at all) and
+three stale passages left over from before Sections 17 and 19 shipped (Documents
+claimed email "delivers nothing"; Clients and FAQ Q18 both claimed the per-client
+project list was missing). Two small related items folded in: Sports & Scope Admin's
+field list now names the Construction Sequence tab, and both Help.jsx version labels
+bumped 3->4. Direct content authorship, no AI-draft step, per the approved spec.
+
+**Smoke test:** `curl http://65.1.234.78/api/health` -> `{"status":"ok"}`. Full
+git-pull/docker-build/frontend-export transcript reviewed before logging this entry --
+`git pull` correctly showed `Updating 0c4558c..e3d9845` with every expected file
+(`handbookData.js`, `Help.jsx`, both spec docs), frontend export build completed
+cleanly (737.74kB copied to `/var/www/nestaprime/dist/`).
+
+---
+
 ## 2026-09-18 -- PRs #94-#96: deploy-log bookkeeping, Amendment 4 verification,
 Section 19 (per-client project list)
 

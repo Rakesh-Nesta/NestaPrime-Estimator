@@ -288,6 +288,15 @@ chapter still claims email "delivers nothing," superseded by Section 17; the Cli
 chapter and FAQ Q18 both still describe the per-client project list as missing,
 superseded by Section 19). Spec for closing these: `docs/annexures/Section-20-specs.md`.
 
+**Implemented 18 September 2026 (PR #99, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** added the Education chapter (both tabs, including
+Construction Sequence and its disclaimer); fixed the three stale passages (Documents,
+Clients, FAQ Q18); folded in the Sports & Scope Admin Construction Sequence mention and
+the Help.jsx version-label fix (both bumped 3->4). Direct content authorship, no
+AI-draft step, per the approved spec. Amendment 10 is now current through Section 19 --
+Simple Calculator, Tender Mode, and Amendment 11/14's smaller content gaps remain
+explicitly out of scope, on record rather than forgotten.
+
 ### Amendment No. 11 — Rate Card & Margin Policy Tuning (from Note R1's Findings)
 **Registered 14 September 2026.** Note R1's own completed exercise (see its "Completed
 14 September 2026 — recreate & compare" entry below) produced three concrete,
