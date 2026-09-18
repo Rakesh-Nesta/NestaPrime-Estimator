@@ -96,7 +96,14 @@ feature, never a hang.
 ## Approval
 
 Amendment 15 (Education tab AI assistant, multi-turn, handbook-grounded, no live data):
-☐ Approved ☐ Changes ☐ Later
+☑ Approved — "approve the Education assistant spec" (18 September 2026)
+
+Decision 1 (multi-turn chat via the new `generate_chat_reply` extension): ☑ Resolved as
+proposed.
+Decision 2 (no live app data / no database tool access this wave): ☑ Resolved as
+proposed.
+Decision 3 (Education tab only for this wave, Help-screen integration deferred): ☑
+Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
