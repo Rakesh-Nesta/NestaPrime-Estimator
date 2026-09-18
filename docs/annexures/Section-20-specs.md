@@ -94,11 +94,11 @@ file changes.
 ## Approval
 
 Amendment 10 continuation (handbook currency pass — one new Education chapter, three
-stale-passage fixes, two small items folded in, items 7-9 deferred): ☐ Pending
-Director approval.
+stale-passage fixes, two small items folded in, items 7-9 deferred): ☑ Approved —
+"approve as proposed, both decisions" (18 September 2026)
 
-Decision 1 (items 7-9 stay out of scope for this pass): ☐ Pending.
-Decision 2 (no AI-draft-then-review step needed): ☐ Pending.
+Decision 1 (items 7-9 stay out of scope for this pass): ☑ Resolved as proposed.
+Decision 2 (no AI-draft-then-review step needed): ☑ Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
