@@ -11,7 +11,42 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-18 -- PRs #79-#83: register/handbook cleanup, Section 15 spec + approval,
+Education tab AI assistant
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `d3bb3f5` -> `d89323e`
+**Backend + frontend** -- no migrations.
+
+**Corrects the entry below** (see its own correction note): today's `git pull` on
+production showed `Updating d3bb3f5..d89323e` -- `d3bb3f5` is PR #78's own merge commit,
+proving production had been sitting there since the 2026-09-17 deploy and had never
+actually received PRs #79-#82 at all. This single pull caught all of it up at once,
+alongside the real reason for today's deploy -- PR #83, the Education tab AI assistant
+(Section 15): a new `POST /education/ask` endpoint (open to every role, grounded only in
+the handbook content the frontend sends, no live app data ever reaches the model) and
+`Education.jsx` becoming a real chat panel. Full backend suite: 1129 passed (9 transient
+Postgres-not-yet-ready errors at the very start of one local run, confirmed clean
+rerunning in isolation -- not a regression); CI green.
+
+**Smoke test:** `curl -s http://127.0.0.1:8000/health` -> `{"status":"ok"}`; frontend
+root -> `200`. Backend container built and started cleanly.
+
+---
+
 ## 2026-09-18 -- PR #80: register/handbook cleanup + Section 15 registration
+
+**Corrected 2026-09-18 -- this deploy never actually reached production.** The entry
+below was written after the smoke test returned `200`, but that was a bare `curl`
+against whatever the server already had running -- a stale, undeployed server also
+returns `200` for `/`, so it wasn't real confirmation. No `git pull`/`docker build`
+transcript was ever shown for this one, unlike every other entry in this log. The actual
+deploy happened today, bundled into the entry directly above. Left here, corrected
+rather than deleted, for the same reason the very first entry in this log's history was
+corrected rather than silently rewritten -- the record should show the mistake, not hide
+it. **Lesson**: a bare `200` isn't a deploy confirmation on its own; the git pull/docker
+build transcript has to be seen too, same as every other entry in this log already
+required.
 
 **Run by:** R. Patni (with AI development assistance)
 **Commit range:** `5b09315` -> `dd285e5`
@@ -24,7 +59,8 @@ review. Also adds Annexure-2.md's missing "Implemented" note for Amendment 14, a
 registers Amendment 15 (Education tab AI assistant) with its draft spec -- neither of
 those two changes affect the running app.
 
-**Smoke test:** `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/` -> `200`.
+**Smoke test:** `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1/` -> `200`
+(not a real confirmation -- see correction note above).
 
 ---
 
