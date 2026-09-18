@@ -128,10 +128,12 @@ export async function getDashboard(token) {
 }
 
 // Amendment 12 (Section 11): drill-downs behind the Dashboard's own tiles.
-export async function listProjects(token, { search, status } = {}) {
+// Section 19 adds client_id, for ClientsAdmin.jsx's per-client project list.
+export async function listProjects(token, { search, status, client_id } = {}) {
   const params = new URLSearchParams();
   if (search) params.set("search", search);
   if (status) params.set("status", status);
+  if (client_id) params.set("client_id", client_id);
   const qs = params.toString();
   const res = await fetch(`${API_BASE}/projects${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
   return handle(res);

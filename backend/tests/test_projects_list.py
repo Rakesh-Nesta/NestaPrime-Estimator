@@ -168,3 +168,39 @@ def test_search_matches_project_no(client, director_user):
 
     res = client.get("/projects", params={"search": project_no}, headers=headers)
     assert any(r["id"] == project_id for r in res.json())
+
+
+def test_client_id_filter_scopes_to_one_client(client, director_user):
+    """Section 19 (Amendment 4 continuation): the per-client project list
+    on ClientsAdmin.jsx needs exactly this client's own projects, not
+    every project matching a free-text guess at their name."""
+    headers = _director_headers(client, director_user)
+    client_a_id = _create_client_record(client, headers, "Client A Projects")
+    client_b_id = _create_client_record(client, headers, "Client B Projects")
+    project_a_id = _create_project(client, headers, client_a_id)
+    project_b_id = _create_project(client, headers, client_b_id)
+
+    res = client.get("/projects", params={"client_id": client_a_id}, headers=headers)
+    assert res.status_code == 200, res.text
+    ids = [r["id"] for r in res.json()]
+    assert project_a_id in ids
+    assert project_b_id not in ids
+
+
+def test_client_id_filter_combines_with_status(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers, "Client Status Combo")
+    project_id = _create_project(client, headers, client_id)
+
+    res = client.get("/projects", params={"client_id": client_id, "status": "open"}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert any(r["id"] == project_id for r in res.json())
+
+
+def test_client_with_no_projects_returns_empty_list(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers, "Client No Projects Yet")
+
+    res = client.get("/projects", params={"client_id": client_id}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json() == []

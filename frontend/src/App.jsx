@@ -433,7 +433,12 @@ export default function App() {
           />
         )}
         {screen === "clients_admin" && (
-          <ClientsAdmin token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
+          <ClientsAdmin
+            token={accessToken}
+            role={user.role}
+            onOpenProject={handleOpenProject}
+            onBack={() => setScreen(preNavScreen)}
+          />
         )}
         {screen === "price_requests" && user.role !== "sales" && (
           <PriceRequests token={accessToken} onBack={() => setScreen(preNavScreen)} />

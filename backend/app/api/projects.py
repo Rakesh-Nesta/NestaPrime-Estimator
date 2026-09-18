@@ -240,6 +240,7 @@ class ProjectSummaryOut(BaseModel):
 def list_projects(
     search: str | None = None,
     status: str | None = None,  # "open" | "won" | "lost"
+    client_id: uuid.UUID | None = None,  # Section 19: per-client project list
     db: Session = Depends(get_db),
     current_user=Depends(
         require_roles("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
@@ -258,6 +259,8 @@ def list_projects(
     )
 
     query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
+    if client_id is not None:
+        query = query.filter(Project.client_id == client_id)
     if search:
         needle = f"%{search}%"
         query = query.filter(
