@@ -555,6 +555,18 @@ confirmed by direct read), `backend/app/api/quotations_admin.py:161-179`, and th
 in `exports.py`/`reports.py`. Needs a Director-approved spec before implementation, per
 this register's own Change Process.
 
+**Implemented 19 September 2026 (PR #112, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** `app/core/export_safety.py::sanitize_row`, applied at all
+ten identified `openpyxl`/`csv` write sites across `exports.py`, `quotations_admin.py`,
+`rate_items.py`, `reports.py`, `settings.py`, and `audit_log.py`. A value starting with
+`=`, `+`, `-`, or `@` gets a leading apostrophe at export time only -- storage and every
+other display of the value are unaffected, and the app's own live formulas (Amount =
+Quantity x Rate, etc.) are untouched since they're set separately, never through the
+sanitized row. Live-verified in production: a real Cost Sheet line posted with
+`category`/`item_name`/`spec` all crafted as formula-injection payloads came back
+correctly neutralized in the exported XLSX, while the sheet's own live Amount formula
+kept working. Amendment 17 is now fully closed.
+
 ### Amendment No. 18 — Login Rate Limiting / Lockout
 **Registered 19 September 2026 (self-identified during the same audit).**
 `POST /auth/login` (`backend/app/api/auth.py:35-50`) has no attempt counter, delay, or
@@ -562,6 +574,18 @@ lockout on repeated failed password checks -- unlimited guesses are possible aga
 known email address. Confirmed by direct read that nothing else in this repo (no
 middleware, no reverse-proxy config checked into the repo) covers this. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
+
+**Implemented 19 September 2026 (PR #113, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** new migration adds `failed_login_attempts`/`locked_until`
+to `User`, persisted on the row rather than kept in worker memory (production runs 2
+gunicorn workers). 5 consecutive failed attempts against one account lock it for 15
+minutes; every failure (unknown email, wrong password, locked account) returns the same
+generic 401 so a client can't distinguish the cause. Unknown emails never count toward
+any account's lockout, closing an email-guessing denial-of-service angle against real
+accounts. A successful login resets both fields. Live-verified in production: 5
+deliberate failed logins against a real account each returned 401, and critically a 6th
+attempt with the *correct* password also returned 401 -- the account was genuinely
+locked, not just rejecting bad guesses. Amendment 18 is now fully closed.
 
 ## Register Notes (non-software, business-process)
 
