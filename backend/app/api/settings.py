@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.core.export_safety import sanitize_row
+from app.core.settings_parse import parse_setting_number
 from app.db.session import get_db
 from app.models.setting import DocumentType, Override, Setting, SettingScope
 from app.models.user import User
@@ -45,7 +46,7 @@ def get_gst_rate_percent(db: Session, default: float = 18.0) -> float:
     hard-coded, in case it ever changes.' Falls back to the blueprint's
     own default when no Setting row exists yet (e.g. a fresh test DB)."""
     value = get_current_setting_value(db, "gst_rate_percent")
-    return float(value) if value is not None else default
+    return parse_setting_number("gst_rate_percent", value, float) if value is not None else default
 
 
 def get_internal_email_domains(db: Session) -> set[str]:
@@ -402,6 +403,29 @@ def create_override(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*OVERRIDE_ROLES)),
 ):
+    # Amendment 22: if the Master Setting this override replaces was
+    # itself numeric, the override plausibly should be too -- reject a
+    # non-numeric override_value at write time in that case, rather than
+    # letting it crash a later document computation. Settings that are
+    # legitimately non-numeric (company details, T&C text) are
+    # unaffected, since master_value won't parse as a float for those
+    # either and this check is skipped.
+    try:
+        float(payload.master_value)
+    except ValueError:
+        pass
+    else:
+        try:
+            float(payload.override_value)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"'{payload.setting_key}' is a numeric setting (current value "
+                    f"'{payload.master_value}') -- override_value ('{payload.override_value}') must be numeric too"
+                ),
+            ) from None
+
     override = Override(
         document_type=payload.document_type,
         document_id=payload.document_id,
