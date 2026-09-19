@@ -183,6 +183,21 @@ not "every field"; the "Others" rule is wired into just 2 dropdowns (Category, V
 `RateSheet.jsx`), not every dropdown in the app; a "None" option is only confirmed on
 those same 5 governed fields, not app-wide.
 
+**Correction, 19 September 2026 (re-checked against current code):** the first two gaps
+above are unchanged and confirmed still real (`GOVERNED_FIELD_KEYS` in
+`backend/app/api/field_settings.py` is still exactly those 5 fields; `SelectWithOther`
+is still only used on Category and Vendor in `RateSheet.jsx` — neither has changed since
+PRs #44/#37). The third claim was imprecise: a literal "None" option only exists on 3 of
+the 5 governed fields (`soil_type`, `site_access`, `power_available` — all `<Select>`s);
+`distance_km`/`number_of_courts` are plain number inputs with no dropdown to put a
+"None" option on, so field-settings governance never gave them one. Separately, and not
+placed there by this amendment's own governance mechanism at all, two unrelated
+dropdowns already show a selectable "None" on their own: `RateSheet.jsx`'s Vendor field
+(via `SelectWithOther`'s own default when not `required`) and its Labour category field
+(a hand-written `<option value="">None (uses blended fallback %)</option>`, nothing to
+do with field-settings). Bottom line is unchanged -- nowhere close to app-wide -- but the
+specific field count in the original claim didn't survive a line-by-line check.
+
 ### Amendment No. 6 — User Rights Management + Reporting & Oversight
 6a: role-based permissions (what each role can see/do). 6b: admin reviews all quotations
 and daily activity. 6c: reports for daily / weekly / monthly / full-year / custom ranges.
