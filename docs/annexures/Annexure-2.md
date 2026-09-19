@@ -683,6 +683,21 @@ out-of-range value (e.g. a `gst_rate_percent` override of `-100`) can also reach
 `ZeroDivisionError` instead of a rejected input. Needs a Director-approved spec before
 implementation, per this register's own Change Process.
 
+**Implemented 19 September 2026 (PR #123, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** new `app/core/settings_parse.py::parse_setting_number`
+wraps every numeric parse of a stored Setting/Override value across `documents.py`,
+`schedule.py`, `sports.py`, `settings.py`, and `pricing.py`, raising a clear
+`HTTPException` naming the broken key instead of a bare crash; `pricing.py`'s GST
+divisor is now guarded against a rate `<= -100`; `POST /overrides` rejects a non-numeric
+`override_value` at write time when the Setting it replaces was itself numeric, leaving
+genuinely text-valued Settings (company details, T&C clauses) unaffected. Live-verified
+in production: a numeric-setting override with a non-numeric value was rejected with a
+clear `422`, while a valid numeric override still succeeded. The GST-divisor guard
+itself was deliberately not live-tested against the real global setting (too risky on a
+live system) -- covered instead by `backend/tests/test_override_validation.py` against
+the real `/pricing/quote` endpoint in the isolated test database. Amendment 22 is now
+fully closed.
+
 ### Amendment No. 23 — Document/PO Number Generation Races Under Concurrent Creation
 **Registered 19 September 2026 (self-identified during the same audit).**
 `_generate_project_no` (`backend/app/api/projects.py:36-49`) and `_po_number`
@@ -697,6 +712,21 @@ instead of a graceful retry or a real, distinct number. A narrow race window, bu
 genuine availability gap for concurrent daily use by multiple PMs/Procurement staff.
 Needs a Director-approved spec before implementation, per this register's own Change
 Process.
+
+**Implemented 19 September 2026 (PR #122, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** new `app/core/db_retry.py::create_with_retry` wraps the
+build-and-commit for both `create_project` and `create_purchase_order` -- on a
+unique-constraint collision it rolls back and calls `build()` again, which recomputes
+the sequence number against the now-updated row set, rather than surfacing the
+collision as a raw 500. No schema change, no dedicated sequence table, per the approved
+spec's catch-and-retry decision. Since this codebase tests against a real Postgres
+database (no mocks), the collision itself is tested by controlling what the `build()`
+callable returns deterministically rather than faking concurrency --
+`backend/tests/test_sequence_number_retry.py` confirms a real collision recovers on
+retry with no zombie row left behind, and confirms the retry gives up cleanly after
+exhausting its attempts. Live-verified in production: two projects created back to back
+both succeeded with distinct, correctly sequential numbers -- the normal path is
+unaffected. Amendment 23 is now fully closed.
 
 ## Register Notes (non-software, business-process)
 

@@ -11,6 +11,58 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-19 -- PRs #121-#123: Amendments 22-23 (settings/override validation,
+sequence-number race)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `ac3d056` -> `89f703a` (PR #121 was the register entries + both
+approved specs, docs-only; #122 and #123 are the two independent implementation PRs,
+each rebased onto `main` twice as the PRs before it merged -- both auto-merged/rebased
+cleanly since they touch entirely unrelated files)
+**Backend only** -- no new migration (neither amendment changed the schema).
+
+Both amendments were self-identified during a third proactive gap audit against the
+register, which this time deliberately targeted a bug class already proven real in this
+codebase (the Amendment 18 timezone-comparison bug) -- that specific check came back
+clean, but two new gaps were found instead. Amendment 22: neither a Master Setting nor a
+document-scoped Override validated its value at write time, so a bad entry didn't fail
+until a later document computation crashed with a bare, undiagnosable `ValueError`; fixed
+via a shared `parse_setting_number` helper wrapping every numeric parse across five API
+modules, a GST-divisor guard in `pricing.py`, and write-time rejection for Overrides
+scoped to when the Setting they replace was itself numeric. Amendment 23:
+`_generate_project_no`/`_po_number` computed the next sequence number with no row lock,
+so two concurrent creations could compute the same number and the second commit
+surfaced as an unhandled `IntegrityError`; fixed via a `create_with_retry` helper that
+catches the collision and recomputes.
+
+**Deploy went smoothly** -- backend-only rebuild and restart, logs confirmed clean
+(`Application startup complete` on both workers, no errors, no migration line since none
+was needed).
+
+**Live-verified both amendments in production**, not just via the automated test suite
+(120 tests total across both PRs, all passing in CI): reactivated
+`verify-director@nestaprime.local` again. Amendment 22: posted a document-scoped
+Override with a numeric `master_value` but a non-numeric `override_value` -- rejected
+with a clear `422` naming the setting, while a genuinely numeric override on the same
+setting still succeeded with `201`. Amendment 23: created two projects back to back,
+confirming both succeeded with distinct, correctly sequential numbers (no crash, no
+regression in the normal, non-colliding path). The GST-divisor guard itself was
+deliberately **not** live-tested against the real, global `gst_rate_percent` Master
+Setting -- doing so would have made every live pricing calculation see a broken rate for
+the duration of the test, an unacceptable risk on a production system currently in real
+use. That guard is covered instead by `backend/tests/test_override_validation.py`,
+which exercises it against the real `/pricing/quote` endpoint in the isolated test
+database and passed in CI before this deploy.
+
+**Known leftover:** a third "Deploy Smoke Test Client (delete me)" / two projects from
+the Amendment 23 check remain in production data, same reasoning as the previous two
+deploys' leftovers (no client-delete endpoint by design).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-19 -- PRs #116-#119: Amendments 19-21 (structure form crash, PO receiving,
 double-submit guard)
 
