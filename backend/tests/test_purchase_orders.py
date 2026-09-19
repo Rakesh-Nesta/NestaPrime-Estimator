@@ -332,3 +332,107 @@ def test_consumption_sheet_reflects_the_po_once_raised(client, director_user):
     assert steel_row["delivery_date"] is None
     assert steel_row["received_qty"] is None
     assert steel_row["balance_qty"] is None
+
+
+# ---------------------------------------------------------------------------
+# Amendment 20 (Section 26): receiving reconciliation + status revert
+# ---------------------------------------------------------------------------
+
+
+def _issued_po(client, headers, quantity=500):
+    cost_sheet_id, line_a, _ = _cost_sheet_with_two_lines(client, headers)
+    vendor = _vendor(client, headers)
+    po = client.post(
+        f"/cost-sheets/{cost_sheet_id}/purchase-orders",
+        json={"vendor_id": vendor["id"], "lines": [{"cost_sheet_line_id": line_a["id"], "quantity": quantity, "rate": 68}]},
+        headers=headers,
+    ).json()
+    client.post(f"/purchase-orders/{po['id']}/issue", headers=headers)
+    return po
+
+
+def test_receive_with_correct_expected_received_qty_succeeds(client, director_user):
+    headers = _director_headers(client, director_user)
+    po = _issued_po(client, headers)
+    line_id = po["lines"][0]["id"]
+
+    res = client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 200, "expected_received_qty": 0}]},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["lines"][0]["received_qty"] == 200
+
+
+def test_receive_with_stale_expected_received_qty_is_rejected_not_silently_overwritten(client, director_user):
+    """Amendment 20: two staff recording separate receipts against the
+    same line -- the second call's stale expectation must be rejected,
+    not silently clobber the first's recorded receipt."""
+    headers = _director_headers(client, director_user)
+    po = _issued_po(client, headers)
+    line_id = po["lines"][0]["id"]
+
+    first = client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 200, "expected_received_qty": 0}]},
+        headers=headers,
+    )
+    assert first.status_code == 200, first.text
+
+    # Second staff member, still working from the pre-update value of 0.
+    stale = client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 150, "expected_received_qty": 0}]},
+        headers=headers,
+    )
+    assert stale.status_code == 409, stale.text
+    assert "200" in stale.json()["detail"]
+
+    # The first staff member's real receipt of 200 must survive untouched.
+    po_after = client.get(f"/purchase-orders/{po['id']}", headers=headers).json()
+    assert po_after["lines"][0]["received_qty"] == 200
+
+
+def test_receive_with_no_expected_received_qty_behaves_exactly_as_before(client, director_user):
+    """Backward compatibility: omitting expected_received_qty (e.g. an
+    older client, or a script) is unconditional, same as before this
+    amendment."""
+    headers = _director_headers(client, director_user)
+    po = _issued_po(client, headers)
+    line_id = po["lines"][0]["id"]
+
+    client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 200}]},
+        headers=headers,
+    )
+    overwrite = client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 150}]},
+        headers=headers,
+    )
+    assert overwrite.status_code == 200, overwrite.text
+    assert overwrite.json()["lines"][0]["received_qty"] == 150
+
+
+def test_correcting_received_qty_back_to_zero_reverts_status_to_issued(client, director_user):
+    headers = _director_headers(client, director_user)
+    po = _issued_po(client, headers)
+    line_id = po["lines"][0]["id"]
+
+    partial = client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 200, "expected_received_qty": 0}]},
+        headers=headers,
+    )
+    assert partial.json()["status"] == "partially_received"
+
+    corrected = client.post(
+        f"/purchase-orders/{po['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_qty": 0, "expected_received_qty": 200}]},
+        headers=headers,
+    )
+    assert corrected.status_code == 200, corrected.text
+    assert corrected.json()["status"] == "issued"
+    assert corrected.json()["lines"][0]["received_qty"] == 0
