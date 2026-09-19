@@ -11,6 +11,45 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-19 -- Decision 1 resolved: real SMTP credentials configured on
+production
+
+**Run by:** R. Patni (with AI development assistance)
+**Not a code deploy** -- Director supplied real Google Workspace SMTP credentials for
+`info@nestaprime.com`; this closes out `docs/annexures/Section-17-specs.md`'s Decision
+1, the one item blocking Section 17 (Amendment 8's email gap) from actually working (as
+opposed to gracefully failing fast).
+
+**First attempt failed:** `535 Username and Password not accepted` from Google, right
+after generating a fresh app password. Checked the Workspace Admin Console's 2-Step
+Verification settings first (Security -> Authentication -> 2-Step Verification) for an
+org-level app-password restriction -- found nothing blocking, and 2-Step Verification
+being genuinely on for the account (confirmed by the Google Account page allowing app
+password creation at all) ruled out the enforcement setting as the cause. Diagnosed as
+a copy-paste issue with the app password itself instead.
+
+**Fix:** deleted the first app password, generated a fresh one, and re-entered it into
+`backend/.env` via the same interactive-prompt pattern used for the Anthropic key (never
+pasted through a channel that could mask or corrupt it) -- this time with an added
+length check (`${#SMTP_PASS_VAL}` characters, confirmed 16) printed to the terminal
+without ever printing the value itself, to catch a truncated/corrupted paste before
+wasting another round trip. Backend rebuilt; `535` cleared immediately.
+
+**Verification:** ran `email_gateway.send_email(...)` directly inside the production
+container, targeting `info@nestaprime.com` itself -- `SUCCESS: email sent`, then
+confirmed in the actual Gmail inbox (not just the SMTP handshake): landed in Inbox, not
+spam, correct sender/subject/body. Amendment 8 is now fully closed end to end -- email
+joins WhatsApp and Telegram as a genuinely live send channel, not just correctly-coded-
+but-unconfigured.
+
+**Lesson reinforced:** the same lesson from the 2026-09-16 Anthropic key incident held
+here too -- always use an interactive prompt for secret entry, never a copy-pasted
+command block. The length-check addition this time caught nothing (the first failure
+was a genuine bad credential, not a display-masking corruption), but it's cheap
+insurance worth keeping in the pattern going forward.
+
+---
+
 ## 2026-09-18 -- PRs #98-#99: Amendment 10 correction, Section 20 (handbook
 currency pass)
 

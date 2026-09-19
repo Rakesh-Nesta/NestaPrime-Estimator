@@ -224,6 +224,19 @@ two-step flow, same as the Anthropic API key) — until then, every real email s
 fast with a clean `failed` status rather than doing anything, which is itself correct,
 expected behaviour, not a bug.
 
+**Decision 1 resolved 19 September 2026:** Director supplied real Google Workspace SMTP
+credentials for `info@nestaprime.com` (an app password, generated after confirming
+2-Step Verification was already on for that account). First attempt failed with a clean
+`535 Username and Password not accepted` from Google — diagnosed as a copy-paste issue
+with the app password itself, not a Workspace admin restriction (checked the Workspace
+Admin Console's 2-Step Verification settings first, found nothing blocking); a freshly
+regenerated app password, entered with an added length check (16 characters, matching
+expected), authenticated successfully on the second attempt. Verified with a real send
+from inside the production container straight to `info@nestaprime.com`, confirmed
+landed in the Inbox (not spam) with the correct sender, subject, and body. Amendment 8
+is now fully closed, end to end — email joins WhatsApp and Telegram as a genuinely live
+send channel in production, not just correctly-coded-but-unconfigured.
+
 ### Amendment No. 9 — Flexible Court Sizing
 Standard sizes become configurable suggestions per sport — adjustable smaller/larger per
 project; admin-editable (links to No. 5).
