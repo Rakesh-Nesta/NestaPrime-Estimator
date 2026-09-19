@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,6 +11,18 @@ from app.db.session import get_db
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+LOGIN_ATTEMPT_THRESHOLD = 5
+LOGIN_LOCKOUT_DURATION = timedelta(minutes=15)
+
+
+def _incorrect_credentials() -> HTTPException:
+    # Amendment 18 (Section 24): the same generic 401 covers every
+    # failure case (unknown email, wrong password, locked account) --
+    # never a different message that would let an attacker distinguish
+    # "wrong password" from "this account is locked," which would
+    # itself leak which emails are real accounts.
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
 
 class UserOut(BaseModel):
@@ -37,15 +51,39 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     user = db.query(User).filter(User.email == form_data.username).first()
-    if (
-        user is None
-        or not user.is_active
-        or not verify_password(form_data.password, user.hashed_password)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-        )
+    # Amendment 18: an unknown email never counts toward any account's
+    # lockout -- counting it would let an attacker lock out an arbitrary
+    # real account just by guessing emails, a denial-of-service angle a
+    # real-account-only counter avoids.
+    if user is None:
+        raise _incorrect_credentials()
+
+    # locked_until is a plain (timezone-naive) DateTime column, like
+    # every other timestamp column in this codebase -- compare against a
+    # naive UTC "now" rather than datetime.now(UTC) directly, which
+    # would raise TypeError against a value just loaded back from the DB.
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if user.locked_until is not None and user.locked_until > now:
+        # Locked accounts stay locked for the full window, even against
+        # the correct password -- that's the whole point of a lockout.
+        raise _incorrect_credentials()
+
+    if not user.is_active or not verify_password(form_data.password, user.hashed_password):
+        if user.is_active:
+            # is_active=False accounts (deactivated, not a password
+            # failure) don't consume lockout attempts -- there's nothing
+            # a lockout protects here that deactivation doesn't already.
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= LOGIN_ATTEMPT_THRESHOLD:
+                user.locked_until = now + LOGIN_LOCKOUT_DURATION
+                user.failed_login_attempts = 0
+            db.commit()
+        raise _incorrect_credentials()
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.commit()
+
     token = create_access_token(subject=user.email, role=user.role.value)
     return TokenOut(access_token=token)
 
