@@ -121,10 +121,13 @@ behavior covers it for free) displays correctly.
 ## Approval
 
 Amendment 5 continuation (add `water_available` to field-settings governance; wire
-City/District into the Others rule): ☐ Pending Director approval.
+City/District into the Others rule): ☑ Approved — "approve, but split into two PRs"
+(19 September 2026)
 
-Decision 1 (both parts ship in one PR): ☐ Pending.
-Decision 2 (Section-6-phase2-specs.md treated as superseded): ☐ Pending.
+Decision 1 (ship separately, not in one PR): ☑ Resolved -- split, not combined. Part A
+(`water_available` governance) and Part B (City/District Others wiring) ship as two
+independent PRs.
+Decision 2 (Section-6-phase2-specs.md treated as superseded): ☑ Resolved as proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
