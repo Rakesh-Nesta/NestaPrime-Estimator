@@ -82,6 +82,14 @@ mode. Quick mode's own copy is also stale: "(customizable once Amendment 9 ships
 Amendment 9 shipped the same day that text was written. Spec for closing this:
 `docs/annexures/Section-21-specs.md`.
 
+**Implemented 19 September 2026 (PR #105, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** `onQuickSetupComplete` now routes to `screen="sports"`,
+matching `onProjectCreated` -- Quick setup lands on Sport Selection with the picked
+sport already added, reusing the exact validated `CourtSize` dimension-entry path
+Detailed mode already had. Stale "(customizable once Amendment 9 ships)" copy fixed.
+Live-verified: the "Customize size" control reveals real, working L(ft)/W(ft) inputs.
+Amendment 2 is now fully implemented.
+
 ### Amendment No. 3 — "Complete Your Facility" Cross-Sell at Estimate Step
 At the Estimate step, suggest 4–5 sport-matched add-ons (lighting, fencing, seating, AMC)
 with prices and own margins; one-tap add; never forced.

@@ -11,6 +11,36 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-19 -- PR #105: Section 21, Quick mode routes through Sport Selection
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `5b331e0` -> `3aece69`
+**Frontend-only** -- no backend rebuild, no migrations.
+
+Closes Amendment 2's remaining gap (register verification earlier today confirmed it
+was still real, unlike several other entries corrected this week). Root cause wasn't a
+missing "Dimensions" form field on Project Setup -- dimension entry lives on Sport
+Selection (`CourtSize`) for both Quick and Detailed mode; Detailed mode already routed
+through that screen, Quick mode skipped straight to Scope. One-line fix:
+`onQuickSetupComplete` now routes to `screen="sports"`, matching `onProjectCreated`'s
+existing routing -- reuses the exact validated dimension-entry path rather than
+building a second one. Also fixed `ProjectSetup.jsx`'s stale "(customizable once
+Amendment 9 ships)" copy, referencing a future event that had already happened the same
+day it was written.
+
+Live-verified before this PR was opened: Quick setup now lands on Select Sports with
+the picked sport already added, standard size shown, and a working "Customize size"
+control revealing real L(ft)/W(ft) inputs -- identical to what Detailed mode already
+provided.
+
+**Smoke test:** `curl http://65.1.234.78/api/health` -> `{"status":"ok"}`. Full
+git-pull/frontend-export transcript reviewed before logging this entry -- `git pull`
+correctly showed `Updating 5b331e0..3aece69` with every expected file
+(`Section-21-specs.md`, `App.jsx`, `ProjectSetup.jsx`), frontend export build completed
+cleanly (737.73kB copied to `/var/www/nestaprime/dist/`).
+
+---
+
 ## 2026-09-19 -- Decision 1 resolved: real SMTP credentials configured on
 production
 
