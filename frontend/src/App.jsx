@@ -456,10 +456,14 @@ export default function App() {
           <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
+          // Section 21: Quick mode now routes through Sport Selection too, same as
+          // Detailed mode -- that's the one screen where dimension customization
+          // genuinely happens (CourtSize), and skipping it was Amendment 2's real
+          // gap, not a missing form field.
           <ProjectSetup
             token={accessToken}
             onProjectCreated={(project) => { setActiveProject(project); setScreen("sports"); }}
-            onQuickSetupComplete={(project) => { setActiveProject(project); setScreen("scope"); }}
+            onQuickSetupComplete={(project) => { setActiveProject(project); setScreen("sports"); }}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (
