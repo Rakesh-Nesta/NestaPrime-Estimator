@@ -206,6 +206,16 @@ dropdowns already show a selectable "None" on their own: `RateSheet.jsx`'s Vendo
 do with field-settings). Bottom line is unchanged -- nowhere close to app-wide -- but the
 specific field count in the original claim didn't survive a line-by-line check.
 
+**Continued 19 September 2026 (Director instruction):** *"spec Amendment 5."* Proposes
+a bounded next increment for each of the two real gaps above, not the literal "every
+field"/"every dropdown" reading: adding `water_available` to field-settings governance
+(Amendment 2's own named pair with the already-governed `power_available`, left out for
+a UI-shape reason rather than a technical blocker), and wiring City/District into the
+`SelectWithOther` rule (already has an inert, non-functional "Other" placeholder today).
+Also surfaces, without resolving, a contradiction between an old unapproved draft
+(`Section-6-phase2-specs.md`) and the reasoning actually shipped in
+`field_setting.py`'s docstring. Spec: `docs/annexures/Section-22-specs.md`.
+
 ### Amendment No. 6 — User Rights Management + Reporting & Oversight
 6a: role-based permissions (what each role can see/do). 6b: admin reviews all quotations
 and daily activity. 6c: reports for daily / weekly / monthly / full-year / custom ranges.
