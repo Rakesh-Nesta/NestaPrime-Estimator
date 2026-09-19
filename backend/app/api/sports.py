@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.audit_log import write_audit_log_entry
 from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
+from app.core.settings_parse import parse_setting_number
 from app.db.session import get_db
 from app.models.flooring_guide import FlooringGuide
 from app.models.lighting_standard import LightingLuxStandard, SportPoleCount
@@ -598,7 +599,7 @@ _DEVIATION_STATUS_SEVERITY = {"green": 0, "amber": 1, "red": 2}
 
 def _get_setting_float(db: Session, key: str, default: float) -> float:
     value = get_current_setting_value(db, key)
-    return float(value) if value is not None else default
+    return parse_setting_number(key, value, float) if value is not None else default
 
 
 def _dimension_deviations(db: Session, sport: Sport, project_sport: ProjectSport) -> list[DimensionDeviation]:

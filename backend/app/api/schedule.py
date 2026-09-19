@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.settings import get_current_setting_value
 from app.api.sports import _POOL_KEYS, _recommend_base, _recommend_flooring, _recommend_structure
 from app.core.auth import require_roles
+from app.core.settings_parse import parse_setting_number
 from app.db.session import get_db
 from app.models.client import Client
 from app.models.project import BuildingStatus, Project
@@ -29,12 +30,12 @@ HANDOVER_DAYS_DEFAULT = 2
 
 def _get_setting_int(db: Session, key: str, default: int) -> int:
     value = get_current_setting_value(db, key)
-    return int(value) if value is not None else default
+    return parse_setting_number(key, value, int) if value is not None else default
 
 
 def _get_setting_float(db: Session, key: str, default: float) -> float:
     value = get_current_setting_value(db, key)
-    return float(value) if value is not None else default
+    return parse_setting_number(key, value, float) if value is not None else default
 
 
 # N: "e.g. 40% advance, 40% on flooring completion, 20% handover" -- the

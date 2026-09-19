@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
 from app.core.auth import require_roles
+from app.core.settings_parse import parse_setting_number
 from app.db.session import get_db
 from app.models.client import ClientType
 from app.models.document import CostSheetLine, GstMode
@@ -38,9 +39,17 @@ def _competitive_gap_points(db: Session, policy: MarginPolicy) -> float:
     gap -- only the floor itself is replaced."""
     if policy.competitive_segment:
         gap_str = get_current_setting_value(db, "competitive_segment_gap_points")
-        return float(gap_str) if gap_str is not None else COMPETITIVE_SEGMENT_POINTS_DEFAULT
+        return (
+            parse_setting_number("competitive_segment_gap_points", gap_str, float)
+            if gap_str is not None
+            else COMPETITIVE_SEGMENT_POINTS_DEFAULT
+        )
     gap_str = get_current_setting_value(db, "non_competitive_segment_gap_points")
-    return float(gap_str) if gap_str is not None else NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT
+    return (
+        parse_setting_number("non_competitive_segment_gap_points", gap_str, float)
+        if gap_str is not None
+        else NON_COMPETITIVE_SEGMENT_POINTS_DEFAULT
+    )
 
 
 def _target_margin_percent(db: Session, policy: MarginPolicy) -> float:
@@ -302,6 +311,14 @@ def compute_pricing(
     target_price_ex_gst = cost / (1 - target / 100)
     if gst_rate_percent is None:
         gst_rate_percent = get_gst_rate_percent(db)
+    # Amendment 22: a Setting/Override typo or an intentionally absurd
+    # value (e.g. -100) would otherwise reach the (1 + gst_rate_percent
+    # / 100) divisor below and raise ZeroDivisionError, or produce a
+    # negative price that passes through silently.
+    if gst_rate_percent <= -100:
+        raise HTTPException(
+            status_code=400, detail=f"GST rate ({gst_rate_percent}%) is invalid -- must be greater than -100%"
+        )
 
     if gst_mode == GstMode.INCLUSIVE:
         target_price = target_price_ex_gst * (1 + gst_rate_percent / 100)

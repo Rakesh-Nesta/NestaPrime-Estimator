@@ -16,6 +16,7 @@ from app.api.pricing import (
 )
 from app.api.reports import _sports_for_quotation
 from app.api.settings import get_current_setting_value, get_gst_rate_percent
+from app.core.settings_parse import parse_setting_number
 from app.api.sports import (
     STRUCTURAL_SIGNOFF_TIER_MULTICOURT_GOVERNMENT,
     STRUCTURAL_SIGNOFF_TIER_PEB_PADEL_POOL,
@@ -237,7 +238,7 @@ J2_NAMED_ACTIVITY_CATEGORY_KEYS = {
 
 def _get_setting_float(db: Session, key: str, default: float) -> float:
     value = get_current_setting_value(db, key)
-    return float(value) if value is not None else default
+    return parse_setting_number(key, value, float) if value is not None else default
 
 
 def _current_override(db: Session, doc_type: DocumentType, doc_id: uuid.UUID, key: str) -> Override | None:
@@ -263,13 +264,13 @@ def _get_effective_setting_float(
     _get_setting_float's own two-tier precedence."""
     override = _current_override(db, doc_type, doc_id, key)
     if override is not None:
-        return float(override.override_value)
+        return parse_setting_number(key, override.override_value, float)
     return _get_setting_float(db, key, default)
 
 
 def _get_setting_int(db: Session, key: str, default: int) -> int:
     value = get_current_setting_value(db, key)
-    return int(value) if value is not None else default
+    return parse_setting_number(key, value, int) if value is not None else default
 
 
 def _structural_signoff_fee(db: Session, tier: str) -> float:
