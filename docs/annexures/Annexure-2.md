@@ -539,6 +539,30 @@ Anthropic call: drafted, saved, and cross-checked badminton's sequence against t
 Guide display and the chat assistant's own answer -- all three agreed, disclaimer
 included. Amendment 16 (both parts) is now fully closed.
 
+### Amendment No. 17 — Export Output Sanitization (CSV/XLSX Formula Injection)
+**Registered 19 September 2026 (self-identified during a Director-requested proactive
+gap audit of the codebase against this register, then spot-verified against the live
+code before recording).** Cost Sheet, Quotation, and other Excel/CSV exports write
+free-text fields that any Sales/PM/Site Engineer user controls -- `CostSheetLine.item_name`/
+`category`/`spec` and `Client.name` among them -- straight into exported cells with no
+escaping of a leading `=`, `+`, `-`, or `@`. A line item or client deliberately named to
+look like a formula would execute when the file is opened in Excel by a Director or
+accountant outside the app -- a real trust-boundary gap (user input flowing into a file
+consumed elsewhere), not a design choice. Evidence: `backend/app/api/exports.py:79-90`
+(Cost Sheet export appends `line.item_name`/`category`/`spec` with no sanitization,
+confirmed by direct read), `backend/app/api/quotations_admin.py:161-179`, and the same
+`openpyxl`/`csv` pattern recurs across the consumption-sheet and other export endpoints
+in `exports.py`/`reports.py`. Needs a Director-approved spec before implementation, per
+this register's own Change Process.
+
+### Amendment No. 18 — Login Rate Limiting / Lockout
+**Registered 19 September 2026 (self-identified during the same audit).**
+`POST /auth/login` (`backend/app/api/auth.py:35-50`) has no attempt counter, delay, or
+lockout on repeated failed password checks -- unlimited guesses are possible against any
+known email address. Confirmed by direct read that nothing else in this repo (no
+middleware, no reverse-proxy config checked into the repo) covers this. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
