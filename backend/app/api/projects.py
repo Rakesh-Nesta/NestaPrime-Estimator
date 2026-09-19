@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.clients import _default_package
 from app.api.field_settings import get_field_state
 from app.core.auth import require_roles
+from app.core.db_retry import create_with_retry
 from app.db.session import get_db
 from app.models.client import Client, ClientType
 from app.models.document import Quotation, QuotationStatus
@@ -195,17 +196,23 @@ def create_project(
                 detail=f"No default package configured for client type '{client.type.value}' -- specify package",
             )
 
-    project = Project(
-        project_no=_generate_project_no(db),
-        # B.2: Client = Government auto-switches Tender Mode on — not a
-        # user-settable field, derived here at creation time.
-        tender_mode=(client.type == ClientType.GOVERNMENT),
-        package=package,
-        **payload.model_dump(exclude={"package"}),
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
+    def _build_project() -> Project:
+        # Amendment 23: called fresh on every retry attempt so a
+        # collision re-reads the now-updated row set and computes a
+        # genuinely new project_no, rather than retrying with the same
+        # doomed-to-collide value.
+        project = Project(
+            project_no=_generate_project_no(db),
+            # B.2: Client = Government auto-switches Tender Mode on — not a
+            # user-settable field, derived here at creation time.
+            tender_mode=(client.type == ClientType.GOVERNMENT),
+            package=package,
+            **payload.model_dump(exclude={"package"}),
+        )
+        db.add(project)
+        return project
+
+    project = create_with_retry(db, _build_project)
     return _to_out(project)
 
 

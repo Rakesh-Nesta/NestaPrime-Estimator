@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
+from app.core.db_retry import create_with_retry
 from app.db.session import get_db
 from app.models.document import CostSheet, CostSheetLine
 from app.models.project import Project
@@ -161,32 +162,41 @@ def create_purchase_order(
             )
         resolved_lines.append((cs_line, line_in))
 
-    po = PurchaseOrder(
-        po_no=_po_number(db, project.project_no),
-        cost_sheet_id=cost_sheet_id,
-        vendor_id=payload.vendor_id,
-        status=PurchaseOrderStatus.DRAFT,
-        delivery_date=payload.delivery_date,
-        eway_bill_no=payload.eway_bill_no,
-        created_by_id=current_user.id,
-    )
-    db.add(po)
-    db.flush()
+    lines_to_create: list[PurchaseOrderLine] = []
 
-    lines_to_create = [
-        PurchaseOrderLine(
-            purchase_order_id=po.id,
-            cost_sheet_line_id=cs_line.id,
-            item_name=cs_line.item_name,
-            unit=cs_line.unit,
-            quantity=line_in.quantity,
-            rate=line_in.rate,
+    def _build_po() -> PurchaseOrder:
+        # Amendment 23: called fresh on every retry attempt so a
+        # collision re-reads the now-updated row set and computes a
+        # genuinely new po_no, rather than retrying with the same
+        # doomed-to-collide value.
+        po = PurchaseOrder(
+            po_no=_po_number(db, project.project_no),
+            cost_sheet_id=cost_sheet_id,
+            vendor_id=payload.vendor_id,
+            status=PurchaseOrderStatus.DRAFT,
+            delivery_date=payload.delivery_date,
+            eway_bill_no=payload.eway_bill_no,
+            created_by_id=current_user.id,
         )
-        for cs_line, line_in in resolved_lines
-    ]
-    db.add_all(lines_to_create)
-    db.commit()
-    db.refresh(po)
+        db.add(po)
+        db.flush()  # need po.id for the lines below
+
+        lines_to_create.clear()
+        lines_to_create.extend(
+            PurchaseOrderLine(
+                purchase_order_id=po.id,
+                cost_sheet_line_id=cs_line.id,
+                item_name=cs_line.item_name,
+                unit=cs_line.unit,
+                quantity=line_in.quantity,
+                rate=line_in.rate,
+            )
+            for cs_line, line_in in resolved_lines
+        )
+        db.add_all(lines_to_create)
+        return po
+
+    po = create_with_retry(db, _build_po)
 
     return _po_to_out(po, vendor.name, lines_to_create)
 
