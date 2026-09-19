@@ -46,6 +46,7 @@ const SITE_ACCESS_OPTIONS = [
   ["good", "Good"], ["narrow_road", "Narrow road (< 4 m)"], ["no_crane_access", "No crane access"],
 ];
 const POWER_OPTIONS = [["yes", "Yes"], ["no", "No"], ["partial", "Partial"]];
+const WATER_OPTIONS = [["yes", "Yes"], ["no", "No"]];
 const PACKAGES = [["budget", "Budget"], ["standard", "Standard"], ["premium", "Premium"]];
 
 const emptyForm = {
@@ -65,7 +66,7 @@ const emptyForm = {
   buildingStatus: "open_air",
   siteAccess: "good",
   powerAvailable: "yes",
-  waterAvailable: true,
+  waterAvailable: "yes",
   numberOfCourts: 1,
   unitSystem: "feet",
   package: "standard",
@@ -226,7 +227,10 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         building_status: form.buildingStatus,
         site_access: form.siteAccess || null,
         power_available: form.powerAvailable || null,
-        water_available: form.waterAvailable,
+        // Unlike power_available (a string enum backend-side),
+        // water_available is a real boolean column -- convert the
+        // Select's "yes"/"no"/"" string state to true/false/null.
+        water_available: form.waterAvailable === "" ? null : form.waterAvailable === "yes",
         number_of_courts: Number(form.numberOfCourts),
         unit_system: form.unitSystem,
         package: form.package,
@@ -530,10 +534,15 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
             placeholder={fieldState("power_available") === "optional" ? "None" : undefined}
           />
         )}
-        <label className="flex items-center gap-2 text-sm text-text-secondary">
-          <input type="checkbox" checked={form.waterAvailable} onChange={(e) => set("waterAvailable", e.target.checked)} />
-          Water available
-        </label>
+        {fieldState("water_available") !== "hidden" && (
+          <Select
+            label="Water available"
+            value={form.waterAvailable}
+            onChange={(v) => set("waterAvailable", v)}
+            options={WATER_OPTIONS}
+            placeholder={fieldState("water_available") === "optional" ? "None" : undefined}
+          />
+        )}
         {fieldState("number_of_courts") !== "hidden" && (
           <NumberField label="Number of courts" value={form.numberOfCourts} onChange={(v) => set("numberOfCourts", v)} min={1} />
         )}

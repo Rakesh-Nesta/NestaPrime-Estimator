@@ -1,7 +1,7 @@
-"""Amendment 5 Phase 2 (Section 6): "admin sets each field compulsory/
-optional/hidden from Master Settings" -- New Project Setup's governed
-fields (soil_type, distance_km, number_of_courts, site_access,
-power_available)."""
+"""Amendment 5 Phase 2 (Section 6, extended by Section 22): "admin sets
+each field compulsory/optional/hidden from Master Settings" -- New
+Project Setup's governed fields (soil_type, distance_km,
+number_of_courts, site_access, power_available, water_available)."""
 
 from app.core.security import hash_password
 from app.models.user import User, UserRole
@@ -63,6 +63,7 @@ def test_field_settings_default_to_compulsory(client, director_user):
         "number_of_courts": "compulsory",
         "site_access": "compulsory",
         "power_available": "compulsory",
+        "water_available": "compulsory",
     }
 
 
@@ -182,6 +183,34 @@ def test_distance_km_and_number_of_courts_never_blocked_regardless_of_setting(cl
     res = _create_project(client, headers, client_id, distance_km=None)
     assert res.status_code == 201, res.text
     assert res.json()["number_of_courts"] == 1
+
+
+def test_water_available_is_governed_and_gates_independently(client, director_user):
+    """Section 22: water_available joined the governed set as a real
+    nullable boolean, not a string enum like power_available -- confirm
+    it gates the same way the other three do."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client(client, headers)
+
+    missing = _create_project(client, headers, client_id, water_available=None)
+    assert missing.status_code == 422, missing.text
+    assert "water_available" in missing.json()["detail"]
+
+    client.patch("/field-settings/water_available", json={"state": "optional"}, headers=headers)
+    ok = _create_project(client, headers, client_id, water_available=None)
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["water_available"] is None
+
+
+def test_water_available_false_is_a_real_value_not_treated_as_missing(client, director_user):
+    """A boolean False must never be confused with an absent/None value --
+    compulsory water_available=False is a real, complete answer."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client(client, headers)
+
+    res = _create_project(client, headers, client_id, water_available=False)
+    assert res.status_code == 201, res.text
+    assert res.json()["water_available"] is False
 
 
 def test_created_project_stores_null_for_an_optional_field_left_blank(client, director_user):

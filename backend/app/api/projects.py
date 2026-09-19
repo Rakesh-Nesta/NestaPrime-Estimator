@@ -77,7 +77,7 @@ class ProjectCreate(BaseModel):
     building_status: BuildingStatus
     site_access: SiteAccess | None = None
     power_available: PowerAvailable | None = None
-    water_available: bool
+    water_available: bool | None = None
     number_of_courts: int = 1
     unit_system: UnitSystem = UnitSystem.FEET
     # B.2: left blank, this resolves from the client's type default
@@ -107,7 +107,7 @@ class ProjectOut(BaseModel):
     building_status: BuildingStatus
     site_access: SiteAccess | None
     power_available: PowerAvailable | None
-    water_available: bool
+    water_available: bool | None
     number_of_courts: int
     unit_system: UnitSystem
     package: Package
@@ -152,17 +152,19 @@ def create_project(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # Amendment 5 Phase 2 (Section 6): soil_type/site_access/
-    # power_available are the three governed fields this app can
-    # actually block on (distance_km/number_of_courts are already
-    # nullable/defaulted, so a field-setting only affects whether New
-    # Project Setup shows them, not whether the API accepts their
-    # absence). A field with no FieldSetting row is COMPULSORY --
-    # today's real behavior, unchanged until a Director opts it down.
+    # Amendment 5 Phase 2 (Section 6, extended by Section 22):
+    # soil_type/site_access/power_available/water_available are the four
+    # governed fields this app can actually block on (distance_km/
+    # number_of_courts are already nullable/defaulted, so a field-setting
+    # only affects whether New Project Setup shows them, not whether the
+    # API accepts their absence). A field with no FieldSetting row is
+    # COMPULSORY -- today's real behavior, unchanged until a Director
+    # opts it down.
     for field_key, value in (
         ("soil_type", payload.soil_type),
         ("site_access", payload.site_access),
         ("power_available", payload.power_available),
+        ("water_available", payload.water_available),
     ):
         if value is None and get_field_state(db, field_key) == "compulsory":
             raise HTTPException(status_code=422, detail=f"'{field_key}' is required")

@@ -18,12 +18,18 @@ field_settings_router = APIRouter(prefix="/field-settings", tags=["field-setting
 READ_ROLES = ("sales", "pm", "director")
 WRITE_ROLES = ("director",)
 
-# The only field_keys this wave governs -- see Section-6-phase2-specs.md
-# for why exactly these five (soil type/distance/court count/site
-# access/power, all named by Amendment 2 itself as T&C candidates) and
-# not e.g. building_status (one of Amendment 2's own "kept 5") or
-# water_available (boolean, doesn't fit the None-option model).
-GOVERNED_FIELD_KEYS = ("soil_type", "distance_km", "number_of_courts", "site_access", "power_available")
+# The field_keys this app governs -- see Section-6-phase2-specs.md for
+# why the original five (soil type/distance/court count/site access/
+# power, all named by Amendment 2 itself as T&C candidates) and
+# Section-22-specs.md for water_available joining them (Amendment 2's
+# own named pair with power_available -- excluded originally only
+# because a plain boolean checkbox had no dropdown to put a real "None"
+# on, now a Select like power_available's, same as every other governed
+# field here). building_status stays out: nullable=False at the DB
+# level, and D.4 logic branches directly on it.
+GOVERNED_FIELD_KEYS = (
+    "soil_type", "distance_km", "number_of_courts", "site_access", "power_available", "water_available",
+)
 
 
 class FieldSettingUpdate(BaseModel):
