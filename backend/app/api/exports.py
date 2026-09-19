@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.api import schedule as schedule_api
 from app.api.documents import _po_lookup_for_cost_sheet
 from app.core.auth import require_roles
+from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.client import Client
 from app.models.document import (
@@ -79,18 +80,20 @@ def export_cost_sheet(
     for line in lines:
         row = ws.max_row + 1
         ws.append(
-            [
-                line.work_package.value,
-                line.category,
-                line.item_name,
-                line.spec,
-                line.unit,
-                float(line.quantity),
-                float(line.rate),
-                None,  # Amount -- filled in as a live formula below
-                line.source.value,
-                float(line.wastage_percent) if line.wastage_percent is not None else None,
-            ]
+            sanitize_row(
+                [
+                    line.work_package.value,
+                    line.category,
+                    line.item_name,
+                    line.spec,
+                    line.unit,
+                    float(line.quantity),
+                    float(line.rate),
+                    None,  # Amount -- filled in as a live formula below
+                    line.source.value,
+                    float(line.wastage_percent) if line.wastage_percent is not None else None,
+                ]
+            )
         )
         ws.cell(row=row, column=8, value=f"=F{row}*G{row}")  # Amount = Quantity x Rate, live
 
@@ -142,21 +145,23 @@ def export_consumption_sheet(
         procurement = po_by_cost_sheet_line_id.get(line.id)
         po_line, po, vendor = procurement if procurement else (None, None, None)
         ws.append(
-            [
-                line.category,
-                item_and_spec,
-                line.unit,
-                None,  # Theoretical qty -- live formula below
-                wastage,
-                float(line.quantity),  # Order qty is the stored, authoritative value
-                float(line.rate),
-                None,  # Amount -- live formula below
-                vendor.name if vendor else None,
-                po.po_no if po else None,
-                po.delivery_date.date().isoformat() if po and po.delivery_date else None,
-                float(po_line.received_qty) if po_line else None,
-                (float(po_line.quantity) - float(po_line.received_qty)) if po_line else None,
-            ]
+            sanitize_row(
+                [
+                    line.category,
+                    item_and_spec,
+                    line.unit,
+                    None,  # Theoretical qty -- live formula below
+                    wastage,
+                    float(line.quantity),  # Order qty is the stored, authoritative value
+                    float(line.rate),
+                    None,  # Amount -- live formula below
+                    vendor.name if vendor else None,
+                    po.po_no if po else None,
+                    po.delivery_date.date().isoformat() if po and po.delivery_date else None,
+                    float(po_line.received_qty) if po_line else None,
+                    (float(po_line.quantity) - float(po_line.received_qty)) if po_line else None,
+                ]
+            )
         )
         ws.cell(row=row, column=4, value=f"=F{row}/(1+E{row}/100)")  # Theoretical = Order / (1 + wastage%)
         ws.cell(row=row, column=8, value=f"=F{row}*G{row}")  # Amount = Order qty x Rate
@@ -194,7 +199,7 @@ def export_rfq(
     ws.title = "Vendor RFQ"
     _header_row(ws, ["Item", "Spec", "Unit", "Qty"])
     for line in lines:
-        ws.append([line.item_name, line.spec, line.unit, float(line.quantity)])
+        ws.append(sanitize_row([line.item_name, line.spec, line.unit, float(line.quantity)]))
 
     return _xlsx_response(wb, f"{cost_sheet.document_no}-rfq.xlsx")
 
@@ -228,10 +233,12 @@ def export_bom(
     for line in lines:
         row = ws.max_row + 1
         ws.append(
-            [
-                line.category, line.item_name, line.spec, line.unit,
-                float(line.quantity), float(line.rate), None, line.source.value,
-            ]
+            sanitize_row(
+                [
+                    line.category, line.item_name, line.spec, line.unit,
+                    float(line.quantity), float(line.rate), None, line.source.value,
+                ]
+            )
         )
         ws.cell(row=row, column=7, value=f"=E{row}*F{row}")
 
@@ -281,7 +288,7 @@ def export_billing_handoff(
         ("Total (GST-inclusive, 18% flat)", float(quotation.quotation_total)),
     ]
     for label, value in info_rows:
-        ws.append([label, value])
+        ws.append(sanitize_row([label, value]))
         ws.cell(row=ws.max_row, column=1).font = bold
     ws.column_dimensions["A"].width = 30
     ws.column_dimensions["B"].width = 40
@@ -299,7 +306,7 @@ def export_billing_handoff(
         project_sport = db.query(ProjectSport).filter(ProjectSport.id == option.project_sport_id).first()
         sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
 
-        ws.append([sport.name])
+        ws.append(sanitize_row([sport.name]))
         ws.cell(row=ws.max_row, column=1).font = Font(italic=True)
         header_row = ws.max_row + 1
         ws.append(["Milestone", "%", "Date"])
@@ -314,7 +321,7 @@ def export_billing_handoff(
             current_user=current_user,
         )
         for milestone in schedule_out.payment_schedule:
-            ws.append([milestone.name, milestone.percent, milestone.date.isoformat()])
+            ws.append(sanitize_row([milestone.name, milestone.percent, milestone.date.isoformat()]))
         ws.append([])
 
     return _xlsx_response(wb, f"{quotation.document_no}-billing-handoff.xlsx")

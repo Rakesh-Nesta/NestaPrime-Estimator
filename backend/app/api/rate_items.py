@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.settings import get_current_setting_value
 from app.core.auth import require_roles
+from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.document import CostSheet, CostSheetLine, CostSheetStatus
 from app.models.project import Project
@@ -628,12 +629,14 @@ def export_rate_items(
     xlsx_header_row(ws, _RATE_ITEM_XLSX_COLUMNS)
     for item in items:
         ws.append(
-            [
-                item.category, item.item_name, item.spec, item.unit, item.hsn_sac,
-                float(item.rate) if item.rate is not None else None,
-                item.vendor, item.city_of_quote, labour_category_key_by_id.get(item.labour_category_id),
-                item.is_commodity_watched, item.source.value, item.verified,
-            ]
+            sanitize_row(
+                [
+                    item.category, item.item_name, item.spec, item.unit, item.hsn_sac,
+                    float(item.rate) if item.rate is not None else None,
+                    item.vendor, item.city_of_quote, labour_category_key_by_id.get(item.labour_category_id),
+                    item.is_commodity_watched, item.source.value, item.verified,
+                ]
+            )
         )
     return xlsx_response(wb, "rate-sheet.xlsx")
 
