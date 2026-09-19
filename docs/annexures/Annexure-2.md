@@ -261,6 +261,17 @@ server-side at federation playing dimensions. **Nuance:** per-project override i
 confirmed; a separate Master Settings control letting the Director edit the *baseline*
 standard suggestion itself (as opposed to a project's override of it) wasn't found.
 
+**Correction, 19 September 2026 (re-checked against current code, not assumed from
+this entry's own older text):** that control already exists, and always has --
+`backend/app/api/sports.py`'s `SportUpdate`/`update_sport()` (Director-only) already
+accept and persist `playing_l_ft`/`playing_w_ft`/`build_l_ft`/`build_w_ft`, the actual
+baseline dimensions, via `PATCH /sports/{id}`; `SportsScopeAdmin.jsx`'s Sports tab
+already has editable fields for exactly this. `git log -S` traces it to `ff9e485`, the
+*original* Sports & Scope Admin build -- it predates this amendment's own 12 September
+review, which simply missed it (it lives on the Sports tab of Sports & Scope Admin, not
+literally inside the Master Settings screen, which is where the review looked). No gap,
+no code change needed. Amendment 9 is fully implemented.
+
 ### Amendment No. 10 — User Handbook (Guide for the Team)
 **Why (Director)**: "One of the most important things" — a handbook the team can learn
 from without calling the boss.
