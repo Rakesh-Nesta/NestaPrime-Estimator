@@ -11,6 +11,52 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-19 -- PRs #111-#113: Amendments 17-18 (export sanitization, login lockout)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `c56c927` -> `7025bfa` (PR #111 was the register entry + both approved
+specs, docs-only; #112 and #113 are the two independent implementation PRs, split per
+this session's usual practice since they touch unrelated files)
+**Backend only** -- one new Alembic migration (`b98a7f5bc39a`, adds
+`failed_login_attempts`/`locked_until` to `users`, auto-applied on container start). No
+frontend change, no new seed script.
+
+Both amendments were self-identified during a Director-requested proactive audit of the
+codebase against the register, rather than a Director-reported gap: Amendment 17 closes
+a real CSV/XLSX formula-injection hole across every Excel/CSV export (a value starting
+with `=`, `+`, `-`, or `@` now gets a leading apostrophe at export time, neutralizing it
+as a spreadsheet formula without touching stored data or the app's own live formulas);
+Amendment 18 adds a 5-attempt / 15-minute login lockout, persisted on the `User` row
+(not in-memory, since production runs 2 gunicorn workers) -- unknown emails never count
+toward any account's lockout, closing an email-guessing DoS angle.
+
+**Deploy went smoothly** -- `git pull` and `docker compose up -d --build backend`, no
+502 this time. Confirmed the migration actually applied (not just that it didn't error)
+by querying the `users` table schema directly (`\d users`) and `SELECT version_num FROM
+alembic_version` -- both new columns present, version at `b98a7f5bc39a`.
+
+**Live-verified both amendments end-to-end inside the production container**, not just
+via the migration/schema check: created (and reused the throwaway-verification-account
+pattern for) `verify-director@nestaprime.local`, which turned out not to already exist
+on production (a dev-only fixture until now) -- created it fresh, DIRECTOR role,
+deactivated again afterward. Amendment 17: posted a real Cost Sheet line with
+`category`/`item_name`/`spec` all crafted as formula-injection payloads
+(`=HYPERLINK(...)`, `+SUM(1+1)`, `@evil`), exported it, and confirmed all three came
+back prefixed with `'` in the real XLSX while the sheet's own live Amount formula
+(`=F2*G2`) was untouched. Amendment 18: 5 deliberate failed logins against the same
+account each returned 401, and critically a 6th attempt with the *correct* password
+also returned 401 -- the account was genuinely locked, not just rejecting bad guesses.
+
+**Known leftover:** a "Smoke Test Client (delete me)" / project / cost-sheet line from
+the Amendment 17 check remains in production data -- this app has no client-delete
+endpoint by design (audit-trailed rather than deletable), so it stays as a harmless,
+clearly-labeled artifact unless the Director wants it handled another way.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-19 -- PRs #107-#109: Section 22, Amendment 5's two remaining gaps
 
 **Run by:** R. Patni (with AI development assistance)
