@@ -603,6 +603,15 @@ instead of the sibling `BaseForm`'s correct pattern of gating directly on its ow
 whichever PM/Director hit it. Needs a Director-approved spec before implementation, per
 this register's own Change Process.
 
+**Implemented 19 September 2026 (PR #117, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** `onUse` now gates directly on `recStructureType`, matching
+`BaseForm`'s already-correct pattern; a new "type not recognised -- pick manually" note
+covers the case the old code silently mishandled; `useRecommendation()` also gained a
+defensive early return as a second layer. Verified via clean production build and no
+console errors on the live frontend after deploy -- the exact trigger condition isn't
+reachable through normal seeded data, so this is confirmed by direct code trace of the
+fix rather than a live repro. Amendment 19 is now fully closed.
+
 ### Amendment No. 20 — Purchase Order Receiving Overwrites Instead of Reconciling
 **Registered 19 September 2026 (self-identified during the same audit).**
 `backend/app/api/purchase_orders.py:287` (`receive_purchase_order`) does
@@ -618,6 +627,17 @@ function: `po.status` (lines 289-292) has `RECEIVED`/`PARTIALLY_RECEIVED` branch
 docstring ("status derives from the lines' own received_qty vs quantity"). Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Implemented 19 September 2026 (PR #118, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** `ReceiveLineIn` gained an optional `expected_received_qty`;
+a mismatch against the line's current value now returns `409` instead of overwriting,
+and `PurchaseOrdersPanel.jsx` sends what it last displayed and re-fetches on any receive
+error. The missing `else` branch was added so `po.status` reverts to `issued` when every
+line's `received_qty` is corrected back to 0. Live-verified end to end in production: a
+real PO's first receipt (200 units) succeeded; a second receipt still asserting the old
+value was rejected with `409` and the first receipt's 200 units were confirmed intact
+afterward; correcting back to 0 with the right expected value reverted status to
+`issued`. Amendment 20 is now fully closed.
+
 ### Amendment No. 21 — No Double-Submit Guard on Cost Sheet Take-Off Forms
 **Registered 19 September 2026 (self-identified during the same audit).**
 `frontend/src/CostSheetBuilder.jsx` contains 21 separate `async function submit` take-off
@@ -630,6 +650,15 @@ identical POSTs before the first resolves, silently duplicating a cost-sheet lin
 inflating `cost_total` -- a real risk on the screen this app's own pricing accuracy most
 depends on. Needs a Director-approved spec before implementation, per this register's own
 Change Process.
+
+**Implemented 19 September 2026 (PR #119, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** all 21 take-off forms gained a local `saving` state, set on
+submit and reset in a `finally`, with the submit button disabled while saving -- reusing
+this codebase's own existing pattern rather than a new abstraction. This branch shared
+`CostSheetBuilder.jsx` with PR #117 (Amendment 19); the rebase auto-merged cleanly and
+both fixes were confirmed present together before pushing. Verified via clean production
+build and no console errors on the live frontend after deploy. Amendment 21 is now fully
+closed.
 
 ## Register Notes (non-software, business-process)
 

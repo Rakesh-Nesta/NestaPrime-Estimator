@@ -11,6 +11,54 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-19 -- PRs #116-#119: Amendments 19-21 (structure form crash, PO receiving,
+double-submit guard)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `d317d48` -> `8af1dc7` (PR #116 was the three approved specs,
+docs-only; #117, #118, #119 are the three independent implementation PRs, each rebased
+onto `main` in turn as the ones before it merged -- #119 shares `CostSheetBuilder.jsx`
+with #117 and auto-merged cleanly, verified directly before pushing)
+**Backend + frontend** -- no new migration (Amendment 20 only added an optional Pydantic
+field, no schema change).
+
+All three amendments were self-identified during a second proactive gap audit against
+the register: Amendment 19 fixes a real crash (`TypeError: Cannot read properties of
+null`) in the Structure take-off form's "Use recommendation" button when the
+recommended type doesn't parse; Amendment 20 replaces Purchase Order receiving's
+unconditional overwrite with an optimistic-concurrency check (rejects a stale update
+with `409` instead of silently discarding a concurrent receipt) and fixes a related bug
+where `po.status` never reverted to `issued`; Amendment 21 adds a `saving`-state guard
+to all 21 Cost Sheet take-off forms so a double-click can't duplicate a line.
+
+**Deploy needed both a backend and frontend rebuild** this time (the previous 17-18
+deploy was backend-only) -- `git pull`, `docker compose up -d --build backend`, then
+the frontend export/copy sequence (`docker build --target export` -> `/var/www/
+nestaprime/dist/`). Backend logs confirmed clean (`Application startup complete` on
+both workers, no errors).
+
+**Live-verified Amendment 20 end-to-end** in production via the same
+`verify-director@nestaprime.local` pattern as the last deploy: raised and issued a real
+PO, received 200 units (succeeded, status -> `partially_received`), then attempted a
+second receipt still asserting the old `expected_received_qty=0` -- rejected with `409`,
+and the first receipt's 200 units were confirmed intact afterward (not overwritten).
+Correcting the line back to 0 with the correct `expected_received_qty=200` reverted
+`po.status` to `issued` as designed. Amendments 19 and 21 are frontend-only guards
+already verified via clean production build and no console errors on both the local dev
+server and the live production frontend (`http://65.1.234.78`) after deploy -- their
+exact trigger conditions (an unparseable recommendation; a double-click race) aren't
+easily reproducible through normal seeded data, so they're verified by direct code
+trace plus this regression check rather than a full interactive repro.
+
+**Known leftover:** a second "Smoke Test Client 2 (delete me)" / project / cost sheet /
+PO from the Amendment 20 check remains in production data, same reasoning as the
+previous deploy's leftover (no client-delete endpoint by design).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-19 -- PRs #111-#113: Amendments 17-18 (export sanitization, login lockout)
 
 **Run by:** R. Patni (with AI development assistance)
