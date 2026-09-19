@@ -660,6 +660,44 @@ both fixes were confirmed present together before pushing. Verified via clean pr
 build and no console errors on the live frontend after deploy. Amendment 21 is now fully
 closed.
 
+### Amendment No. 22 — Master Settings Override Values Are Never Validated
+**Registered 19 September 2026 (self-identified during a third Director-requested
+proactive gap audit against the register, spot-verified against the live code before
+recording).** `OverrideCreate` (`backend/app/api/settings.py:376-382`) accepts
+`setting_key: str` and `override_value: str` with no validation at all -- no check that
+`setting_key` matches any real Setting, no numeric/range constraint on `override_value`,
+confirmed by direct read of `create_override` (lines 398-416). The same gap exists one
+layer up at `SettingCreate` (lines 133-139): a Master Setting's own `value: str` is
+equally unvalidated at write time, unlike `bulk_update_settings` (lines 184-230), which
+at least wraps its arithmetic in `try/except ValueError` and skips non-numeric rows
+rather than persisting one. `_get_effective_setting_float`
+(`backend/app/api/documents.py:255-265`) does `float(override.override_value)` with no
+try/except, feeding directly into the Cost Sheet's core cost-build chain
+(`site_establishment_percent`, `company_overhead_percent`, `contingency_percent`,
+`documents.py:861-910`). A Director (or PM -- `OVERRIDE_ROLES = ("pm", "director")`)
+entering a typo'd override doesn't fail at write time; it fails later, as an unhandled
+`ValueError` -> 500, on every future computation of that document, since Overrides are
+write-once/most-recent-wins with nothing to clean one up. A numerically valid but
+out-of-range value (e.g. a `gst_rate_percent` override of `-100`) can also reach
+`pricing.py:324`'s `1 + gst_rate_percent / 100` divisor and produce a
+`ZeroDivisionError` instead of a rejected input. Needs a Director-approved spec before
+implementation, per this register's own Change Process.
+
+### Amendment No. 23 — Document/PO Number Generation Races Under Concurrent Creation
+**Registered 19 September 2026 (self-identified during the same audit).**
+`_generate_project_no` (`backend/app/api/projects.py:36-49`) and `_po_number`
+(`backend/app/api/purchase_orders.py:27-33`) both compute the next sequence number via
+a `SELECT`-then-compute-max-in-Python pattern, confirmed by direct read to have no row
+lock (`with_for_update`) and no database sequence -- the only protection is each
+column's `unique=True` constraint (`Project.project_no`, `PurchaseOrder.po_no`, both
+confirmed present). Two PMs creating a project (or two POs on the same project) at the
+same moment can both read the same existing-numbers set, both compute the identical
+next number, and the second commit dies with an unhandled `IntegrityError` -> 500,
+instead of a graceful retry or a real, distinct number. A narrow race window, but a
+genuine availability gap for concurrent daily use by multiple PMs/Procurement staff.
+Needs a Director-approved spec before implementation, per this register's own Change
+Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
