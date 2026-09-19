@@ -411,6 +411,7 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
   const recIsVendorQuoteOnly = recStructureType && ["e", "f"].includes(recStructureType.type);
 
   function useRecommendation() {
+    if (!recStructureType) return;
     setF((s) => ({
       ...s,
       structure_type: recStructureType.type,
@@ -463,8 +464,16 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
           label="E.4 recommends"
           text={`Type ${rec.structure_type}, ${rec.section}, height ${rec.height}`}
           why={rec.why}
-          onUse={!recIsVendorQuoteOnly ? useRecommendation : undefined}
-          note={recIsVendorQuoteOnly ? "vendor-quote type, not usable in this calculator" : !recSection ? "section not recognised -- pick manually" : undefined}
+          onUse={recStructureType && !recIsVendorQuoteOnly ? useRecommendation : undefined}
+          note={
+            !recStructureType
+              ? "type not recognised -- pick manually"
+              : recIsVendorQuoteOnly
+                ? "vendor-quote type, not usable in this calculator"
+                : !recSection
+                  ? "section not recognised -- pick manually"
+                  : undefined
+          }
         />
       )}
       <div className="grid grid-cols-3 gap-2">
