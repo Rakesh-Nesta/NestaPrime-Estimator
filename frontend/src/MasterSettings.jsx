@@ -716,6 +716,7 @@ const FIELD_LABELS = {
   number_of_courts: "Number of courts",
   site_access: "Site access",
   power_available: "Power available",
+  water_available: "Water available",
 };
 const FIELD_STATES = ["compulsory", "optional", "hidden"];
 

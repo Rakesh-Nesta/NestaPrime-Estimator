@@ -132,7 +132,10 @@ class Project(Base):
     power_available: Mapped[PowerAvailable | None] = mapped_column(
         Enum(PowerAvailable, name="power_available"), nullable=True
     )
-    water_available: Mapped[bool] = mapped_column(Boolean, nullable=False)  # #9
+    # Section 22: nullable, same reasoning as soil_type/site_access/
+    # power_available above -- Amendment 5 Phase 2 field-settings
+    # governance.
+    water_available: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # #9
 
     number_of_courts: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # #10
     unit_system: Mapped[UnitSystem] = mapped_column(  # #11

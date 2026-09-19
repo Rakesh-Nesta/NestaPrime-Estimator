@@ -16,16 +16,19 @@ class FieldSettingState(str, enum.Enum):
 
 
 class FieldSetting(Base):
-    """Amendment 5 Phase 2 (Section 6): "admin sets each field compulsory/
-    optional/hidden from Master Settings." Scoped this wave to New Project
-    Setup's own B.1 fields that Amendment 2 already made a one-time
-    hardcoded call about (soil type, distance, court count, site access,
-    power) -- see Section-6-phase2-specs.md for the field list and why
-    building_status/water_available/site_condition are deliberately left
-    out (building_status is one of Amendment 2's own "kept 5" required
-    fields; water_available is boolean and doesn't fit the None-option
-    model; site_condition was never named as a T&C candidate by Amendment
-    2 either).
+    """Amendment 5 Phase 2 (Section 6, extended by Section 22): "admin sets
+    each field compulsory/optional/hidden from Master Settings." Scoped to
+    New Project Setup's own B.1 fields that Amendment 2 already made a
+    one-time hardcoded call about (soil type, distance, court count, site
+    access, power, water) -- see Section-6-phase2-specs.md and
+    Section-22-specs.md for the field list and why building_status/
+    site_condition stay deliberately excluded (building_status is
+    nullable=False at the DB level and D.4 logic branches directly on it;
+    site_condition was never named as a T&C candidate by Amendment 2).
+    water_available joined the governed set in Section 22 -- originally
+    excluded only because a plain boolean checkbox had no dropdown to put
+    a real "None" on, now rendered as a Select like every other governed
+    field here.
 
     One row per governed field_key; a field with no row here defaults to
     COMPULSORY (today's actual behavior, unchanged until a Director
