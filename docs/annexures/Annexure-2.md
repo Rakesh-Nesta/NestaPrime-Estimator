@@ -216,6 +216,16 @@ Also surfaces, without resolving, a contradiction between an old unapproved draf
 (`Section-6-phase2-specs.md`) and the reasoning actually shipped in
 `field_setting.py`'s docstring. Spec: `docs/annexures/Section-22-specs.md`.
 
+**Implemented 19 September 2026 (PRs #108-109, shipped as two independent PRs per
+Director instruction, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** `water_available` joined `GOVERNED_FIELD_KEYS`, its Quick
+checkbox replaced by a Select matching `power_available`'s exact pattern (new
+migration made the column nullable); City/District wired into `SelectWithOther` on
+both Quick and Detailed mode, replacing the old inert "Other" placeholder. Both
+live-verified via the real `POST /projects` network payload before either PR was
+opened. Amendment 5 is now fully implemented -- all three original gaps (governance
+scope, Others rule, None-option precision) closed or corrected.
+
 ### Amendment No. 6 — User Rights Management + Reporting & Oversight
 6a: role-based permissions (what each role can see/do). 6b: admin reviews all quotations
 and daily activity. 6c: reports for daily / weekly / monthly / full-year / custom ranges.

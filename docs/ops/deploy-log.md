@@ -11,6 +11,44 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-19 -- PRs #107-#109: Section 22, Amendment 5's two remaining gaps
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `a64e4b0` -> `f0eeb62` (PR #107 was the Section 22 spec approval,
+docs-only; #108 and #109 are the two independent implementation PRs, shipped as
+separate PRs per Director instruction -- "approve, but split into two")
+**Backend + frontend** -- one new Alembic migration (`water_available` made nullable,
+auto-applied on container start).
+
+Closes Amendment 5's two remaining confirmed-real gaps: `water_available` joins
+field-settings governance (Amendment 2's own named pair with `power_available`, the
+Quick checkbox becomes a Select matching `power_available`'s exact existing pattern);
+City/District is wired into the `SelectWithOther` "Others" rule (its old trailing
+"Other" entry was fully inert -- selecting it submitted the literal string "Other" to
+the backend). Both live-verified before either PR was opened: water_available's real
+"None" option confirmed via the actual `POST /projects` payload; City's "Others…" text
+input confirmed the same way with a typed city name.
+
+**First deploy attempt looked like a failure but wasn't:** `curl .../health` returned
+`502 Bad Gateway` immediately after the backend rebuild. Diagnosed properly rather than
+re-running blindly or assuming the code was broken: `docker compose ps` showed the
+container genuinely running with no restarts; backend logs showed a clean startup with
+`Application startup complete` at `08:58:14`; the nginx error log showed the failed
+request hit the backend at `08:58:11` -- three seconds *before* the workers finished
+booting, a transient race between gunicorn's master accepting connections and the
+workers actually being ready, not a crash. Re-running the health check after workers
+had time to finish booting confirmed `{"status":"ok"}`. Full backend suite (1151
+passed) had already confirmed the code itself was sound before this deploy even
+started, which is what justified treating the 502 as a timing issue worth
+re-checking rather than a real regression to roll back.
+
+**Smoke test:** `curl http://65.1.234.78/api/health` -> `{"status":"ok"}` (second
+attempt, after the startup-race window passed). Full git-pull/docker-build/
+frontend-export transcript plus the diagnostic logs above reviewed before logging this
+entry as confirmed.
+
+---
+
 ## 2026-09-19 -- PR #105: Section 21, Quick mode routes through Sport Selection
 
 **Run by:** R. Patni (with AI development assistance)
