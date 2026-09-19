@@ -356,7 +356,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         />
         {quickSport && (
           <p className="text-xs text-text-secondary -mt-3">
-            Dimensions: standard build {quickSport.build_dims} ft (customizable once Amendment 9 ships)
+            Dimensions: standard build {quickSport.build_dims} ft (customize on the next screen)
           </p>
         )}
 
