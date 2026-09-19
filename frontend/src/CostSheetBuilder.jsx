@@ -389,6 +389,7 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [nettingGrades, setNettingGrades] = useState([]);
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const isRound = ROUND_SECTIONS.has(f.section);
   const usesNettingEnvelope = NETTING_ENVELOPE_TYPES.has(f.structure_type);
@@ -422,6 +423,7 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -449,6 +451,8 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -520,7 +524,7 @@ function StructureForm({ token, costSheetId, projectSports, sportsById, onAdded 
         <CheckboxField label="Tall variant" checked={f.tall_variant} onChange={set("tall_variant")} />
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -539,6 +543,7 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const isRcc = f.base_type === "rcc";
 
@@ -557,6 +562,7 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -574,6 +580,8 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -607,7 +615,7 @@ function BaseForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         </div>
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -630,10 +638,12 @@ function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -654,6 +664,8 @@ function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -708,7 +720,7 @@ function SitePrepForm({ token, costSheetId, projectSports, sportsById, onAdded }
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -728,10 +740,12 @@ function DrainageForm({ token, costSheetId, projectSports, sportsById, onAdded }
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -752,6 +766,8 @@ function DrainageForm({ token, costSheetId, projectSports, sportsById, onAdded }
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -777,7 +793,7 @@ function DrainageForm({ token, costSheetId, projectSports, sportsById, onAdded }
         <Field label="Sub-surface pipe Rs/m"><NumberInput value={f.subsurface_pipe_rate_per_m} onChange={set("subsurface_pipe_rate_per_m")} required /></Field>
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -799,6 +815,7 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
@@ -811,6 +828,7 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -832,6 +850,8 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -869,7 +889,7 @@ function TurfForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Line-marking Rs/set"><NumberInput value={f.line_marking_rate_per_set} onChange={set("line_marking_rate_per_set")} /></Field>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -890,10 +910,12 @@ function WoodenFlooringForm({ token, costSheetId, projectSports, sportsById, onA
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -913,6 +935,8 @@ function WoodenFlooringForm({ token, costSheetId, projectSports, sportsById, onA
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -942,7 +966,7 @@ function WoodenFlooringForm({ token, costSheetId, projectSports, sportsById, onA
       <p className="text-[11px] text-text-secondary">Base (PCC/RCC/compacted stone) below this is the separate Base (D.1) tab.</p>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -960,10 +984,12 @@ function AcrylicPuForm({ token, costSheetId, projectSports, sportsById, onAdded 
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -979,6 +1005,8 @@ function AcrylicPuForm({ token, costSheetId, projectSports, sportsById, onAdded 
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1006,7 +1034,7 @@ function AcrylicPuForm({ token, costSheetId, projectSports, sportsById, onAdded 
       <p className="text-[11px] text-text-secondary">Sub-base (asphalt/WBM/PCC) below this is the separate Base (D.1) tab.</p>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1023,6 +1051,7 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
   const [sets, setSets] = useState([{ sport_label: "", style: "painted", rate_per_set: "" }]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function addSet() {
     if (sets.length >= 4) return; // F.6: "Multipurpose: up to 4"
@@ -1037,6 +1066,7 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1048,6 +1078,8 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1091,7 +1123,7 @@ function LineMarkingForm({ token, costSheetId, projectSports, sportsById, onAdde
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1112,6 +1144,7 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   const selectedProjectSport = projectSports.find((ps) => ps.id === f.project_sport_id);
@@ -1131,6 +1164,7 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1157,6 +1191,8 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1202,7 +1238,7 @@ function LightingForm({ token, costSheetId, projectSports, sportsById, onAdded }
         <Field label="Hours/day" hint="informational only"><NumberInput value={f.hours_per_day} onChange={set("hours_per_day")} /></Field>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1222,10 +1258,12 @@ function HvacForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1246,6 +1284,8 @@ function HvacForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1273,7 +1313,7 @@ function HvacForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
         <Field label="Acoustic panel Rs/sqm"><NumberInput value={f.acoustic_panel_rate_per_sqm} onChange={set("acoustic_panel_rate_per_sqm")} /></Field>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1292,6 +1332,7 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [catalogItems, setCatalogItems] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   const selectedProjectSport = projectSports.find((ps) => ps.id === projectSportId);
   const sport = selectedProjectSport ? sportsById[selectedProjectSport.sport_id] : null;
@@ -1318,6 +1359,7 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1342,6 +1384,8 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1407,7 +1451,7 @@ function AccessoriesForm({ token, costSheetId, projectSports, sportsById, onAdde
       {error && <p className="text-sm text-red-400">{error}</p>}
       <button
         type="submit"
-        disabled={!projectSportId}
+        disabled={saving || (!projectSportId)}
         className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
       >
         Compute &amp; add to Cost Sheet
@@ -1429,6 +1473,7 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
   const [fieldEvents, setFieldEvents] = useState([]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   function addFieldEvent() {
@@ -1443,6 +1488,7 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1463,6 +1509,8 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1507,7 +1555,7 @@ function AthleticsForm({ token, costSheetId, projectSports, sportsById, onAdded 
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1531,6 +1579,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
   const [items, setItems] = useState([emptyPlayEquipmentItem()]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function addItem() {
     setItems((rows) => [...rows, emptyPlayEquipmentItem()]);
@@ -1544,6 +1593,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1564,6 +1614,8 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1609,7 +1661,7 @@ function PlayEquipmentForm({ token, costSheetId, projectSports, sportsById, onAd
       </button>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1629,6 +1681,7 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
   const [electricalPointRate, setElectricalPointRate] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function addZone() {
     setZones((rows) => [...rows, { zone_name: "", area_sqft: "", flooring_rate_per_sqft: "" }]);
@@ -1652,6 +1705,7 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -1681,6 +1735,8 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1759,7 +1815,7 @@ function GymForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -1833,6 +1889,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function makeListHandlers(setList) {
     return {
@@ -1847,6 +1904,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const shellPayload = {
@@ -1914,6 +1972,8 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2066,7 +2126,7 @@ function PoolForm({ token, costSheetId, projectSports, sportsById, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2085,10 +2145,12 @@ function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdd
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -2106,6 +2168,8 @@ function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdd
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2139,7 +2203,7 @@ function NaturalGrassForm({ token, costSheetId, projectSports, sportsById, onAdd
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2153,10 +2217,12 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -2171,6 +2237,8 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2190,7 +2258,7 @@ function HockeyIrrigationForm({ token, costSheetId, projectSports, sportsById, o
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2210,6 +2278,7 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [vehicleClasses, setVehicleClasses] = useState([]);
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const usesVehicleClass = f.vehicle_class_id !== "";
 
@@ -2229,6 +2298,7 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -2245,6 +2315,8 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2296,7 +2368,7 @@ function FreightCraneForm({ token, costSheetId, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2312,10 +2384,12 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
   const [f, setF] = useState({ car_policy_premium: "", workmens_comp_premium: "" });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -2327,6 +2401,8 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2344,7 +2420,7 @@ function DesignApprovalsForm({ token, costSheetId, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       <BreakdownPanel result={result} />
@@ -2362,10 +2438,12 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
   });
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -2380,6 +2458,8 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2409,7 +2489,7 @@ function TenderOverheadsForm({ token, costSheetId, onAdded }) {
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Compute &amp; add to Cost Sheet
       </button>
       {result?.bg_contract_months != null && (
@@ -2432,10 +2512,12 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
     quantity: "", rate: "", labour_category_id: "",
   });
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
   async function submit(e) {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       await addCostSheetLine(token, costSheetId, {
@@ -2453,6 +2535,8 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
       await onAdded();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -2489,7 +2573,7 @@ function ManualLineForm({ token, costSheetId, projectSports, sportsById, labourC
         />
       </Field>
       {error && <p className="text-sm text-red-400">{error}</p>}
-      <button type="submit" className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
+      <button type="submit" disabled={saving} className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover">
         Add line
       </button>
     </form>
