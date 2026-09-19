@@ -81,10 +81,13 @@ mode); nothing about client/sport/city/base-scope entry changes.
 ## Approval
 
 Amendment 2 continuation (Quick mode routes through Sport Selection instead of
-skipping it; stale copy fixed): ☐ Pending Director approval.
+skipping it; stale copy fixed): ☑ Approved — "approve as proposed, both decisions"
+(19 September 2026)
 
-Decision 1 (route through Sport Selection, not a literal 5th field): ☐ Pending.
-Decision 2 (replacement copy wording): ☐ Pending.
+Decision 1 (route through Sport Selection, not a literal 5th field): ☑ Resolved as
+proposed.
+Decision 2 (replacement copy wording, "customize on the next screen"): ☑ Resolved as
+proposed.
 
 Director Name: ______________________ Signature: ______________________ Date: ____________
 
