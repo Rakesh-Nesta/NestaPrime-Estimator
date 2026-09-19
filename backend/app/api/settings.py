@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
+from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.setting import DocumentType, Override, Setting, SettingScope
 from app.models.user import User
@@ -253,7 +254,11 @@ def export_settings(
     ws.title = "Master Settings"
     xlsx_header_row(ws, _XLSX_COLUMNS)
     for row in _current_settings(db):
-        ws.append([row.key, row.scope.value, row.scope_value, row.value, row.unit, row.effective_from.isoformat(), row.reason])
+        ws.append(
+            sanitize_row(
+                [row.key, row.scope.value, row.scope_value, row.value, row.unit, row.effective_from.isoformat(), row.reason]
+            )
+        )
     return xlsx_response(wb, "master-settings.xlsx")
 
 

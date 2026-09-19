@@ -12,6 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
+from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.document import Estimate, EstimateOption, EstimateOptionClientStatus, Quotation, QuotationLine
 from app.models.report import Report, ReportStatus, ReportType
@@ -393,22 +394,22 @@ def _pipeline_to_xlsx(wb: Workbook, content: dict) -> None:
     ws2 = wb.create_sheet("Rejected by reason")
     _header_row(ws2, ["Reason", "Count"])
     for reason, count in est.get("rejected_by_reason", {}).items():
-        ws2.append([reason, count])
+        ws2.append(sanitize_row([reason, count]))
 
     ws3 = wb.create_sheet("Quotations by sport")
     _header_row(ws3, ["Sport", "Count", "Total amount"])
     for sport, row in quo.get("by_sport", {}).items():
-        ws3.append([sport, row.get("count", 0), row.get("total_amount", 0)])
+        ws3.append(sanitize_row([sport, row.get("count", 0), row.get("total_amount", 0)]))
 
     ws4 = wb.create_sheet("Quotations by status")
     _header_row(ws4, ["Status", "Count"])
     for status, count in quo.get("by_status", {}).items():
-        ws4.append([status, count])
+        ws4.append(sanitize_row([status, count]))
 
     ws5 = wb.create_sheet("Quotations by released by")
     _header_row(ws5, ["Released by", "Count", "Total amount"])
     for user_name, row in quo.get("by_released_by", {}).items():
-        ws5.append([user_name, row.get("count", 0), row.get("total_amount", 0)])
+        ws5.append(sanitize_row([user_name, row.get("count", 0), row.get("total_amount", 0)]))
 
 
 def _margin_to_xlsx(wb: Workbook, content: dict) -> None:
@@ -423,12 +424,14 @@ def _margin_to_xlsx(wb: Workbook, content: dict) -> None:
     )
     for q in content.get("quotations", []):
         ws.append(
-            [
-                q.get("document_no"), q.get("project_id"), q.get("cost_total"), q.get("selling_price_ex_gst"),
-                q.get("discount_amount"), q.get("selling_after_discount"), q.get("margin_percent"),
-                q.get("floor_margin_percent"), q.get("below_floor"), q.get("cost_basis_unverified"),
-                q.get("released_at"), q.get("released_by"),
-            ]
+            sanitize_row(
+                [
+                    q.get("document_no"), q.get("project_id"), q.get("cost_total"), q.get("selling_price_ex_gst"),
+                    q.get("discount_amount"), q.get("selling_after_discount"), q.get("margin_percent"),
+                    q.get("floor_margin_percent"), q.get("below_floor"), q.get("cost_basis_unverified"),
+                    q.get("released_at"), q.get("released_by"),
+                ]
+            )
         )
 
     summary = content.get("summary", {})
@@ -449,10 +452,12 @@ def _override_summary_to_xlsx(wb: Workbook, content: dict) -> None:
     _header_row(ws, ["Setting key", "Override count", "Most common value", "Document types"])
     for row in content.get("rows", []):
         ws.append(
-            [
-                row.get("setting_key"), row.get("override_count"), row.get("most_common_override_value"),
-                ", ".join(row.get("document_types", [])),
-            ]
+            sanitize_row(
+                [
+                    row.get("setting_key"), row.get("override_count"), row.get("most_common_override_value"),
+                    ", ".join(row.get("document_types", [])),
+                ]
+            )
         )
 
     ws2 = wb.create_sheet("Summary")

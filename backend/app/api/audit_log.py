@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_roles
+from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.audit_log import AuditLogEntry
 
@@ -111,7 +112,9 @@ def export_audit_log(
     )
     for e in entries:
         writer.writerow(
-            [e.timestamp.isoformat(), e.user_id, e.role, e.document_type, e.document_id, e.field, e.old_value, e.new_value, e.reason, e.ip]
+            sanitize_row(
+                [e.timestamp.isoformat(), e.user_id, e.role, e.document_type, e.document_id, e.field, e.old_value, e.new_value, e.reason, e.ip]
+            )
         )
 
     return StreamingResponse(

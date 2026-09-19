@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.documents import _effective_quotation_status
 from app.api.reports import _sports_for_quotation
 from app.core.auth import require_roles
+from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.client import Client
 from app.models.document import Quotation, QuotationStatus
@@ -171,14 +172,16 @@ def export_all_quotations(
         client = db.query(Client).filter(Client.id == project.client_id).first()
         summary = _to_summary(db, q, project, client)
         writer.writerow(
-            [
-                summary.document_no, summary.status.value, summary.project_no, summary.client_name,
-                "; ".join(summary.sports), summary.cost_total, summary.selling_after_discount,
-                summary.quotation_total, summary.margin_percent, summary.below_floor,
-                summary.created_at.isoformat(),
-                summary.released_at.isoformat() if summary.released_at else "",
-                summary.sent_at.isoformat() if summary.sent_at else "",
-            ]
+            sanitize_row(
+                [
+                    summary.document_no, summary.status.value, summary.project_no, summary.client_name,
+                    "; ".join(summary.sports), summary.cost_total, summary.selling_after_discount,
+                    summary.quotation_total, summary.margin_percent, summary.below_floor,
+                    summary.created_at.isoformat(),
+                    summary.released_at.isoformat() if summary.released_at else "",
+                    summary.sent_at.isoformat() if summary.sent_at else "",
+                ]
+            )
         )
 
     return StreamingResponse(
