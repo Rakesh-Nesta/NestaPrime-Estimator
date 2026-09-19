@@ -587,6 +587,50 @@ deliberate failed logins against a real account each returned 401, and criticall
 attempt with the *correct* password also returned 401 -- the account was genuinely
 locked, not just rejecting bad guesses. Amendment 18 is now fully closed.
 
+### Amendment No. 19 — Structure Form Crash on an Unrecognized Recommendation
+**Registered 19 September 2026 (self-identified during a second Director-requested
+proactive gap audit, spot-verified against the live code before recording).**
+`frontend/src/CostSheetBuilder.jsx`'s Structure take-off form derives
+`recStructureType = rec && mapStructureType(rec.structure_type)`, which is `null`
+whenever E.4's recommended structure type doesn't match the parser. The "Use
+recommendation" button's enabled condition checks `!recIsVendorQuoteOnly` (line 462),
+and `recIsVendorQuoteOnly = recStructureType && [...]` is itself `null` (falsy) in that
+same case -- so `!null` evaluates `true` and the button renders active with no warning,
+instead of the sibling `BaseForm`'s correct pattern of gating directly on its own
+`recBaseType`. Clicking it runs `useRecommendation()` (lines 412-420), which reads
+`recStructureType.type` on a `null` value -- confirmed by direct read to throw
+`TypeError: Cannot read properties of null (reading 'type')`, crashing the form for
+whichever PM/Director hit it. Needs a Director-approved spec before implementation, per
+this register's own Change Process.
+
+### Amendment No. 20 — Purchase Order Receiving Overwrites Instead of Reconciling
+**Registered 19 September 2026 (self-identified during the same audit).**
+`backend/app/api/purchase_orders.py:287` (`receive_purchase_order`) does
+`line.received_qty = update.received_qty` -- confirmed by direct read to be a plain
+overwrite, not additive, with no row lock or version check. Two staff independently
+recording separate partial deliveries close together (e.g. from separate paper delivery
+notes) can have the second commit silently clobber the first's recorded receipt, with no
+conflict signal to either party -- a real lost-update risk on inventory data the
+Consumption Sheet and BOM both depend on. A related, smaller correctness gap in the same
+function: `po.status` (lines 289-292) has `RECEIVED`/`PARTIALLY_RECEIVED` branches but no
+`else`, so correcting a line's `received_qty` back down to 0 leaves `status` stuck at
+`PARTIALLY_RECEIVED` instead of reverting to `ISSUED`, contradicting the function's own
+docstring ("status derives from the lines' own received_qty vs quantity"). Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
+### Amendment No. 21 — No Double-Submit Guard on Cost Sheet Take-Off Forms
+**Registered 19 September 2026 (self-identified during the same audit).**
+`frontend/src/CostSheetBuilder.jsx` contains 21 separate `async function submit` take-off
+handlers (Structure, Manual Line, Flooring, Lighting, HVAC, Athletics, and every other
+per-category form) -- confirmed by direct grep that none of them track a `submitting`
+flag or disable their submit button during the `await`, unlike this app's own established
+pattern elsewhere (`AttachmentsPanel.jsx`, `RateSheet.jsx`, `ProjectSetup.jsx` all guard
+against this). A double-click on any "Compute & add to Cost Sheet" button fires two
+identical POSTs before the first resolves, silently duplicating a cost-sheet line and
+inflating `cost_total` -- a real risk on the screen this app's own pricing accuracy most
+depends on. Needs a Director-approved spec before implementation, per this register's own
+Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
