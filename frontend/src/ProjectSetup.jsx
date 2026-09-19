@@ -10,6 +10,7 @@ import {
   listRegionalMultipliers,
   listSports,
 } from "./api";
+import SelectWithOther from "./SelectWithOther";
 
 const PROJECT_TYPES = [
   ["new_build", "New Build"],
@@ -28,9 +29,12 @@ const CLIENT_TYPES = [
   ["individual", "Individual"],
 ];
 
+// Section 22: no trailing "Other" entry -- SelectWithOther supplies its own
+// "Others…" option and reveals a real text input, replacing the old inert
+// literal-string "Other" value that meant nothing to the backend.
 const CITIES = [
   "Mumbai", "Delhi NCR", "Bengaluru", "Hyderabad", "Chennai",
-  "Pune", "Kolkata", "Ahmedabad", "Jaipur", "Lucknow", "Other",
+  "Pune", "Kolkata", "Ahmedabad", "Jaipur", "Lucknow",
 ];
 
 const SITE_CONDITIONS = [["level", "Level"], ["sloped", "Sloped"], ["water_logged", "Water-logged"]];
@@ -364,7 +368,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
           </p>
         )}
 
-        <Select label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES.map((c) => [c, c])} />
+        <SelectWithOther label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES} required />
         {cityInfo && !cityInfo.is_confirmed && (
           <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
             Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
@@ -472,7 +476,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
       <fieldset className="space-y-3 border-t pt-4">
         <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Site</legend>
-        <Select label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES.map((c) => [c, c])} />
+        <SelectWithOther label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES} required />
         {cityInfo && !cityInfo.is_confirmed && (
           <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
             Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
