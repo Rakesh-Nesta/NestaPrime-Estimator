@@ -255,6 +255,13 @@ def cancel_purchase_order(
 class ReceiveLineIn(BaseModel):
     line_id: uuid.UUID
     received_qty: float = Field(ge=0)
+    # Amendment 20: optimistic concurrency -- when supplied, the caller is
+    # asserting this was the line's received_qty as of when they last
+    # loaded it. A mismatch means someone else recorded a receipt in the
+    # meantime; reject with 409 rather than silently overwriting it.
+    # Optional so a caller with no prior read (e.g. a script) can still
+    # unconditionally set the value, same as before this amendment.
+    expected_received_qty: float | None = None
 
 
 class ReceivePayload(BaseModel):
@@ -284,12 +291,38 @@ def receive_purchase_order(
             raise HTTPException(
                 status_code=422, detail=f"Received qty for '{line.item_name}' exceeds the ordered quantity"
             )
-        line.received_qty = update.received_qty
+        # Amendment 20: optimistic concurrency -- reject rather than
+        # silently overwrite if someone else recorded a receipt against
+        # this line since the caller last read it. Nothing has been
+        # written yet at this point (writes only happen after every line
+        # in this payload passes both checks, and nothing commits until
+        # the end of this function), so a 409 here leaves every line
+        # exactly as it was.
+        if (
+            update.expected_received_qty is not None
+            and update.expected_received_qty != float(line.received_qty)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"'{line.item_name}' was received against since you last loaded this PO -- "
+                    f"current received_qty is {float(line.received_qty)}, not "
+                    f"{update.expected_received_qty}. Reload and re-enter this receipt."
+                ),
+            )
+
+    for update in payload.lines:
+        lines_by_id[update.line_id].received_qty = update.received_qty
 
     if all(float(line.received_qty) >= float(line.quantity) for line in lines):
         po.status = PurchaseOrderStatus.RECEIVED
     elif any(float(line.received_qty) > 0 for line in lines):
         po.status = PurchaseOrderStatus.PARTIALLY_RECEIVED
+    else:
+        # Amendment 20: a correction back to 0 across every line must
+        # revert status too -- previously this branch didn't exist, so
+        # status stayed stuck at Partially received.
+        po.status = PurchaseOrderStatus.ISSUED
 
     db.commit()
     db.refresh(po)

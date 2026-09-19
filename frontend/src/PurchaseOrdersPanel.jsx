@@ -138,12 +138,23 @@ export default function PurchaseOrdersPanel({ token, costSheetId, consumptionRow
     setError("");
     const qty = Number(receiveInputs[lineId]);
     if (Number.isNaN(qty)) return;
+    // Amendment 20: assert what this screen currently shows as the
+    // received qty, so the backend can reject (409) instead of silently
+    // overwriting if someone else recorded a receipt in the meantime.
+    const po = purchaseOrders.find((p) => p.id === poId);
+    const line = po?.lines.find((l) => l.id === lineId);
     try {
-      await receivePurchaseOrder(token, poId, { lines: [{ line_id: lineId, received_qty: qty }] });
+      await receivePurchaseOrder(token, poId, {
+        lines: [{ line_id: lineId, received_qty: qty, expected_received_qty: line?.received_qty ?? null }],
+      });
       setReceiveInputs((r) => ({ ...r, [lineId]: "" }));
       await refresh();
     } catch (err) {
       setError(err.message);
+      // A 409 means this screen's numbers are stale -- re-fetch so the
+      // real current received_qty is what the user retries against,
+      // whatever the failure reason turned out to be.
+      await refresh();
     }
   }
 
