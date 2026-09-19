@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -49,3 +49,11 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
+    # Amendment 18 (Section 24): login lockout. failed_login_attempts
+    # resets to 0 on any successful login; once it reaches the threshold
+    # (auth.py's own constant), locked_until is set and the counter
+    # resets. Persisted on the User row rather than kept in worker
+    # memory -- production runs 2 gunicorn workers, and in-memory state
+    # wouldn't be visible to both.
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, default=None, nullable=True)
