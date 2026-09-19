@@ -68,6 +68,20 @@ field settings rather than moved to T&C text. **Gap:** Quick mode asks only 4 fi
 5 — Dimensions is shown as read-only informational text, not something the user actually
 enters in Quick mode.
 
+**Verified 19 September 2026 (re-checked against current code, not assumed from this
+entry's own older text):** still a real gap, confirmed unchanged since PR #23 --
+`ProjectSetup.jsx`'s Quick form still shows Dimensions as plain text with no `onChange`,
+and `handleQuickSubmit` still hardcodes every dimension-adjacent field. The real cause
+isn't a missing form field, though: dimensions live on `ProjectSport`, set via
+`SportSelection.jsx`'s `CourtSize`, for *both* modes -- Detailed mode's own form has no
+literal "Dimensions" field either. Detailed mode routes through Sport Selection after
+creation (`App.jsx`'s `onProjectCreated` → `screen="sports"`); Quick mode instead skips
+straight to Scope (`onQuickSetupComplete` → `screen="scope"`), so the one screen where
+dimension entry genuinely happens is reachable in Detailed mode and skipped in Quick
+mode. Quick mode's own copy is also stale: "(customizable once Amendment 9 ships)" --
+Amendment 9 shipped the same day that text was written. Spec for closing this:
+`docs/annexures/Section-21-specs.md`.
+
 ### Amendment No. 3 — "Complete Your Facility" Cross-Sell at Estimate Step
 At the Estimate step, suggest 4–5 sport-matched add-ons (lighting, fencing, seating, AMC)
 with prices and own margins; one-tap add; never forced.
