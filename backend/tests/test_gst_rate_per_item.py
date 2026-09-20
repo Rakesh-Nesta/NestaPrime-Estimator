@@ -170,3 +170,62 @@ def test_sport_with_no_cost_sheet_lines_still_uses_flat_global_rate(client, dire
     option = res.json()["options"][0]
     assert round(option["price_low"], 2) == 1121000.00
     assert round(option["price_high"], 2) == 1239000.00
+
+
+# ---------------------------------------------------------------------------
+# Amendment 24 (Section 30): the Quotation PDF and Billing Handoff export
+# must show the *actual* blended rate, not a hardcoded "18% flat" label.
+# ---------------------------------------------------------------------------
+
+
+def test_quotation_pdf_and_billing_handoff_show_the_real_blended_gst_rate(client, director_user):
+    import io
+
+    from pypdf import PdfReader
+    from openpyxl import load_workbook
+
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _cost_sheet_with_mixed_gst_lines(client, headers, project_id, project_sport_id)
+
+    estimate = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},
+        headers=headers,
+    ).json()
+    option_id = estimate["options"][0]["id"]
+    client.patch(
+        f"/estimates/{estimate['id']}/options/{option_id}/client-status",
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    quotation = client.post(
+        f"/projects/{project_id}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [option_id]},
+        headers=headers,
+    ).json()
+    client.post(f"/quotations/{quotation['id']}/release", headers=headers)
+    client.post(f"/quotations/{quotation['id']}/send", headers=headers)
+
+    pdf_res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert pdf_res.status_code == 200, pdf_res.text
+    reader = PdfReader(io.BytesIO(pdf_res.content))
+    text = "\n".join(page.extract_text() for page in reader.pages)
+    assert "GST @ 11.5%" in text
+    assert "GST @ 18" not in text  # the old hardcoded label must be gone
+
+    won = client.post(
+        f"/quotations/{quotation['id']}/mark-won",
+        json={"reason": "Client accepted", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert won.status_code == 200, won.text
+
+    handoff_res = client.get(f"/quotations/{quotation['id']}/exports/billing-handoff", headers=headers)
+    assert handoff_res.status_code == 200, handoff_res.text
+    ws = load_workbook(io.BytesIO(handoff_res.content)).active
+    labels = [ws.cell(row=r, column=1).value for r in range(1, ws.max_row + 1)]
+    assert "Total (GST-inclusive, 11.5%)" in labels
+    assert not any(label and "18%" in str(label) for label in labels)
