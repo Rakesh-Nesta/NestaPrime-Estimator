@@ -728,6 +728,42 @@ exhausting its attempts. Live-verified in production: two projects created back 
 both succeeded with distinct, correctly sequential numbers -- the normal path is
 unaffected. Amendment 23 is now fully closed.
 
+### Amendment No. 24 — Quotation PDF and Billing Handoff Hardcode a False "18% Flat" GST Label
+**Registered 20 September 2026 (self-identified during a fourth Director-requested
+proactive gap audit against the register, spot-verified against the live code before
+recording).** `backend/app/api/pdf_documents.py:841` prints the literal string
+`"GST @ 18% (flat)"` next to the real, computed GST amount
+(`format_inr(gst_amount)`); `backend/app/api/exports.py:288`'s Billing Handoff export
+carries the identical hardcoded claim in its own row label
+(`"Total (GST-inclusive, 18% flat)"`). Both are confirmed by direct read to be plain
+string literals, not derived from the rate actually used. That rate is Director-
+configurable (`get_gst_rate_percent`, `backend/app/api/settings.py`) and, per Note R1's
+own shipped work, blends in a 5% rate for HSN-9506 sports-equipment lines when a Cost
+Sheet mixes equipment with 18%-rated civil/flooring work
+(`cost_weighted_gst_rate_percent`, `backend/app/api/pricing.py:256-274`). Whenever the
+effective rate isn't literally a flat 18% -- a changed Master Setting, or any project
+mixing equipment and civil-work lines, exactly the scenario Note R1 built -- the
+client-facing Quotation PDF and the internal Billing Handoff both print a false rate
+label next to a correctly-computed but differently-derived amount. Tax-compliance-
+adjacent and reaches the client directly. Needs a Director-approved spec before
+implementation, per this register's own Change Process.
+
+### Amendment No. 25 — Rate Sheet Excel Import Silently Discards Non-Rate Field Edits
+**Registered 20 September 2026 (self-identified during the same audit).**
+`backend/app/api/rate_items.py:772-795` (`import_rate_items`): the `if rate is not None
+and rate != previous_rate:` branch is confirmed by direct read to be the *only* place
+that applies `unit`/`hsn_sac`/`vendor`/`city_of_quote`/`labour_category_id`/
+`is_commodity_watched` changes from an imported row -- the `else` branch (line 795)
+just increments `unchanged` and applies none of those fields, even when they genuinely
+differ from the file. The function's own docstring (lines 670-696) states "other
+changed fields ... are applied directly, same as PATCH .../{id}", which is only true
+when the rate also changed. A PM/Director bulk-correcting vendor names, HSN/SAC codes,
+or the commodity-watch flag via Excel -- with rates left untouched, a plausible and
+likely common editing pattern -- has every one of those edits silently dropped, and the
+import result reports the row as "unchanged," giving false confidence the import
+succeeded. A real data-loss risk on a documented bulk-edit workflow. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
