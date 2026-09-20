@@ -770,7 +770,28 @@ def import_rate_items(
             continue
 
         previous_rate = float(existing.rate) if existing.rate is not None else None
-        if rate is not None and rate != previous_rate:
+        # Amendment 25: "did the rate change" (governs RateHistory
+        # versioning) and "did anything about this row change" (governs
+        # whether to apply the edit and count it as updated) are separate
+        # questions -- a blank Rate cell is an explicit, documented "leave
+        # the rate untouched" signal (see the rate parsing above), so
+        # bulk-editing only the non-rate columns with Rate left blank is
+        # an expected usage pattern, not an edge case.
+        rate_changed = rate is not None and rate != previous_rate
+        fields_changed = (
+            rate_changed
+            or existing.unit != unit
+            or existing.hsn_sac != hsn_sac
+            or existing.vendor != vendor
+            or existing.city_of_quote != city_of_quote
+            or existing.labour_category_id != labour_category_id
+            or existing.is_commodity_watched != is_commodity_watched
+        )
+        if not fields_changed:
+            unchanged += 1
+            continue
+
+        if rate_changed:
             open_row = (
                 db.query(RateHistory)
                 .filter(RateHistory.rate_item_id == existing.id, RateHistory.effective_to.is_(None))
@@ -784,15 +805,14 @@ def import_rate_items(
                 rate_item_id=existing.id, rate=rate, effective_from=date.today(), effective_to=None,
                 changed_by_id=current_user.id, reason=_RATE_ITEM_IMPORT_DEFAULT_REASON,
             ))
-            existing.unit = unit
-            existing.hsn_sac = hsn_sac
-            existing.vendor = vendor
-            existing.city_of_quote = city_of_quote
-            existing.labour_category_id = labour_category_id
-            existing.is_commodity_watched = is_commodity_watched
-            updated.append(existing)
-        else:
-            unchanged += 1
+
+        existing.unit = unit
+        existing.hsn_sac = hsn_sac
+        existing.vendor = vendor
+        existing.city_of_quote = city_of_quote
+        existing.labour_category_id = labour_category_id
+        existing.is_commodity_watched = is_commodity_watched
+        updated.append(existing)
 
     db.commit()
     for item in created + updated:
