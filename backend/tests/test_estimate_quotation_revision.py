@@ -406,3 +406,135 @@ def test_revising_a_sent_quotation_writes_an_audit_log_entry(client, director_us
     ).json()
     entry = next(e for e in entries if e["field"] == "status" and e["new_value"] == "superseded")
     assert "Major revision created" in entry["reason"]
+
+
+# ---------------------------------------------------------------------------
+# Amendment 26: fresh Estimate/Quotation creation on a project that already
+# has a concluded (Won/Lost) document chain must not collide on document_no.
+# ---------------------------------------------------------------------------
+
+
+def _lost_quotation(client, headers, project_id, estimate_id, option_id):
+    quotation = _released_quotation(client, headers, project_id, estimate_id, option_id)
+    res = client.post(f"/quotations/{quotation['id']}/mark-lost", json={"reason": "Client went with a competitor"}, headers=headers)
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def test_first_estimate_and_quotation_on_a_project_still_get_revision_1(client, director_user):
+    headers = _director_headers(client, director_user)
+    project_id = _create_project(client, headers, _create_client_record(client, headers))
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _verified_cost_sheet(client, headers, project_id)
+    estimate = _sent_estimate(client, headers, project_id, project_sport_id)
+    option_id = estimate["options"][0]["id"]
+    _approve_option(client, headers, estimate["id"], option_id)
+    quotation = _released_quotation(client, headers, project_id, estimate["id"], option_id)
+
+    assert estimate["revision_major"] == 1
+    assert estimate["document_no"].endswith("-R1")
+    assert quotation["revision_major"] == 1
+    assert quotation["document_no"].endswith("-R1")
+
+
+def test_second_estimate_after_prior_quotation_lost_gets_incremented_document_no(client, director_user):
+    headers = _director_headers(client, director_user)
+    project_id = _create_project(client, headers, _create_client_record(client, headers))
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _verified_cost_sheet(client, headers, project_id)
+    estimate = _sent_estimate(client, headers, project_id, project_sport_id)
+    option_id = estimate["options"][0]["id"]
+    _approve_option(client, headers, estimate["id"], option_id)
+    _lost_quotation(client, headers, project_id, estimate["id"], option_id)
+
+    # Re-bidding the project: a brand-new Estimate, not a /revise of the old
+    # one (which is blocked once the project's pursuit already moved past it).
+    res = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 900000}]},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    second_estimate = res.json()
+    assert second_estimate["id"] != estimate["id"]
+    assert second_estimate["revision_major"] == 2
+    assert second_estimate["document_no"].endswith("-R2")
+
+
+def test_second_quotation_after_prior_quotation_lost_gets_incremented_document_no(client, director_user):
+    headers = _director_headers(client, director_user)
+    project_id = _create_project(client, headers, _create_client_record(client, headers))
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    _verified_cost_sheet(client, headers, project_id)
+    estimate = _sent_estimate(client, headers, project_id, project_sport_id)
+    option_id = estimate["options"][0]["id"]
+    _approve_option(client, headers, estimate["id"], option_id)
+    _lost_quotation(client, headers, project_id, estimate["id"], option_id)
+
+    second_estimate = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 900000}]},
+        headers=headers,
+    ).json()
+    second_estimate = client.post(f"/estimates/{second_estimate['id']}/send", headers=headers).json()
+    second_option_id = second_estimate["options"][0]["id"]
+    _approve_option(client, headers, second_estimate["id"], second_option_id)
+
+    res = client.post(
+        f"/projects/{project_id}/quotations",
+        json={"estimate_id": second_estimate["id"], "included_option_ids": [second_option_id]},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    second_quotation = res.json()
+    assert second_quotation["revision_major"] == 2
+    assert second_quotation["document_no"].endswith("-R2")
+
+
+def test_fast_track_quotation_after_prior_quotation_lost_gets_incremented_revision(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    res = client.post(
+        "/projects",
+        json={
+            "client_id": client_id, "city": "Mumbai", "site_condition": "level", "soil_type": "normal",
+            "building_status": "open_air", "site_access": "good", "power_available": "yes",
+            "water_available": True, "package": "standard", "project_type": "resurfacing",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    project_id = res.json()["id"]
+    _add_project_sport(client, headers, project_id)
+    cost_sheet_id = _verified_cost_sheet(client, headers, project_id, cost_total=150000)
+
+    # First pursuit: fast-track straight to a Lost quotation.
+    first_quotation = client.post(
+        f"/projects/{project_id}/quotations/fast-track",
+        json={"cost_sheet_id": cost_sheet_id, "package": "standard"},
+        headers=headers,
+    ).json()
+    assert first_quotation["document_no"].endswith("-R1")
+    res = client.post(f"/quotations/{first_quotation['id']}/release", headers=headers)
+    assert res.status_code == 200, res.text
+    res = client.post(f"/quotations/{first_quotation['id']}/mark-lost", json={"reason": "Budget cut"}, headers=headers)
+    assert res.status_code == 200, res.text
+
+    res = client.post(f"/cost-sheets/{cost_sheet_id}/revise", json={"cost_total": 160000}, headers=headers)
+    assert res.status_code == 201, res.text
+    second_cost_sheet = res.json()
+    client.post(f"/cost-sheets/{second_cost_sheet['id']}/verify", headers=headers)
+
+    res = client.post(
+        f"/projects/{project_id}/quotations/fast-track",
+        json={"cost_sheet_id": second_cost_sheet["id"], "package": "standard"},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    second_quotation = res.json()
+    assert second_quotation["revision_major"] == 2
+    assert second_quotation["document_no"].endswith("-R2")
+
+    estimates = client.get(f"/projects/{project_id}/estimates", headers=headers).json()
+    revisions = sorted(e["revision_major"] for e in estimates)
+    assert revisions == [1, 2]
