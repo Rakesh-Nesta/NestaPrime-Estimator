@@ -393,7 +393,9 @@ def test_use_reply_applies_to_master_rate_as_unverified_proposal(client, directo
     item_id = pr["items"][0]["id"]
     reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=65.0)
 
-    res = client.post(f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master"}, headers=headers)
+    res = client.post(
+        f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master", "confirmed_ex_gst": True}, headers=headers
+    )
     assert res.status_code == 200, res.text
     used = res.json()
     assert used["confirmed"] is True
@@ -424,7 +426,7 @@ def test_use_reply_applies_to_cost_sheet_line(client, director_user):
 
     res = client.post(
         f"/vendor-replies/{reply['id']}/use",
-        json={"apply_to": "cost_sheet_line", "cost_sheet_line_id": line_id},
+        json={"apply_to": "cost_sheet_line", "cost_sheet_line_id": line_id, "confirmed_ex_gst": True},
         headers=headers,
     )
     assert res.status_code == 200, res.text
@@ -451,7 +453,7 @@ def test_use_reply_blocked_on_a_verified_cost_sheet(client, director_user):
 
     res = client.post(
         f"/vendor-replies/{reply['id']}/use",
-        json={"apply_to": "cost_sheet_line", "cost_sheet_line_id": line_id},
+        json={"apply_to": "cost_sheet_line", "cost_sheet_line_id": line_id, "confirmed_ex_gst": True},
         headers=headers,
     )
     assert res.status_code == 400
@@ -485,7 +487,9 @@ def test_use_reply_writes_an_audit_log_entry(client, director_user):
     item_id = pr["items"][0]["id"]
     reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=65.0)
 
-    client.post(f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master"}, headers=headers)
+    client.post(
+        f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master", "confirmed_ex_gst": True}, headers=headers
+    )
 
     entries = _audit_entries(client, headers, document_type="price_request", document_id=pr["id"])
     applied = next(e for e in entries if e["field"] == "applied_rate")
@@ -495,6 +499,109 @@ def test_use_reply_writes_an_audit_log_entry(client, director_user):
 # ---------------------------------------------------------------------------
 # Vendor consent fields
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Amendment 27: vendor reply GST-basis conversion + cost-sheet-line
+# cross-check
+# ---------------------------------------------------------------------------
+
+
+def test_use_reply_with_ambiguous_gst_basis_requires_confirmation(client, director_user):
+    headers = _director_headers(client, director_user)
+    rate_item_id = _create_rate_item(client, headers)
+    vendor_id = _create_vendor(client, headers)
+    pr = _create_price_request(client, headers, rate_item_id, vendor_id)
+    item_id = pr["items"][0]["id"]
+    reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=65.0)
+
+    res = client.post(f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master"}, headers=headers)
+    assert res.status_code == 422
+    assert "GST basis" in res.json()["detail"]
+
+    res = client.post(
+        f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master", "confirmed_ex_gst": True}, headers=headers
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_use_reply_exclusive_basis_applies_the_rate_unchanged(client, director_user):
+    headers = _director_headers(client, director_user)
+    rate_item_id = _create_rate_item(client, headers)
+    vendor_id = _create_vendor(client, headers)
+    pr = _create_price_request(client, headers, rate_item_id, vendor_id)
+    item_id = pr["items"][0]["id"]
+    reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=65.0, text="Rs 65/kg ex-GST")
+
+    res = client.post(f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master"}, headers=headers)
+    assert res.status_code == 200, res.text
+
+    rate_items = client.get("/rate-items", headers=headers).json()
+    updated = next(r for r in rate_items if r["id"] == rate_item_id)
+    assert updated["rate"] == 65.0
+
+
+def test_use_reply_inclusive_basis_converts_to_ex_gst_using_global_setting(client, director_user):
+    headers = _director_headers(client, director_user)
+    rate_item_id = _create_rate_item(client, headers)  # no per-item gst_percent -- falls back to global 18%
+    vendor_id = _create_vendor(client, headers)
+    pr = _create_price_request(client, headers, rate_item_id, vendor_id)
+    item_id = pr["items"][0]["id"]
+    reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=118.0, text="Rs 118/kg incl GST")
+    assert reply["parsed_gst_basis"] == "inclusive"
+
+    res = client.post(f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master"}, headers=headers)
+    assert res.status_code == 200, res.text
+
+    rate_items = client.get("/rate-items", headers=headers).json()
+    updated = next(r for r in rate_items if r["id"] == rate_item_id)
+    assert updated["rate"] == 100.0  # 118 / 1.18
+
+    history = client.get(f"/rate-items/{rate_item_id}/history", headers=headers).json()
+    latest = next(h for h in history if h["effective_to"] is None)
+    assert latest["rate"] == 100.0
+
+    entries = _audit_entries(client, headers, document_type="price_request", document_id=pr["id"])
+    applied = next(e for e in entries if e["field"] == "applied_rate")
+    assert applied["new_value"] == "100.00"
+
+
+def test_use_reply_inclusive_basis_converts_using_per_item_gst_override(client, director_user):
+    headers = _director_headers(client, director_user)
+    rate_item_id = _create_rate_item(client, headers, gst_percent=5.0)  # Note R1's HSN-9506 style override
+    vendor_id = _create_vendor(client, headers)
+    pr = _create_price_request(client, headers, rate_item_id, vendor_id)
+    item_id = pr["items"][0]["id"]
+    reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=105.0, text="Rs 105/kg incl GST")
+
+    res = client.post(f"/vendor-replies/{reply['id']}/use", json={"apply_to": "master"}, headers=headers)
+    assert res.status_code == 200, res.text
+
+    rate_items = client.get("/rate-items", headers=headers).json()
+    updated = next(r for r in rate_items if r["id"] == rate_item_id)
+    assert updated["rate"] == 100.0  # 105 / 1.05, the item's own 5% override, not the global 18%
+
+
+def test_use_reply_cost_sheet_line_cross_check_rejects_mismatched_rate_item(client, director_user):
+    headers = _director_headers(client, director_user)
+    rate_item_id = _create_rate_item(client, headers)
+    other_rate_item_id = _create_rate_item(client, headers, item_name="Aluminium Rs/kg", category="Other")
+    vendor_id = _create_vendor(client, headers)
+    pr = _create_price_request(client, headers, rate_item_id, vendor_id)
+    item_id = pr["items"][0]["id"]
+    reply = _capture_reply(client, headers, pr, item_id, vendor_id, rate=65.0, text="Rs 65/kg ex-GST")
+
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+    # A line on a *different* rate item than the one this reply answers.
+    line_id = _add_line(client, headers, cost_sheet_id, other_rate_item_id, rate=60.0)
+
+    res = client.post(
+        f"/vendor-replies/{reply['id']}/use",
+        json={"apply_to": "cost_sheet_line", "cost_sheet_line_id": line_id},
+        headers=headers,
+    )
+    assert res.status_code == 400
+    assert "doesn't match" in res.json()["detail"]
 
 
 def test_vendor_update_accepts_opt_in_fields(client, director_user):
