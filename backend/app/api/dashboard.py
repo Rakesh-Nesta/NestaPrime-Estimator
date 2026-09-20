@@ -57,30 +57,45 @@ def get_dashboard(
         require_roles("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
     ),
 ):
-    # "Open" = no Quotation on the project has reached a closed status yet
-    # (Won/Lost) -- the same WON/LOST vocabulary reports.py's Pipeline
-    # report already uses for this schema.
+    # Amendment 28 Part A: "closed" means *every* Quotation on the project
+    # has reached Won/Lost, not just any -- a project with a newer,
+    # currently-active Quotation is Open regardless of an older Lost one
+    # (e.g. a re-bid, which Amendment 26 made possible). A project with no
+    # Quotations at all is never closed, unaffected by this fix.
+    open_quotation_project_ids = (
+        db.query(Quotation.project_id)
+        .filter(~Quotation.status.in_([QuotationStatus.WON, QuotationStatus.LOST]))
+    )
     closed_project_ids = (
         db.query(Quotation.project_id)
-        .filter(Quotation.status.in_([QuotationStatus.WON, QuotationStatus.LOST]))
+        .filter(~Quotation.project_id.in_(open_quotation_project_ids))
         .distinct()
     )
     open_projects_count = (
-        db.query(Project).filter(~Project.id.in_(closed_project_ids)).count()
+        db.query(Project)
+        .filter(~Project.id.in_(closed_project_ids), Project.is_calibration.is_(False))
+        .count()
     )
 
     # "Pending" an estimate = sent to the client, awaiting a response --
     # Draft hasn't gone out yet, Superseded/Expired are no longer live.
+    # Amendment 28 Part B: calibration/test projects never contribute to
+    # any of the three summary tiles.
     pending_estimates_count = (
-        db.query(Estimate).filter(Estimate.status == EstimateStatus.SENT).count()
+        db.query(Estimate)
+        .join(Project, Project.id == Estimate.project_id)
+        .filter(Estimate.status == EstimateStatus.SENT, Project.is_calibration.is_(False))
+        .count()
     )
 
     pending_quotations_count = (
         db.query(Quotation)
+        .join(Project, Project.id == Quotation.project_id)
         .filter(
             Quotation.status.in_(
                 [QuotationStatus.DRAFT, QuotationStatus.RELEASED, QuotationStatus.SENT]
-            )
+            ),
+            Project.is_calibration.is_(False),
         )
         .count()
     )

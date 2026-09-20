@@ -183,6 +183,151 @@ def test_recent_projects_lists_newest_first_with_client_name(client, director_us
     assert recent[0]["city"] == "Chennai"
 
 
+# ---------------------------------------------------------------------------
+# Amendment 28 Part A: "closed" means every Quotation on the project, not
+# just any
+# ---------------------------------------------------------------------------
+
+
+def test_open_projects_count_stays_closed_when_every_quotation_is_won_or_lost(client, director_user):
+    headers = _director_headers(client, director_user)
+    quotation, project_id = _released_quotation(client, headers)
+    lost_res = client.post(
+        f"/quotations/{quotation['id']}/mark-lost", json={"reason": "test setup"}, headers=headers
+    )
+    assert lost_res.status_code == 200, lost_res.text
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["summary"]["open_projects_count"] == 0
+
+
+def test_open_projects_count_includes_project_restarted_after_a_lost_quotation(client, director_user):
+    """Amendment 26 made re-bidding a Lost project possible; this confirms
+    the dashboard no longer excludes it forever once that happens."""
+    headers = _director_headers(client, director_user)
+    quotation, project_id = _released_quotation(client, headers)
+    lost_res = client.post(
+        f"/quotations/{quotation['id']}/mark-lost", json={"reason": "test setup"}, headers=headers
+    )
+    assert lost_res.status_code == 200, lost_res.text
+
+    project_sport_id = client.get(f"/projects/{project_id}/sports", headers=headers).json()[0]["id"]
+    # A brand-new Estimate + Quotation on the same project -- Amendment
+    # 26's fix -- with the new Quotation left live (not itself Won/Lost).
+    estimate = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 900000}]},
+        headers=headers,
+    ).json()
+    assert estimate["document_no"].endswith("-R2"), estimate
+    send_res = client.post(f"/estimates/{estimate['id']}/send", headers=headers)
+    assert send_res.status_code == 200, send_res.text
+    estimate = send_res.json()
+    option_id = estimate["options"][0]["id"]
+    approve_res = client.patch(
+        f"/estimates/{estimate['id']}/options/{option_id}/client-status",
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert approve_res.status_code == 200, approve_res.text
+    new_quotation = client.post(
+        f"/projects/{project_id}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [option_id]},
+        headers=headers,
+    ).json()
+    assert new_quotation["document_no"].endswith("-R2"), new_quotation
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.status_code == 200, res.text
+    # The restarted project counts as Open again: it now has a live
+    # (Draft) Quotation alongside the older Lost one, so not *every*
+    # Quotation on the project is Won/Lost any more.
+    assert res.json()["summary"]["open_projects_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Amendment 28 Part B: calibration/test projects excluded from every tile
+# ---------------------------------------------------------------------------
+
+
+def test_calibration_project_excluded_from_open_projects_count(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    res = client.post(
+        "/projects",
+        json={
+            "client_id": client_id, "city": "Mumbai", "site_condition": "level", "soil_type": "normal",
+            "building_status": "open_air", "site_access": "good", "power_available": "yes",
+            "water_available": True, "package": "standard", "is_calibration": True,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["is_calibration"] is True
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["summary"]["open_projects_count"] == 0
+
+
+def test_calibration_project_excluded_from_pending_estimates_and_quotations_counts(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_res = client.post(
+        "/projects",
+        json={
+            "client_id": client_id, "city": "Mumbai", "site_condition": "level", "soil_type": "normal",
+            "building_status": "open_air", "site_access": "good", "power_available": "yes",
+            "water_available": True, "package": "standard", "is_calibration": True,
+        },
+        headers=headers,
+    )
+    project_id = project_res.json()["id"]
+    project_sport_id = _add_project_sport(client, headers, project_id)
+    cs_res = client.post(f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=headers)
+    client.post(f"/cost-sheets/{cs_res.json()['id']}/verify", headers=headers)
+    estimate = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=headers,
+    ).json()
+    send_res = client.post(f"/estimates/{estimate['id']}/send", headers=headers)
+    assert send_res.status_code == 200, send_res.text
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["summary"]["pending_estimates_count"] == 0
+
+
+def test_default_project_is_not_calibration(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+
+    res = client.get(f"/projects/{project_id}", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["is_calibration"] is False
+
+
+def test_only_director_can_flag_an_existing_project_as_calibration(client, director_user, db_session):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+
+    sales_headers = _sales_headers(client, db_session)
+    res = client.patch(
+        f"/projects/{project_id}/calibration", json={"is_calibration": True}, headers=sales_headers
+    )
+    assert res.status_code == 403
+
+    res = client.patch(
+        f"/projects/{project_id}/calibration", json={"is_calibration": True}, headers=headers
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["is_calibration"] is True
+
+
 def test_recent_activity_visible_to_director_only(client, director_user, db_session):
     director_headers = _director_headers(client, director_user)
     create_res = client.post(

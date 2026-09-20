@@ -92,6 +92,12 @@ class ProjectCreate(BaseModel):
     # pdf_documents.py to print those assumptions as T&C clauses on the
     # Quotation PDF.
     quick_setup: bool = False
+    # Amendment 28 Part B: marks validation/demo data at creation time --
+    # same role gate as the rest of this endpoint (Director-only
+    # flagging of an *existing* project is a separate, dedicated PATCH
+    # below, since backfilling a project created before this flag existed
+    # needs no new Project data, just this one field).
+    is_calibration: bool = False
 
 
 class ProjectOut(BaseModel):
@@ -117,6 +123,7 @@ class ProjectOut(BaseModel):
     safe_bearing_capacity: float | None
     existing_building_clear_height_ft: float | None
     tender_mode: bool
+    is_calibration: bool
     soil_test_required: bool = False  # derived, not stored — D.4; _to_out() sets the real value
 
     # D.4 site-prep triggers (B.2's worked examples), all derived — none
@@ -326,6 +333,30 @@ def update_project_notes(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     project.custom_notes = payload.custom_notes
+    db.commit()
+    db.refresh(project)
+    return _to_out(project)
+
+
+class ProjectCalibrationUpdate(BaseModel):
+    is_calibration: bool
+
+
+@router.patch("/{project_id}/calibration", response_model=ProjectOut)
+def update_project_calibration_flag(
+    project_id: uuid.UUID,
+    payload: ProjectCalibrationUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("director")),
+):
+    """Amendment 28 Part B: flagging an *existing* project (e.g. a manual
+    Note R1 Mathura/Noida/Bathinda backfill, since there's no reliable
+    code-level signal to detect those automatically) is Director-only,
+    unlike setting the flag at creation time on ProjectCreate above."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project.is_calibration = payload.is_calibration
     db.commit()
     db.refresh(project)
     return _to_out(project)

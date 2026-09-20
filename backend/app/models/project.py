@@ -171,6 +171,11 @@ class Project(Base):
     # to the Quotation PDF's "Special Remarks / T&C" section when non-empty.
     custom_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Amendment 28 Part B: marks validation/demo data (e.g. Note R1's own
+    # Mathura/Noida/Bathinda projects) so it doesn't crowd the dashboard's
+    # business-summary tiles alongside real client work.
+    is_calibration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
