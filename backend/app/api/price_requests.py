@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.api.documents import _EDITABLE_COST_SHEET_STATUSES
+from app.api.settings import get_gst_rate_percent
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.document import CostSheet, CostSheetLine
@@ -543,6 +544,10 @@ def list_vendor_replies(
 class UseReplyRequest(BaseModel):
     apply_to: PriceRequestApplyTarget
     cost_sheet_line_id: uuid.UUID | None = None
+    # Amendment 27: required when the reply's GST basis couldn't be parsed
+    # from the vendor's message, so an ambiguous reply is never silently
+    # treated as ex-GST.
+    confirmed_ex_gst: bool = False
 
 
 @price_requests_router.post("/vendor-replies/{reply_id}/use", response_model=VendorReplyOut)
@@ -575,8 +580,33 @@ def use_vendor_reply(
     item = db.query(PriceRequestItem).filter(PriceRequestItem.id == reply.price_request_item_id).first()
     vendor = db.query(Vendor).filter(Vendor.id == reply.vendor_id).first()
 
+    # Amendment 27: convert a GST-inclusive reply to the ex-GST rate the
+    # pricing engine expects everywhere else, before applying it anywhere.
+    # Same item-override-else-global GST% resolution order pricing.py's
+    # own _line_gst_percent already uses.
+    rate_item = db.query(RateItem).filter(RateItem.id == item.rate_item_id).first()
+    applicable_gst_percent = (
+        float(rate_item.gst_percent)
+        if rate_item is not None and rate_item.gst_percent is not None
+        else get_gst_rate_percent(db)
+    )
+    if reply.parsed_gst_basis == GstBasis.INCLUSIVE:
+        applied_rate = float(reply.parsed_rate) / (1 + applicable_gst_percent / 100)
+    elif reply.parsed_gst_basis == GstBasis.EXCLUSIVE:
+        applied_rate = float(reply.parsed_rate)
+    elif payload.confirmed_ex_gst:
+        applied_rate = float(reply.parsed_rate)
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This reply's GST basis could not be determined from the vendor's message -- "
+                "retry with confirmed_ex_gst=true to apply the quoted rate as-is (ex-GST), or ask "
+                "the vendor to clarify whether it includes GST"
+            ),
+        )
+
     if payload.apply_to in (PriceRequestApplyTarget.MASTER, PriceRequestApplyTarget.BOTH):
-        rate_item = db.query(RateItem).filter(RateItem.id == item.rate_item_id).first()
         if not rate_item:
             raise HTTPException(status_code=404, detail="Rate item no longer exists")
 
@@ -591,14 +621,14 @@ def use_vendor_reply(
             closed_to = effective_from - timedelta(days=1)
             open_row.effective_to = closed_to if closed_to >= open_row.effective_from else open_row.effective_from
 
-        rate_item.rate = reply.parsed_rate
+        rate_item.rate = applied_rate
         rate_item.source = RateSource.MANUAL
         rate_item.verified = False
         rate_item.vendor = vendor.name if vendor else None
         db.add(
             RateHistory(
                 rate_item_id=rate_item.id,
-                rate=reply.parsed_rate,
+                rate=applied_rate,
                 effective_from=effective_from,
                 effective_to=None,
                 vendor_id=reply.vendor_id,
@@ -611,12 +641,17 @@ def use_vendor_reply(
         line = db.query(CostSheetLine).filter(CostSheetLine.id == payload.cost_sheet_line_id).first()
         if not line:
             raise HTTPException(status_code=404, detail="Cost sheet line not found")
+        if line.rate_item_id != item.rate_item_id:
+            raise HTTPException(
+                status_code=400,
+                detail="This cost sheet line's rate item doesn't match the price request item this reply answers",
+            )
         cost_sheet = db.query(CostSheet).filter(CostSheet.id == line.cost_sheet_id).first()
         if cost_sheet.status not in _EDITABLE_COST_SHEET_STATUSES:
             raise HTTPException(
                 status_code=400, detail=f"Cannot edit a line on a cost sheet in {cost_sheet.status.value} status"
             )
-        line.rate = reply.parsed_rate
+        line.rate = applied_rate
         line.source = RateSource.MANUAL
 
     reply.confirmed = True
@@ -626,7 +661,7 @@ def use_vendor_reply(
 
     write_audit_log_entry(
         db, current_user, "price_request", reply.price_request_id, "applied_rate",
-        old_value=None, new_value=str(reply.parsed_rate),
+        old_value=None, new_value=f"{applied_rate:.2f}",
         reason=f"{vendor.name if vendor else reply.vendor_id}'s reply applied to {payload.apply_to.value}",
         request=request,
     )
