@@ -785,6 +785,69 @@ changing only the vendor with Rate left blank -- the row came back as `updated`,
 vendor was applied, and the rate stayed untouched at its original value. Amendment 25
 is now fully closed.
 
+### Amendment No. 26 — Re-Creating an Estimate or Quotation for a Project Crashes (500)
+**Registered 20 September 2026 (self-identified during a fifth Director-requested
+proactive gap audit against the register, spot-verified against the live code before
+recording).** `backend/app/api/documents.py`'s `create_estimate` (line 1452) and
+`create_quotation` (lines 1943, 2114) all build `document_no` via
+`_document_no(project.project_no, "EST"/"NPQ", 1)` -- confirmed by direct read to be a
+**hardcoded revision `1`**, not derived from how many Estimates/Quotations the project
+already has. Both `Estimate.document_no` and `Quotation.document_no` are `unique=True`
+(`backend/app/models/document.py:240,354`), and neither `create_estimate` nor
+`create_quotation` queries for an existing document on the project before inserting --
+confirmed by direct read of `create_estimate`'s full body (lines 1405-1452), which has
+no such check. The existing "revise" endpoints (`documents.py:1652`, `2305`) correctly
+increment `old.revision_major + 1`, but those operate on an *existing* Estimate/
+Quotation being revised -- they don't help a project that needs a brand-new document
+chain (e.g. re-bidding a project whose earlier Quotation was marked Lost). The moment a
+second Estimate is created for such a project, the second `document_no` collides with
+the first and the request dies with an unhandled `IntegrityError` -> 500, not a clear
+error -- and there is no supported way to restart a project's document chain at all.
+Needs a Director-approved spec before implementation, per this register's own Change
+Process.
+
+### Amendment No. 27 — Vendor Price Request Replies Ignore the Parsed GST Basis
+**Registered 20 September 2026 (self-identified during the same audit).**
+`backend/app/api/price_requests.py:593` (`rate_item.rate = reply.parsed_rate`) and
+`:618` (`line.rate = reply.parsed_rate`), inside `use_vendor_reply`, both apply the
+vendor's parsed rate literally to the Rate Master / Cost Sheet line. `VendorReply.
+parsed_gst_basis` (`EXCLUSIVE`/`INCLUSIVE`, parsed from the vendor's free-text reply,
+`price_requests.py:79-93`) is captured, stored (`models/price_request.py:123`), and
+returned in `VendorReplyOut` (`price_requests.py:230,253`) -- but confirmed by direct
+read and grep to be **never referenced anywhere inside `use_vendor_reply`**. A vendor
+who replies "Rs 100/kg incl. GST" has that rupee-100 figure written straight into
+`RateItem.rate`/`CostSheetLine.rate` as if it were the ex-GST material rate the pricing
+engine expects everywhere else -- silently overstating the cost basis by the embedded
+GST% on every downstream Cost Sheet/Estimate/Quotation that uses that rate, with no
+error or warning surfaced anywhere. A closely related gap in the same function
+(`price_requests.py:608-619`): the `COST_SHEET_LINE`/`BOTH` branch takes an arbitrary
+`cost_sheet_line_id` from the request payload with no check that the targeted line
+actually corresponds to the `PriceRequestItem` the reply answers, so a reply can be
+misapplied onto an unrelated cost-sheet line with no server-side guard catching it.
+Needs a Director-approved spec before implementation, per this register's own Change
+Process.
+
+### Amendment No. 28 — Dashboard "Open Projects" Permanently Misclassifies Restarted Projects
+**Registered 20 September 2026 (self-identified during the same audit).**
+`backend/app/api/dashboard.py:62-70`: `closed_project_ids` is every `project_id` where
+*any* Quotation has ever reached `WON`/`LOST` status, and `open_projects_count` excludes
+every one of those projects entirely -- confirmed by direct read. Nothing in
+`create_estimate`/`create_quotation` prevents a fresh Estimate/Quotation cycle from
+starting on a project after an earlier one was marked Lost (aside from the unrelated
+crash Amendment 26 covers) -- but even once that crash is fixed, a project with any
+historical WON/LOST quotation stays excluded from the "Open Projects" tile forever,
+even if a brand-new, currently-active Quotation now exists for it. Real, active work is
+silently dropped from the number a Director checks daily. A related, broader gap in the
+same function: dashboard tiles (`open_projects_count`, `pending_estimates_count`,
+`pending_quotations_count`) have no calibration/test-project exclusion filter at all --
+confirmed by a repo-wide grep for `is_calibration`/`is_test`/`calibration` across
+`backend/app/models` and `backend/app/api` returning zero matches, despite this
+register's own Amendment 4 refinement text explicitly calling for one ("so real client
+work isn't crowded by validation data") and Note R1's Mathura/Noida/Bathinda projects
+being real, recreated-end-to-end database rows that would count toward these tiles
+indistinguishably from genuine client work. Needs a Director-approved spec before
+implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
