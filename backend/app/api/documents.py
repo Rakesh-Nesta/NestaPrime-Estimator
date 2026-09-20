@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
@@ -344,6 +345,23 @@ def _document_no(project_no: str, prefix: str, revision_major: int, revision_min
     suffix = project_no.split("-", 1)[1]
     rev = f"R{revision_major}" if revision_minor == 0 else f"R{revision_major}.{revision_minor}"
     return f"{prefix}-{suffix}-{rev}"
+
+
+def _next_fresh_document_revision(db: Session, model, project_id: uuid.UUID) -> int:
+    """Amendment 26: create_estimate/create_quotation ("start a fresh
+    document chain," as distinct from revise_estimate/revise_quotation,
+    which bump an *existing* row's own revision_major) used to hardcode
+    revision 1, colliding against document_no's unique constraint the
+    moment a project got a second Estimate/Quotation -- e.g. re-bidding a
+    project whose earlier Quotation was marked Lost, which revise_* can't
+    help with either (both require the row being revised to still be
+    Sent). This computes the next revision from whatever already exists
+    for the project instead, same "read-existing-then-compute-next" shape
+    Amendment 23 already uses for _generate_project_no/_po_number."""
+    max_revision = (
+        db.query(func.max(model.revision_major)).filter(model.project_id == project_id).scalar()
+    )
+    return (max_revision or 0) + 1
 
 
 def _get_margin_policy(db: Session, client_type) -> MarginPolicy:
@@ -1446,10 +1464,15 @@ def create_estimate(
     gst_rate_percent = get_gst_rate_percent(db)
     price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
 
+    # Amendment 26: a project can already have an earlier Estimate whose
+    # pursuit concluded (its Quotation went Lost) -- compute the next
+    # fresh revision rather than hardcoding 1, which would collide.
+    next_revision = _next_fresh_document_revision(db, Estimate, project_id)
     estimate = Estimate(
         project_id=project_id,
         cost_sheet_id=cost_sheet.id,
-        document_no=_document_no(project.project_no, "EST", 1),
+        document_no=_document_no(project.project_no, "EST", next_revision),
+        revision_major=next_revision,
         created_by_id=current_user.id,
     )
     db.add(estimate)
@@ -1937,10 +1960,14 @@ def create_quotation(
         gst_mode=payload.gst_mode, gst_rate_percent=gst_rate_percent,
     )
 
+    # Amendment 26: same reasoning as create_estimate above -- compute the
+    # next fresh revision rather than hardcoding 1.
+    next_revision = _next_fresh_document_revision(db, Quotation, project_id)
     quotation = Quotation(
         project_id=project_id,
         estimate_id=estimate.id,
-        document_no=_document_no(project.project_no, "NPQ", 1),
+        document_no=_document_no(project.project_no, "NPQ", next_revision),
+        revision_major=next_revision,
         cost_total=cost_total,
         target_margin_percent=pricing.target_margin_percent,
         floor_margin_percent=pricing.floor_margin_percent,
@@ -2079,10 +2106,14 @@ def create_fast_track_quotation(
         db, policy, gst_rate_percent, price_range_percent, project_sport, cost_total
     )
 
+    # Amendment 26: same reasoning as create_estimate above -- compute the
+    # next fresh revision rather than hardcoding 1.
+    next_estimate_revision = _next_fresh_document_revision(db, Estimate, project_id)
     estimate = Estimate(
         project_id=project_id,
         cost_sheet_id=cost_sheet.id,
-        document_no=_document_no(project.project_no, "EST", 1),
+        document_no=_document_no(project.project_no, "EST", next_estimate_revision),
+        revision_major=next_estimate_revision,
         created_by_id=current_user.id,
     )
     db.add(estimate)
@@ -2108,10 +2139,14 @@ def create_fast_track_quotation(
         gst_mode=payload.gst_mode, gst_rate_percent=gst_rate_percent,
     )
 
+    # Amendment 26: same reasoning as create_estimate above -- compute the
+    # next fresh revision rather than hardcoding 1.
+    next_quotation_revision = _next_fresh_document_revision(db, Quotation, project_id)
     quotation = Quotation(
         project_id=project_id,
         estimate_id=estimate.id,
-        document_no=_document_no(project.project_no, "NPQ", 1),
+        document_no=_document_no(project.project_no, "NPQ", next_quotation_revision),
+        revision_major=next_quotation_revision,
         cost_total=cost_total,
         target_margin_percent=pricing.target_margin_percent,
         floor_margin_percent=pricing.floor_margin_percent,
