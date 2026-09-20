@@ -11,6 +11,64 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-20 -- PRs #126-#128: Amendments 24-25 (dynamic GST label, rate import
+field-update fix)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `89f703a` -> `f8a941b` (PR #126 was the two approved specs,
+docs-only; #127 and #128 are the two independent implementation PRs, each rebased onto
+`main` twice as the ones before it merged -- clean rebases both times, unrelated files)
+**Backend only** -- no new migration (neither amendment changed the schema), no
+frontend rebuild needed.
+
+Both amendments were self-identified during a fourth proactive gap audit against the
+register: Amendment 24 fixes the Quotation PDF and Billing Handoff export both
+hardcoding "GST @ 18% (flat)"/"18% flat" regardless of the actual, Director-
+configurable, possibly-blended rate (Note R1's own HSN-9506 5% equipment lines) -- the
+label is now back-derived from the document's own frozen `gst_amount`/
+`selling_after_discount`, the only value that's guaranteed to match the rupee amount
+already printed next to it. Amendment 25 fixes `import_rate_items` silently discarding
+non-rate field edits (vendor, HSN/SAC, city, labour category, commodity-watch flag)
+whenever a row's rate was unchanged, reporting the row as "unchanged" instead of
+applying the edit -- a real data-loss risk on a documented bulk-edit workflow (a blank
+Rate cell is an explicit, intentional "leave the rate untouched" signal, not an edge
+case).
+
+**Deploy interrupted by a real power cut partway through the live smoke test** -- the
+backend rebuild/restart itself completed and was confirmed clean beforehand. The EC2
+instance came back on its own; `docker compose ps` after reconnecting showed both
+containers had survived/restarted cleanly (`restart: unless-stopped`), and `curl
+.../api/health` returned `{"status":"ok"}` before smoke testing resumed. Two of the
+smoke-test script attempts crashed partway through (a missing Cost Sheet-creation step
+before the Estimate call; then a `client_id` field assumption that didn't match `GET
+/projects`'s actual response shape) -- both crashes briefly left
+`verify-director@nestaprime.local` reactivated before the script's own cleanup step
+could run. Caught and fixed immediately both times by having a follow-up command
+deactivate the account before proceeding; the final working script was rewritten with a
+`try/finally` so the account is deactivated regardless of whether the rest of the
+script succeeds, closing that gap for future passes too.
+
+**Live-verified both amendments in production**, not just via the automated test suite
+(149 tests total across both PRs, all passing in CI): raised a full real Quotation
+through release/send/mark-won on a throwaway client, downloaded its PDF, and confirmed
+(via `pypdf.PdfReader`'s actual text extraction, not a naive byte-decode -- a first
+attempt using the latter produced a false negative, caught and corrected before trusting
+it) that it prints "GST @ 18.0%" and no longer contains "(flat)"; the Billing Handoff
+export showed "Total (GST-inclusive, 18.0%)". Amendment 25: imported an Excel row
+changing only the vendor with the Rate cell left blank -- the row came back as
+`updated` (not `unchanged`), the vendor was applied, and the rate stayed untouched at
+its original value.
+
+**Known leftover:** a fourth "Deploy Smoke Test Client 2 (delete me)" / project /
+quotation and one "Deploy Smoke Test Item (delete me)" rate item remain in production
+data, same reasoning as prior deploys' leftovers (no delete endpoint for either by
+design).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a
+health-check curl.
+
+---
+
 ## 2026-09-19 -- PRs #121-#123: Amendments 22-23 (settings/override validation,
 sequence-number race)
 

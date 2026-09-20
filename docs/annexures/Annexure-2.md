@@ -748,6 +748,17 @@ label next to a correctly-computed but differently-derived amount. Tax-complianc
 adjacent and reaches the client directly. Needs a Director-approved spec before
 implementation, per this register's own Change Process.
 
+**Implemented 20 September 2026 (PR #127, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** both labels now back-derive the effective rate from the
+document's own frozen `gst_amount`/`selling_after_discount` (`gst_amount /
+selling_after_discount * 100`, valid in both `GstMode.EXCLUSIVE` and `INCLUSIVE`) --
+the only choice that stays consistent with the rupee amount already printed next to it,
+rather than re-querying a Master Setting that could have changed since. "(flat)"/"flat"
+dropped from both labels. Live-verified in production: a real Quotation's PDF (via
+`pypdf`'s actual text extraction) shows "GST @ 18.0%" with no "(flat)" text, and its
+Billing Handoff export shows "Total (GST-inclusive, 18.0%)". Amendment 24 is now fully
+closed.
+
 ### Amendment No. 25 — Rate Sheet Excel Import Silently Discards Non-Rate Field Edits
 **Registered 20 September 2026 (self-identified during the same audit).**
 `backend/app/api/rate_items.py:772-795` (`import_rate_items`): the `if rate is not None
@@ -763,6 +774,16 @@ likely common editing pattern -- has every one of those edits silently dropped, 
 import result reports the row as "unchanged," giving false confidence the import
 succeeded. A real data-loss risk on a documented bulk-edit workflow. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
+
+**Implemented 20 September 2026 (PR #128, deployed to production same day -- see
+`docs/ops/deploy-log.md`):** decoupled `rate_changed` (still the only thing triggering
+`RateHistory` versioning, unchanged) from `fields_changed` (now governs whether the
+edit applies and the row counts as `updated`) -- a row where any field genuinely
+differs now gets that edit applied and counts as updated, even with the Rate cell left
+blank or numerically unchanged. Live-verified in production: imported an Excel row
+changing only the vendor with Rate left blank -- the row came back as `updated`, the
+vendor was applied, and the rate stayed untouched at its original value. Amendment 25
+is now fully closed.
 
 ## Register Notes (non-software, business-process)
 
