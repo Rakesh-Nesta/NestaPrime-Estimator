@@ -806,6 +806,22 @@ error -- and there is no supported way to restart a project's document chain at 
 Needs a Director-approved spec before implementation, per this register's own Change
 Process.
 
+**Implemented 20 September 2026 (PR #132, deployed to production same day, per
+[docs/annexures/Section-32-specs.md](Section-32-specs.md), approved as proposed).** Adds
+`_next_fresh_document_revision(db, model, project_id)`, computing `max(existing
+revision_major) + 1` for the project -- same read-existing-then-compute-next shape
+Amendment 23 already uses for `_generate_project_no`/`_po_number`. All four "fresh
+document" creation sites (`create_estimate`; `create_quotation`'s normal path; both the
+Estimate and Quotation created inside `create_fast_track_quotation`) now call this
+instead of hardcoding `1`, with `revision_major` set explicitly on the constructed row
+(not just embedded in the `document_no` string) to avoid an internal inconsistency
+between the two. Cost Sheet's own `_document_no` sites were left untouched, out of
+scope per the approved spec. Live-verified in production: re-bid a throwaway project
+past a Lost Quotation -- a second Estimate and a second Quotation, created directly
+(not via `/revise`), both succeeded with `201` and clean `R2` document numbers
+(`EST-2609-0011-R2`, `NPQ-2609-0011-R2`) instead of the old unhandled 500. Amendment 26
+is now fully closed.
+
 ### Amendment No. 27 — Vendor Price Request Replies Ignore the Parsed GST Basis
 **Registered 20 September 2026 (self-identified during the same audit).**
 `backend/app/api/price_requests.py:593` (`rate_item.rate = reply.parsed_rate`) and
