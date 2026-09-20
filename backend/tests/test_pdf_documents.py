@@ -277,7 +277,7 @@ def test_quotation_pdf_has_real_content_and_never_leaks_cost_or_margin(client, d
     assert quotation["document_no"] in text
     assert "FORMAL QUOTATION" in text
     assert "Subtotal" in text
-    assert "GST @ 18%" in text
+    assert "GST @ 18.0%" in text  # Amendment 24: derived from the document's own gst_amount/selling_ex_gst
     assert "Total Project Cost" in text
     assert "Amount in words" in text
     assert "Advance" in text and "Flooring completion" in text and "Handover" in text

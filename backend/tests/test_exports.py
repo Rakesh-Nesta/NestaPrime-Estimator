@@ -353,7 +353,9 @@ def test_billing_handoff_carries_client_total_and_payment_schedule_no_cost(clien
     assert values["Contact"] == "Jane PM"
     assert values["Billing address"] == "1 Sports Lane, Mumbai"
     assert values["Quotation No."] == quotation["document_no"]
-    assert values["Total (GST-inclusive, 18% flat)"] == quotation["quotation_total"]
+    # Amendment 24: label is now derived from the document's own gst_amount/
+    # selling_after_discount, not hardcoded -- 18.0% in this normal, no-override case.
+    assert values["Total (GST-inclusive, 18.0%)"] == quotation["quotation_total"]
 
     all_text = " ".join(str(ws.cell(row=r, column=c).value) for r in range(1, ws.max_row + 1) for c in (1, 2, 3))
     assert "cost" not in all_text.lower().replace("gst-inclusive", "")

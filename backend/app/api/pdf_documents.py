@@ -836,9 +836,16 @@ def build_quotation_pdf(
         story.append(table)
 
     total_rounded = round_to_nearest_10(float(quotation.quotation_total))
+    # Amendment 24: back-derived from this document's own frozen
+    # gst_amount/selling_ex_gst -- the rate that actually produced the
+    # rupee figure already printed next to it, not whatever the Master
+    # Setting/blend happens to be today (Note R1's HSN-9506 blending
+    # means this isn't always literally 18%). selling_ex_gst is the
+    # ex-GST base in both GstMode.EXCLUSIVE and GstMode.INCLUSIVE.
+    effective_gst_rate = (gst_amount / selling_ex_gst * 100) if selling_ex_gst else 18.0
     totals_rows = [
         ["Subtotal", format_inr(selling_ex_gst)],
-        ["GST @ 18% (flat)", format_inr(gst_amount)],
+        [f"GST @ {effective_gst_rate:.1f}%", format_inr(gst_amount)],
         ["Total Project Cost", format_inr(total_rounded)],
     ]
     totals_table = Table(totals_rows, colWidths=[135 * mm, 40 * mm])

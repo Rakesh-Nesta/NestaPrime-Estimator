@@ -277,6 +277,13 @@ def export_billing_handoff(
     ws.title = "Billing Handoff"
     bold = Font(bold=True)
 
+    # Amendment 24: back-derived from this document's own frozen
+    # gst_amount/selling_after_discount, same reasoning as the Quotation
+    # PDF -- the rate that actually produced this total, not whatever
+    # the Master Setting/blend happens to be today.
+    selling_ex_gst = float(quotation.selling_after_discount)
+    effective_gst_rate = (float(quotation.gst_amount) / selling_ex_gst * 100) if selling_ex_gst else 18.0
+
     info_rows = [
         ("Client", client.name),
         ("Contact", client.contact_name),
@@ -285,7 +292,7 @@ def export_billing_handoff(
         ("Billing address", client.billing_address),
         ("Quotation No.", quotation.document_no),
         ("Date", quotation.sent_at.date().isoformat() if quotation.sent_at else quotation.created_at.date().isoformat()),
-        ("Total (GST-inclusive, 18% flat)", float(quotation.quotation_total)),
+        (f"Total (GST-inclusive, {effective_gst_rate:.1f}%)", float(quotation.quotation_total)),
     ]
     for label, value in info_rows:
         ws.append(sanitize_row([label, value]))
