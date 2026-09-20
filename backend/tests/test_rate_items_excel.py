@@ -238,3 +238,83 @@ def test_import_rejects_an_unreadable_file(client, director_user):
         headers=headers,
     )
     assert res.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Amendment 25 (Section 31): non-rate field edits must apply (and count as
+# updated) even when the row's rate is unchanged/blank.
+# ---------------------------------------------------------------------------
+
+
+def test_import_applies_a_vendor_change_with_rate_left_blank(client, director_user):
+    """Amendment 25: a blank Rate cell means 'leave the rate untouched'
+    (Amendment 11 Part A) -- bulk-editing only non-rate columns with Rate
+    left blank is the documented, expected usage pattern this bug broke."""
+    headers = _director_headers(client, director_user)
+    client.post(
+        "/rate-items",
+        json={
+            "category": "Steel", "item_name": "Vendor Only Item", "unit": "kg", "hsn_sac": "7306",
+            "rate": 70.0, "vendor": "Old Vendor",
+        },
+        headers=headers,
+    )
+
+    res = _import(
+        client, headers,
+        [["Steel", "Vendor Only Item", None, "kg", "7306", None, "New Vendor", None, None, False, "manual", False]],
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["unchanged"] == 0
+    assert len(body["updated"]) == 1
+    assert body["updated"][0]["vendor"] == "New Vendor"
+    assert body["updated"][0]["rate"] == 70.0  # untouched, as the blank Rate cell asked
+
+
+def test_import_applies_a_commodity_watched_change_with_rate_unchanged(client, director_user):
+    """Same fix, a different non-rate field -- and this time the Rate
+    cell is present but numerically identical to what's already stored,
+    the other documented 'no rate change' case."""
+    headers = _director_headers(client, director_user)
+    client.post(
+        "/rate-items",
+        json={
+            "category": "Steel", "item_name": "Watched Flag Item", "unit": "kg", "hsn_sac": "7306",
+            "rate": 70.0, "is_commodity_watched": False,
+        },
+        headers=headers,
+    )
+
+    res = _import(
+        client, headers,
+        [["Steel", "Watched Flag Item", None, "kg", "7306", 70.0, None, None, None, True, "manual", False]],
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["unchanged"] == 0
+    assert len(body["updated"]) == 1
+    assert body["updated"][0]["is_commodity_watched"] is True
+
+
+def test_import_row_with_truly_nothing_changed_still_counts_as_unchanged(client, director_user):
+    """Regression check: the fix must not make every row 'updated' --
+    a row identical in every field, rate included, is still unchanged."""
+    headers = _director_headers(client, director_user)
+    client.post(
+        "/rate-items",
+        json={
+            "category": "Steel", "item_name": "Truly Unchanged Item", "unit": "kg", "hsn_sac": "7306",
+            "rate": 70.0, "vendor": "Same Vendor",
+        },
+        headers=headers,
+    )
+
+    res = _import(
+        client, headers,
+        [["Steel", "Truly Unchanged Item", None, "kg", "7306", 70.0, "Same Vendor", None, None, False, "manual", False]],
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["updated"] == []
+    assert body["unchanged"] == 1
