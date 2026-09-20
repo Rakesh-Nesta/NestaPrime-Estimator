@@ -843,6 +843,22 @@ misapplied onto an unrelated cost-sheet line with no server-side guard catching 
 Needs a Director-approved spec before implementation, per this register's own Change
 Process.
 
+**Implemented 20 September 2026 (PR #134, deployed to production same day, per
+[docs/annexures/Section-33-specs.md](Section-33-specs.md), approved as proposed).** An
+`INCLUSIVE` reply is now converted via `ex_gst_rate = parsed_rate / (1 +
+applicable_gst_percent / 100)` before being applied anywhere, where
+`applicable_gst_percent` is the rate item's own `gst_percent` override if set, else the
+global Master Setting -- the same item-override-else-global resolution order
+`pricing.py`'s own `_line_gst_percent` already uses. An `EXCLUSIVE` reply applies
+unchanged. A reply whose basis couldn't be parsed now requires the caller to pass
+`confirmed_ex_gst=true`, rejecting with `422` naming the ambiguity otherwise, rather than
+silently assuming exclusive. Also adds the missing cross-check: applying a reply to a
+Cost Sheet line whose `rate_item_id` doesn't match the price request item it answers is
+now rejected with `400`. Live-verified in production: a vendor reply of "Rs 118/kg incl
+GST" (against the live 18% global setting) correctly applied a `100.0` ex-GST rate to the
+Rate Master, and a reply with no parseable GST wording was correctly rejected with `422`
+until confirmed. Amendment 27 is now fully closed.
+
 ### Amendment No. 28 — Dashboard "Open Projects" Permanently Misclassifies Restarted Projects
 **Registered 20 September 2026 (self-identified during the same audit).**
 `backend/app/api/dashboard.py:62-70`: `closed_project_ids` is every `project_id` where

@@ -11,6 +11,48 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-20 -- PR #134: Amendment 27 (vendor reply GST-basis conversion)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `3e9534e` -> `73673b6`
+**Backend only** -- no new migration (no schema change), no frontend rebuild needed.
+
+Self-identified during the same fifth proactive gap audit as Amendment 26:
+`use_vendor_reply` applied a vendor's parsed rate literally onto `RateItem.rate`/
+`CostSheetLine.rate` regardless of whether the reply was GST-inclusive or exclusive, even
+though `VendorReply.parsed_gst_basis` was already captured and stored -- a GST-inclusive
+reply silently overstated the cost basis by the embedded GST% on every downstream Cost
+Sheet/Estimate/Quotation, with no error or warning. A related gap in the same function:
+applying a reply to a Cost Sheet line never checked the line's `rate_item_id` matched the
+price request item the reply actually answers. Fixed via a GST-basis conversion
+(`ex_gst_rate = parsed_rate / (1 + applicable_gst_percent / 100)`, item-override-else-
+global resolution order matching `pricing.py`), a required `confirmed_ex_gst` flag for
+ambiguous replies, and the missing cross-check.
+
+**Rebuild was clean** -- `git pull` fast-forwarded to `73673b6`, `docker compose ... up -d
+--build backend` built and started without incident (one terminal-paste artifact on the
+first `curl` attempt, re-run cleanly), both gunicorn workers logged `Application startup
+complete`, `curl .../health` returned `{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: 26 tests in
+`test_vendor_price_requests.py`, full backend suite 1188 passed): reactivated
+`verify-director@nestaprime.local`, created a throwaway rate item/vendor/price request,
+captured a reply of "Rs 118/kg incl GST" against the live 18% global `gst_rate_percent`
+setting, applied it to the Rate Master -- resulting rate `100.0`, the correct ex-GST
+figure, not `118.0`. Separately captured a reply with no parseable GST wording and
+confirmed applying it without `confirmed_ex_gst` was rejected with `422`. Account
+deactivated in the script's own `finally` block, confirmed `is_active: False` at the end.
+
+**Known leftover:** a sixth throwaway record, "Amendment 27 Verify (delete me)" rate
+item/vendor/price request, remains in production data -- same reasoning as every prior
+deploy's leftovers (no delete endpoint for either by design; Director has said to leave
+these as-is).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-20 -- PRs #130-#132: Amendment 26 (re-quote crash fix)
 
 **Run by:** R. Patni (with AI development assistance)
