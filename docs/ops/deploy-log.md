@@ -11,6 +11,49 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-20 -- PRs #130-#132: Amendment 26 (re-quote crash fix)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `89f703a` -> `df47162` (PR #130 registered Amendments 26-28; #131
+recorded the Sections 32-34 spec approvals -- both docs-only; #132 is the
+implementation, rebased onto `main` once as #131 merged first -- clean rebase, unrelated
+files)
+**Backend only** -- no new migration (no schema change), no frontend rebuild needed.
+
+Self-identified during a fifth proactive gap audit against the register: `create_estimate`,
+`create_quotation`, and both document-creation sites inside `create_fast_track_quotation`
+all hardcoded `document_no`'s revision to `1` with no check for an existing document on
+the project, so the second Estimate/Quotation a project ever needed (e.g. re-bidding a
+project whose earlier Quotation went Lost) collided against the `document_no` unique
+constraint and crashed with an unhandled `IntegrityError` -> 500. `revise_estimate`/
+`revise_quotation` couldn't help either, since both require the document being revised to
+still be Sent. Fixed via `_next_fresh_document_revision(db, model, project_id)`, computing
+`max(existing revision_major) + 1` for the project -- same shape Amendment 23 already uses
+for `_generate_project_no`/`_po_number`.
+
+**Rebuild was clean** -- `git pull` fast-forwarded to `df47162`, `docker compose ... up -d
+--build backend` built and started without incident, both gunicorn workers logged
+`Application startup complete`, `curl .../health` returned `{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: 4 new tests in
+`test_estimate_quotation_revision.py`, full backend suite 1183 passed): reactivated
+`verify-director@nestaprime.local`, created a throwaway project end-to-end through a Sent
+Estimate -> Released Quotation -> marked Lost, then created a second Estimate directly
+(not via `/revise`) -- `201`, `EST-2609-0011-R2`, `revision_major: 2` -- followed by a
+second Quotation the same way -- `201`, `NPQ-2609-0011-R2`, `revision_major: 2`. Neither
+crashed. Account deactivated in the script's own `finally` block regardless of outcome,
+confirmed `is_active: False` at the end.
+
+**Known leftover:** a fifth throwaway record, "Amendment 26 Verify (delete me)"
+client/project/two Estimates/two Quotations, remains in production data -- same reasoning
+as every prior deploy's leftovers (no delete endpoint for either by design; Director has
+said to leave these as-is).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-20 -- PRs #126-#128: Amendments 24-25 (dynamic GST label, rate import
 field-update fix)
 
