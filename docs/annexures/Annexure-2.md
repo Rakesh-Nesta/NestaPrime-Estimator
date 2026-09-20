@@ -880,6 +880,26 @@ being real, recreated-end-to-end database rows that would count toward these til
 indistinguishably from genuine client work. Needs a Director-approved spec before
 implementation, per this register's own Change Process.
 
+**Implemented 20 September 2026 (PR #136, deployed to production same day, per
+[docs/annexures/Section-34-specs.md](Section-34-specs.md), approved as proposed).** Part
+A: `closed_project_ids` now derives from projects with no live (non-Won/Lost) Quotation,
+so only a project where *every* Quotation is closed counts as closed; a project with zero
+Quotations is still never closed, unaffected. Part B: a new `Project.is_calibration`
+boolean column (migration `323ecc35b9df`, default `False`), settable on `ProjectCreate`
+(same role gate as project creation) or via a new Director-only `PATCH
+/projects/{id}/calibration`; all three dashboard tiles now exclude flagged projects.
+Live-verified in production: a project re-bid past a Lost quotation correctly returned to
+Open (11 -> 10 -> 11 on the live counter); a calibration-flagged project was excluded from
+both `open_projects_count` and `pending_estimates_count`; the Director-only PATCH backfill
+mechanism worked end-to-end. **Backfill note:** the Mathura/Noida/Bathinda projects this
+paragraph's registered text refers to do not exist as rows on the production server (a
+direct DB search by city/client-name/notes across all 15 production projects found zero
+matches) -- whatever environment that recreation work was done in, it was never persisted
+here. The production server's actual calibration data was instead two projects under
+client "Pathankot Badminton Court (FY23-24 actual, calibration)" (`P-2609-0002`,
+`P-2609-0003`) -- self-identified by name -- which have now been flagged
+`is_calibration=True` via the new PATCH endpoint. Amendment 28 is now fully closed.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

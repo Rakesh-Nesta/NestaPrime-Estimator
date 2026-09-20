@@ -11,6 +11,60 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-20 -- PR #136: Amendment 28 (Open Projects fix + calibration exclusion)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `e474aa6` -> `5f27fb3`
+**Backend only, first real migration of this batch** -- `323ecc35b9df` adds
+`projects.is_calibration` (boolean, default `False`). No frontend rebuild needed (no UI
+built for this yet -- the flag is set via `ProjectCreate`/the new PATCH endpoint only).
+
+Self-identified during the same fifth proactive gap audit as Amendments 26-27. Part A:
+`open_projects_count` excluded a project the moment *any* Quotation on it reached
+Won/Lost, permanently -- so a project re-bid after Amendment 26 made that possible would
+still never show as Open again. Fixed by deriving `closed_project_ids` from projects with
+no live (non-Won/Lost) Quotation, so only a project where *every* Quotation is closed
+counts as closed. Part B: adds `Project.is_calibration`, settable at creation or via a new
+Director-only `PATCH /projects/{id}/calibration`, excluded from all three dashboard
+summary tiles.
+
+**Rebuild and migration were clean** -- `git pull` fast-forwarded to `5f27fb3`, the
+backend rebuilt and started, the log explicitly showed `Running upgrade b98a7f5bc39a ->
+323ecc35b9df, add project is_calibration flag (Amendment 28 Part B)`, both gunicorn
+workers logged `Application startup complete`, `curl .../health` returned
+`{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: 20 new/updated tests in
+`test_dashboard.py`, full backend suite 1194 passed): reactivated
+`verify-director@nestaprime.local`, ran the full re-bid cycle on a throwaway project --
+Open count went 10 -> 11 (live Released quotation) -> 10 (quotation marked Lost, correctly
+still closed) -> 11 again (fresh Estimate + Quotation after the Lost one, correctly Open
+again). A calibration-flagged project didn't move `open_projects_count` at all, and
+sending a calibration project's Estimate didn't move `pending_estimates_count`. The
+Director-only PATCH backfill mechanism was exercised live too (flagging the restarted
+project brought the count back to 10). Account deactivated in the script's own `finally`
+block, confirmed `is_active: False` at the end. The verification script appears to have
+run twice (14 minutes apart) leaving 4 throwaway projects instead of 2 under "Amendment 28
+Verify (delete me)" -- harmless, same known-leftover pattern as below.
+
+**Manual backfill.** The Mathura/Noida/Bathinda projects this Amendment's registered text
+refers to (see Annexure 2's own closing note) do not exist as rows on this production
+server -- a direct DB search across all 15 production projects by city, client name, and
+notes found zero matches. The server's actual calibration data turned out to be two
+projects under client "Pathankot Badminton Court (FY23-24 actual, calibration)"
+(`P-2609-0002`, `P-2609-0003`) -- self-identified by name -- confirmed and flagged
+`is_calibration=True` via a direct script using the same DB session the API uses, verified
+by re-reading both rows back afterward.
+
+**Known leftover:** beyond the usual "(delete me)" throwaway records from prior deploys,
+this deploy added 4 more under "Amendment 28 Verify (delete me)" (see above) -- same
+reasoning as every prior deploy's leftovers, no delete endpoint by design.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-20 -- PR #134: Amendment 27 (vendor reply GST-basis conversion)
 
 **Run by:** R. Patni (with AI development assistance)
