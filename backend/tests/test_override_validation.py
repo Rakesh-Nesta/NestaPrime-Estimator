@@ -46,13 +46,16 @@ def test_parse_setting_number_raises_a_clear_error_naming_the_key():
 
 def test_numeric_override_with_non_numeric_value_is_rejected(client, director_user):
     headers = _director_headers(client, director_user)
+    client.post(
+        "/settings", json={"key": "site_establishment_percent", "value": "6.0", "reason": "test setup"},
+        headers=headers,
+    )
     res = client.post(
         "/overrides",
         json={
             "document_type": "cost_sheet",
             "document_id": "00000000-0000-0000-0000-0000000000dd",
             "setting_key": "site_establishment_percent",
-            "master_value": "6.0",  # numeric
             "override_value": "not-a-number",
             "reason": "test",
         },
@@ -65,15 +68,19 @@ def test_numeric_override_with_non_numeric_value_is_rejected(client, director_us
 def test_non_numeric_setting_override_is_unaffected(client, director_user):
     """A genuinely text-valued Setting (company details, T&C clauses,
     etc.) must still accept a text override -- this fix only kicks in
-    when master_value itself is numeric."""
+    when the real Master Setting value itself is numeric."""
     headers = _director_headers(client, director_user)
+    client.post(
+        "/settings",
+        json={"key": "company_tagline", "value": "Building champions since 2015", "reason": "test setup"},
+        headers=headers,
+    )
     res = client.post(
         "/overrides",
         json={
             "document_type": "quotation",
             "document_id": "00000000-0000-0000-0000-0000000000ee",
             "setting_key": "company_tagline",
-            "master_value": "Building champions since 2015",  # not numeric
             "override_value": "Custom tagline for this client",  # not numeric either
             "reason": "test",
         },
@@ -84,19 +91,54 @@ def test_non_numeric_setting_override_is_unaffected(client, director_user):
 
 def test_numeric_override_with_numeric_value_still_succeeds(client, director_user):
     headers = _director_headers(client, director_user)
+    client.post(
+        "/settings", json={"key": "contingency_percent", "value": "5.0", "reason": "test setup"}, headers=headers,
+    )
     res = client.post(
         "/overrides",
         json={
             "document_type": "cost_sheet",
             "document_id": "00000000-0000-0000-0000-0000000000ff",
             "setting_key": "contingency_percent",
-            "master_value": "5.0",
             "override_value": "7.5",
             "reason": "test",
         },
         headers=headers,
     )
     assert res.status_code == 201, res.text
+
+
+# ---------------------------------------------------------------------------
+# Amendment 32: a fabricated master_value can no longer bypass the guard
+# ---------------------------------------------------------------------------
+
+
+def test_a_fabricated_master_value_in_the_payload_cannot_bypass_the_numeric_check(client, director_user):
+    """Before Amendment 32, create_override only inspected whatever
+    master_value the caller sent -- a caller claiming a non-numeric
+    master_value for a genuinely numeric setting skipped the check
+    entirely. The field no longer exists on the request at all, so
+    sending it (even with a client that still tries to) has no effect;
+    the server looks up the real value and validates against that."""
+    headers = _director_headers(client, director_user)
+    client.post(
+        "/settings", json={"key": "site_establishment_percent", "value": "6.0", "reason": "test setup"},
+        headers=headers,
+    )
+    res = client.post(
+        "/overrides",
+        json={
+            "document_type": "cost_sheet",
+            "document_id": "00000000-0000-0000-0000-000000000011",
+            "setting_key": "site_establishment_percent",
+            "master_value": "not-a-number",  # extra field an old client might still send -- must be ignored
+            "override_value": "also-not-a-number",
+            "reason": "test",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 422, res.text
+    assert "site_establishment_percent" in res.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

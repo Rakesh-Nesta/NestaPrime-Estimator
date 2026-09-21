@@ -378,7 +378,6 @@ class OverrideCreate(BaseModel):
     document_type: DocumentType
     document_id: uuid.UUID
     setting_key: str
-    master_value: str
     override_value: str
     reason: str = Field(min_length=1)
 
@@ -403,34 +402,53 @@ def create_override(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*OVERRIDE_ROLES)),
 ):
-    # Amendment 22: if the Master Setting this override replaces was
+    # Amendment 32: look up the real, current Master Setting value
+    # server-side rather than trusting a caller-supplied master_value --
+    # the earlier version of this check only inspected whatever the
+    # client sent, letting a fabricated non-numeric value skip the
+    # numeric-consistency check entirely (Amendment 22's own gap,
+    # reopened by never cross-checking the claim). Many settings
+    # (most of the K.1 cost-sheet constants) run entirely on a hardcoded
+    # Python default with no Settings-table row ever created for them --
+    # documents.py's _get_setting_float's own two-tier precedence -- so a
+    # missing row here is a normal, legitimate case, not evidence of an
+    # unknown/bogus key; there's just nothing authoritative to check
+    # override_value against, same as before this fix.
+    real_master_value = get_current_setting_value(db, payload.setting_key)
+
+    # Amendment 22: if the Master Setting this override replaces is
     # itself numeric, the override plausibly should be too -- reject a
     # non-numeric override_value at write time in that case, rather than
     # letting it crash a later document computation. Settings that are
     # legitimately non-numeric (company details, T&C text) are
-    # unaffected, since master_value won't parse as a float for those
-    # either and this check is skipped.
-    try:
-        float(payload.master_value)
-    except ValueError:
-        pass
-    else:
+    # unaffected, since real_master_value won't parse as a float for
+    # those either and this check is skipped.
+    if real_master_value is not None:
         try:
-            float(payload.override_value)
+            float(real_master_value)
         except ValueError:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"'{payload.setting_key}' is a numeric setting (current value "
-                    f"'{payload.master_value}') -- override_value ('{payload.override_value}') must be numeric too"
-                ),
-            ) from None
+            pass
+        else:
+            try:
+                float(payload.override_value)
+            except ValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"'{payload.setting_key}' is a numeric setting (current value "
+                        f"'{real_master_value}') -- override_value ('{payload.override_value}') must be numeric too"
+                    ),
+                ) from None
+    else:
+        real_master_value = (
+            f"(no Master Setting on record for '{payload.setting_key}' -- running on its built-in default)"
+        )
 
     override = Override(
         document_type=payload.document_type,
         document_id=payload.document_id,
         setting_key=payload.setting_key,
-        master_value=payload.master_value,
+        master_value=real_master_value,
         override_value=payload.override_value,
         reason=payload.reason,
         user_id=current_user.id,
