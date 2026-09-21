@@ -916,6 +916,15 @@ un-blacklist a client (or clear/set overdue) with zero record of who did it or w
 control whose entire purpose is Director-level financial gatekeeping. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Implemented 21 September 2026 (PR #140, deployed to production same day, per
+[docs/annexures/Section-35-specs.md](Section-35-specs.md), approved as proposed).**
+`update_client_flags` now takes a `request` parameter and mirrors
+`update_client_consent`'s own changed-field logging loop exactly, reusing
+`document_type="client"` so both consent and flag history live in the same per-client
+audit trail. Live-verified in production: setting `blacklist_flag` to `True` on a
+throwaway client wrote a `client` audit entry (`False` -> `True`). Amendment 29 is now
+fully closed.
+
 ### Amendment No. 30 — Report Release Has No Audit Trail, Unlike the Identical Quotation-Release Pattern
 **Registered 21 September 2026 (self-identified during the same audit).**
 `backend/app/api/reports.py:647-665` (`release_report`, Director-only, DRAFT ->
@@ -927,6 +936,14 @@ Summary reports carry cost/margin and override-frequency data restricted to PM/D
 (`VISIBLE_ROLES`) -- releasing one is a governance action with no record beyond the row's
 own `released_by_id`/`released_at`, which isn't surfaced anywhere the audit log is. Needs
 a Director-approved spec before implementation, per this register's own Change Process.
+
+**Implemented 21 September 2026 (PR #141, deployed to production same day, per
+[docs/annexures/Section-36-specs.md](Section-36-specs.md), approved as proposed).**
+`release_report` now logs its DRAFT -> RELEASED transition unconditionally (every
+release here is already Director-only, unlike `release_quotation`'s conditional
+PM-vs-Director split), under `document_type="report"`. Live-verified in production:
+releasing a Margin report wrote a `report` audit entry (`draft` -> `released`).
+Amendment 30 is now fully closed.
 
 ### Amendment No. 31 — Client Signatory Records Have No Audit Trail At All
 **Registered 21 September 2026 (self-identified during the same audit).**
@@ -940,6 +957,15 @@ considered legally valid -- someone could quietly extend an `expiry_date`, flip 
 departed employee's `is_active` back to `True`, or edit a `designation` to make a stale
 signatory match again, with no audit entry anywhere to catch it. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
+
+**Implemented 21 September 2026 (PR #142, deployed to production same day, per
+[docs/annexures/Section-37-specs.md](Section-37-specs.md), approved as proposed).**
+`create_signatory` now logs a "created" entry; `update_signatory` logs one entry per
+field that actually changed (all fields, not just `is_active`/`expiry_date`), both under
+a new `document_type="client_signatory"` category kept separate from the parent client's
+own `"client"` trail. Live-verified in production: creating a signatory wrote a
+"created" entry naming it, and updating its `designation` and `is_active` wrote two
+correctly-valued entries. Amendment 31 is now fully closed.
 
 ## Register Notes (non-software, business-process)
 
