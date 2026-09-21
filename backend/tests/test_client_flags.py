@@ -120,6 +120,53 @@ def test_client_flags_update_for_unknown_client_404s(client, director_user):
     assert res.status_code == 404
 
 
+def test_setting_a_client_flag_writes_an_audit_log_entry(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+
+    client.patch(f"/clients/{client_id}", json={"blacklist_flag": True}, headers=headers)
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "client", "document_id": client_id}, headers=headers
+    ).json()
+    entry = next(e for e in entries if e["field"] == "blacklist_flag")
+    assert entry["old_value"] == "False"
+    assert entry["new_value"] == "True"
+
+
+def test_setting_both_flags_at_once_writes_two_audit_log_entries(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+
+    client.patch(
+        f"/clients/{client_id}", json={"blacklist_flag": True, "overdue_flag": True}, headers=headers
+    )
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "client", "document_id": client_id}, headers=headers
+    ).json()
+    fields_logged = {e["field"] for e in entries if e["field"] in ("blacklist_flag", "overdue_flag")}
+    assert fields_logged == {"blacklist_flag", "overdue_flag"}
+
+
+def test_resending_the_same_flag_value_writes_no_new_audit_log_entry(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    client.patch(f"/clients/{client_id}", json={"blacklist_flag": True}, headers=headers)
+
+    before = client.get(
+        "/audit-log", params={"document_type": "client", "document_id": client_id}, headers=headers
+    ).json()
+
+    res = client.patch(f"/clients/{client_id}", json={"blacklist_flag": True}, headers=headers)
+    assert res.status_code == 200, res.text
+
+    after = client.get(
+        "/audit-log", params={"document_type": "client", "document_id": client_id}, headers=headers
+    ).json()
+    assert len(after) == len(before)
+
+
 # ---------------------------------------------------------------------------
 # blacklist_flag blocks new Estimates (Part O)
 # ---------------------------------------------------------------------------

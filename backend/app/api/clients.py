@@ -166,6 +166,7 @@ def get_client(
 def update_client_flags(
     client_id: uuid.UUID,
     payload: ClientFlagsUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     # Part O: "overdue_flag (blocks new Quotation release until Director
     # clears), blacklist_flag (blocks new Estimates)" -- Director-only,
@@ -176,10 +177,19 @@ def update_client_flags(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    if payload.overdue_flag is not None:
-        client.overdue_flag = payload.overdue_flag
-    if payload.blacklist_flag is not None:
-        client.blacklist_flag = payload.blacklist_flag
+    # Amendment 29: these two flags gate real financial controls
+    # (blacklist blocks new Estimates, overdue blocks Quotation release)
+    # -- log every actual change, same changed-field pattern
+    # update_client_consent below already uses.
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        old_value = getattr(client, field)
+        if old_value != value:
+            write_audit_log_entry(
+                db, current_user, "client", client.id, field,
+                old_value=old_value, new_value=value, request=request,
+            )
+        setattr(client, field, value)
 
     db.commit()
     db.refresh(client)
