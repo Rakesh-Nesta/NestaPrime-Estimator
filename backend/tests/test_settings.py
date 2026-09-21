@@ -143,6 +143,10 @@ def test_override_is_logged_with_master_and_override_values(client, director_use
     """Part O OVERRIDES / Q.2 rule 2."""
     headers = _director_headers(client, director_user)
     fake_cost_sheet_id = "00000000-0000-0000-0000-0000000000aa"
+    client.post(
+        "/settings", json={"key": "site_establishment_percent", "value": "6.0", "reason": "test setup"},
+        headers=headers,
+    )
 
     res = client.post(
         "/overrides",
@@ -150,7 +154,6 @@ def test_override_is_logged_with_master_and_override_values(client, director_use
             "document_type": "cost_sheet",
             "document_id": fake_cost_sheet_id,
             "setting_key": "site_establishment_percent",
-            "master_value": "6.0",
             "override_value": "8.0",
             "reason": "remote site, +2% for extra mobilisation",
         },
@@ -158,6 +161,8 @@ def test_override_is_logged_with_master_and_override_values(client, director_use
     )
     assert res.status_code == 201, res.text
     body = res.json()
+    # Amendment 32: master_value is the real Master Setting's value,
+    # server-computed -- not whatever the caller claims.
     assert body["master_value"] == "6.0"
     assert body["override_value"] == "8.0"
 
@@ -168,6 +173,29 @@ def test_override_is_logged_with_master_and_override_values(client, director_use
     )
     assert list_res.status_code == 200
     assert len(list_res.json()) == 1
+
+
+def test_override_against_a_setting_with_no_master_row_skips_the_numeric_check(client, director_user):
+    """Amendment 32: most K.1 cost-sheet constants run on a hardcoded
+    Python default with no Settings-table row ever created for them --
+    a missing row is a normal case, not an unknown/bogus key, so this
+    must keep working exactly as it always has."""
+    headers = _director_headers(client, director_user)
+    fake_cost_sheet_id = "00000000-0000-0000-0000-0000000000cc"
+
+    res = client.post(
+        "/overrides",
+        json={
+            "document_type": "cost_sheet",
+            "document_id": fake_cost_sheet_id,
+            "setting_key": "contingency_structure_percent",
+            "override_value": "not-a-number",
+            "reason": "test",
+        },
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert "no Master Setting on record" in res.json()["master_value"]
 
 
 def test_override_requires_a_reason(client, director_user):
