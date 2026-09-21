@@ -4,13 +4,14 @@ import json
 import uuid
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from openpyxl import Workbook
 from pydantic import BaseModel, ConfigDict
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.core.export_safety import sanitize_row
 from app.db.session import get_db
@@ -647,6 +648,7 @@ def export_report_pdf(
 @router.post("/{report_id}/release", response_model=ReportOut)
 def release_report(
     report_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("director")),
 ):
@@ -656,6 +658,15 @@ def release_report(
         raise HTTPException(status_code=404, detail="Report not found")
     if report.status != ReportStatus.DRAFT:
         raise HTTPException(status_code=400, detail=f"Cannot release a report in {report.status.value} status")
+
+    # Amendment 30: every release here is already Director-only (unlike
+    # release_quotation's conditional PM-vs-Director split), so the
+    # transition itself is always the governance event worth logging.
+    write_audit_log_entry(
+        db, current_user, "report", report.id, "status",
+        old_value=report.status.value, new_value=ReportStatus.RELEASED.value,
+        request=request,
+    )
 
     report.status = ReportStatus.RELEASED
     report.released_by_id = current_user.id

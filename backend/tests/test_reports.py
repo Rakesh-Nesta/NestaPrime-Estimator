@@ -226,6 +226,27 @@ def test_margin_report_is_draft_until_director_releases_it(client, director_user
     assert second_release_attempt.status_code == 400
 
 
+def test_releasing_a_report_writes_an_audit_log_entry(client, director_user, db_session):
+    director_headers = _director_headers(client, director_user)
+    _released_quotation(client, director_headers)
+
+    pm_headers = _pm_headers(client, db_session)
+    report = client.post(
+        "/reports/generate",
+        json={"report_type": "margin", "period_from": TODAY, "period_to": TODAY},
+        headers=pm_headers,
+    ).json()
+
+    client.post(f"/reports/{report['id']}/release", headers=director_headers)
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "report", "document_id": report["id"]}, headers=director_headers
+    ).json()
+    entry = next(e for e in entries if e["field"] == "status")
+    assert entry["old_value"] == "draft"
+    assert entry["new_value"] == "released"
+
+
 def test_report_has_a_sha256_integrity_hash(client, director_user):
     """T.2 rule 2: 'a SHA-256 hash of its output, same integrity pattern as
     ATTACHMENTS.'"""
