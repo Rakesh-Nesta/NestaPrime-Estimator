@@ -900,6 +900,47 @@ client "Pathankot Badminton Court (FY23-24 actual, calibration)" (`P-2609-0002`,
 `P-2609-0003`) -- self-identified by name -- which have now been flagged
 `is_calibration=True` via the new PATCH endpoint. Amendment 28 is now fully closed.
 
+### Amendment No. 29 — Director Can Silently Flip a Client's Blacklist/Overdue Flags With No Audit Trail
+**Registered 21 September 2026 (self-identified during a sixth Director-requested
+proactive gap audit against the register, spot-verified against the live code before
+recording).** `backend/app/api/clients.py:165-186` (`update_client_flags`, the
+Director-only `PATCH /clients/{client_id}` that sets `overdue_flag`/`blacklist_flag`)
+calls `db.commit()` directly with no `write_audit_log_entry` call and no `request`
+parameter at all -- confirmed by direct read. These two flags are not cosmetic:
+`blacklist_flag` blocks new Estimate creation (`documents.py:1459`, `:2096`) and
+`overdue_flag` blocks Quotation release (`documents.py:2465`) -- Part O's own stated
+purpose for both. The very next function in the same file, `update_client_consent`
+(`clients.py:189-219`), does the correct thing: it takes a `request` parameter and calls
+`write_audit_log_entry` for every changed field. A Director can silently blacklist or
+un-blacklist a client (or clear/set overdue) with zero record of who did it or when, on a
+control whose entire purpose is Director-level financial gatekeeping. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
+### Amendment No. 30 — Report Release Has No Audit Trail, Unlike the Identical Quotation-Release Pattern
+**Registered 21 September 2026 (self-identified during the same audit).**
+`backend/app/api/reports.py:647-665` (`release_report`, Director-only, DRAFT ->
+RELEASED) never imports or calls `write_audit_log_entry` -- confirmed by a grep of the
+entire file returning zero matches for either. The exactly analogous status-transition
+endpoint elsewhere in the codebase, `release_quotation`
+(`backend/app/api/documents.py:2443-2498`), does log the transition. Margin/Override
+Summary reports carry cost/margin and override-frequency data restricted to PM/Director
+(`VISIBLE_ROLES`) -- releasing one is a governance action with no record beyond the row's
+own `released_by_id`/`released_at`, which isn't surfaced anywhere the audit log is. Needs
+a Director-approved spec before implementation, per this register's own Change Process.
+
+### Amendment No. 31 — Client Signatory Records Have No Audit Trail At All
+**Registered 21 September 2026 (self-identified during the same audit).**
+`backend/app/api/client_signatories.py` -- the entire file -- has no
+`write_audit_log_entry` import or call anywhere, confirmed by grep returning zero
+matches. `create_signatory` and `update_signatory` let Sales/PM/Director create, edit,
+deactivate, or **reactivate** a `ClientSignatory` with zero trail. This matters because
+`attachments.py`'s `_match_active_signatory` (`attachments.py:132-149`) uses these exact
+rows to decide whether a client-side approval on an `approval_evidence` attachment is
+considered legally valid -- someone could quietly extend an `expiry_date`, flip a
+departed employee's `is_active` back to `True`, or edit a `designation` to make a stale
+signatory match again, with no audit entry anywhere to catch it. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
