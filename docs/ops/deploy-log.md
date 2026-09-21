@@ -11,6 +11,51 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-21 -- PRs #140-#142: Amendments 29-31 (missing audit-log trails)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `5f27fb3` -> `4bd9420`
+**Backend only** -- no new migration (none of the three changed the schema), no
+frontend rebuild needed.
+
+Self-identified during a sixth proactive gap audit against the register, targeting
+fresh territory (user/auth management, reports, attachments, client management,
+audit-log consistency, and not-yet-audited reference-data modules). Three findings
+registered and specced: Amendment 29 -- `update_client_flags` (blacklist/overdue,
+Director-only) had no audit trail, unlike its sibling `update_client_consent` right
+below it. Amendment 30 -- `release_report` had no audit trail, unlike the identical
+`release_quotation` pattern. Amendment 31 -- `client_signatories.py` had no audit trail
+at all, despite these records gating whether a client-side approval on an
+`approval_evidence` attachment is considered legally valid. All three fixed by adding
+`write_audit_log_entry` calls matching this codebase's existing conventions (a
+changed-field loop for 29 and 31's update path, an unconditional log for 30's
+Director-only transition, a "created" entry for 31's create path).
+
+**Rebuild was clean** -- `git pull` fast-forwarded to `4bd9420`, the backend rebuilt and
+started without incident, both gunicorn workers logged `Application startup complete`,
+`curl .../health` returned `{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: 4 new/updated tests in
+`test_client_flags.py`, 1 in `test_reports.py`, 3 in `test_client_signatories.py`; full
+backend suite 1201 passed across the three implementation PRs): reactivated
+`verify-director@nestaprime.local`, then in one script: set `blacklist_flag` on a
+throwaway client and confirmed a `client` audit entry (`False` -> `True`); released a
+Margin report and confirmed a `report` audit entry (`draft` -> `released`); created a
+signatory and confirmed a `client_signatory` "created" entry naming it, then updated its
+`designation` and `is_active` and confirmed two more correctly-valued entries. Account
+deactivated in the script's own `finally` block, confirmed `is_active: False` at the
+end.
+
+**Known leftover:** one more throwaway record, "Amendments 29-31 Verify (delete me)"
+client/project/estimate/quotation/report/signatory, remains in production data -- same
+reasoning as every prior deploy's leftovers (no delete endpoint by design; Director has
+said to leave these as-is).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a
+health-check curl.
+
+---
+
 ## 2026-09-20 -- PR #136: Amendment 28 (Open Projects fix + calibration exclusion)
 
 **Run by:** R. Patni (with AI development assistance)
