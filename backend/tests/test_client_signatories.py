@@ -166,6 +166,73 @@ def test_update_missing_signatory_404s(client, director_user):
 
 
 # ---------------------------------------------------------------------------
+# Amendment 31: audit trail on create/update
+# ---------------------------------------------------------------------------
+
+
+def test_creating_a_signatory_writes_an_audit_log_entry(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+
+    signatory_id = client.post(
+        f"/clients/{client_id}/signatories", json=_signatory_payload(), headers=headers
+    ).json()["id"]
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "client_signatory", "document_id": signatory_id}, headers=headers
+    ).json()
+    entry = next(e for e in entries if e["field"] == "created")
+    assert "Priya Sharma" in entry["new_value"]
+    assert "Principal" in entry["new_value"]
+
+
+def test_updating_a_signatory_writes_one_audit_log_entry_per_changed_field(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    signatory_id = client.post(
+        f"/clients/{client_id}/signatories", json=_signatory_payload(), headers=headers
+    ).json()["id"]
+
+    client.patch(
+        f"/clients/{client_id}/signatories/{signatory_id}",
+        json={"designation": "Vice Principal", "is_active": False},
+        headers=headers,
+    )
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "client_signatory", "document_id": signatory_id}, headers=headers
+    ).json()
+    designation_entry = next(e for e in entries if e["field"] == "designation")
+    assert designation_entry["old_value"] == "Principal"
+    assert designation_entry["new_value"] == "Vice Principal"
+    is_active_entry = next(e for e in entries if e["field"] == "is_active")
+    assert is_active_entry["old_value"] == "True"
+    assert is_active_entry["new_value"] == "False"
+
+
+def test_resending_the_same_signatory_field_value_writes_no_new_audit_log_entry(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    signatory_id = client.post(
+        f"/clients/{client_id}/signatories", json=_signatory_payload(), headers=headers
+    ).json()["id"]
+
+    before = client.get(
+        "/audit-log", params={"document_type": "client_signatory", "document_id": signatory_id}, headers=headers
+    ).json()
+
+    res = client.patch(
+        f"/clients/{client_id}/signatories/{signatory_id}", json={"designation": "Principal"}, headers=headers
+    )
+    assert res.status_code == 200, res.text
+
+    after = client.get(
+        "/audit-log", params={"document_type": "client_signatory", "document_id": signatory_id}, headers=headers
+    ).json()
+    assert len(after) == len(before)
+
+
+# ---------------------------------------------------------------------------
 # M.3 approval-evidence signatory matching (Part O)
 # ---------------------------------------------------------------------------
 

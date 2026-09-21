@@ -1,10 +1,11 @@
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
@@ -78,6 +79,7 @@ class ClientSignatoryOut(BaseModel):
 def create_signatory(
     client_id: uuid.UUID,
     payload: ClientSignatoryCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*WRITE_ROLES)),
 ):
@@ -87,6 +89,15 @@ def create_signatory(
     _get_client_or_404(db, client_id)
     signatory = ClientSignatory(client_id=client_id, **payload.model_dump())
     db.add(signatory)
+    db.flush()  # assigns signatory.id before the audit entry references it
+    # Amendment 31: these records gate whether a client-side approval on
+    # an approval_evidence attachment is considered valid
+    # (attachments.py's _match_active_signatory) -- worth its own trail.
+    write_audit_log_entry(
+        db, current_user, "client_signatory", signatory.id, "created",
+        old_value=None, new_value=f"{signatory.name} ({signatory.designation})",
+        request=request,
+    )
     db.commit()
     db.refresh(signatory)
     return signatory
@@ -111,6 +122,7 @@ def update_signatory(
     client_id: uuid.UUID,
     signatory_id: uuid.UUID,
     payload: ClientSignatoryUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*WRITE_ROLES)),
 ):
@@ -119,7 +131,19 @@ def update_signatory(
     supersede convention for approval-adjacent records (Attachments)."""
     _get_client_or_404(db, client_id)
     signatory = _get_signatory_or_404(db, client_id, signatory_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    # Amendment 31: log every changed field, same convention
+    # update_client_consent already uses -- a quiet is_active reactivation
+    # or expiry_date extension is exactly the kind of edit this exists to
+    # catch, but a designation/name edit can also make a stale signatory
+    # match an attachment it shouldn't, so nothing here is special-cased.
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        old_value = getattr(signatory, field)
+        if old_value != value:
+            write_audit_log_entry(
+                db, current_user, "client_signatory", signatory.id, field,
+                old_value=old_value, new_value=value, request=request,
+            )
         setattr(signatory, field, value)
     db.commit()
     db.refresh(signatory)
