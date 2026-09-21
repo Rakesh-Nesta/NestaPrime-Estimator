@@ -50,6 +50,7 @@ from app.models.project import Package, Project, ProjectType
 from app.models.rate_item import LabourCategory, RateSource
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.setting import DocumentType, Override
+from app.models.skip_request import SkipRequest, SkipRequestStatus
 from app.models.sport import ProjectSport
 from app.services import ai_content
 
@@ -433,6 +434,21 @@ def create_cost_sheet(
         raise HTTPException(
             status_code=400,
             detail="An active cost sheet already exists for this project; use /revise on it instead",
+        )
+
+    # Amendment 33: symmetric with create_skip_request's own guard against
+    # an existing Cost Sheet -- without this, a normal Cost Sheet build
+    # could proceed independently of a pending SkipRequest, leaving the
+    # two paths silently diverged once approved/rejected.
+    pending_skip = (
+        db.query(SkipRequest)
+        .filter(SkipRequest.project_id == project_id, SkipRequest.status == SkipRequestStatus.PENDING)
+        .first()
+    )
+    if pending_skip:
+        raise HTTPException(
+            status_code=400,
+            detail="A skip request is pending for this project -- approve or reject it first",
         )
 
     cost_sheet = CostSheet(
