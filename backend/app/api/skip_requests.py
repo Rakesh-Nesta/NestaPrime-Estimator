@@ -39,6 +39,7 @@ class SkipRequestOut(BaseModel):
     resulting_cost_sheet_id: uuid.UUID | None
     created_at: datetime
     decided_at: datetime | None
+    rejection_reason: str | None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,6 +161,44 @@ def approve_skip_request(
         db, current_user, "skip_request", skip_request.id, "status",
         old_value=SkipRequestStatus.PENDING.value, new_value=SkipRequestStatus.APPROVED.value,
         reason=skip_request.reason, request=request,
+    )
+
+    db.commit()
+    db.refresh(skip_request)
+    return skip_request
+
+
+class SkipRequestReject(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@skip_requests_router.post("/skip-requests/{skip_request_id}/reject", response_model=SkipRequestOut)
+def reject_skip_request(
+    skip_request_id: uuid.UUID,
+    payload: SkipRequestReject,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*APPROVE_ROLES)),
+):
+    """Amendment 33: the reverse of approve_skip_request -- lets a PM/
+    Director close out a pending request they don't want to approve,
+    rather than leaving it PENDING forever (which would otherwise block
+    every future skip request on the project, per create_skip_request's
+    own pending-check above)."""
+    skip_request = db.query(SkipRequest).filter(SkipRequest.id == skip_request_id).first()
+    if not skip_request:
+        raise HTTPException(status_code=404, detail="Skip request not found")
+    if skip_request.status != SkipRequestStatus.PENDING:
+        raise HTTPException(status_code=400, detail="This skip request has already been decided")
+
+    skip_request.status = SkipRequestStatus.REJECTED
+    skip_request.rejection_reason = payload.reason
+    skip_request.decided_at = datetime.now(UTC)
+
+    write_audit_log_entry(
+        db, current_user, "skip_request", skip_request.id, "status",
+        old_value=SkipRequestStatus.PENDING.value, new_value=SkipRequestStatus.REJECTED.value,
+        reason=payload.reason, request=request,
     )
 
     db.commit()

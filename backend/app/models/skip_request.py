@@ -25,6 +25,11 @@ class SkipRequestStage(str, enum.Enum):
 class SkipRequestStatus(str, enum.Enum):
     PENDING = "pending"
     APPROVED = "approved"
+    # Amendment 33: without this, a pending request nobody wants to
+    # approve could never be closed out -- it would block every future
+    # skip request on the project forever, with no record a decision was
+    # ever made.
+    REJECTED = "rejected"
 
 
 class SkipRequest(Base):
@@ -67,3 +72,7 @@ class SkipRequest(Base):
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Amendment 33: separate from `reason` above, which holds the
+    # requester's own justification for the skip -- this is the
+    # approver's reason for declining it, never overwriting the original.
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)

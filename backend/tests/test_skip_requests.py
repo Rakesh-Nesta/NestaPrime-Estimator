@@ -222,6 +222,139 @@ def test_approve_unknown_skip_request_404s(client, director_user):
 
 
 # ---------------------------------------------------------------------------
+# Amendment 33: rejecting a skip request
+# ---------------------------------------------------------------------------
+
+
+def test_sales_cannot_reject_a_skip_request(client, director_user, db_session):
+    director_headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, director_headers)
+    project_id = _create_project(client, director_headers, client_id)
+    req = client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "test"},
+        headers=director_headers,
+    ).json()
+
+    sales_headers = _sales_headers(client, db_session)
+    res = client.post(f"/skip-requests/{req['id']}/reject", json={"reason": "not needed"}, headers=sales_headers)
+    assert res.status_code == 403
+
+
+def test_pm_can_reject_a_skip_request(client, director_user, db_session):
+    director_headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, director_headers)
+    project_id = _create_project(client, director_headers, client_id)
+    req = client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "test"},
+        headers=director_headers,
+    ).json()
+
+    pm_headers = _pm_headers(client, db_session)
+    res = client.post(f"/skip-requests/{req['id']}/reject", json={"reason": "build the real thing"}, headers=pm_headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["status"] == "rejected"
+    assert body["rejection_reason"] == "build the real thing"
+    assert body["decided_at"] is not None
+    assert body["approved_by_id"] is None
+    assert body["resulting_cost_sheet_id"] is None
+
+
+def test_rejecting_closes_the_deadlock_a_new_skip_request_can_be_raised(client, director_user):
+    """The actual fix: a rejected request no longer blocks future ones."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    req = client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "first"},
+        headers=headers,
+    ).json()
+    client.post(f"/skip-requests/{req['id']}/reject", json={"reason": "no"}, headers=headers)
+
+    res = client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "second attempt"},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+
+
+def test_cannot_reject_an_already_decided_skip_request(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    req, _ = _approved_skip_request(client, headers, project_id)
+
+    res = client.post(f"/skip-requests/{req['id']}/reject", json={"reason": "too late"}, headers=headers)
+    assert res.status_code == 400
+
+
+def test_reject_unknown_skip_request_404s(client, director_user):
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/skip-requests/00000000-0000-0000-0000-000000000000/reject", json={"reason": "x"}, headers=headers
+    )
+    assert res.status_code == 404
+
+
+def test_rejecting_a_skip_request_writes_an_audit_log_entry(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    req = client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "test"},
+        headers=headers,
+    ).json()
+    client.post(f"/skip-requests/{req['id']}/reject", json={"reason": "declined"}, headers=headers)
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "skip_request", "document_id": req["id"]}, headers=headers
+    ).json()
+    entry = next(e for e in entries if e["new_value"] == "rejected")
+    assert entry["old_value"] == "pending"
+    assert entry["reason"] == "declined"
+
+
+# ---------------------------------------------------------------------------
+# Amendment 33: a pending skip request blocks the normal Cost Sheet path too
+# ---------------------------------------------------------------------------
+
+
+def test_pending_skip_request_blocks_a_normal_cost_sheet_build(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "test"},
+        headers=headers,
+    )
+
+    res = client.post(f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=headers)
+    assert res.status_code == 400
+    assert "skip request" in res.json()["detail"].lower()
+
+
+def test_rejecting_the_skip_request_unblocks_a_normal_cost_sheet_build(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    req = client.post(
+        f"/projects/{project_id}/skip-requests",
+        json={"stage_skipped": "cost_sheet", "reason": "test"},
+        headers=headers,
+    ).json()
+    client.post(f"/skip-requests/{req['id']}/reject", json={"reason": "build it properly"}, headers=headers)
+
+    res = client.post(f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=headers)
+    assert res.status_code == 201, res.text
+
+
+# ---------------------------------------------------------------------------
 # Downstream consequences: Unverified cost sheet "behaves as Draft" for
 # editing, unblocks Estimate creation, and flows into
 # Quotation.cost_basis_unverified (M.2 rules 1 and 3)
