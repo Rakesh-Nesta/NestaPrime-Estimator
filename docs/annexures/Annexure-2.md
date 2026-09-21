@@ -967,6 +967,59 @@ own `"client"` trail. Live-verified in production: creating a signatory wrote a
 "created" entry naming it, and updating its `designation` and `is_active` wrote two
 correctly-valued entries. Amendment 31 is now fully closed.
 
+### Amendment No. 32 — Master Settings Override's Amendment-22 Numeric Guard Is Bypassable
+**Registered 21 September 2026 (self-identified during a seventh Director-requested
+proactive gap audit against the register, spot-verified against the live code before
+recording).** `backend/app/api/settings.py:377-427` (`create_override`)'s Amendment 22
+numeric-consistency check only inspects the caller-supplied `OverrideCreate.master_value`
+field -- confirmed by direct read to never call `get_current_setting_value(db,
+payload.setting_key)` to check what the real, current Master Setting value actually is.
+A PM or Director (both in `OVERRIDE_ROLES`) can send a fabricated non-numeric
+`master_value` for a `setting_key` that is genuinely numeric (e.g. `gst_rate_percent`),
+which skips the `try: float(payload.master_value) except ValueError: pass` branch
+entirely and lets a non-numeric `override_value` persist unchecked -- reopening the exact
+deferred-failure risk Amendment 22 was built to close (the write-time guard is
+defeatable; a later document computation now raises a clear `parse_setting_number`
+`HTTPException` rather than a bare crash, so this is a smaller regression than the
+original Amendment 22 gap, but the guard itself does not do what its own comment claims).
+Separately, `create_override` also never checks that `setting_key` corresponds to a real
+Setting row or that `document_id` corresponds to a real document of `document_type`.
+Needs a Director-approved spec before implementation, per this register's own Change
+Process.
+
+### Amendment No. 33 — Skip Request Workflow Has No Reject Path, Can Deadlock a Project
+**Registered 21 September 2026 (self-identified during the same audit).**
+`backend/app/models/skip_request.py`'s `SkipRequestStatus` enum has only `PENDING` and
+`APPROVED` members -- confirmed by direct read, no `REJECTED`/`DECLINED` value exists.
+`backend/app/api/skip_requests.py` registers `create_skip_request`, `list_skip_requests`,
+and `approve_skip_request` only -- confirmed by grep, no reject/decline endpoint exists
+anywhere in the backend, and the frontend (`Documents.jsx`/`api.js`) only wires up
+`approveSkipRequest`. `create_skip_request` (`skip_requests.py:72-78`) blocks creating a
+second skip request while one is already `PENDING` for the project, so once a PM or
+Director decides *not* to approve a Sales-raised skip request, there is no way to close
+it out -- it sits `PENDING` forever, permanently blocking any future skip request on that
+project, with no record anywhere that a decision was ever made. A normal, full Cost Sheet
+build is unaffected by (and doesn't clear) a pending `SkipRequest` either, so the two
+paths can silently diverge. Needs a Director-approved spec before implementation, per
+this register's own Change Process.
+
+### Amendment No. 34 — Vendor Master Has No Deactivation and No Duplicate-Vendor Guard
+**Registered 21 September 2026 (self-identified during the same audit).**
+`backend/app/models/vendor.py`'s `Vendor` model has no `is_active` column at all --
+confirmed by a full model read and a grep for `is_active` returning zero matches --
+unlike `Hub` (`backend/app/models/hub.py`), which explicitly documents following
+"Sport/ScopeItem's own convention" for exactly this kind of retire-without-delete flag.
+`backend/app/api/vendors.py` has no DELETE endpoint for a vendor either (only for a
+vendor's `Product` rows) -- confirmed by grep of every route in the file -- so a vendor
+can never be retired once created; it stays selectable in RFQ, Purchase Order, and Price
+Request flows indefinitely, with no way to signal "we no longer use this vendor" short of
+manually avoiding it. `create_vendor` (`vendors.py:80-90`) also performs zero duplicate
+check on `name` or `gstin` before inserting -- confirmed by direct read (`vendor =
+Vendor(**payload.model_dump()); db.add(vendor); db.commit()`, no prior query) -- unlike
+`create_hub`'s explicit `409` on a duplicate name in the same codebase
+(`hubs.py:61-62`). Needs a Director-approved spec before implementation, per this
+register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
