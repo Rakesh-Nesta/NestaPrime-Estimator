@@ -11,6 +11,49 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-22 -- PR #149: Amendment 34 (Vendor deactivation + duplicate-vendor guard)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `b075d41` -> `3e7e5b0`
+**One real migration** -- `9e8bdbaf6219` adds `vendors.is_active` (boolean, default
+`True`). No frontend rebuild needed (no UI built for this yet -- the flag is set via
+`VendorCreate`/the updated `PATCH /vendors/{id}` only).
+
+Self-identified during the seventh proactive gap audit, the last of that batch (32-34).
+`Vendor` had no `is_active` column at all, unlike `Hub`'s own explicit retire-without-
+delete convention, and no DELETE endpoint either -- a vendor could never be retired once
+created. `create_vendor` also had zero duplicate check on `name`/`gstin`, unlike
+`create_hub`'s explicit `409` in the same codebase. Fixed by adding `is_active` (default
+`True`, deactivation not deletion -- a vendor may be referenced by historical Price
+Requests/POs/RateHistory rows), `list_vendors`'s `include_inactive` param, and a `409`
+duplicate guard on `name`/`gstin` (only when `gstin` is set, since `null` legitimately
+means unregistered).
+
+**Rebuild and migration were clean** -- `git pull` fast-forwarded to `3e7e5b0`, the log
+explicitly showed `Running upgrade ac1785734f0f -> 9e8bdbaf6219, add vendor is_active flag
+(Amendment 34)`, both gunicorn workers logged `Application startup complete`, `curl
+.../health` returned `{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: 6 new tests in
+`test_vendor_products.py`, full backend suite 1217 passed): reactivated
+`verify-director@nestaprime.local`, created a throwaway vendor (`is_active: true` by
+default), confirmed a duplicate name and a duplicate GSTIN were both rejected `409`,
+deactivated the vendor and confirmed it dropped out of the default `GET /vendors` listing
+while remaining retrievable directly by id and via `include_inactive=true`. Account
+deactivated in the script's own `finally` block, confirmed `is_active: False` at the end.
+
+**Known leftover:** one more throwaway record, "Amendment 34 Verify (delete me)" vendor,
+remains in production data -- same reasoning as every prior deploy's leftovers (no delete
+endpoint by design; Director has said to leave these as-is).
+
+**This closes out the entire seventh gap-audit batch** (Amendments 32-34), and with it, all
+34 amendments registered so far are now implemented and deployed to production.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-22 -- PRs #146-#147: Amendments 32-33 (Override guard fix, Skip Request reject path)
 
 **Run by:** R. Patni (with AI development assistance)

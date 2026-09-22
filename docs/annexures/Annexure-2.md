@@ -1052,6 +1052,20 @@ Vendor(**payload.model_dump()); db.add(vendor); db.commit()`, no prior query) --
 (`hubs.py:61-62`). Needs a Director-approved spec before implementation, per this
 register's own Change Process.
 
+**Implemented 22 September 2026 (PR #149, deployed to production same day, per
+[docs/annexures/Section-40-specs.md](Section-40-specs.md), approved as proposed).** Adds a
+nullable-safe `Vendor.is_active` column (migration `9e8bdbaf6219`, default `True`) --
+retirement is deactivation, not deletion, matching `Hub`/`ClientSignatory`'s existing
+convention, since a vendor may be referenced by historical Price Requests/POs/RateHistory
+rows. `list_vendors` gains `include_inactive` (same shape as `list_hubs`), and
+`create_vendor` now `409`s on a duplicate `name` or a duplicate `gstin` when one is
+given -- `gstin=None` legitimately means "unregistered," so multiple unregistered vendors
+don't collide with each other. Live-verified in production: a new vendor defaulted to
+`is_active: true`; a duplicate name and a duplicate GSTIN were both rejected with `409`;
+deactivating a vendor removed it from the default listing while it remained retrievable
+directly by id and via `include_inactive=true`. Amendment 34 is now fully closed --
+**this closes out the entire seventh gap-audit batch (Amendments 32-34).**
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
