@@ -24,23 +24,23 @@ import { getDashboard } from "./api";
 // real, empty one.
 function ComingSoonTile({ label }) {
   return (
-    <div className="text-left bg-surface border border-border-dark rounded-lg p-4 opacity-70">
+    <div className="text-left bg-surface border border-border-dark rounded-lg p-5 opacity-70">
       <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center justify-between">
         {label}
         <span className="text-[10px] normal-case tracking-normal bg-surface-raised border border-border-dark rounded px-1.5 py-0.5">
           Soon
         </span>
       </p>
-      <p className="text-lg font-heading font-semibold mt-1 text-text-secondary">--</p>
+      <p className="text-2xl font-heading font-bold mt-2 text-text-secondary">--</p>
     </div>
   );
 }
 
 function ComingSoonPanel({ title, description }) {
   return (
-    <div className="bg-surface border border-border-dark rounded-lg p-4 opacity-70">
+    <div className="bg-surface border border-border-dark rounded-lg p-5 opacity-70">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-heading font-semibold text-text-primary">{title}</h3>
+        <h3 className="font-heading font-semibold text-text-primary text-base">{title}</h3>
         <span className="text-[10px] uppercase tracking-wider bg-surface-raised border border-border-dark rounded px-1.5 py-0.5 text-text-secondary">
           Coming soon
         </span>
@@ -87,30 +87,30 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   ];
 
   return (
-    <div className="max-w-5xl mx-auto mt-8 mb-10 space-y-6 px-4">
+    <div className="max-w-[1600px] mx-auto mt-8 mb-10 space-y-6 px-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
-          <h2 className="font-heading font-bold text-text-primary text-lg">Business overview</h2>
+          <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1">Business overview</h2>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => onDrillDown("reports", {})}
             title="Pinned for quick access"
-            className="text-xs uppercase tracking-wider bg-surface border border-gold/40 text-gold hover:bg-gold/10 rounded px-4 py-2 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+            className="text-xs uppercase tracking-wider bg-surface border border-gold/40 text-gold hover:bg-gold/10 rounded px-4 py-2.5 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
           >
             📌 Reports
           </button>
           <button
             onClick={onNewProject}
-            className="text-xs uppercase tracking-wider bg-gold hover:bg-gold-hover text-base rounded px-4 py-2 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+            className="text-xs uppercase tracking-wider bg-gold hover:bg-gold-hover text-base rounded px-4 py-2.5 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
           >
             + New project
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <ComingSoonTile label="Open opportunities" />
         <ComingSoonTile label="Follow-ups due" />
         {realTiles.map((tile) =>
@@ -118,22 +118,22 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             <button
               key={tile.label}
               onClick={() => onDrillDown(tile.target, tile.preset)}
-              className="text-left bg-surface border border-border-dark rounded-lg p-4 hover:border-gold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+              className="text-left bg-surface border border-border-dark rounded-lg p-5 hover:border-gold hover:-translate-y-0.5 transition-all duration-250 ease-out"
             >
               <p className="text-xs uppercase tracking-wide text-text-secondary">{tile.label}</p>
-              <p className="text-lg font-heading font-semibold mt-1 text-text-primary">{tile.value}</p>
+              <p className="text-2xl font-heading font-bold mt-2 text-text-primary">{tile.value}</p>
             </button>
           ) : (
-            <div key={tile.label} className="text-left bg-surface border border-border-dark rounded-lg p-4">
+            <div key={tile.label} className="text-left bg-surface border border-border-dark rounded-lg p-5">
               <p className="text-xs uppercase tracking-wide text-text-secondary">{tile.label}</p>
-              <p className="text-lg font-heading font-semibold mt-1 text-text-primary">{tile.value}</p>
+              <p className="text-2xl font-heading font-bold mt-2 text-text-primary">{tile.value}</p>
             </div>
           )
         )}
         <ComingSoonTile label="Payments overdue" />
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-2 gap-5">
         <ComingSoonPanel
           title="Orders & collections"
           description="Won order value vs. cash received, by month -- lands with Payments (Phase 7)."
@@ -144,9 +144,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         />
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        <div className="sm:col-span-2 bg-surface border border-border-dark rounded-lg p-4">
-          <h3 className="font-heading font-semibold text-text-primary mb-3">Recent projects</h3>
+      <div className="grid sm:grid-cols-3 gap-5">
+        <div className="sm:col-span-2 bg-surface border border-border-dark rounded-lg p-5">
+          <h3 className="font-heading font-semibold text-text-primary text-base mb-3">Recent projects</h3>
           {recentProjects.length === 0 ? (
             <p className="text-sm text-text-secondary">No projects yet -- create one to get started.</p>
           ) : (
@@ -155,7 +155,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
                 <li key={project.id}>
                   <button
                     onClick={() => onOpenProject(project.id)}
-                    className="w-full text-left py-2.5 flex items-center justify-between hover:bg-surface-raised px-1 rounded hover:-translate-y-0.5 transition-all duration-250 ease-out"
+                    className="w-full text-left py-3 flex items-center justify-between hover:bg-surface-raised px-2 rounded hover:-translate-y-0.5 transition-all duration-250 ease-out"
                   >
                     <span>
                       <span className="font-medium text-text-primary font-mono text-sm">{project.project_no}</span>{" "}

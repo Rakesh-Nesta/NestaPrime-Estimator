@@ -211,7 +211,7 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="hidden sm:flex sm:flex-col w-60 shrink-0 bg-surface border-r border-border-dark min-h-screen print:hidden">
+      <aside className="hidden sm:flex sm:flex-col w-64 shrink-0 bg-surface border-r border-border-dark min-h-screen print:hidden">
         {sidebarBody}
       </aside>
 
