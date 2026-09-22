@@ -5,6 +5,7 @@ import AllProjects from "./AllProjects";
 import AllQuotations from "./AllQuotations";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
+import ComingSoon from "./ComingSoon";
 import CrossSellAdmin from "./CrossSellAdmin";
 import CustomNotesPanel from "./CustomNotesPanel";
 import Dashboard from "./Dashboard";
@@ -18,6 +19,7 @@ import ProjectSetup from "./ProjectSetup";
 import RateSheet from "./RateSheet";
 import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
+import Sidebar from "./Sidebar";
 import SimpleCalculator from "./SimpleCalculator";
 import SiteSurvey from "./SiteSurvey";
 import SportSelection from "./SportSelection";
@@ -36,7 +38,6 @@ export default function App() {
   const [screen, setScreen] = useState("dashboard"); // "dashboard" | "sports" | "scope" | "rates" | "pricing" | ...
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
-  const [openNavGroup, setOpenNavGroup] = useState(null);
   // Amendment 12 (Section 11): a Dashboard tile drill-down carries a preset
   // filter (e.g. { status: "open" }, { statusGroup: "pending" }) into
   // whichever list screen it targets.
@@ -46,6 +47,10 @@ export default function App() {
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
     "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help",
     "projects_admin", "estimates_admin", "calculator", "education",
+    // Amendment 36 (Section 42): Opportunities/Follow-ups/Payments are
+    // placeholder headers -- visible in the new sidebar per the CRM
+    // reference, no real backend yet (Phases 4/5/7).
+    "opportunities", "followups", "payments",
   ];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
@@ -54,7 +59,6 @@ export default function App() {
       setPreNavScreen(screen);
     }
     setScreen(target);
-    setOpenNavGroup(null);
     setNavMenuOpen(false);
   }
 
@@ -119,246 +123,29 @@ export default function App() {
   }
 
   if (user) {
-    // Amendment 12 (Section 11): Director-supplied nav diagram -- Dashboard
-    // / Quotation / Projects / Client / Vendor / Tools / Reports / Admin /
-    // Education, replacing the old flat Daily Work / Management / Admin
-    // grouping. Every item that only carries a preset filter (Pending/Old
-    // Quotation, Quotation-winning projects) reuses an existing screen via
-    // onDrillDown rather than inventing a new one. A group's own label is
-    // never a clickable item, only the entries within it.
-    const navGroups = [
-      {
-        key: "quotation",
-        label: "Quotation",
-        items: [
-          { key: "new_quotation", label: "New Quotation", action: () => handleNewProject() },
-          // K.3: cost/margin figures, so Pending/Old Quotation stay
-          // Director-only, same gate quotations_admin already has.
-          ...(user.role === "director"
-            ? [
-                { key: "quotation_pending", label: "Pending", action: () => handleDrillDown("quotations_admin", { statusGroup: "pending" }) },
-                { key: "quotation_old", label: "Old", action: () => handleDrillDown("quotations_admin", { statusGroup: "old" }) },
-              ]
-            : []),
-        ],
-      },
-      {
-        key: "projects",
-        label: "Projects",
-        items: [
-          { key: "create_cost_sheet", label: "Create Cost Sheet of Quotations", action: () => handleNewProject() },
-          { key: "won_projects", label: "Quotation-winning Projects", action: () => handleDrillDown("projects_admin", { status: "won" }) },
-          // Procurement statement = the existing per-project Consumption
-          // Sheet (already on Documents/Cost Sheet) -- a project picker
-          // first, matching the Director's own clarification that this is
-          // a nav fix, not a new capability.
-          { key: "procurement_statement", label: "Procurement Statement", action: () => handleDrillDown("projects_admin", {}) },
-          { key: "all_projects", label: "All Projects", action: () => handleDrillDown("projects_admin", {}) },
-        ],
-      },
-      {
-        key: "client",
-        label: "Client",
-        items: [
-          { key: "client_create", label: "Create New", action: () => goToTopLevel("clients_admin") },
-          { key: "client_list", label: "List", action: () => goToTopLevel("clients_admin") },
-        ],
-      },
-      ...(["pm", "director", "procurement"].includes(user.role)
-        ? [
-            {
-              key: "vendor",
-              label: "Vendor",
-              items: [
-                { key: "vendor_create", label: "Create New", action: () => goToTopLevel("vendors_admin") },
-                { key: "vendor_list", label: "List", action: () => goToTopLevel("vendors_admin") },
-              ],
-            },
-          ]
-        : []),
-      {
-        key: "tools",
-        label: "Tools",
-        items: [
-          // K.3 / rate_items.py READ_ROLES: PM/Director/Procurement/Site
-          // Engineer only, server-side -- Sales hit a dead-end 403 on
-          // these before this hid them.
-          ...(user.role !== "sales" ? [{ key: "pricing", label: "Price Calculator", action: () => goToTopLevel("pricing") }] : []),
-          ...(user.role !== "sales" ? [{ key: "rates", label: "Rate Sheet", action: () => goToTopLevel("rates") }] : []),
-          { key: "calculator", label: "One Simple Calculator", action: () => goToTopLevel("calculator") },
-          ...(user.role !== "sales" ? [{ key: "price_requests", label: "Price Requests", action: () => goToTopLevel("price_requests") }] : []),
-        ],
-      },
-      {
-        key: "reports",
-        label: "Reports",
-        items: [{ key: "reports", label: "All Types of Reports", action: () => goToTopLevel("reports") }],
-      },
-      {
-        key: "admin",
-        label: "Admin",
-        items: [
-          // Master Settings' core /settings read and Sports & Scope
-          // Admin's aggregated lists are PM/Director/Procurement/Site
-          // Engineer only server-side -- same dead-end-403 reasoning as
-          // Tools above.
-          ...(user.role !== "sales" ? [{ key: "sports_scope_admin", label: "Sports & Scope", action: () => goToTopLevel("sports_scope_admin") }] : []),
-          ...(user.role !== "sales" ? [{ key: "settings", label: "Master Settings", action: () => goToTopLevel("settings") }] : []),
-          ...(user.role === "director" ? [{ key: "cross_sell_admin", label: "Cross-Sell Add-ons", action: () => goToTopLevel("cross_sell_admin") }] : []),
-          ...(user.role === "director" ? [{ key: "audit_log", label: "Audit Log", action: () => goToTopLevel("audit_log") }] : []),
-          ...(user.role === "director" ? [{ key: "quotations_admin_all", label: "All Quotations", action: () => handleDrillDown("quotations_admin", {}) }] : []),
-          { key: "help", label: "Help", action: () => goToTopLevel("help") },
-        ],
-      },
-    ];
+    // Amendment 36 (Section 42): the old Director-supplied nav diagram
+    // (Dashboard / Quotation / Projects / Client / Vendor / Tools / Reports
+    // / Admin / Education, a top-nav dropdown group) is replaced by
+    // Sidebar.jsx's own item list -- see that file for the equivalent
+    // structure, now organized around the new CRM-shaped headers.
     const canResumeProject = activeProject && TOP_LEVEL_SCREENS.includes(screen) && screen !== "dashboard";
 
     return (
-      <div className="min-h-screen bg-base">
-        <header className="bg-surface border-b border-border-dark px-4 sm:px-8 py-4 relative print:hidden">
-          {openNavGroup && (
-            <div className="fixed inset-0 z-40" onClick={() => setOpenNavGroup(null)} />
-          )}
-          <div className="flex items-center justify-between relative z-50">
-            <button
-              onClick={() => goToTopLevel("dashboard")}
-              className="flex items-center gap-2.5 group"
-            >
-              <span className="w-8 h-8 rounded bg-base border border-gold/40 flex items-center justify-center text-gold font-heading font-bold text-sm group-hover:border-gold transition-colors">
-                N
-              </span>
-              <span className="font-heading font-bold text-text-primary tracking-tight">
-                NestaPrime <span className="text-text-secondary font-normal">Estimator</span>
-              </span>
-            </button>
-            <div className="hidden sm:flex items-center gap-4">
-              <button
-                onClick={() => goToTopLevel("dashboard")}
-                className={`text-xs uppercase tracking-wider font-medium pb-0.5 border-b-2 hover:-translate-y-0.5 transition-all duration-250 ease-out ${
-                  screen === "dashboard"
-                    ? "text-text-primary border-gold"
-                    : "text-text-secondary border-transparent hover:text-text-primary"
-                }`}
-              >
-                Dashboard
-              </button>
-              {navGroups.map((group) => (
-                <div key={group.key} className="relative border-l border-border-dark pl-4">
-                  <button
-                    onClick={() => setOpenNavGroup(openNavGroup === group.key ? null : group.key)}
-                    className={`text-xs uppercase tracking-wider font-medium pb-0.5 border-b-2 flex items-center gap-1 hover:-translate-y-0.5 transition-all duration-250 ease-out ${
-                      openNavGroup === group.key
-                        ? "text-text-primary border-gold"
-                        : "text-text-secondary border-transparent hover:text-text-primary"
-                    }`}
-                  >
-                    {group.label}
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  {openNavGroup === group.key && (
-                    <div className="absolute top-full left-0 mt-2 bg-surface border border-border-dark rounded-lg shadow-lg py-1.5 min-w-[220px] z-50">
-                      {group.items.map((item) => (
-                        <button
-                          key={item.key}
-                          onClick={item.action}
-                          className="w-full text-left text-xs text-text-secondary hover:text-text-primary hover:bg-surface-raised px-4 py-2 transition-colors duration-200"
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => goToTopLevel("education")}
-                className={`text-xs uppercase tracking-wider font-medium pb-0.5 border-b-2 border-l-0 hover:-translate-y-0.5 transition-all duration-250 ease-out ${
-                  screen === "education"
-                    ? "text-text-primary border-gold"
-                    : "text-text-secondary border-transparent hover:text-text-primary"
-                }`}
-              >
-                Education
-              </button>
-              {canResumeProject && (
-                <button
-                  onClick={() => setScreen(preNavScreen)}
-                  className="text-xs uppercase tracking-wider font-medium text-gold hover:text-gold-hover border-l border-border-dark pl-5"
-                >
-                  ↩ Resume {activeProject.project_no}
-                </button>
-              )}
-              <p className="text-xs text-text-secondary border-l border-border-dark pl-5">
-                {user.name} · <span className="text-text-primary">{user.role}</span>
-              </p>
-              <button onClick={handleLogout} className="text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary">
-                Log out
-              </button>
-            </div>
-            <button
-              onClick={() => setNavMenuOpen(!navMenuOpen)}
-              className="sm:hidden p-2 -mr-2 text-text-secondary"
-              aria-label="Toggle navigation menu"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                {navMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-          </div>
-          {navMenuOpen && (
-            <div className="sm:hidden absolute inset-x-0 top-full bg-surface border-b border-border-dark shadow-lg flex flex-col z-10 max-h-[70vh] overflow-y-auto">
-              <button
-                onClick={() => { goToTopLevel("dashboard"); setNavMenuOpen(false); }}
-                className="text-left text-sm text-text-primary px-4 py-3 border-b border-border-dark hover:bg-surface-raised w-full font-medium"
-              >
-                Dashboard
-              </button>
-              {navGroups.map((group) => (
-                <div key={group.key}>
-                  <p className="text-xs uppercase tracking-wide text-text-secondary/70 px-4 pt-3">{group.label}</p>
-                  {group.items.map((item) => (
-                    <button
-                      key={item.key}
-                      onClick={() => { item.action(); setNavMenuOpen(false); }}
-                      className="text-left text-sm text-text-primary px-4 py-3 border-b border-border-dark hover:bg-surface-raised w-full"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              ))}
-              <button
-                onClick={() => { goToTopLevel("education"); setNavMenuOpen(false); }}
-                className="text-left text-sm text-text-primary px-4 py-3 border-b border-border-dark hover:bg-surface-raised w-full font-medium"
-              >
-                Education
-              </button>
-              {canResumeProject && (
-                <button
-                  onClick={() => { setScreen(preNavScreen); setNavMenuOpen(false); }}
-                  className="text-left text-sm text-gold px-4 py-3 border-b border-border-dark hover:bg-surface-raised"
-                >
-                  ↩ Resume {activeProject.project_no}
-                </button>
-              )}
-              <p className="text-sm text-text-secondary px-4 py-3">
-                {user.name} · <span className="text-text-primary">{user.role}</span>
-              </p>
-              <button
-                onClick={() => { handleLogout(); setNavMenuOpen(false); }}
-                className="text-left text-sm text-text-secondary px-4 py-3 hover:bg-surface-raised"
-              >
-                Log out
-              </button>
-            </div>
-          )}
-        </header>
+      <div className="flex min-h-screen bg-base">
+        <Sidebar
+          user={user}
+          screen={screen}
+          activeProject={activeProject}
+          preNavScreen={preNavScreen}
+          canResumeProject={canResumeProject}
+          goToTopLevel={goToTopLevel}
+          handleDrillDown={handleDrillDown}
+          handleNewProject={handleNewProject}
+          handleLogout={handleLogout}
+          navMenuOpen={navMenuOpen}
+          setNavMenuOpen={setNavMenuOpen}
+        />
+        <main className="flex-1 min-w-0">
         {error && (
           <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-400 print:hidden">{error}</p>
         )}
@@ -455,6 +242,27 @@ export default function App() {
         {screen === "help" && (
           <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
+        {screen === "opportunities" && (
+          <ComingSoon
+            title="Opportunities"
+            description="Pipeline-stage tracking for pre-project enquiries -- lands in a later phase of the CRM restructure."
+            onBack={() => setScreen("dashboard")}
+          />
+        )}
+        {screen === "followups" && (
+          <ComingSoon
+            title="Follow-ups"
+            description="Due/overdue client follow-up reminders -- lands in a later phase of the CRM restructure."
+            onBack={() => setScreen("dashboard")}
+          />
+        )}
+        {screen === "payments" && (
+          <ComingSoon
+            title="Payments"
+            description="Forward-looking payment due-dates and overdue tracking -- lands in a later phase of the CRM restructure."
+            onBack={() => setScreen("dashboard")}
+          />
+        )}
         {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
           // Section 21: Quick mode now routes through Sport Selection too, same as
           // Detailed mode -- that's the one screen where dimension customization
@@ -508,6 +316,7 @@ export default function App() {
             onBack={() => setScreen("scope")}
           />
         )}
+        </main>
       </div>
     );
   }
