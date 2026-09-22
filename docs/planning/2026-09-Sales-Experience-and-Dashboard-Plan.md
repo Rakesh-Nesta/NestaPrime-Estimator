@@ -399,39 +399,54 @@ is no longer a separate final step. Its visual shell is built in step 1,
 with honest empty states, then wired incrementally as each later step's real
 data ships -- see step 1 below.
 
-1. **Nav shell + Dashboard shell (shell-first, Director-approved
-   2026-09-22)** — build the sidebar itself with routing for every
-   confirmed header from E.1 (placeholder screens are fine at this stage),
-   replacing the current top-nav dropdowns, **and**, in the same step, the
-   Overview/Dashboard's visual shell matching the reference layout with
-   honest empty/zero states ("No follow-ups yet," "0 opportunities") for
-   every tile whose real data doesn't exist yet. No fake/sample numbers.
-   Each tile is then wired live incrementally as its real data source ships
-   later in this sequence (Follow-ups due lights up at step 4, Payments
-   overdue at step 7, Opportunities pipeline at step 5, etc.) — Overview is
-   no longer a separate final step; it is built once, here, and filled in
-   as the rest of this index ships. Everything below plugs into the nav
-   shell built in this step.
-2. **Projects** — re-home the existing Cost Sheet -> Estimate -> Quotation
-   chain under the new shell; fold in Amendment 35 (Site Survey Next
-   button, already spec-approved) and Section A's remaining UX fixes
-   (A.1-A.3, A.5).
+**Update, 2026-09-22 (Director decision — persona-driven resequencing).**
+The Director clarified who "Sales rep" actually means in this app: an
+office-based telecaller who works leads by phone and sends clients
+quotations/details -- not the field-based role (that's "Engineer," i.e. the
+existing `site_engineer` role, who owns Site Survey). Against that persona,
+Opportunities/Follow-ups (lead-pipeline tracking, mandatory-follow-up-date
+discipline) is the actual highest-leverage work, not the remaining Section A
+polish items -- a telecaller with no system tracking "who to call today,
+what was promised" is the real daily pain. Leads & Clients / Follow-ups /
+Opportunities move ahead of Amendments 37-39 in the order below. Amendment
+35 (Site Survey) still shipped first regardless -- it was already
+spec-approved and cheap -- but is understood as an Engineer-facing fix, not
+the Sales-persona lever.
+
+1. **Nav shell + Dashboard shell (shell-first)** — DONE, Amendment 36,
+   deployed 2026-09-22. Sidebar + Overview shell built with honest empty
+   states, wired incrementally as each step below ships.
+2. **Site Survey Next button** — DONE, Amendment 35, deployed 2026-09-22.
+   Engineer-facing, not the Sales-persona lever, but cheap and already
+   approved so it shipped first regardless.
 3. **Leads & Clients** — re-home Client screens; add the follow-up-date
-   field (Section B.1).
-4. **Follow-ups** — small, depends directly on step 3's new field; surfaces
-   due/overdue follow-ups as its own view (also closes Section B.2's "my
-   open items" gap for Sales).
+   field (Section B.1). Prerequisite for steps 4-5 below.
+4. **Follow-ups** — surfaces due/overdue follow-ups as its own view; closes
+   Section B.2's "my open items" gap. Depends directly on step 3's new
+   field.
 5. **Opportunities** — the largest single piece: new `Opportunity` entity +
    pipeline-stage enum, linked to Leads & Clients, converts into a Project
-   once Won (step 2's structure already exists to receive it).
-6. **Quotations** — re-home the existing Quotation screens; link back to
+   once Won. Mandatory-follow-up-date discipline (Director decision,
+   2026-09-22: a Lead/Opportunity can never be left with no future
+   follow-up date, enforced not just at creation but whenever its stage
+   changes or an existing follow-up date passes) is a core design
+   requirement of this entity, not an add-on.
+6. **What's-next guidance (Amendment 40)** — still valuable for the
+   telecaller persona (lets them answer a client call with a real status
+   instead of "let me check"); cheap, independent of steps 3-5, slotted in
+   here rather than left behind with 37-39.
+7. **Remaining Section A polish (Amendments 37-39)** — existing-client city
+   auto-fill, Create-Cost-Sheet form visibility, Scope Checklist bulk
+   controls. All three already approved; deprioritized below
+   Opportunities/Follow-ups per the persona clarification, not cancelled.
+8. **Quotations** — re-home the existing Quotation screens; link back to
    the Opportunity that produced it, once step 5 exists.
-7. **Payments** — extend `WorkOrderPaymentEntry` with due-dates/reminders;
+9. **Payments** — extend `WorkOrderPaymentEntry` with due-dates/reminders;
    surface "payments overdue" as its own header.
-8. **Team & Access** — re-home User Management/Role Permissions; place
-   Vendor/Tools/Reports/Admin/Education per whatever E.1 decides (deferred
-   until this step, per Director decision 2026-09-22 — those screens stay
-   reachable from their current locations in the meantime, not hidden).
+10. **Team & Access** — re-home User Management/Role Permissions; place
+    Vendor/Tools/Reports/Admin/Education per whatever E.1 decides (deferred
+    until this step — those screens stay reachable from their current
+    locations in the meantime, not hidden).
 
 Each numbered step above is still its own Annexure 2 Amendment (or small
 group of them) — registered, specced, approved, and built individually per
