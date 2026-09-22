@@ -11,6 +11,58 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-22 -- PRs #146-#147: Amendments 32-33 (Override guard fix, Skip Request reject path)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `4bd9420` -> `b075d41`
+**One real migration in this batch** -- `ac1785734f0f` (Amendment 33) adds
+`skip_requests.rejection_reason` and a `REJECTED` value to the `skip_request_status`
+Postgres enum. Amendment 32 is backend-only, no schema change. No frontend rebuild
+needed for either.
+
+Both self-identified during the seventh proactive gap audit. Amendment 32:
+`create_override`'s Amendment-22 numeric guard only inspected the caller-supplied
+`master_value`, never the real Setting -- a fabricated non-numeric `master_value` skipped
+the check entirely. Fixed by looking up the real value server-side; when none exists (most
+K.1 constants run on a hardcoded default with no `Settings` row), the check is skipped
+exactly as before rather than 404ing, a narrowing agreed during implementation after
+discovering that architecture (see Annexure 2's own Amendment 32 closing note). Amendment
+33: `SkipRequestStatus` had no `REJECTED` value and no reject endpoint, so a pending
+request nobody wanted to approve permanently blocked every future skip request on that
+project; fixed with a new status, a reject endpoint, and a symmetric guard on
+`create_cost_sheet`.
+
+**Rebuild and migration were clean** -- `git pull` fast-forwarded to `b075d41`, the log
+explicitly showed `Running upgrade 323ecc35b9df -> ac1785734f0f, add skip request REJECTED
+status + rejection_reason (Amendment 33)`, both gunicorn workers logged `Application
+startup complete`, `curl .../health` returned `{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: Amendment 32's tests in
+`test_settings.py`/`test_override_validation.py`, Amendment 33's 8 new tests in
+`test_skip_requests.py`; full backend suite 1203 passed then 1211 passed across the two
+PRs): the first verification script for Amendment 32 hit a false-negative-shaped result on
+`contingency_structure_percent` -- a direct DB query confirmed this setting genuinely
+already had a real `Settings` row (`5.0`, dated 2026-01-01) in production, so the `422` it
+returned was correct behavior, not a bug; the test's own assumption (that key would have no
+row) was wrong, not the product. Re-ran cleanly against a guaranteed-unconfigured key
+instead: fabricated `master_value` rejected (`422`), a real override recorded the correct
+server-computed `master_value` (`6.0`), and an override against the confirmed-unconfigured
+key still succeeded with the new placeholder text. Amendment 33: a normal Cost Sheet build
+was blocked (`400`) while a skip request was pending; rejecting it recorded the reason;
+a new skip request could then be raised (deadlock resolved); the normal Cost Sheet path
+was blocked again by that second pending request. Account deactivated in each script's own
+`finally` block, confirmed `is_active: False` each time.
+
+**Known leftover:** two more throwaway records, "Amendment 32 Verify (delete me)" (rate
+overrides only, no client/project) and "Amendment 33 Verify (delete me)" (client/project/
+two skip requests), remain in production data -- same reasoning as every prior deploy's
+leftovers (no delete endpoint by design; Director has said to leave these as-is).
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-21 -- PRs #140-#142: Amendments 29-31 (missing audit-log trails)
 
 **Run by:** R. Patni (with AI development assistance)
