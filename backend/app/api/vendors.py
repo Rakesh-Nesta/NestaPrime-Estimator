@@ -55,6 +55,7 @@ class VendorUpdate(BaseModel):
     whatsapp_opt_in: bool | None = None
     email_opt_in: bool | None = None
     consent_date: date | None = None
+    is_active: bool | None = None
 
 
 class VendorOut(BaseModel):
@@ -73,6 +74,7 @@ class VendorOut(BaseModel):
     whatsapp_opt_in: bool
     email_opt_in: bool
     consent_date: date | None
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -83,6 +85,15 @@ def create_vendor(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
+    # Amendment 34: mirrors create_hub's own exact-match duplicate check.
+    # gstin is only checked when set -- gstin=None legitimately means
+    # "unregistered" (Vendor's own docstring), so multiple unregistered
+    # vendors sharing a null GSTIN are not duplicates of each other.
+    if db.query(Vendor).filter(Vendor.name == payload.name).first():
+        raise HTTPException(status_code=409, detail=f"A vendor named '{payload.name}' already exists")
+    if payload.gstin and db.query(Vendor).filter(Vendor.gstin == payload.gstin).first():
+        raise HTTPException(status_code=409, detail=f"A vendor with GSTIN '{payload.gstin}' already exists")
+
     vendor = Vendor(**payload.model_dump())
     db.add(vendor)
     db.commit()
@@ -92,10 +103,14 @@ def create_vendor(
 
 @vendors_router.get("", response_model=list[VendorOut])
 def list_vendors(
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
-    return db.query(Vendor).order_by(Vendor.name).all()
+    query = db.query(Vendor)
+    if not include_inactive:
+        query = query.filter(Vendor.is_active.is_(True))
+    return query.order_by(Vendor.name).all()
 
 
 @vendors_router.get("/{vendor_id}", response_model=VendorOut)
