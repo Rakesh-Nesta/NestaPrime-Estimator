@@ -1066,6 +1066,42 @@ deactivating a vendor removed it from the default listing while it remained retr
 directly by id and via `include_inactive=true`. Amendment 34 is now fully closed --
 **this closes out the entire seventh gap-audit batch (Amendments 32-34).**
 
+### Amendment No. 35 — Site Survey Has No Forward Navigation, a Genuine Dead End for Sales
+**Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
+`docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md` Section A.4, confirmed by
+direct read before registering). `frontend/src/SiteSurvey.jsx:190-194` has only a "←
+Back" control -- no forward/Next button anywhere on the screen. `frontend/src/App.jsx:
+488-495` mounts `<SiteSurvey onBack={...} />` without ever passing an `onNext` prop,
+unlike `ScopeChecklist`, which receives `onNext`/`onDocuments`/`onSiteSurvey`
+(`App.jsx:478-487`) and can therefore route the user onward. A Sales rep who finishes a
+Site Survey and taps "Mark Completed" has no button to press next -- confirmed this is a
+real functional dead end, not a cosmetic gap. Separately confirmed and ruled out during
+the same investigation: the survey's fields are **not** all mandatory as originally
+suspected -- only `photo_count >= 4` gates "Mark Completed"
+(`backend/app/api/site_surveys.py:24`, `MIN_PHOTOS_TO_COMPLETE = 4`); every other field on
+`SiteSurvey` (`backend/app/models/site_survey.py:53-77`) is already nullable. That part of
+the original complaint does not need a code change. Needs a Director-approved spec before
+implementation, per this register's own Change Process.
+
+### Amendment No. 36 — Nav Shell + Dashboard Shell (CRM Restructure, Phase 1 of the Header Index)
+**Registered 22 September 2026**, from
+`docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md` Sections D/E (Director
+decision to move to a CRM-shaped sidebar navigation, "shell-first" build order). Current
+state: `frontend/src/App.jsx:129-213` renders a top nav with dropdown groups (Dashboard /
+Quotation / Projects / Client / Vendor / Tools / Reports / Admin / Education);
+`frontend/src/Dashboard.jsx` is 5 static tiles + a flat project list, confirmed by direct
+read, no charts, no CRM-shaped data (Opportunities, Follow-ups, Payments-due all
+confirmed absent from the schema, see `PROJECT-BLUEPRINT.md` Section 6). This is Phase 1
+of the 9-step header-by-header build index in Section E of the plan doc: replaces the nav
+shell with a left sidebar carrying every E.1-confirmed header (Overview, Leads & Clients,
+Opportunities, Quotations, Projects, Payments, Follow-ups, Team & Access), and builds the
+Overview/Dashboard's visual shell against the CRM reference layout, with honest empty/zero
+states for every tile whose real data (Opportunities, Follow-ups, Payments-due) does not
+exist yet -- no fake/sample numbers. Vendor/Tools/Reports/Admin/Education placement is
+explicitly deferred to Phase 8 (Team & Access) per Director decision 2026-09-22; those
+screens must remain reachable during this phase, not hidden or removed. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
