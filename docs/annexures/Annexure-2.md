@@ -1102,6 +1102,36 @@ explicitly deferred to Phase 8 (Team & Access) per Director decision 2026-09-22;
 screens must remain reachable during this phase, not hidden or removed. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Implemented 22 September 2026 (PR #151, deployed to production same day, per
+[docs/annexures/Section-42-specs.md](Section-42-specs.md), approved as proposed).** Adds
+`frontend/src/Sidebar.jsx` (the new left sidebar, replacing `App.jsx`'s old `navGroups`
+dropdown block) and `frontend/src/ComingSoon.jsx` (the honest placeholder for
+Opportunities/Follow-ups/Payments); rewrites `Dashboard.jsx` as the "Overview" shell --
+Pending Quotations and Active Projects tiles reuse the existing `/dashboard` endpoint
+unchanged, the other three tiles and two panel placeholders show "Soon"/"Coming soon"
+rather than a fabricated number. Vendor/Tools/Reports/Admin/Education re-homed into a
+temporary "More" accordion with their exact old sub-groupings and role gates preserved.
+No backend changes. All three open decisions closed as proposed (existing gold-accent
+theme kept, plain-text empty states, old groupings preserved under "More").
+
+**Live-verified in production:** `git pull` fast-forwarded cleanly, backend rebuild was a
+clean no-op (no migration, as expected for a frontend-only change), frontend rebuild and
+`nginx` publish succeeded, `curl .../api/health` returned `{"status":"ok"}`. Logged into
+production as `verify-director@nestaprime.local`: the new sidebar and Overview dashboard
+render correctly with real live figures (Pending Quotations: 3, Active Projects: 12),
+every not-yet-built tile/panel correctly reads "Soon"/"Coming soon", and a side-by-side
+comparison against the chosen CRM reference was produced and reviewed. Locally, both
+director and sales roles were also verified before merge (Team & Access/Vendor correctly
+hidden from Sales; Tools/Admin correctly narrowed to the same items the old nav gave
+Sales). Amendment 36 (Phase 1 of 9) is now fully closed.
+
+**Director decision, 22 September 2026: `verify-director@nestaprime.local` intentionally
+left active in production**, rather than deactivated immediately per this account's usual
+try/finally discipline -- the Director wants it available across the next several
+amendments' live verification rather than reactivating it each time, with a single
+consolidated deactivation once that batch is audited. Tracked here so it isn't lost; this
+account must be deactivated before this is treated as closed.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
