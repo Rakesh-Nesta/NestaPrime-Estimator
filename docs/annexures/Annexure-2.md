@@ -1102,6 +1102,57 @@ explicitly deferred to Phase 8 (Team & Access) per Director decision 2026-09-22;
 screens must remain reachable during this phase, not hidden or removed. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+### Amendment No. 37 — Existing-Client Selection Never Auto-Fills City
+**Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
+`docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md` Section A.1, re-confirmed
+by direct read before registering). `frontend/src/ProjectSetup.jsx:64` hardcodes
+`city: "Mumbai"` in `emptyForm`; the effect that fires when an existing client is selected
+(`ProjectSetup.jsx:137-141`) auto-fills `package` and `paymentTerms` only -- a grep for any
+property read off `selectedExistingClient` (line 120) besides deriving
+`effectiveClientType` returns zero hits, confirming no client field, including city, is
+ever copied into `form.city`. Root cause is structural, not a missed line: `Client`
+(`backend/app/models/client.py:36`) has no structured `city` column at all, only free-text
+`billing_address`. A Sales rep re-selecting a known client for a new project sees "Mumbai"
+regardless of that client's real city, and must remember to correct it. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
+### Amendment No. 38 — Create-Cost-Sheet Form Stays Live After a Sheet Already Exists
+**Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
+Section A.2, re-confirmed by direct read). `frontend/src/Documents.jsx:451-477`: the
+create-cost-sheet input and button are gated only on `role !== "sales"`
+(`Documents.jsx:451`) -- confirmed by direct read that neither the input (453-459) nor its
+wrapping section is ever hidden once an active Cost Sheet exists for the project; the
+button (468-474) is only `disabled={!!active}` (line 470), not removed. A PM/Director
+looking at a project that already has a Cost Sheet still sees a live "create one" form
+sitting above it, confusing about whether a second one is wanted. Sales sees this too
+today only because the gate is role-based, not existence-based -- although Sales cannot
+submit it either way (`COST_ROLES`). Needs a Director-approved spec before implementation,
+per this register's own Change Process.
+
+### Amendment No. 39 — Scope Checklist Has No Bulk "Not Applicable" Control
+**Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
+Section A.3, re-confirmed by direct read -- the Director noted this had already been
+raised once before and not acted on). `frontend/src/ScopeChecklist.jsx` renders 30
+checkboxes (`ScopeChecklist.jsx:97-100`), each toggled individually through a single
+`handleToggle` function (`ScopeChecklist.jsx:32-46`) -- confirmed by grep that no
+select-all/bulk pattern exists anywhere in the 110-line file. Unchecked items are excluded
+by design (Part I, Exclusions) -- correct behaviour -- but a Sales rep who wants to
+exclude most of the 30 items (the common case for a simple single-sport project) must
+click each one individually with no shortcut. Needs a Director-approved spec before
+implementation, per this register's own Change Process.
+
+### Amendment No. 40 — No "What's Next" Guidance for Sales Across the Document Stages
+**Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
+Section A.5, re-confirmed by direct read). `frontend/src/Documents.jsx`'s stage headers
+(`Documents.jsx:384` Cost Sheet, `:600` Estimate, `:1068` Quotation, `:1434` Work Order)
+each show only the stage's own status badge/SLA note -- confirmed by a whole-file grep for
+"your turn"/"whose turn"/"what's next"/"next step"/"awaiting sales/pm/director" returning
+zero matches. A Sales rep who has done their part (e.g. created the project, requested a
+skip) has nothing on screen telling them whose court the ball is in or what happens next --
+the exact bottleneck the Director named as the app's central problem to solve
+("my hole point round to sales persons or his actual bottle neck"). Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
