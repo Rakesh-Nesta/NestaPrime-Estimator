@@ -1153,6 +1153,23 @@ the exact bottleneck the Director named as the app's central problem to solve
 ("my hole point round to sales persons or his actual bottle neck"). Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+### Amendment No. 41 — Overview Visual Reskin (Serif/Amber Theme, Live Clock, Motion)
+**Registered 22 September 2026**, from a Director-supplied HTML/CSS/JS reference file
+(`Desktop\NPS-APP\HTML_Code.html`) and a direct side-by-side comparison against the live
+Overview page confirming the Director's earlier "dynamic and interactive" request
+(Section D of the plan doc) meant this level of visual treatment, not just the Amendment
+36 shell's plain layout. Current state: `frontend/src/index.css`'s Amendment 1 theme
+(dark base, gold `#c9a227`, Sora/Inter fonts) has no live clock, no motion beyond hover
+lift, no animated counters/sparklines. **Scope explicitly confirmed by the Director as
+visual/theme only** -- every layout position already shipped (breadcrumb top-left, top
+bar top-right, tab strip, KPI tile grid, two-panel row, Recent Projects + Your Next Moves)
+stays exactly where it is; nothing here repositions anything. One open question flagged
+before speccing: the reference's live activity ticker is functionally the same concept as
+the "Recent Activity" feed Amendment 12 explicitly *removed* from this Dashboard for being
+"noise, not signal, in real usage" -- needs a real decision, not an assumption, before
+building it again. Needs a Director-approved spec before implementation, per this
+register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
