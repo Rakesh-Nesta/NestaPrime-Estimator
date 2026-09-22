@@ -59,4 +59,11 @@ class Vendor(Base):
     email_opt_in: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     consent_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
+    # Amendment 34: same retire-without-delete convention Hub/ClientSignatory
+    # already use -- a vendor may be referenced by historical Price
+    # Requests/POs/RateHistory rows that must keep resolving correctly.
+    # Defaults True (unlike is_calibration's default False) since the
+    # exception here is the retired vendor, not the ordinary one.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)

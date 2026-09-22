@@ -134,3 +134,74 @@ def test_two_vendors_can_each_carry_their_own_product_catalog(client, director_u
     b_products = client.get(f"/vendors/{vendor_b}/products", headers=headers).json()
     assert a_products[0]["approx_price"] == 60.0
     assert b_products[0]["approx_price"] == 65.0
+
+
+# ---------------------------------------------------------------------------
+# Amendment 34: deactivation + duplicate-vendor guard
+# ---------------------------------------------------------------------------
+
+
+def test_vendor_is_active_defaults_to_true(client, director_user):
+    headers = _director_headers(client, director_user)
+    vendor_id = _create_vendor(client, headers)
+    res = client.get(f"/vendors/{vendor_id}", headers=headers)
+    assert res.json()["is_active"] is True
+
+
+def test_vendor_can_be_deactivated_and_reactivated(client, director_user):
+    headers = _director_headers(client, director_user)
+    vendor_id = _create_vendor(client, headers)
+
+    res = client.patch(f"/vendors/{vendor_id}", json={"is_active": False}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["is_active"] is False
+
+    res = client.patch(f"/vendors/{vendor_id}", json={"is_active": True}, headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["is_active"] is True
+
+
+def test_deactivated_vendor_excluded_from_default_listing(client, director_user):
+    headers = _director_headers(client, director_user)
+    active_id = _create_vendor(client, headers, name="Active Vendor")
+    inactive_id = _create_vendor(client, headers, name="Retired Vendor")
+    client.patch(f"/vendors/{inactive_id}", json={"is_active": False}, headers=headers)
+
+    default_listing = client.get("/vendors", headers=headers).json()
+    assert {v["id"] for v in default_listing} == {active_id}
+
+    full_listing = client.get("/vendors", params={"include_inactive": True}, headers=headers).json()
+    assert {v["id"] for v in full_listing} == {active_id, inactive_id}
+
+    # A deactivated vendor is still directly retrievable by id -- it's
+    # retired, not deleted.
+    res = client.get(f"/vendors/{inactive_id}", headers=headers)
+    assert res.status_code == 200, res.text
+
+
+def test_creating_a_vendor_with_a_duplicate_name_is_rejected(client, director_user):
+    headers = _director_headers(client, director_user)
+    _create_vendor(client, headers, name="Steel Traders")
+
+    res = client.post("/vendors", json={"name": "Steel Traders"}, headers=headers)
+    assert res.status_code == 409, res.text
+
+
+def test_creating_a_vendor_with_a_duplicate_gstin_is_rejected(client, director_user):
+    headers = _director_headers(client, director_user)
+    _create_vendor(client, headers, name="Vendor One", gstin="27AAAAA0000A1Z5")
+
+    res = client.post(
+        "/vendors", json={"name": "Vendor Two", "gstin": "27AAAAA0000A1Z5"}, headers=headers
+    )
+    assert res.status_code == 409, res.text
+
+
+def test_two_unregistered_vendors_with_no_gstin_can_coexist(client, director_user):
+    """gstin=None means 'unregistered' (Vendor's own docstring) -- not a
+    duplicate just for sharing a null GSTIN."""
+    headers = _director_headers(client, director_user)
+    _create_vendor(client, headers, name="Vendor One")
+
+    res = client.post("/vendors", json={"name": "Vendor Two"}, headers=headers)
+    assert res.status_code == 201, res.text
