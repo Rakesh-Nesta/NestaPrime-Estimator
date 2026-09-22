@@ -21,6 +21,7 @@ import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
 import Sidebar from "./Sidebar";
 import { BellIcon } from "./Icons";
+import LiveClock from "./LiveClock";
 import SimpleCalculator from "./SimpleCalculator";
 import SiteSurvey from "./SiteSurvey";
 import SportSelection from "./SportSelection";
@@ -152,9 +153,7 @@ export default function App() {
             {screen === "dashboard" ? "Workspace / Overview" : " "}
           </p>
           <div className="flex items-center gap-4">
-          <p className="text-xs text-text-secondary text-right leading-tight">
-            {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}
-          </p>
+          <LiveClock name={user.name} />
           <span title="No live notifications yet" className="text-text-secondary/60">
             <BellIcon className="w-4 h-4" />
           </span>

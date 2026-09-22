@@ -1,6 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getDashboard } from "./api";
 import { CalendarIcon, ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
+
+// Amendment 41 (Section 47): animates a KPI tile's arrival, real data only
+// (Pending Quotations/Active Projects) -- never applied to a placeholder
+// "--" tile. Respects prefers-reduced-motion by skipping straight to the
+// final value.
+function useCountUp(target) {
+  const [value, setValue] = useState(0);
+  const reduceMotion = useRef(
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+
+  useEffect(() => {
+    if (reduceMotion.current) {
+      setValue(target);
+      return;
+    }
+    let raf;
+    const start = performance.now();
+    const duration = 900;
+    function step(now) {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(Math.round(target * eased));
+      if (p < 1) raf = requestAnimationFrame(step);
+    }
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+
+  return value;
+}
 
 // Amendment 4 (Annexure 2): "business-summary dashboard ... link back to
 // dashboard from every section ... the app itself is the training." This
@@ -38,6 +69,11 @@ function ComingSoonTile({ label, icon: IconComp }) {
       <p className="text-2xl font-heading font-bold mt-2 text-text-secondary">--</p>
     </div>
   );
+}
+
+function CountUpValue({ value }) {
+  const animated = useCountUp(value);
+  return <>{animated}</>;
 }
 
 function ComingSoonPanel({ title, description }) {
@@ -117,7 +153,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
 
   return (
     <div className="max-w-[1600px] mx-auto mt-6 mb-10 space-y-6 px-6">
-      <div>
+      <div className="rise" style={{ "--d": "0.05s" }}>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
@@ -158,7 +194,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 rise" style={{ "--d": "0.12s" }}>
         <ComingSoonTile label="Open opportunities" icon={FunnelIcon} />
         <ComingSoonTile label="Follow-ups due" icon={ClockIcon} />
         {realTiles.map((tile) =>
@@ -172,7 +208,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
                 <tile.icon className="w-3.5 h-3.5" />
                 {tile.label}
               </p>
-              <p className="text-2xl font-heading font-bold mt-2 text-text-primary">{tile.value}</p>
+              <p className="text-2xl font-heading font-bold mt-2 text-text-primary">
+                <CountUpValue value={tile.value} />
+              </p>
             </button>
           ) : (
             <div key={tile.label} className="text-left bg-surface border border-border-dark rounded-lg p-5">
@@ -180,14 +218,16 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
                 <tile.icon className="w-3.5 h-3.5" />
                 {tile.label}
               </p>
-              <p className="text-2xl font-heading font-bold mt-2 text-text-primary">{tile.value}</p>
+              <p className="text-2xl font-heading font-bold mt-2 text-text-primary">
+                <CountUpValue value={tile.value} />
+              </p>
             </div>
           )
         )}
         <ComingSoonTile label="Payments overdue" icon={CalendarIcon} />
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-5">
+      <div className="grid sm:grid-cols-2 gap-5 rise" style={{ "--d": "0.2s" }}>
         <ComingSoonPanel
           title="Orders & collections"
           description="Won order value vs. cash received, by month -- lands with Payments (Phase 7)."
@@ -198,7 +238,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         />
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-5">
+      <div className="grid sm:grid-cols-3 gap-5 rise" style={{ "--d": "0.28s" }}>
         <div className="sm:col-span-2 bg-surface border border-border-dark rounded-lg p-5">
           <h3 className="font-heading font-semibold text-text-primary text-base mb-3">Recent projects</h3>
           {recentProjects.length === 0 ? (
@@ -211,10 +251,16 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
                     onClick={() => onOpenProject(project.id)}
                     className="w-full text-left py-3 flex items-center justify-between hover:bg-surface-raised px-2 rounded hover:-translate-y-0.5 transition-all duration-250 ease-out"
                   >
-                    <span>
-                      <span className="font-medium text-text-primary font-mono text-sm">{project.project_no}</span>{" "}
-                      <span className="text-text-secondary">
-                        · {project.client_name} · {project.city}
+                    <span className="flex items-center gap-3">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-gold bg-gold-muted border border-gold/30 rounded-full px-2 py-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gold" />
+                        Open
+                      </span>
+                      <span>
+                        <span className="font-medium text-text-primary font-mono text-sm">{project.project_no}</span>{" "}
+                        <span className="text-text-secondary">
+                          · {project.client_name} · {project.city}
+                        </span>
                       </span>
                     </span>
                     <span className="text-sm text-gold">Open →</span>
