@@ -1,4 +1,13 @@
 import { useState } from "react";
+import {
+  CalendarIcon,
+  ClockIcon,
+  DocumentIcon,
+  FolderIcon,
+  FunnelIcon,
+  GridIcon,
+  UsersIcon,
+} from "./Icons";
 
 // Amendment 36 (Section 42): Phase 1 of the header-by-header CRM restructure
 // -- replaces the old top-nav dropdowns with a left sidebar. Confirmed
@@ -55,7 +64,7 @@ const MORE_GROUPS = [
   },
 ];
 
-function NavLink({ label, active, onClick, badge, muted }) {
+function NavLink({ label, active, onClick, badge, muted, icon: IconComp }) {
   return (
     <button
       onClick={onClick}
@@ -67,7 +76,10 @@ function NavLink({ label, active, onClick, badge, muted }) {
           : "text-text-secondary hover:text-text-primary hover:bg-surface-raised"
       }`}
     >
-      <span>{label}</span>
+      <span className="flex items-center gap-2.5">
+        {IconComp && <IconComp className="w-4 h-4 shrink-0" />}
+        {label}
+      </span>
       {badge !== undefined && (
         <span className="text-[10px] uppercase tracking-wider bg-surface-raised border border-border-dark rounded px-1.5 py-0.5">
           {badge}
@@ -110,34 +122,49 @@ export default function Sidebar({
   }
 
   const primaryItems = [
-    { key: "dashboard", label: "Overview", onClick: () => go("dashboard") },
-    { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin") },
-    { key: "__opportunities", label: "Opportunities", onClick: () => go("opportunities"), muted: true, badge: "Soon" },
-    { key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"] },
-    { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin") },
-    { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon" },
-    { key: "__followups", label: "Follow-ups", onClick: () => go("followups"), muted: true, badge: "Soon" },
-    ...(showTeamAccess ? [{ key: "settings", label: "Team & Access", onClick: () => go("settings") }] : []),
+    { key: "dashboard", label: "Overview", onClick: () => go("dashboard"), icon: GridIcon },
+    { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
+    { key: "__opportunities", label: "Opportunities", onClick: () => go("opportunities"), muted: true, badge: "Soon", icon: FunnelIcon },
+    { key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon },
+    { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
+    { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon", icon: CalendarIcon },
+    { key: "__followups", label: "Follow-ups", onClick: () => go("followups"), muted: true, badge: "Soon", icon: ClockIcon },
+    ...(showTeamAccess ? [{ key: "settings", label: "Team & Access", onClick: () => go("settings"), icon: UsersIcon }] : []),
   ];
 
   const sidebarBody = (
     <div className="flex flex-col h-full">
-      <button onClick={() => go("dashboard")} className="flex items-center gap-2.5 px-4 py-5 group text-left">
+      <button onClick={() => go("dashboard")} className="flex items-center gap-2.5 px-4 pt-5 pb-1 group text-left">
         <span className="w-8 h-8 rounded bg-base border border-gold/40 flex items-center justify-center text-gold font-heading font-bold text-sm group-hover:border-gold transition-colors">
           N
         </span>
-        <span className="font-heading font-bold text-text-primary tracking-tight leading-tight">
-          NestaPrime <span className="block text-text-secondary font-normal text-xs">Estimator</span>
+        <span className="leading-tight">
+          <span className="font-heading font-bold text-text-primary tracking-tight block">NestaPrime</span>
+          <span className="text-[9px] uppercase tracking-wider text-text-secondary/70">Relationships &middot; Projects &middot; Growth</span>
         </span>
       </button>
 
-      <nav className="flex-1 overflow-y-auto px-2 space-y-1">
+      <div className="px-4 pt-4 pb-2">
+        <p className="text-[10px] uppercase tracking-wider text-text-secondary/60 mb-2">Your workspace</p>
+        <div className="bg-surface-raised border border-border-dark rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded bg-base border border-border-dark flex items-center justify-center text-text-secondary font-heading font-bold text-[11px] shrink-0">
+            NP
+          </span>
+          <span className="leading-tight min-w-0">
+            <span className="block text-xs font-medium text-text-primary truncate">Nesta Prime Solutions</span>
+            <span className="block text-[10px] text-text-secondary truncate">Sports infrastructure &middot; India</span>
+          </span>
+        </div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-2 space-y-1 pt-1">
         {primaryItems.map((item) => (
           <NavLink
             key={item.key}
             label={item.label}
             badge={item.badge}
             muted={item.muted}
+            icon={item.icon}
             active={screen === item.key || (item.matchKeys || []).includes(screen)}
             onClick={item.onClick}
           />
