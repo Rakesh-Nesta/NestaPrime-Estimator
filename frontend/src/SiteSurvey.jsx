@@ -152,7 +152,7 @@ function SurveyCard({ token, survey, onChanged }) {
   );
 }
 
-export default function SiteSurvey({ token, project, role, onBack }) {
+export default function SiteSurvey({ token, project, role, onBack, onNext }) {
   const [surveys, setSurveys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -187,11 +187,18 @@ export default function SiteSurvey({ token, project, role, onBack }) {
       <div className="bg-surface shadow rounded-lg p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-text-primary">Site Survey (Appendix C)</h2>
-          {onBack && (
-            <button onClick={onBack} className="text-sm text-gold hover:underline">
-              &larr; Back
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button onClick={onBack} className="text-sm text-gold hover:underline">
+                &larr; Back
+              </button>
+            )}
+            {onNext && (
+              <button onClick={onNext} className="text-sm text-gold hover:underline">
+                Next &rarr;
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-xs text-text-secondary mt-1">
           A.3: "Site Engineer: Site survey form, actuals entry." Starts blank, filled in during the site visit, and

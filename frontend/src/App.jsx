@@ -320,6 +320,7 @@ export default function App() {
             project={activeProject}
             role={user.role}
             onBack={() => setScreen("scope")}
+            onNext={() => setScreen("documents")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "tender" && (
