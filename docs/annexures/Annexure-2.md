@@ -987,6 +987,26 @@ Setting row or that `document_id` corresponds to a real document of `document_ty
 Needs a Director-approved spec before implementation, per this register's own Change
 Process.
 
+**Implemented 21 September 2026 (PR #146, deployed to production 22 September 2026, per
+[docs/annexures/Section-38-specs.md](Section-38-specs.md), approved as proposed -- with
+one narrowing revision agreed during implementation).** `master_value` is removed from
+`OverrideCreate`; the server now looks up the real value via `get_current_setting_value()`
+and uses it for both the numeric check and the persisted `Override.master_value`. The
+originally-approved "reject unknown `setting_key` with 404" behavior was dropped after
+discovering, mid-implementation, that most K.1 cost-sheet constants run purely on a
+hardcoded Python default with no `Settings` row ever created for them -- a normal,
+legitimate case (confirmed by an existing, previously-passing test), not an unknown key;
+requiring a row would have broken real overrides of those constants. When no row exists,
+the numeric check is skipped exactly as before Amendment 32, with a placeholder value
+recorded since there's nothing authoritative to check `override_value` against. This
+revision was confirmed with the Director before proceeding. Live-verified in production: a
+fabricated `master_value` sent alongside a real numeric setting was ignored and the
+override correctly rejected (`422`) against the real value; a legitimate override against
+that same real setting recorded the correct `master_value` (`6.0`); an override against a
+key with no `Settings` row (confirmed via direct DB query before testing, to avoid the
+false negative a pre-existing real row would cause) still succeeded with the new
+placeholder `master_value` text. Amendment 32 is now fully closed.
+
 ### Amendment No. 33 — Skip Request Workflow Has No Reject Path, Can Deadlock a Project
 **Registered 21 September 2026 (self-identified during the same audit).**
 `backend/app/models/skip_request.py`'s `SkipRequestStatus` enum has only `PENDING` and
@@ -1002,6 +1022,18 @@ project, with no record anywhere that a decision was ever made. A normal, full C
 build is unaffected by (and doesn't clear) a pending `SkipRequest` either, so the two
 paths can silently diverge. Needs a Director-approved spec before implementation, per
 this register's own Change Process.
+
+**Implemented 21 September 2026 (PR #147, deployed to production 22 September 2026, per
+[docs/annexures/Section-39-specs.md](Section-39-specs.md), approved as proposed).** Adds a
+`REJECTED` status (migration `ac1785734f0f`, `ALTER TYPE ... ADD VALUE`) and a
+`rejection_reason` column, a new `POST /skip-requests/{id}/reject` endpoint (same
+PM/Director role gate as approve, audit-logged), and a symmetric guard on
+`create_cost_sheet` rejecting while a skip request is pending. Live-verified in
+production: a normal Cost Sheet build was correctly blocked (`400`) while a skip request
+sat pending; rejecting it recorded `status: rejected` and the rejection reason; a second
+skip request could then be raised on the same project (the deadlock resolved); the normal
+Cost Sheet path was correctly blocked again by that second pending request. Amendment 33
+is now fully closed.
 
 ### Amendment No. 34 — Vendor Master Has No Deactivation and No Duplicate-Vendor Guard
 **Registered 21 September 2026 (self-identified during the same audit).**
