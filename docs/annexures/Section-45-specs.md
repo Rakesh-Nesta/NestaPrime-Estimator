@@ -50,7 +50,7 @@ and there is no way to bulk-confirm a whole category as reviewed-and-excluded ei
 
 ## Approval
 
-☐ Approved — pending Director decision.
+☑ Approved — "approve as proposed, all decisions" (22 September 2026).
 
 ---
 Prepared by: R. Patni (with AI development assistance) | Date: 22 September 2026

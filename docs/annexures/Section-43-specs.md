@@ -49,7 +49,7 @@ only free-text `billing_address` (line 36).
 
 ## Approval
 
-☐ Approved — pending Director decision.
+☑ Approved — "approve as proposed, all decisions" (22 September 2026).
 
 ---
 Prepared by: R. Patni (with AI development assistance) | Date: 22 September 2026
