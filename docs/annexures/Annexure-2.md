@@ -1200,6 +1200,21 @@ the "Recent Activity" feed Amendment 12 explicitly *removed* from this Dashboard
 building it again. Needs a Director-approved spec before implementation, per this
 register's own Change Process.
 
+### Amendment No. 42 — Client Follow-Up Date (Leads & Clients, Header Index Step 3)
+**Registered 23 September 2026**, from `docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md`
+Section B.1 and Section E step 3 (the header-by-header build index, resequenced
+22 September 2026 to prioritize Leads & Clients / Follow-ups / Opportunities per the
+Director's persona clarification). Re-verified 23 September 2026: `Client`
+(`backend/app/models/client.py`) still has no due-date, next-action, or reminder field of
+any kind -- confirmed by grep, zero matches for "follow_up"/"reminder". `Sidebar.jsx`'s
+"Leads & Clients" item already routes to `ClientsAdmin.jsx` (`clients_admin`) since
+Amendment 36 -- the "re-home" half of this header's step is already done; the only real
+remaining work is this field. `ClientsAdmin.jsx` also confirmed to have no general
+client-edit capability -- only `createClient`, `updateClientFlags` (Director-only), and
+`updateClientConsent` exist (`backend/app/api/clients.py`) -- so this needs its own
+narrow, purpose-built endpoint, not a slot in an edit form that doesn't exist. Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

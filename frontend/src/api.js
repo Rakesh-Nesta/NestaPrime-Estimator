@@ -70,6 +70,15 @@ export async function updateClientConsent(token, clientId, payload) {
   return handle(res);
 }
 
+export async function updateClientFollowUp(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/follow-up`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function listClientSignatories(token, clientId, includeInactive = false) {
   const params = includeInactive ? "?include_inactive=true" : "";
   const res = await fetch(`${API_BASE}/clients/${clientId}/signatories${params}`, { headers: authHeaders(token) });

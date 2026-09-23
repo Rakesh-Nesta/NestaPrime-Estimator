@@ -80,6 +80,11 @@ class ClientConsentUpdate(BaseModel):
     telegram_chat_id: str | None = None
 
 
+class ClientFollowUpUpdate(BaseModel):
+    next_follow_up_date: date | None = None
+    follow_up_note: str | None = None
+
+
 class ClientOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -95,6 +100,8 @@ class ClientOut(BaseModel):
     consent_date: date | None
     telegram_opt_in: bool
     telegram_chat_id: str | None
+    next_follow_up_date: date | None
+    follow_up_note: str | None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -222,6 +229,31 @@ def update_client_consent(
                 db, current_user, "client", client.id, field,
                 old_value=old_value, new_value=value, request=request,
             )
+        setattr(client, field, value)
+
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+@router.patch("/{client_id}/follow-up", response_model=ClientOut)
+def update_client_follow_up(
+    client_id: uuid.UUID,
+    payload: ClientFollowUpUpdate,
+    db: Session = Depends(get_db),
+    # Amendment 42 (Section 48): same role set as create_client -- Sales is
+    # the primary daily user of this field, not Director-only like the
+    # blacklist/overdue flags. Deliberately NOT audit-logged: a routine
+    # personal reminder a rep updates often, not a governance-relevant fact
+    # like a flag or consent change.
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         setattr(client, field, value)
 
     db.commit()
