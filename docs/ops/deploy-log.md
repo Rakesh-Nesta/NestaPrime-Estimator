@@ -11,6 +11,39 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-23 -- PR #159: Amendment 42 (Client follow-up date, Leads & Clients)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `d042931` -> `708dc53`
+**One real migration** -- `a3c7e29f5d16` adds `clients.next_follow_up_date` (Date,
+nullable) and `clients.follow_up_note` (String(200), nullable). Frontend rebuild needed
+(`ClientsAdmin.jsx` gained the inline follow-up control).
+
+The concrete deliverable for Section E step 3 (Leads & Clients) of the header-by-header
+build index -- the "re-home" half already shipped in Amendment 36; this is the
+new-capability half (Section B.1's verified gap). New `PATCH /clients/{id}/follow-up`
+endpoint, `sales`/`pm`/`director` (not Director-only -- Sales is the primary daily user),
+deliberately not audit-logged (routine reminder, not a governance-relevant fact like
+blacklist/consent) and deliberately not mandatory (distinct from the mandatory-follow-up
+discipline already decided for the future Opportunity entity).
+
+**Rebuild and migration were clean** -- `git pull` fast-forwarded to `708dc53`, the log
+explicitly showed `Running upgrade 9e8bdbaf6219 -> a3c7e29f5d16, add client follow-up
+date and note (Amendment 42)`, both gunicorn workers logged `Application startup
+complete`, `curl .../health` returned `{"status":"ok"}`.
+
+**Live-verified in production** (not just the automated suite: 7 new tests in
+`test_client_follow_up.py`, full client suite 65 tests re-run clean): reactivated
+`verify-director@nestaprime.local`, set a real follow-up date and note on a live client,
+confirmed it persisted after reload, cleared it back to null afterward -- this test
+modified an existing real client record's own field (not a throwaway "(delete me)"
+record), so it was cleaned up rather than left as a known leftover.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-22 -- PR #151: Amendment 36 (Nav shell + Dashboard shell, CRM restructure Phase 1)
 
 **Run by:** R. Patni (with AI development assistance)
