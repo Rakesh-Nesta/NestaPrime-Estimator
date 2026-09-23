@@ -7,10 +7,11 @@ import {
   updateClientConsent,
   updateClientFlags,
   updateClientFollowUp,
+  updateClientNotes,
 } from "./api";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
-const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "" };
+const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", notes: "" };
 const canCreateClient = (role) => ["sales", "pm", "director"].includes(role);
 
 // Amendment 44 (Section E step 5, Design input 2026-09-23): a quick-capture
@@ -25,7 +26,13 @@ function defaultEnquiryFollowUpDate() {
   d.setDate(d.getDate() + 2);
   return d.toISOString().slice(0, 10);
 }
-const emptyEnquiryForm = { lead_name: "", lead_phone: "", lead_email: "", next_follow_up_date: defaultEnquiryFollowUpDate() };
+const emptyEnquiryForm = {
+  lead_name: "",
+  lead_phone: "",
+  lead_email: "",
+  next_follow_up_date: defaultEnquiryFollowUpDate(),
+  notes: "",
+};
 
 // Section 19 (Amendment 4 continuation): reuses AllProjects.jsx's own status
 // pill colors, kept as a small local duplicate rather than a shared import,
@@ -42,6 +49,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   const [error, setError] = useState("");
   const [chatIdDrafts, setChatIdDrafts] = useState({});
   const [followUpDrafts, setFollowUpDrafts] = useState({});
+  const [notesDrafts, setNotesDrafts] = useState({});
   const [form, setForm] = useState(emptyClientForm);
   const [submitting, setSubmitting] = useState(false);
   const [enquiryForm, setEnquiryForm] = useState(emptyEnquiryForm);
@@ -98,6 +106,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
         contact_name: form.contact_name || null,
         phone: form.phone || null,
         email: form.email || null,
+        notes: form.notes || null,
       });
       setForm(emptyClientForm);
       await load();
@@ -123,8 +132,15 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
         lead_phone: enquiryForm.lead_phone || null,
         lead_email: enquiryForm.lead_email || null,
         next_follow_up_date: enquiryForm.next_follow_up_date,
+        notes: enquiryForm.notes || null,
       });
-      setEnquiryForm({ lead_name: "", lead_phone: "", lead_email: "", next_follow_up_date: defaultEnquiryFollowUpDate() });
+      setEnquiryForm({
+        lead_name: "",
+        lead_phone: "",
+        lead_email: "",
+        next_follow_up_date: defaultEnquiryFollowUpDate(),
+        notes: "",
+      });
       setEnquirySaved(true);
     } catch (err) {
       setError(err.message);
@@ -184,6 +200,19 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
     }
   }
 
+  // Amendment 45 (Section 51): a general free-text catch-all, distinct
+  // from the follow-up note above -- same draft/Save pattern.
+  async function saveNotes(clientId) {
+    setError("");
+    try {
+      await updateClientNotes(token, clientId, { notes: notesDrafts[clientId] || null });
+      setNotesDrafts((d) => ({ ...d, [clientId]: undefined }));
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   if (loading) {
     return <p className="text-center text-text-secondary mt-10">Loading clients…</p>;
   }
@@ -201,8 +230,8 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
         </div>
         <p className="text-xs text-text-secondary mt-1">
           Part O: "overdue_flag (blocks new Quotation release until Director clears), blacklist_flag (blocks new
-          Estimates)." Overdue/Blacklisted are Director-only (enforced below, not just server-side); consent
-          toggles are open to Sales/PM/Director.
+          Estimates)." Overdue/Blacklisted are Director-only -- only shown to a Director, not just disabled for
+          everyone else; consent toggles are open to Sales/PM/Director.
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
@@ -259,6 +288,16 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 type="email"
                 value={form.email}
                 onChange={(e) => setField("email", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-text-secondary">Notes / remarks</label>
+              <textarea
+                value={form.notes}
+                onChange={(e) => setField("notes", e.target.value)}
+                rows={3}
+                placeholder="Anything else worth noting -- not tied to any field above."
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
@@ -319,6 +358,16 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-text-secondary">Notes / remarks</label>
+              <textarea
+                value={enquiryForm.notes}
+                onChange={(e) => setEnquiryField("notes", e.target.value)}
+                rows={3}
+                placeholder="Anything else worth noting -- not tied to any field above."
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -342,31 +391,27 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
               <span className="text-xs text-text-secondary">({c.type})</span>
             </span>
             <div className="flex items-center gap-4 text-xs">
-              <label
-                className={`flex items-center gap-1 ${!canEditFlags ? "opacity-50" : ""}`}
-                title={canEditFlags ? undefined : "Director only"}
-              >
-                <input
-                  type="checkbox"
-                  checked={c.overdue_flag}
-                  disabled={!canEditFlags}
-                  onChange={(e) => toggleFlag(c.id, "overdue_flag", e.target.checked)}
-                />
-                Overdue
-              </label>
-              <label
-                className={`flex items-center gap-1 ${!canEditFlags ? "opacity-50" : ""}`}
-                title={canEditFlags ? undefined : "Director only"}
-              >
-                <input
-                  type="checkbox"
-                  checked={c.blacklist_flag}
-                  disabled={!canEditFlags}
-                  onChange={(e) => toggleFlag(c.id, "blacklist_flag", e.target.checked)}
-                />
-                Blacklisted
-              </label>
-              <span className="border-l border-border-dark pl-4 flex items-center gap-4">
+              {canEditFlags && (
+                <>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={c.overdue_flag}
+                      onChange={(e) => toggleFlag(c.id, "overdue_flag", e.target.checked)}
+                    />
+                    Overdue
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={c.blacklist_flag}
+                      onChange={(e) => toggleFlag(c.id, "blacklist_flag", e.target.checked)}
+                    />
+                    Blacklisted
+                  </label>
+                </>
+              )}
+              <span className={`flex items-center gap-4 ${canEditFlags ? "border-l border-border-dark pl-4" : ""}`}>
                 <label className="flex items-center gap-1" title="M.7.2 rule 5 (DPDP Act)">
                   <input
                     type="checkbox"
@@ -435,6 +480,22 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
               />
               <button onClick={() => saveFollowUp(c.id)} className="text-gold hover:underline shrink-0">
+                Save
+              </button>
+            </div>
+          )}
+
+          {canCreateClient(role) && (
+            <div className="flex items-start gap-2 text-xs text-text-secondary">
+              <span className="font-medium pt-1 shrink-0">Notes</span>
+              <textarea
+                value={notesDrafts[c.id] ?? c.notes ?? ""}
+                onChange={(e) => setNotesDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
+                rows={1}
+                placeholder="Notes / remarks (optional)"
+                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
+              />
+              <button onClick={() => saveNotes(c.id)} className="text-gold hover:underline shrink-0">
                 Save
               </button>
             </div>

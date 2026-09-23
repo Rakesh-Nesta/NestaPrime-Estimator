@@ -1360,6 +1360,38 @@ confirmed it appeared on the Opportunities screen under "Leads", linked it to an
 throwaway "(delete me)" Client (confirmed it moved to the "Clients" filter), then set its
 stage to Lost -- left in that terminal, harmless state.
 
+### Amendment No. 45 — Leads & Clients Polish: Hide Admin-Only Flags, Add Notes Field
+**Registered 23 September 2026**, from a direct Director review of the Sales-facing
+surface audit above. Two related fixes to the Leads & Clients / Opportunities screens,
+both already Director-approved in the same message that raised them:
+
+1. **Hide Overdue/Blacklisted from non-Director roles.** `ClientsAdmin.jsx` (lines
+   344-369, pre-fix) showed these two checkboxes to every role, only disabled (with a
+   "Director only" tooltip) for non-directors -- Sales saw two greyed-out admin controls
+   it can never use on every single client row, exactly the kind of admin-area clutter
+   the audit flagged as not needed for the Sales persona. Fixed directly (no schema/API
+   change, pure visibility): wrapped both in `{canEditFlags && (...)}` so they render only
+   for a Director; the consent-toggle divider (`border-l`) is now conditional too, so
+   Sales's row doesn't show an orphaned left border where the hidden controls used to be.
+   **Already implemented and verified locally** (screenshotted as both `sales` and
+   `director` test accounts) as of this registration -- a UI-only correction to already-
+   shipped Amendment 42/43 functionality, not a new capability, same category as this
+   register's earlier "sizing fix"/"structural gap" direct fixes.
+2. **Add a general Notes/Remarks field to "Add a client" and "Add Enquiry".** Grounded
+   against current code: `Client` (`backend/app/models/client.py`) has no general
+   free-text field at all -- its closest relative, `next_follow_up_date`/`follow_up_note`
+   (Amendment 42), is specifically about the *next follow-up reminder*, not a catch-all
+   note, and isn't even part of the client-creation form (`ClientCreate` in
+   `backend/app/api/clients.py`), only editable afterward via the separate inline
+   follow-up editor. `Opportunity` (`backend/app/models/opportunity.py`) has the same gap
+   at creation -- `OpportunityCreate` accepts `lead_name`/`lead_phone`/`lead_email`/
+   `next_follow_up_date` only, no general note. The established precedent for exactly this
+   need already exists on `Project`: `custom_notes: Mapped[str | None] = mapped_column(
+   Text, nullable=True)` (`project.py:172`), Amendment 5's "+ Add Note" -- "one note per
+   project (not per screen)," a free-text catch-all distinct from any structured field.
+   Needs a Director-approved spec before implementation, per this register's own Change
+   Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

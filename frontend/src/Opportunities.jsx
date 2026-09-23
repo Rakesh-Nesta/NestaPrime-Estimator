@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { linkOpportunityClient, listClients, listOpportunities, updateOpportunityFollowUp, updateOpportunityStage } from "./api";
+import {
+  linkOpportunityClient,
+  listClients,
+  listOpportunities,
+  updateOpportunityFollowUp,
+  updateOpportunityNotes,
+  updateOpportunityStage,
+} from "./api";
 import { FunnelIcon } from "./Icons";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
@@ -33,6 +40,7 @@ export default function Opportunities({ token, onBack }) {
   const [error, setError] = useState("");
   const [drafts, setDrafts] = useState({});
   const [linkPicks, setLinkPicks] = useState({});
+  const [notesDrafts, setNotesDrafts] = useState({});
 
   function load() {
     return listOpportunities(token, { relationship: relationship || undefined }).then(setOpportunities);
@@ -85,6 +93,19 @@ export default function Opportunities({ token, onBack }) {
     try {
       await linkOpportunityClient(token, o.id, { client_id: clientId });
       setLinkPicks((p) => ({ ...p, [o.id]: undefined }));
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Amendment 45 (Section 51): a general free-text catch-all, distinct
+  // from the follow-up note in the stage/date row above.
+  async function saveNotes(o) {
+    setError("");
+    try {
+      await updateOpportunityNotes(token, o.id, { notes: notesDrafts[o.id] || null });
+      setNotesDrafts((d) => ({ ...d, [o.id]: undefined }));
       await load();
     } catch (err) {
       setError(err.message);
@@ -200,6 +221,20 @@ export default function Opportunities({ token, onBack }) {
                     disabled={!dirty && closed}
                     className="text-gold hover:underline shrink-0 disabled:opacity-40 disabled:no-underline"
                   >
+                    Save
+                  </button>
+                </div>
+
+                <div className="flex items-start gap-2 text-xs">
+                  <span className="text-text-secondary pt-1 shrink-0">Notes</span>
+                  <textarea
+                    value={notesDrafts[o.id] ?? o.notes ?? ""}
+                    onChange={(e) => setNotesDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
+                    rows={1}
+                    placeholder="Notes / remarks (optional)"
+                    className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
+                  />
+                  <button onClick={() => saveNotes(o)} className="text-gold hover:underline shrink-0">
                     Save
                   </button>
                 </div>
