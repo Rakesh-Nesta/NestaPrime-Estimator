@@ -27,6 +27,7 @@ from app.api import (
     lighting,
     message_templates,
     messages,
+    opportunities,
     overheads,
     package_contents,
     pdf_documents,
@@ -81,6 +82,7 @@ app.include_router(auth.router)
 app.include_router(users.users_router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)
+app.include_router(opportunities.router)
 app.include_router(company.router)
 app.include_router(dashboard.router)
 app.include_router(projects.router)
