@@ -430,9 +430,12 @@ the Sales-persona lever.
    open items" goal is not fully closed by this step; that awaits step 5's
    `Opportunity.owner`). Wires Dashboard's "Follow-ups due" tile and "Your
    next moves" panel to real data. Depends directly on step 3's new field.
-5. **Opportunities** — REGISTERED & SPECCED, Amendment 44, 2026-09-23 (spec:
-   `docs/annexures/Section-50-specs.md`, pending Director approval). The
-   largest single piece: new `Opportunity` entity + pipeline-stage enum,
+5. **Opportunities** — Amendment 44, approved 2026-09-23 (spec:
+   `docs/annexures/Section-50-specs.md`). Phase A (model + API + mandatory-
+   date rules, PR #164) DONE, deployed 2026-09-23. Add Enquiry UI, the
+   Opportunities screen, the Won-Project hand-off, and Dashboard/Follow-ups
+   wiring are still pending as later phases. The largest single piece: new
+   `Opportunity` entity + pipeline-stage enum,
    linked to Leads & Clients, converts into a Project once Won.
    Mandatory-follow-up-date discipline (Director decision, 2026-09-22: a
    Lead/Opportunity can never be left with no future follow-up date,

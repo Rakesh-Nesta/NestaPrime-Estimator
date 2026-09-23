@@ -1324,6 +1324,28 @@ Grounded against current code:
 Needs a Director-approved spec before implementation, per this register's own Change
 Process.
 
+**Implemented, Phase A only, 23 September 2026 (PR #164, deployed to production same day,
+per [docs/annexures/Section-50-specs.md](Section-50-specs.md), approved as proposed).**
+Ships the backend foundation, shell-first per the approved spec's phasing: the
+`Opportunity` model, `OpportunityStage` enum, `Project.opportunity_id` back-link, and the
+`POST /opportunities` / `GET /opportunities` / `PATCH .../stage` / `PATCH .../follow-up` /
+`PATCH .../link-client` endpoints, with the mandatory-follow-up-date discipline enforced
+at the API layer (required at creation and every non-terminal stage change, auto-cleared
+on Won/Lost). 23 new backend tests. Add Enquiry UI, the Opportunities screen, the Won ->
+Start Project hand-off, and Dashboard/Follow-ups-screen wiring are **not yet built** --
+still pending as later phases of this same Amendment, not yet registered as separate
+Amendment numbers.
+
+**Live-verified in production:** `git pull` fast-forwarded to `e3c0fc4`, the log explicitly
+showed `Running upgrade a3c7e29f5d16 -> d0d627473d3c, add opportunities table and project
+opportunity_id (Amendment 44)`, both gunicorn workers logged `Application startup
+complete`. Logged in as `verify-director@nestaprime.local`: created a lead-only
+Opportunity via the API, confirmed creation without a follow-up date is rejected (422),
+confirmed a non-terminal stage change without a fresh date is rejected (400), moved it to
+Won and confirmed the date cleared automatically, confirmed it appears under the
+`relationship=lead` list filter. Left in place as a harmless (Won, terminal) throwaway
+record -- no delete/rename endpoint exists yet for Opportunities.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

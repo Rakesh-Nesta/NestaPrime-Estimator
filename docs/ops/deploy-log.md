@@ -11,6 +11,55 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-23 -- PR #164: Amendment 44 Phase A (Opportunity model + API, Section E step 5)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `408ac1b` -> `e3c0fc4` (also fast-forwards production past PR #163's
+docs-only close-out, not separately deployed -- see its own deploy-log entry below)
+**One real migration** -- `d0d627473d3c` creates the `opportunities` table and adds
+`projects.opportunity_id` (nullable back-link). Backend-only; no frontend rebuild needed
+(nothing in `frontend/src` changed this PR).
+
+The backend foundation for the largest single piece in the header-by-header build index:
+a new `Opportunity` entity (Lead/Client distinction, pipeline stages, mandatory-
+follow-up-date discipline), shipped shell-first per the approved spec -- Add Enquiry UI,
+the Opportunities screen, the Won-Project hand-off, and Dashboard wiring land in
+follow-up PRs. `POST /opportunities` (Add Enquiry), `GET /opportunities` (stage/
+relationship filters), `PATCH .../stage`, `PATCH .../follow-up`, `PATCH .../link-client`.
+
+**Rebuild and migration were clean** -- `git pull` fast-forwarded to `e3c0fc4`, the log
+explicitly showed `Running upgrade a3c7e29f5d16 -> d0d627473d3c, add opportunities table
+and project opportunity_id (Amendment 44)`, `docker compose ... ps` showed the backend
+container `Up` with no restart, both gunicorn workers logged `Application startup
+complete`. As with PR #162's deploy, the first pasted-together health curls (both the
+direct-to-container one and, this time, the external one through nginx) failed
+transiently before the workers finished booting -- re-checking `ps`/logs/curl a few
+seconds later confirmed a clean, stable boot, not a real fault.
+
+**Live-verified in production** (not just the automated suite: 23 new tests in
+`test_opportunities.py`, full dashboard/client-follow-up/opportunities suite 44 tests
+re-run clean beforehand): logged in as `verify-director@nestaprime.local`, created a
+lead-only Opportunity via `POST /opportunities` (no `client_id`), confirmed creation
+without `next_follow_up_date` is rejected (422), confirmed a stage change to `contacted`
+without a fresh date is rejected (400), moved it to `won` and confirmed
+`next_follow_up_date` cleared to null automatically, confirmed it appears under
+`GET /opportunities?relationship=lead`. Left in place as a real (Won, terminal, harmless)
+throwaway record -- no delete/rename endpoint exists yet for Opportunities, unlike
+Client's own "(delete me)" convention.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
+## 2026-09-23 -- PR #163: Amendment 43 close-out (deploy-log entry + register closure)
+
+**Run by:** R. Patni (with AI development assistance)
+**Docs-only** -- no code changes, no deploy step. Its content reached production only as
+part of PR #164's `git pull` above, since it was never deployed on its own.
+
+---
+
 ## 2026-09-23 -- PR #162: Amendment 43 (Follow-ups screen, Section E step 4)
 
 **Run by:** R. Patni (with AI development assistance)
