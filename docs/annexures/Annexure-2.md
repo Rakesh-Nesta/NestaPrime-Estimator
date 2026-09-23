@@ -1231,6 +1231,28 @@ confirmed it persisted after reload, cleared it back to null afterward (this tes
 modified an existing real client record's field, not a throwaway one, so left no test
 data behind). Amendment 42 (Section E step 3, Leads & Clients) is now fully closed.
 
+### Amendment No. 43 — Follow-ups (Header Index Step 4)
+**Registered 23 September 2026**, from `docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md`
+Section E step 4 (the header-by-header build index). Grounded against current code:
+`Client` (`backend/app/models/client.py`) has no "owner"/assigned-rep field of any kind
+(confirmed by grep, zero matches for "owner"/"assigned_to"/"rep_id") -- so a fully
+personalized "my open items" view (plan doc Section B.2) is not honestly buildable yet;
+only an org-wide Follow-ups view is, until a future `Opportunity.owner` field exists
+(Section E step 5). `GET /clients` (`backend/app/api/clients.py:152-157`) already returns
+`next_follow_up_date`/`follow_up_note` on every `ClientOut` since Amendment 42
+(`clients.py:103-104`), so no new list endpoint is needed for the Follow-ups screen itself.
+Three places in the current UI are already explicitly earmarked, in their own code
+comments, for this exact step: Dashboard's "Follow-ups due" KPI tile
+(`frontend/src/Dashboard.jsx:199`, a `ComingSoonTile`, with the file's own header comment
+at `Dashboard.jsx:52-53` naming it as backend-less), the "Your next moves" panel
+(`Dashboard.jsx:279-282`, a `ComingSoonPanel` whose description text literally reads
+"...lands with Follow-ups (Phase 4)"), and the `DashboardSummary` Pydantic schema
+(`backend/app/api/dashboard.py:29-34`), which has no `followups_due_count` field yet
+alongside its four existing computed counts. The Sidebar and Dashboard tab-strip nav
+entries for "Follow-ups" are both still `muted`/badged "Soon" (`Sidebar.jsx:131`,
+`App.jsx:273-278` routes it to a `ComingSoon` placeholder screen). Needs a
+Director-approved spec before implementation, per this register's own Change Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

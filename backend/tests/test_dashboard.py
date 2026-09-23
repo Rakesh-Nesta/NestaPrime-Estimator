@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 
@@ -166,6 +168,31 @@ def test_overdue_clients_count(client, director_user):
     res = client.get("/dashboard", headers=headers)
     assert res.status_code == 200, res.text
     assert res.json()["summary"]["overdue_clients_count"] == 1
+
+
+def test_followups_due_count_includes_today_and_overdue_excludes_future_and_null(client, director_user):
+    headers = _director_headers(client, director_user)
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+
+    due_today_id = _create_client_record(client, headers, name="Due Today")
+    client.patch(
+        f"/clients/{due_today_id}/follow-up", json={"next_follow_up_date": today}, headers=headers
+    )
+    overdue_id = _create_client_record(client, headers, name="Overdue")
+    client.patch(
+        f"/clients/{overdue_id}/follow-up", json={"next_follow_up_date": yesterday}, headers=headers
+    )
+    future_id = _create_client_record(client, headers, name="Future")
+    client.patch(
+        f"/clients/{future_id}/follow-up", json={"next_follow_up_date": tomorrow}, headers=headers
+    )
+    _create_client_record(client, headers, name="No Follow-up Set")  # next_follow_up_date stays null
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["summary"]["followups_due_count"] == 2
 
 
 def test_recent_projects_lists_newest_first_with_client_name(client, director_user):

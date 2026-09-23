@@ -423,9 +423,13 @@ the Sales-persona lever.
    screens (already done via Amendment 36); added `next_follow_up_date` +
    `follow_up_note` to `Client` (Section B.1). Prerequisite for steps 4-5
    below.
-4. **Follow-ups** — surfaces due/overdue follow-ups as its own view; closes
-   Section B.2's "my open items" gap. Depends directly on step 3's new
-   field.
+4. **Follow-ups** — REGISTERED & SPECCED, Amendment 43, 2026-09-23 (spec:
+   `docs/annexures/Section-49-specs.md`, pending Director approval). Surfaces
+   due/overdue follow-ups as its own view, org-wide only (no per-rep
+   filtering yet -- `Client` has no owner field, so Section B.2's full "my
+   open items" goal is not fully closed by this step; that awaits step 5's
+   `Opportunity.owner`). Wires Dashboard's "Follow-ups due" tile and "Your
+   next moves" panel to real data. Depends directly on step 3's new field.
 5. **Opportunities** — the largest single piece: new `Opportunity` entity +
    pipeline-stage enum, linked to Leads & Clients, converts into a Project
    once Won. Mandatory-follow-up-date discipline (Director decision,

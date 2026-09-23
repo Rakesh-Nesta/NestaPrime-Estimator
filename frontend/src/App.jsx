@@ -11,6 +11,7 @@ import CustomNotesPanel from "./CustomNotesPanel";
 import Dashboard from "./Dashboard";
 import Documents from "./Documents";
 import Education from "./Education";
+import FollowUps from "./FollowUps";
 import Help from "./Help";
 import MasterSettings from "./MasterSettings";
 import PriceRequests from "./PriceRequests";
@@ -49,9 +50,9 @@ export default function App() {
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
     "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help",
     "projects_admin", "estimates_admin", "calculator", "education",
-    // Amendment 36 (Section 42): Opportunities/Follow-ups/Payments are
-    // placeholder headers -- visible in the new sidebar per the CRM
-    // reference, no real backend yet (Phases 4/5/7).
+    // Amendment 36 (Section 42): Opportunities/Payments are placeholder
+    // headers -- visible in the new sidebar per the CRM reference, no real
+    // backend yet (Phases 5/7). Follow-ups got its real screen in Amendment 43.
     "opportunities", "followups", "payments",
   ];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
@@ -271,11 +272,7 @@ export default function App() {
           />
         )}
         {screen === "followups" && (
-          <ComingSoon
-            title="Follow-ups"
-            description="Due/overdue client follow-up reminders -- lands in a later phase of the CRM restructure."
-            onBack={() => setScreen("dashboard")}
-          />
+          <FollowUps token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "payments" && (
           <ComingSoon

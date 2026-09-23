@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -31,6 +31,7 @@ class DashboardSummary(BaseModel):
     pending_estimates_count: int
     pending_quotations_count: int
     overdue_clients_count: int
+    followups_due_count: int
     won_this_month_total: float
 
 
@@ -102,6 +103,16 @@ def get_dashboard(
 
     overdue_clients_count = db.query(Client).filter(Client.overdue_flag.is_(True)).count()
 
+    # Amendment 43 (Section E step 4): "due" includes due-today, not just
+    # strictly overdue -- matches the overdue-red convention Amendment 42's
+    # Client Admin follow-up row already uses (< today, not <= today, shown
+    # red; today itself is "due" rather than "overdue").
+    followups_due_count = (
+        db.query(Client)
+        .filter(Client.next_follow_up_date.isnot(None), Client.next_follow_up_date <= date.today())
+        .count()
+    )
+
     # Quotation has no dedicated "won_at" timestamp (same gap reports.py's
     # own Pipeline report documents) -- released_at is the same proxy
     # period-anchor reports.py already uses for this schema, kept
@@ -150,6 +161,7 @@ def get_dashboard(
             pending_estimates_count=pending_estimates_count,
             pending_quotations_count=pending_quotations_count,
             overdue_clients_count=overdue_clients_count,
+            followups_due_count=followups_due_count,
             won_this_month_total=float(won_this_month_total),
         ),
         recent_projects=recent_projects,
