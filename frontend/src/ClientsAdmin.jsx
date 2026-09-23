@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createClient, listClients, listProjects, updateClientConsent, updateClientFlags } from "./api";
+import { createClient, listClients, listProjects, updateClientConsent, updateClientFlags, updateClientFollowUp } from "./api";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
 const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "" };
@@ -19,6 +19,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [chatIdDrafts, setChatIdDrafts] = useState({});
+  const [followUpDrafts, setFollowUpDrafts] = useState({});
   const [form, setForm] = useState(emptyClientForm);
   const [submitting, setSubmitting] = useState(false);
   const canEditFlags = role === "director";
@@ -109,6 +110,24 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
     setError("");
     try {
       await updateClientConsent(token, clientId, { telegram_chat_id: chatIdDrafts[clientId] || null });
+      await load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  // Amendment 42 (Section 48): a simple, optional reminder -- not
+  // mandatory, not audit-logged, same style as the Telegram chat-id draft
+  // pattern above (local draft state, explicit Save).
+  async function saveFollowUp(clientId) {
+    setError("");
+    const draft = followUpDrafts[clientId] || {};
+    try {
+      await updateClientFollowUp(token, clientId, {
+        next_follow_up_date: draft.date !== undefined ? draft.date || null : undefined,
+        follow_up_note: draft.note !== undefined ? draft.note || null : undefined,
+      });
+      setFollowUpDrafts((d) => ({ ...d, [clientId]: undefined }));
       await load();
     } catch (err) {
       setError(err.message);
@@ -279,6 +298,37 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
               </span>
             </div>
           </div>
+
+          {canCreateClient(role) && (
+            <div
+              className={`flex items-center gap-2 text-xs ${
+                c.next_follow_up_date && c.next_follow_up_date < new Date().toISOString().slice(0, 10)
+                  ? "text-red-400"
+                  : "text-text-secondary"
+              }`}
+            >
+              <span className="font-medium">Follow-up</span>
+              <input
+                type="date"
+                value={followUpDrafts[c.id]?.date ?? c.next_follow_up_date ?? ""}
+                onChange={(e) =>
+                  setFollowUpDrafts((d) => ({ ...d, [c.id]: { ...d[c.id], date: e.target.value } }))
+                }
+                className="rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
+              />
+              <input
+                value={followUpDrafts[c.id]?.note ?? c.follow_up_note ?? ""}
+                onChange={(e) =>
+                  setFollowUpDrafts((d) => ({ ...d, [c.id]: { ...d[c.id], note: e.target.value } }))
+                }
+                placeholder="Note (optional)"
+                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
+              />
+              <button onClick={() => saveFollowUp(c.id)} className="text-gold hover:underline shrink-0">
+                Save
+              </button>
+            </div>
+          )}
 
           <div>
             <button onClick={() => toggleProjects(c.id)} className="text-xs text-gold hover:underline">

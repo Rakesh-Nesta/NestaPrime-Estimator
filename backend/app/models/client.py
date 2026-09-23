@@ -69,6 +69,15 @@ class Client(Base):
     telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     telegram_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Amendment 42 (Section 48): a simple, optional reminder -- distinct from
+    # the mandatory-follow-up-date discipline decided for the future
+    # Opportunity entity (a stricter rule for a different, not-yet-built
+    # entity). Not audit-logged: a routine personal reminder a Sales rep
+    # updates often, not a governance-relevant fact like blacklist_flag or
+    # consent.
+    next_follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    follow_up_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )
