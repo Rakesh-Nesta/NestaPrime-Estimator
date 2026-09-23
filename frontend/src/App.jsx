@@ -14,6 +14,7 @@ import Education from "./Education";
 import FollowUps from "./FollowUps";
 import Help from "./Help";
 import MasterSettings from "./MasterSettings";
+import Opportunities from "./Opportunities";
 import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
 import ProjectSetup from "./ProjectSetup";
@@ -50,9 +51,10 @@ export default function App() {
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
     "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help",
     "projects_admin", "estimates_admin", "calculator", "education",
-    // Amendment 36 (Section 42): Opportunities/Payments are placeholder
-    // headers -- visible in the new sidebar per the CRM reference, no real
-    // backend yet (Phases 5/7). Follow-ups got its real screen in Amendment 43.
+    // Amendment 36 (Section 42): Payments is still a placeholder header --
+    // visible in the sidebar per the CRM reference, no real backend yet
+    // (Phase 7). Follow-ups got its real screen in Amendment 43;
+    // Opportunities got its own in Amendment 44.
     "opportunities", "followups", "payments",
   ];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
@@ -265,11 +267,7 @@ export default function App() {
           <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "opportunities" && (
-          <ComingSoon
-            title="Opportunities"
-            description="Pipeline-stage tracking for pre-project enquiries -- lands in a later phase of the CRM restructure."
-            onBack={() => setScreen("dashboard")}
-          />
+          <Opportunities token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "followups" && (
           <FollowUps token={accessToken} onBack={() => setScreen(preNavScreen)} />

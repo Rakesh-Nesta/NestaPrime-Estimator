@@ -136,6 +136,53 @@ export async function getDashboard(token) {
   return handle(res);
 }
 
+// Amendment 44 (Section E step 5): Opportunity -- pipeline-stage leads/
+// enquiries, distinct from Client.
+export async function createOpportunity(token, payload) {
+  const res = await fetch(`${API_BASE}/opportunities`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listOpportunities(token, { stage, relationship } = {}) {
+  const params = new URLSearchParams();
+  if (stage) params.set("stage", stage);
+  if (relationship) params.set("relationship", relationship);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/opportunities${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function updateOpportunityStage(token, opportunityId, payload) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/stage`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateOpportunityFollowUp(token, opportunityId, payload) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/follow-up`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function linkOpportunityClient(token, opportunityId, payload) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/link-client`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 // Amendment 12 (Section 11): drill-downs behind the Dashboard's own tiles.
 // Section 19 adds client_id, for ClientsAdmin.jsx's per-client project list.
 export async function listProjects(token, { search, status, client_id } = {}) {
