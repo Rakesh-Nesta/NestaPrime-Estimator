@@ -65,7 +65,7 @@ blacklist/overdue), and `updateClientConsent` (WhatsApp/email/Telegram opt-in) e
 
 ## Approval
 
-☐ Approved — pending Director decision.
+☑ Approved — "approve as proposed, all decisions" (23 September 2026).
 
 ---
 Prepared by: R. Patni (with AI development assistance) | Date: 23 September 2026
