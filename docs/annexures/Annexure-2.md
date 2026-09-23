@@ -1253,6 +1253,31 @@ entries for "Follow-ups" are both still `muted`/badged "Soon" (`Sidebar.jsx:131`
 `App.jsx:273-278` routes it to a `ComingSoon` placeholder screen). Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Implemented 23 September 2026 (PR #162, deployed to production same day, per
+[docs/annexures/Section-49-specs.md](Section-49-specs.md), approved as proposed).** Adds
+`followups_due_count` to `DashboardSummary`/`GET /dashboard` (clients with
+`next_follow_up_date <= today`), wires Dashboard's "Follow-ups due" tile and "Your next
+moves" panel to real data, and adds a real `FollowUps.jsx` screen reusing `GET /clients`
+-- no new list endpoint. Org-wide only, as scoped: `site_engineer`/`ca_tax` (which can
+view Dashboard but not `GET /clients`) get the real KPI count but a role-appropriate
+message instead of the client breakdown, rather than the whole Dashboard erroring. Drops
+the "Soon" badge from the Sidebar/tab-strip "Follow-ups" nav item. One new backend test
+(due-today/overdue counted, future/null excluded); no new migration (computed field, no
+schema change).
+
+**Live-verified in production:** `git pull` fast-forwarded to `408ac1b`, backend logs
+showed a clean alembic context with no pending migration (as expected), both gunicorn
+workers logged `Application startup complete`, both `/health` curls returned
+`{"status":"ok"}` (the first direct-to-container curl transiently failed with
+"Connection reset by peer" before the workers finished booting -- a pasted-command race,
+resolved by re-checking logs a few seconds later, not a real fault). Logged into
+production as `verify-director@nestaprime.local`: set a real follow-up date and note on
+an existing throwaway "(delete me)" test client, confirmed the Dashboard tile went from 0
+to 1, "Your next moves" showed the client with today's date, the full Follow-ups screen
+showed it labeled "Due today" with the note, then cleared the follow-up fields back to
+null and confirmed the count returned to 0 -- no test data left behind. Amendment 43
+(Section E step 4, Follow-ups) is now fully closed.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

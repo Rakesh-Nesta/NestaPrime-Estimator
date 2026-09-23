@@ -11,6 +11,42 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-23 -- PR #162: Amendment 43 (Follow-ups screen, Section E step 4)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `708dc53` -> `408ac1b`
+**No migration** -- `followups_due_count` is a computed field on the existing
+`DashboardSummary`, not a schema change. Frontend rebuild needed (`FollowUps.jsx` is new,
+`Dashboard.jsx`/`Sidebar.jsx`/`App.jsx` changed).
+
+The concrete deliverable for Section E step 4 (Follow-ups) of the header-by-header build
+index. Wires Dashboard's "Follow-ups due" KPI tile and "Your next moves" panel to real
+data (both previously `ComingSoon` placeholders), and adds a real org-wide Follow-ups
+screen reusing `GET /clients` -- no new list endpoint. Org-wide only: `Client` has no
+owner/assigned-rep field yet, so per-rep filtering awaits the future `Opportunity.owner`
+field (Section E step 5). Drops the "Soon" badge from the Sidebar/tab-strip nav item.
+
+**Rebuild was clean** -- `git pull` fast-forwarded to `408ac1b`, backend logs showed a
+clean alembic context with no pending migration (as expected), both gunicorn workers
+logged `Application startup complete`. The first direct-to-container health curl
+(`127.0.0.1:8000/health`) transiently failed with "Connection reset by peer" -- all the
+redeploy commands were pasted together, so it fired before the workers finished booting;
+re-checking logs and re-curling a few seconds later confirmed a clean boot, not a real
+fault. The external health curl (`65.1.234.78/api/health`, through nginx) had already
+returned `{"status":"ok"}` by that point regardless.
+
+**Live-verified in production** (not just the automated suite: one new backend test in
+`test_dashboard.py`): logged in as `verify-director@nestaprime.local`, set a real
+follow-up date and note on an existing throwaway "(delete me)" test client, confirmed the
+Dashboard tile went 0 -> 1, "Your next moves" showed it with today's date, the full
+Follow-ups screen labeled it "Due today" with the note, then cleared the fields back to
+null and confirmed the count returned to 0 -- no test data left behind.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-23 -- PR #159: Amendment 42 (Client follow-up date, Leads & Clients)
 
 **Run by:** R. Patni (with AI development assistance)
