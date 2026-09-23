@@ -12,11 +12,11 @@ import {
 // Amendment 36 (Section 42): Phase 1 of the header-by-header CRM restructure
 // -- replaces the old top-nav dropdowns with a left sidebar. Confirmed
 // headers (Overview/Leads & Clients/Quotations/Projects/Team & Access) route
-// to their existing, already-working screens, unchanged. Opportunities/
-// Payments are visible per the CRM reference but route to a "Coming soon"
-// placeholder -- their real data doesn't exist yet (Phases 5/7). Follow-ups
-// got its real screen in Amendment 43. Vendor/Tools/Reports/Admin/Education
-// keep their exact old
+// to their existing, already-working screens, unchanged. Payments is still
+// visible per the CRM reference but routes to a "Coming soon" placeholder --
+// its real data doesn't exist yet (Phase 7). Follow-ups got its real screen
+// in Amendment 43; Opportunities got its own in Amendment 44.
+// Vendor/Tools/Reports/Admin/Education keep their exact old
 // sub-groupings (Open Decision 3), relocated under a temporary "More"
 // section pending the Phase 8 placement decision -- nothing is hidden or
 // removed, only moved one level deeper.
@@ -125,7 +125,7 @@ export default function Sidebar({
   const primaryItems = [
     { key: "dashboard", label: "Overview", onClick: () => go("dashboard"), icon: GridIcon },
     { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
-    { key: "__opportunities", label: "Opportunities", onClick: () => go("opportunities"), muted: true, badge: "Soon", icon: FunnelIcon },
+    { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
     { key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon },
     { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
     { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon", icon: CalendarIcon },

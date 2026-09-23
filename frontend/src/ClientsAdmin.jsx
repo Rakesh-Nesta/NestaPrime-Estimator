@@ -1,9 +1,31 @@
 import { useEffect, useState } from "react";
-import { createClient, listClients, listProjects, updateClientConsent, updateClientFlags, updateClientFollowUp } from "./api";
+import {
+  createClient,
+  createOpportunity,
+  listClients,
+  listProjects,
+  updateClientConsent,
+  updateClientFlags,
+  updateClientFollowUp,
+} from "./api";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
 const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "" };
 const canCreateClient = (role) => ["sales", "pm", "director"].includes(role);
+
+// Amendment 44 (Section E step 5, Design input 2026-09-23): a quick-capture
+// intake distinct from "Add a client" -- just name/phone/email, no
+// ClientType or any other full-Client field, since forcing that form at
+// first contact is itself the friction point the Design input calls out.
+// Pre-filled two days out rather than left blank, matching the mandatory-
+// follow-up-date discipline (never created without one) while still being
+// a one-click-adjustable default, not a locked value.
+function defaultEnquiryFollowUpDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 2);
+  return d.toISOString().slice(0, 10);
+}
+const emptyEnquiryForm = { lead_name: "", lead_phone: "", lead_email: "", next_follow_up_date: defaultEnquiryFollowUpDate() };
 
 // Section 19 (Amendment 4 continuation): reuses AllProjects.jsx's own status
 // pill colors, kept as a small local duplicate rather than a shared import,
@@ -22,6 +44,9 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   const [followUpDrafts, setFollowUpDrafts] = useState({});
   const [form, setForm] = useState(emptyClientForm);
   const [submitting, setSubmitting] = useState(false);
+  const [enquiryForm, setEnquiryForm] = useState(emptyEnquiryForm);
+  const [submittingEnquiry, setSubmittingEnquiry] = useState(false);
+  const [enquirySaved, setEnquirySaved] = useState(false);
   const canEditFlags = role === "director";
 
   const [expandedClientId, setExpandedClientId] = useState(null);
@@ -80,6 +105,31 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function setEnquiryField(field, value) {
+    setEnquiryForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleCreateEnquiry(e) {
+    e.preventDefault();
+    setError("");
+    setEnquirySaved(false);
+    setSubmittingEnquiry(true);
+    try {
+      await createOpportunity(token, {
+        lead_name: enquiryForm.lead_name,
+        lead_phone: enquiryForm.lead_phone || null,
+        lead_email: enquiryForm.lead_email || null,
+        next_follow_up_date: enquiryForm.next_follow_up_date,
+      });
+      setEnquiryForm({ lead_name: "", lead_phone: "", lead_email: "", next_follow_up_date: defaultEnquiryFollowUpDate() });
+      setEnquirySaved(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmittingEnquiry(false);
     }
   }
 
@@ -220,6 +270,66 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
           >
             {submitting ? "Saving…" : "Save client"}
           </button>
+        </form>
+      )}
+
+      {canCreateClient(role) && (
+        <form onSubmit={handleCreateEnquiry} className="bg-surface shadow rounded-lg p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-text-secondary">Add Enquiry</h3>
+          <p className="text-xs text-text-secondary">
+            A raw lead -- just a name and contact, not a full client record yet. Every enquiry needs a follow-up
+            date; there is no way to leave one blank.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Name</label>
+              <input
+                type="text"
+                required
+                value={enquiryForm.lead_name}
+                onChange={(e) => setEnquiryField("lead_name", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Follow-up date</label>
+              <input
+                type="date"
+                required
+                value={enquiryForm.next_follow_up_date}
+                onChange={(e) => setEnquiryField("next_follow_up_date", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Phone</label>
+              <input
+                type="text"
+                value={enquiryForm.lead_phone}
+                onChange={(e) => setEnquiryField("lead_phone", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary">Email</label>
+              <input
+                type="email"
+                value={enquiryForm.lead_email}
+                onChange={(e) => setEnquiryField("lead_email", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={submittingEnquiry}
+              className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover hover:-translate-y-0.5 transition-all duration-250 ease-out disabled:opacity-50"
+            >
+              {submittingEnquiry ? "Saving…" : "Save enquiry"}
+            </button>
+            {enquirySaved && <span className="text-xs text-gold">Saved -- see it in Opportunities.</span>}
+          </div>
         </form>
       )}
 
