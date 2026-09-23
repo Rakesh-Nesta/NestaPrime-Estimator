@@ -1392,6 +1392,24 @@ both already Director-approved in the same message that raised them:
    Needs a Director-approved spec before implementation, per this register's own Change
    Process.
 
+**Implemented, 23 September 2026 (PR #168, deployed to production same day, per
+[docs/annexures/Section-51-specs.md](Section-51-specs.md), approved as proposed).** Item 1
+(hiding Overdue/Blacklisted) shipped as a direct fix, verified locally before this PR.
+Item 2 ships `Client.notes`/`Opportunity.notes` (`Text`, nullable), new `PATCH
+/clients/{id}/notes` and `PATCH /opportunities/{id}/notes` endpoints
+(`sales`/`pm`/`director`, not audit-logged), a textarea on both "Add a client" and
+"Add Enquiry", and inline edit-and-save on every existing client/opportunity row. 20 new
+backend tests.
+
+**Live-verified in production:** `git pull` fast-forwarded to `f8ed62d`, backend logs
+showed `Running upgrade d0d627473d3c -> 324c6521d698, add notes field to clients and
+opportunities (Amendment 45)`, the backend container came up with no restart, frontend
+rebuild completed, `/api/health` returned `{"status":"ok"}`. Logged in as
+`verify-director@nestaprime.local`: created a client via "Add a client" with notes text
+and confirmed it persisted, created an Opportunity via "Add Enquiry" with notes text and
+confirmed the same, then cleared the client's notes and moved the Opportunity to Lost
+(terminal, harmless) -- no live test data left active. Amendment 45 is now fully closed.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

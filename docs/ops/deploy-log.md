@@ -11,6 +11,50 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-23 -- PR #168: Amendment 45 (hide admin-only client flags, add Notes field)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `0133eed` -> `f8ed62d` (also fast-forwards production past PR #167's
+docs-only close-out, not separately deployed -- see its own deploy-log entry below)
+**One real migration** -- `324c6521d698` adds `clients.notes` and `opportunities.notes`
+(both `Text`, nullable). Frontend rebuild needed (`ClientsAdmin.jsx`/`Opportunities.jsx`
+changed).
+
+Two Leads & Clients polish fixes from a direct Director review of the Sales-facing
+surface audit: Overdue/Blacklisted checkboxes now render only for a Director (previously
+shown greyed-out to everyone); a general Notes/remarks field (distinct from either
+entity's follow-up-specific note) on `Client` and `Opportunity`, with a textarea on
+"Add a client"/"Add Enquiry" and inline edit-and-save on existing records.
+
+**Rebuild and migration were clean** -- `git pull` fast-forwarded to `f8ed62d`, the log
+explicitly showed `Running upgrade d0d627473d3c -> 324c6521d698, add notes field to
+clients and opportunities (Amendment 45)`, `docker compose ... ps` showed the backend
+container `Up` with no restart, gunicorn started both workers, frontend build completed,
+and the final health curl (run after the frontend build, not in the same instant as the
+backend restart) returned `{"status":"ok"}` -- no repeat of the earlier pasted-commands
+boot race since the checks landed later in the sequence this time.
+
+**Live-verified in production** (not just the automated suite: 20 new tests in
+`test_notes.py`, full dashboard/client-follow-up/opportunities/notes suite 44 tests
+re-run clean beforehand): logged in as `verify-director@nestaprime.local`, created a
+client via "Add a client" with notes text and confirmed it persisted in the API response,
+created an Opportunity via "Add Enquiry" with notes text and confirmed the same. Cleared
+the verify client's notes back to null and moved the verify Opportunity to Lost (terminal,
+harmless) afterward -- no live test data left active.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
+## 2026-09-23 -- PR #167: Amendment 44 Phase B close-out (deploy-log entry + register closure)
+
+**Run by:** R. Patni (with AI development assistance)
+**Docs-only** -- no code changes, no deploy step. Its content reached production only as
+part of PR #168's `git pull` above, since it was never deployed on its own.
+
+---
+
 ## 2026-09-23 -- PR #166: Amendment 44 Phase B (Add Enquiry UI + Opportunities screen)
 
 **Run by:** R. Patni (with AI development assistance)
