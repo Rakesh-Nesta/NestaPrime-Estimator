@@ -1346,6 +1346,20 @@ Won and confirmed the date cleared automatically, confirmed it appears under the
 `relationship=lead` list filter. Left in place as a harmless (Won, terminal) throwaway
 record -- no delete/rename endpoint exists yet for Opportunities.
 
+**Implemented, Phase B, 23 September 2026 (PR #166, deployed to production same day).**
+Ships the UI half: "Add Enquiry" quick-capture on `ClientsAdmin.jsx` (mandatory follow-up
+date, pre-filled two days out) and a new `Opportunities.jsx` screen (All/Leads/Clients
+relationship tabs, stage pill, inline stage-change and follow-up-date editing,
+link-to-existing-client). Sidebar/tab-strip drop the "Soon" badge. The Won -> Start
+Project hand-off and Dashboard/Follow-ups-screen wiring are still pending as later phases.
+
+**Live-verified in production:** `git pull` fast-forwarded to `0133eed`, the frontend
+Docker build completed cleanly, `/api/health` returned `{"status":"ok"}`. Logged in as
+`verify-director@nestaprime.local`: used "Add Enquiry" to create a lead-only Opportunity,
+confirmed it appeared on the Opportunities screen under "Leads", linked it to an existing
+throwaway "(delete me)" Client (confirmed it moved to the "Clients" filter), then set its
+stage to Lost -- left in that terminal, harmless state.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

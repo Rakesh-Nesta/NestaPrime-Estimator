@@ -11,6 +11,43 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-23 -- PR #166: Amendment 44 Phase B (Add Enquiry UI + Opportunities screen)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `e3c0fc4` -> `0133eed` (also fast-forwards production past PR #165's
+docs-only close-out, not separately deployed -- see its own deploy-log entry below)
+**Frontend-only** -- no migration, no backend rebuild needed.
+
+The UI half of the shell-first Opportunities build: "Add Enquiry" on `ClientsAdmin.jsx`
+(quick-capture, no `ClientType`/full-Client fields), and a new `Opportunities.jsx` screen
+(All/Leads/Clients relationship tabs, stage pill, inline stage-change and follow-up-date
+editing, link-to-existing-client). Replaces the `ComingSoon` placeholder; Sidebar/tab-strip
+drop the "Soon" badge.
+
+**Rebuild was clean** -- `git pull` fast-forwarded to `0133eed`, the frontend Docker build
+completed without error, files copied to `/var/www/nestaprime/dist`, `/api/health`
+returned `{"status":"ok"}` (backend untouched by this deploy, no boot-race this time).
+
+**Live-verified in production:** logged in as `verify-director@nestaprime.local`, used
+"Add Enquiry" to create a lead-only Opportunity, confirmed it appeared on the
+Opportunities screen under "Leads" with the "new" stage pill, linked it to an existing
+throwaway "(delete me)" Client (confirmed it moved to the "Clients" filter), then set its
+stage to "lost" -- left in that terminal, harmless state alongside PR #164's own earlier
+throwaway Opportunity (also still lead-only, in "won").
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
+## 2026-09-23 -- PR #165: Amendment 44 Phase A close-out (deploy-log entry + register closure)
+
+**Run by:** R. Patni (with AI development assistance)
+**Docs-only** -- no code changes, no deploy step. Its content reached production only as
+part of PR #166's `git pull` above, since it was never deployed on its own.
+
+---
+
 ## 2026-09-23 -- PR #164: Amendment 44 Phase A (Opportunity model + API, Section E step 5)
 
 **Run by:** R. Patni (with AI development assistance)
