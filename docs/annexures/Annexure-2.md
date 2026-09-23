@@ -1215,6 +1215,22 @@ client-edit capability -- only `createClient`, `updateClientFlags` (Director-onl
 narrow, purpose-built endpoint, not a slot in an edit form that doesn't exist. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Implemented 23 September 2026 (PR #159, deployed to production same day, per
+[docs/annexures/Section-48-specs.md](Section-48-specs.md), approved as proposed).** Adds
+`next_follow_up_date`/`follow_up_note` to `Client` (migration `a3c7e29f5d16`), a new
+`PATCH /clients/{id}/follow-up` endpoint (`sales`/`pm`/`director`, not audit-logged per
+the approved spec), and an inline follow-up control on each Client Admin row (overdue
+rows shown in red). 7 new backend tests, full 65-test client suite re-run clean.
+
+**Live-verified in production:** `git pull` fast-forwarded to `708dc53`, the log
+explicitly showed `Running upgrade 9e8bdbaf6219 -> a3c7e29f5d16, add client follow-up
+date and note (Amendment 42)`, both gunicorn workers logged `Application startup
+complete`, `curl .../health` returned `{"status":"ok"}`. Logged into production as
+`verify-director@nestaprime.local`: set a real follow-up date and note on a live client,
+confirmed it persisted after reload, cleared it back to null afterward (this test
+modified an existing real client record's field, not a throwaway one, so left no test
+data behind). Amendment 42 (Section E step 3, Leads & Clients) is now fully closed.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
