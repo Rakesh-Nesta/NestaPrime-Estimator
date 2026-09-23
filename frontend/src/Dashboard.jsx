@@ -1,6 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { getDashboard } from "./api";
+import { getDashboard, listClients } from "./api";
 import { CalendarIcon, ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
+
+// Small local duplicate of FollowUps.jsx's own due-date filter/sort (same
+// pattern ClientsAdmin.jsx's STATUS_PILL_STYLE comment already documents)
+// -- both read the same next_follow_up_date field from GET /clients.
+function dueFollowUps(clients) {
+  const today = new Date().toISOString().slice(0, 10);
+  return clients
+    .filter((c) => c.next_follow_up_date)
+    .sort((a, b) => a.next_follow_up_date.localeCompare(b.next_follow_up_date))
+    .map((c) => ({
+      ...c,
+      status: c.next_follow_up_date < today ? "overdue" : c.next_follow_up_date === today ? "due" : "upcoming",
+    }));
+}
 
 // Amendment 41 (Section 47): animates a KPI tile's arrival, real data only
 // (Pending Quotations/Active Projects) -- never applied to a placeholder
@@ -48,12 +62,13 @@ function useCountUp(target) {
 //
 // Amendment 36 (Section 42): "Overview" shell, shell-first per Director
 // decision -- two tiles (Pending quotations, Active projects) reuse the
-// exact same real backend counts this screen already had; the other three
-// (Open opportunities, Follow-ups due, Payments overdue) and the two panel
-// placeholders below have no backend yet (Opportunities/Follow-ups/
-// Payments are Phases 4/5/7) and deliberately show "--" with "Coming soon"
-// rather than a fabricated "0" -- an unbuilt feature must never read as a
-// real, empty one.
+// exact same real backend counts this screen already had; the other two
+// (Open opportunities, Payments overdue) and the "Orders & collections"/
+// "Sales pipeline" panels have no backend yet (Opportunities/Payments are
+// Phases 5/7) and deliberately show "--" with "Coming soon" rather than a
+// fabricated "0" -- an unbuilt feature must never read as a real, empty
+// one. Follow-ups due (tile) and Your next moves (panel) got real data in
+// Amendment 43.
 function ComingSoonTile({ label, icon: IconComp }) {
   return (
     <div className="text-left bg-surface border border-border-dark rounded-lg p-5 opacity-70">
@@ -90,8 +105,24 @@ function ComingSoonPanel({ title, description }) {
   );
 }
 
+// Amendment 43 (Section E step 4): "Your next moves" reuses the same
+// GET /clients + dueFollowUps() filter FollowUps.jsx uses for the full
+// screen, capped to a short preview -- same due/overdue set, not a
+// separate computation.
+const NEXT_MOVES_PREVIEW_LIMIT = 5;
+
+// GET /clients (clients.py) is gated to sales/pm/director/procurement --
+// narrower than Dashboard's own gate, which also admits site_engineer and
+// ca_tax. Those two roles can see the real followups_due_count (it comes
+// from GET /dashboard, which they can call) but not the per-client
+// breakdown, same existing gap the "Leads & Clients" nav item already has
+// for those roles. Fetched separately from the dashboard summary so a 403
+// here never breaks the rest of the page.
+const CAN_SEE_CLIENT_LIST = ["sales", "pm", "director", "procurement"];
+
 export default function Dashboard({ token, role, onOpenProject, onNewProject, onDrillDown }) {
   const [data, setData] = useState(null);
+  const [clients, setClients] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -100,7 +131,12 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       .then(setData)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [token]);
+    if (CAN_SEE_CLIENT_LIST.includes(role)) {
+      listClients(token)
+        .then(setClients)
+        .catch(() => setClients(null));
+    }
+  }, [token, role]);
 
   if (loading) {
     return <p className="text-center text-text-secondary mt-10">Loading Dashboard…</p>;
@@ -111,6 +147,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   }
 
   const { summary, recent_projects: recentProjects } = data;
+  const nextMoves = clients ? dueFollowUps(clients).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
 
   // "Pending quotations" carries cost/margin figures (K.3), so its
   // drill-down -- AllQuotations -- keeps the same Director-only gate it
@@ -130,6 +167,13 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       target: "projects_admin",
       preset: { status: "open" },
       icon: FolderIcon,
+    },
+    {
+      label: "Follow-ups due",
+      value: summary.followups_due_count,
+      target: CAN_SEE_CLIENT_LIST.includes(role) ? "followups" : null,
+      preset: {},
+      icon: ClockIcon,
     },
   ];
 
@@ -196,7 +240,6 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 rise" style={{ "--d": "0.12s" }}>
         <ComingSoonTile label="Open opportunities" icon={FunnelIcon} />
-        <ComingSoonTile label="Follow-ups due" icon={ClockIcon} />
         {realTiles.map((tile) =>
           tile.target ? (
             <button
@@ -276,10 +319,33 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             View all projects →
           </button>
         </div>
-        <ComingSoonPanel
-          title="Your next moves"
-          description="Overdue follow-ups and action items, with owner and due date -- lands with Follow-ups (Phase 4)."
-        />
+        <div className="bg-surface border border-border-dark rounded-lg p-5">
+          <h3 className="font-heading font-semibold text-text-primary text-base mb-3">Your next moves</h3>
+          {nextMoves === null ? (
+            <p className="text-sm text-text-secondary">Follow-up details aren't available for your role.</p>
+          ) : nextMoves.length === 0 ? (
+            <p className="text-sm text-text-secondary">No client follow-ups due right now.</p>
+          ) : (
+            <ul className="divide-y divide-border-dark">
+              {nextMoves.map((c) => (
+                <li key={c.id} className="py-2 flex items-center justify-between gap-2">
+                  <span className="text-sm text-text-primary truncate">{c.name}</span>
+                  <span className={`text-xs shrink-0 ${c.status === "overdue" ? "text-red-400" : "text-text-secondary"}`}>
+                    {c.next_follow_up_date}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {nextMoves !== null && (
+            <button
+              onClick={() => onDrillDown("followups", {})}
+              className="mt-3 text-xs uppercase tracking-wider text-gold hover:text-gold-hover"
+            >
+              View all follow-ups →
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

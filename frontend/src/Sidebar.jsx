@@ -13,9 +13,10 @@ import {
 // -- replaces the old top-nav dropdowns with a left sidebar. Confirmed
 // headers (Overview/Leads & Clients/Quotations/Projects/Team & Access) route
 // to their existing, already-working screens, unchanged. Opportunities/
-// Follow-ups/Payments are visible per the CRM reference but route to a
-// "Coming soon" placeholder -- their real data doesn't exist yet (Phases
-// 4/5/7). Vendor/Tools/Reports/Admin/Education keep their exact old
+// Payments are visible per the CRM reference but route to a "Coming soon"
+// placeholder -- their real data doesn't exist yet (Phases 5/7). Follow-ups
+// got its real screen in Amendment 43. Vendor/Tools/Reports/Admin/Education
+// keep their exact old
 // sub-groupings (Open Decision 3), relocated under a temporary "More"
 // section pending the Phase 8 placement decision -- nothing is hidden or
 // removed, only moved one level deeper.
@@ -128,7 +129,7 @@ export default function Sidebar({
     { key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon },
     { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
     { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon", icon: CalendarIcon },
-    { key: "__followups", label: "Follow-ups", onClick: () => go("followups"), muted: true, badge: "Soon", icon: ClockIcon },
+    { key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon },
     ...(showTeamAccess ? [{ key: "settings", label: "Team & Access", onClick: () => go("settings"), icon: UsersIcon }] : []),
   ];
 
