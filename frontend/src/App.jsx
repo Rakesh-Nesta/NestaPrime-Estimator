@@ -20,6 +20,8 @@ import RateSheet from "./RateSheet";
 import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
 import Sidebar from "./Sidebar";
+import { BellIcon } from "./Icons";
+import LiveClock from "./LiveClock";
 import SimpleCalculator from "./SimpleCalculator";
 import SiteSurvey from "./SiteSurvey";
 import SportSelection from "./SportSelection";
@@ -146,6 +148,25 @@ export default function App() {
           setNavMenuOpen={setNavMenuOpen}
         />
         <main className="flex-1 min-w-0">
+        <div className="hidden sm:flex items-center justify-between gap-4 px-6 pt-4 print:hidden">
+          <p className="text-xs text-text-secondary">
+            {screen === "dashboard" ? "Workspace / Overview" : " "}
+          </p>
+          <div className="flex items-center gap-4">
+          <LiveClock name={user.name} />
+          <span title="No live notifications yet" className="text-text-secondary/60">
+            <BellIcon className="w-4 h-4" />
+          </span>
+          <span className="w-7 h-7 rounded-full bg-surface-raised border border-border-dark flex items-center justify-center text-text-primary font-heading font-bold text-[11px]">
+            {user.name
+              .split(" ")
+              .map((n) => n[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+          </span>
+          </div>
+        </div>
         {error && (
           <p className="max-w-4xl mx-auto mt-4 px-4 text-sm text-red-400 print:hidden">{error}</p>
         )}
@@ -299,6 +320,7 @@ export default function App() {
             project={activeProject}
             role={user.role}
             onBack={() => setScreen("scope")}
+            onNext={() => setScreen("documents")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "tender" && (
