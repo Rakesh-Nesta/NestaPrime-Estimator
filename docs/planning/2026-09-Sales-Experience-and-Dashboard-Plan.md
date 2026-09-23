@@ -419,8 +419,10 @@ the Sales-persona lever.
 2. **Site Survey Next button** — DONE, Amendment 35, deployed 2026-09-22.
    Engineer-facing, not the Sales-persona lever, but cheap and already
    approved so it shipped first regardless.
-3. **Leads & Clients** — re-home Client screens; add the follow-up-date
-   field (Section B.1). Prerequisite for steps 4-5 below.
+3. **Leads & Clients** — DONE, Amendment 42, 2026-09-23. Re-homed Client
+   screens (already done via Amendment 36); added `next_follow_up_date` +
+   `follow_up_note` to `Client` (Section B.1). Prerequisite for steps 4-5
+   below.
 4. **Follow-ups** — surfaces due/overdue follow-ups as its own view; closes
    Section B.2's "my open items" gap. Depends directly on step 3's new
    field.
@@ -431,6 +433,24 @@ the Sales-persona lever.
    follow-up date, enforced not just at creation but whenever its stage
    changes or an existing follow-up date passes) is a core design
    requirement of this entity, not an add-on.
+
+   **Design input, 2026-09-23 (Director, against the "Leads" tab of the CRM
+   reference)**: confirms `Client` and `Opportunity`/Lead are genuinely
+   different things, not one entity with a status flag --
+   - **A real "Lead" vs "Client" distinction**, matching the reference's
+     All/Leads/Clients tab filter and per-row "Relationship" badge. Today
+     `ClientsAdmin.jsx` has one flat list with no such split.
+   - **A separate "Add Enquiry" quick-capture entry point**, distinct from
+     "Add a client". A real intake often starts with just a name and basic
+     contact -- not enough yet to justify a full Client record (type,
+     GSTIN, payment terms, etc.). Forcing the full Client form at first
+     contact is itself a friction point for the telecaller persona.
+   - **Follow-up matters most exactly at this early, not-yet-qualified
+     stage** -- "if we have enquiry but not connected or proper talk to
+     client, need follow-up." This is the direct, concrete case the
+     mandatory-follow-up-date discipline above exists to cover: an
+     Opportunity that's been created but never really engaged is the one
+     most likely to silently go cold without a forced next-follow-up-date.
 6. **What's-next guidance (Amendment 40)** — still valuable for the
    telecaller persona (lets them answer a client call with a real status
    instead of "let me check"); cheap, independent of steps 3-5, slotted in
