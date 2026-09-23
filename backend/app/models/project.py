@@ -176,6 +176,20 @@ class Project(Base):
     # business-summary tiles alongside real client work.
     is_calibration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Amendment 44 (Section E step 5): set only when this Project was
+    # created via "Start Project" on a Won Opportunity -- the forward half
+    # of Opportunity.project_id's own back-link. Null for every other
+    # project-creation path (the overwhelming majority, unaffected).
+    # use_alter=True (and a name, required for it) breaks the two-table FK
+    # cycle this creates with Opportunity.project_id -- without it,
+    # SQLAlchemy can't order CREATE/DROP TABLE between the two, exactly as
+    # the migration's own two-step create_table-then-add_column already does.
+    opportunity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("opportunities.id", use_alter=True, name="projects_opportunity_id_fkey"),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )

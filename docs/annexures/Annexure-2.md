@@ -1278,6 +1278,52 @@ showed it labeled "Due today" with the note, then cleared the follow-up fields b
 null and confirmed the count returned to 0 -- no test data left behind. Amendment 43
 (Section E step 4, Follow-ups) is now fully closed.
 
+### Amendment No. 44 — Opportunities (Header Index Step 5)
+**Registered 23 September 2026**, from `docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md`
+Section E step 5 (the header-by-header build index) and its locked-in design input from
+23 September 2026 (Director, against the "Leads" tab of the CRM reference): a real "Lead"
+vs "Client" distinction, a separate "Add Enquiry" quick-capture entry point distinct from
+"Add a client", and the mandatory-follow-up-date discipline decided 22 September 2026 (a
+Lead/Opportunity can never be left with no future follow-up date, enforced at creation and
+whenever its stage changes or an existing date passes). The largest single piece in the
+build index -- a new `Opportunity` entity, not a wiring change like steps 3-4.
+
+Grounded against current code:
+- No `Opportunity` model, table, or route exists anywhere in the codebase (confirmed by
+  grep for "Opportunity"/"enquiry"/"inquiry" across `backend/app` and `frontend/src` --
+  the only hit is `client.py:74`'s own comment naming it as future work).
+- `Client` (`backend/app/models/client.py:32`) requires `type` (`ClientType` enum,
+  `nullable=False`) at creation -- confirmed there is no path to create a `Client` row
+  without picking a type, which is exactly the friction point the Design input calls out:
+  a raw lead's name and phone number aren't enough to justify one. Opportunity therefore
+  needs its own `lead_name`/`lead_phone`/`lead_email` fields rather than requiring a
+  `Client` row to exist first; `client_id` should be nullable on `Opportunity`, set only
+  once/if it's linked to or promotes an existing `Client`.
+- `Project` (`backend/app/models/project.py:76-179`) requires many fields no Lead would
+  ever have yet (`site_condition`, `building_status`, `unit_system`, `package`,
+  `number_of_courts`, etc., all `nullable=False`) -- confirmed "converts into a Project
+  once Won" cannot mean an automatic silent conversion; it means a hand-off into the
+  existing New Project Setup flow. `ProjectSetup.jsx` (`frontend/src/ProjectSetup.jsx:99,
+  168, 212`) already supports picking an existing client via `form.existingClientId`, so
+  the hand-off point already exists -- only pre-filling it from a Won Opportunity is new.
+- `created_by_id: Mapped[uuid.UUID] = mapped_column(..., ForeignKey("users.id"),
+  nullable=False)` is an established pattern already used on `CostSheet`/`Estimate`/
+  `Quotation` (`document.py:148,249,408`), `PriceRequest`, `PurchaseOrder`, `SiteSurvey`,
+  and `WorkOrder`/`WorkOrderPaymentEntry` -- reused here as `Opportunity.created_by_id`,
+  which doubles as the "owner" field Amendment 43's registration explicitly flagged as
+  missing (`Client` has none), closing that gap for Opportunities going forward.
+- Stage-transition endpoints elsewhere (`documents.py`'s `mark_quotation_won`/
+  `mark_quotation_lost`, lines 2589-2640) do not call `write_audit_log_entry` for the
+  status change itself -- confirms this codebase's audit log is reserved for
+  governance-relevant facts (blacklist/consent/evidence-waiver), not routine workflow
+  transitions, same convention Amendment 42 already followed for `next_follow_up_date`.
+  Opportunity stage changes should follow the same non-audited convention.
+- `QuotationStatus`/`EstimateStatus` (`document.py:39-85`) are the established pattern for
+  a lifecycle enum on a `str, enum.Enum` -- `OpportunityStage` follows the same shape.
+
+Needs a Director-approved spec before implementation, per this register's own Change
+Process.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
