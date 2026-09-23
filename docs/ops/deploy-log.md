@@ -11,6 +11,42 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-22 -- PR #151: Amendment 36 (Nav shell + Dashboard shell, CRM restructure Phase 1)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `59c7301` -> `0970847`
+**No migration, no seed script** -- frontend-only. Backend was rebuilt anyway per the
+standard redeploy sequence (clean no-op, no schema change).
+
+Phase 1 of the 9-step header-by-header CRM build index
+(`docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md` Section E). Replaces the
+top-nav dropdowns (`App.jsx`'s old `navGroups`) with a left sidebar
+(`frontend/src/Sidebar.jsx`) carrying the confirmed CRM headers, and rebuilds
+`Dashboard.jsx` as an "Overview" shell matching the chosen CRM reference layout. Two
+tiles (Pending Quotations, Active Projects) show real data from the existing `/dashboard`
+endpoint, unchanged; Opportunities/Follow-ups/Payments and two panel placeholders
+(`ComingSoon.jsx`) honestly read "Soon"/"Coming soon" rather than a fabricated number,
+since those capabilities don't exist yet. Vendor/Tools/Reports/Admin/Education re-homed
+into a temporary "More" menu with their exact old sub-groupings and role gates intact.
+
+**Rebuild was clean** -- `git pull` fast-forwarded to `0970847`, backend rebuild was a
+no-op (cached layers, no migration ran), frontend rebuild+`nginx` publish succeeded,
+`curl .../api/health` returned `{"status":"ok"}`.
+
+**Live-verified in production**: reactivated `verify-director@nestaprime.local`, logged
+in, confirmed the new sidebar and Overview dashboard render with real live figures
+(Pending Quotations: 3, Active Projects: 12) and every not-yet-built tile/panel correctly
+shows "Soon"/"Coming soon". A side-by-side comparison artifact against the chosen CRM
+reference was produced and reviewed
+(`https://claude.ai/artifact/A7hVLbMZM52AzfA18t9YyY`). Both director and sales roles were
+also verified locally before merge.
+
+**`verify-director@nestaprime.local` intentionally left active** -- Director decision, to
+stay available across the next several amendments' live verification rather than
+reactivating it per-deploy; one consolidated deactivation once that batch is audited. See
+Amendment 36's Annexure-2.md entry for the full note. **Not yet closed** -- must be
+deactivated before this is treated as done.
+
 ## 2026-09-22 -- PR #149: Amendment 34 (Vendor deactivation + duplicate-vendor guard)
 
 **Run by:** R. Patni (with AI development assistance)
