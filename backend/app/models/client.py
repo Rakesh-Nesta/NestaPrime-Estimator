@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Numeric, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -77,6 +77,12 @@ class Client(Base):
     # consent.
     next_follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     follow_up_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # Amendment 45 (Section 51): a general free-text catch-all, distinct from
+    # follow_up_note above (which is specifically about the next reminder) --
+    # same role as Project.custom_notes (Amendment 5's "+ Add Note"). Not
+    # audit-logged, same convention as follow_up_note.
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False

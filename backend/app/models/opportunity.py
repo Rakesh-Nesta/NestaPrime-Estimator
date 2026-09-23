@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,6 +64,12 @@ class Opportunity(Base):
 
     next_follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     follow_up_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # Amendment 45 (Section 51): a general free-text catch-all, distinct from
+    # follow_up_note above (next-reminder-specific) and lost_reason (why-lost-
+    # specific) -- same role as Client.notes / Project.custom_notes. Not
+    # audit-logged, same convention as follow_up_note.
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Set once "Start Project" (item 6 of the spec) creates a Project from
     # a Won, Client-linked Opportunity -- lets Quotations trace back to the

@@ -32,6 +32,9 @@ class OpportunityCreate(BaseModel):
     # "Add Enquiry" itself never creates a Client row (see link-client).
     client_id: uuid.UUID | None = None
     next_follow_up_date: date
+    # Amendment 45 (Section 51): a general free-text catch-all, distinct
+    # from next_follow_up_date/follow-up note -- same role as Client.notes.
+    notes: str | None = None
 
 
 class OpportunityStageUpdate(BaseModel):
@@ -55,6 +58,10 @@ class OpportunityLinkClientUpdate(BaseModel):
     client_id: uuid.UUID
 
 
+class OpportunityNotesUpdate(BaseModel):
+    notes: str | None = None
+
+
 class OpportunityOut(BaseModel):
     id: uuid.UUID
     client_id: uuid.UUID | None
@@ -65,6 +72,7 @@ class OpportunityOut(BaseModel):
     lost_reason: str | None
     next_follow_up_date: date | None
     follow_up_note: str | None
+    notes: str | None
     project_id: uuid.UUID | None
     created_by_id: uuid.UUID
 
@@ -195,6 +203,23 @@ def link_opportunity_client(
         raise HTTPException(status_code=404, detail="Client not found")
 
     opportunity.client_id = payload.client_id
+    db.commit()
+    db.refresh(opportunity)
+    return opportunity
+
+
+@router.patch("/{opportunity_id}/notes", response_model=OpportunityOut)
+def update_opportunity_notes(
+    opportunity_id: uuid.UUID,
+    payload: OpportunityNotesUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    opportunity.notes = payload.notes
     db.commit()
     db.refresh(opportunity)
     return opportunity

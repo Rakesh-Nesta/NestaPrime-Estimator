@@ -65,6 +65,10 @@ class ClientCreate(BaseModel):
     # case it already is.
     telegram_opt_in: bool = False
     telegram_chat_id: str | None = None
+    # Amendment 45 (Section 51): a general free-text catch-all, distinct
+    # from follow_up_note (next-reminder-specific) -- same role as
+    # Project.custom_notes ("+ Add Note").
+    notes: str | None = None
 
 
 class ClientFlagsUpdate(BaseModel):
@@ -85,6 +89,10 @@ class ClientFollowUpUpdate(BaseModel):
     follow_up_note: str | None = None
 
 
+class ClientNotesUpdate(BaseModel):
+    notes: str | None = None
+
+
 class ClientOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -102,6 +110,7 @@ class ClientOut(BaseModel):
     telegram_chat_id: str | None
     next_follow_up_date: date | None
     follow_up_note: str | None
+    notes: str | None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -256,6 +265,26 @@ def update_client_follow_up(
     for field, value in changes.items():
         setattr(client, field, value)
 
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+@router.patch("/{client_id}/notes", response_model=ClientOut)
+def update_client_notes(
+    client_id: uuid.UUID,
+    payload: ClientNotesUpdate,
+    db: Session = Depends(get_db),
+    # Amendment 45 (Section 51): same role set as create_client/follow-up --
+    # a general free-text catch-all, not a governance-relevant fact, so not
+    # Director-only and not audit-logged.
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    client.notes = payload.notes
     db.commit()
     db.refresh(client)
     return client
