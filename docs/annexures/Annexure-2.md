@@ -1373,10 +1373,23 @@ Opportunity's `project_id` are set together. 7 new backend tests. No migration.
 through the real UI (P-2609-0020, on a "(delete me)" client), confirmed the two-way link
 via the API, and confirmed a second project from the same Opportunity is rejected (400).
 
-**Phase D, merged 24 September 2026 (PR #171, `1dfbbb0`), not yet deployed.** Dashboard
-wiring (real "Open opportunities" tile and "Sales pipeline" panel, counts only) and the
-combined Clients + Opportunities Follow-ups queue with the "My follow-ups" toggle (spec
-items 7-9). Amendment 44 closes once Phase D is deployed and live-verified.
+**Implemented, Phase D, 24 September 2026 (PR #171, deployed to production same day).**
+Ships spec items 7-9: real "Open opportunities" tile and "Sales pipeline" panel (counts only,
+no fabricated value); `followups_due_count` summing due Clients and due open Opportunities;
+due leads in "Your next moves"; and one combined Clients + Opportunities Follow-ups queue with
+a "My follow-ups" toggle. The toggle narrows leads to the ones the signed-in user created
+(`Opportunity.created_by_id`) and keeps Clients visible with a note, since `Client` has no
+owner field -- closing the "my open items" gap Amendment 43's registration flagged as blocked
+on this step. 5 new backend tests. No migration.
+
+**Live-verified in production:** `git pull` fast-forwarded `2806240..0caf69d`, no migration
+line (correct), both workers `Application startup complete`, `/api/health` OK; deployment
+confirmed by production's own `/api/dashboard` returning the new fields and the frontend
+bundle changing. With a throwaway due-today lead, the Dashboard tile/pipeline/"Your next
+moves" and the Follow-ups screen (including the "My follow-ups" toggle and an in-place save)
+all behaved correctly; the lead was closed as Lost and every count returned to 0.
+
+**Amendment 44 is now fully closed** (Phases A-D all deployed and live-verified).
 
 ### Amendment No. 45 — Leads & Clients Polish: Hide Admin-Only Flags, Add Notes Field
 **Registered 23 September 2026**, from a direct Director review of the Sales-facing

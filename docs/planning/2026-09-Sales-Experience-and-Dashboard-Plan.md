@@ -433,9 +433,9 @@ the Sales-persona lever.
 5. **Opportunities** — Amendment 44, approved 2026-09-23 (spec:
    `docs/annexures/Section-50-specs.md`). Phase A (model + API + mandatory-
    date rules, PR #164), Phase B (Add Enquiry UI + Opportunities screen,
-   PR #166) and Phase C (Won -> Start Project hand-off, PR #170) DONE and
-   deployed 2026-09-23/24. Phase D (Dashboard + combined Follow-ups, PR #171)
-   is merged, awaiting deploy. The
+   PR #166), Phase C (Won -> Start Project hand-off, PR #170) and Phase D
+   (Dashboard + combined Follow-ups, PR #171) -- **DONE**, all deployed and
+   live-verified 2026-09-23/24. The
    largest single piece: new
    `Opportunity` entity + pipeline-stage enum,
    linked to Leads & Clients, converts into a Project once Won.
