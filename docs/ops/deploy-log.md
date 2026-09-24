@@ -11,6 +11,45 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PR #170: Amendment 44 Phase C (Won -> Start Project hand-off)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `f8ed62d` -> `2806240` (also fast-forwards production past PR #169's
+docs-only close-out, not separately deployed)
+**No migration** -- both link columns (`Project.opportunity_id`,
+`Opportunity.project_id`) shipped in PR #164's migration. Backend rebuild
+(`projects.py` now validates and writes back `opportunity_id`) and frontend rebuild
+(`Opportunities.jsx`, `ProjectSetup.jsx`, `App.jsx`) both needed.
+
+A Won Opportunity linked to a Client gets a "Start Project" button that opens New Project
+Setup with the client locked and a banner naming the Opportunity; the created Project and
+the Opportunity point at each other. `POST /projects` rejects a non-Won, client-mismatched,
+lead-only or already-converted Opportunity before creating anything.
+
+**Rebuild was clean, no boot race this time** -- the checks ran after a `sleep 10`
+following the rebuild: `git pull` fast-forwarded to `2806240`, the log showed no
+`Running upgrade` line (correct, no migration), the backend container was `Up`, both
+gunicorn workers logged `Application startup complete`, `/api/health` returned
+`{"status":"ok"}`. The earlier deploys' transient failed health curls were purely a
+paste-timing race; separating the check from the restart removed them.
+
+**Live-verified in production:** linked the throwaway Won lead "Amendment 44 Verify Lead"
+to the existing "(delete me)" client, then as `verify-director@nestaprime.local` used the
+real UI: Opportunities -> "Start Project" -> confirmed the banner and locked client ->
+created **P-2609-0020**. Confirmed via the API that `Project.opportunity_id` and
+`Opportunity.project_id` match, and that a second attempt from the same Opportunity is
+rejected (400, "This Opportunity has already started a Project"). The new project sits on
+a "(delete me)" client, same throwaway convention as earlier verification projects.
+
+**Not yet deployed:** Phase D (PR #171, Dashboard wiring + combined Follow-ups) is merged
+to `main` (`1dfbbb0`) but production is still on Phase C -- the Dashboard's "Open
+opportunities" tile and "Sales pipeline" panel still read "Soon" there.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-23 -- PR #168: Amendment 45 (hide admin-only client flags, add Notes field)
 
 **Run by:** R. Patni (with AI development assistance)
