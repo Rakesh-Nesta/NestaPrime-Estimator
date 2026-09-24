@@ -1735,7 +1735,7 @@ current code:
   month" chart cannot be drawn honestly from won dates; `WorkOrder.awarded_at` is the honest
   anchor.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-54-specs.md`).
+(spec: `docs/annexures/Section-54-specs.md`, approved 24 September 2026).
 
 ## Register Notes (non-software, business-process)
 

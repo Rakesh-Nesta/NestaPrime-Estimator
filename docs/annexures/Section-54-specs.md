@@ -129,7 +129,7 @@ collections" chart have no data behind them.
 9. **Three ordered PRs** (API, screen, Overview). Proposed: **yes.**
 
 ### Approval
-☐ Approved as proposed, all decisions
+☑ Approved — "approve as proposed, all decisions" (24 September 2026)
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
