@@ -927,6 +927,65 @@ export async function addWorkOrderPaymentEntry(token, workOrderId, payload) {
   return handle(res);
 }
 
+// Amendment 50 (Section 54): expected payments (milestones), receipt edits and
+// the org-wide Payments list. Reconciliation only -- the API derives status,
+// overdue and outstanding from what people entered.
+export async function listPayments(token, { overdue, search } = {}) {
+  const params = new URLSearchParams();
+  if (overdue !== undefined) params.set("overdue", String(overdue));
+  if (search) params.set("search", search);
+  const qs = params.toString() ? `?${params}` : "";
+  const res = await fetch(`${API_BASE}/payments${qs}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function getWorkOrderPaymentSummary(token, workOrderId) {
+  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}/payment-summary`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listWorkOrderPaymentMilestones(token, workOrderId) {
+  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}/payment-milestones`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createWorkOrderPaymentMilestone(token, workOrderId, payload) {
+  const res = await fetch(`${API_BASE}/work-orders/${workOrderId}/payment-milestones`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updatePaymentMilestone(token, milestoneId, payload) {
+  const res = await fetch(`${API_BASE}/payment-milestones/${milestoneId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deletePaymentMilestone(token, milestoneId) {
+  const res = await fetch(`${API_BASE}/payment-milestones/${milestoneId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  // 204 No Content on success -- there is no body for handle() to parse.
+  if (res.status === 204) return null;
+  return handle(res);
+}
+
+export async function updatePaymentEntry(token, entryId, payload) {
+  const res = await fetch(`${API_BASE}/payment-entries/${entryId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function getSchedule(token, projectSportId, startDate) {
   const params = startDate ? `?start_date=${startDate}` : "";
   const res = await fetch(`${API_BASE}/schedule/project-sports/${projectSportId}${params}`, {

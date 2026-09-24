@@ -12,10 +12,9 @@ import {
 // Amendment 36 (Section 42): Phase 1 of the header-by-header CRM restructure
 // -- replaces the old top-nav dropdowns with a left sidebar. Confirmed
 // headers (Overview/Leads & Clients/Quotations/Projects/Team & Access) route
-// to their existing, already-working screens, unchanged. Payments is still
-// visible per the CRM reference but routes to a "Coming soon" placeholder --
-// its real data doesn't exist yet (Phase 7). Follow-ups got its real screen
-// in Amendment 43; Opportunities got its own in Amendment 44.
+// to their existing, already-working screens, unchanged. Follow-ups got its
+// real screen in Amendment 43; Opportunities got its own in Amendment 44;
+// Payments in Amendment 50.
 // Vendor/Tools/Reports/Admin/Education keep their exact old
 // sub-groupings (Open Decision 3), relocated under a temporary "More"
 // section pending the Phase 8 placement decision -- nothing is hidden or
@@ -120,6 +119,7 @@ export default function Sidebar({
     setNavMenuOpen(false);
   }
   const canSeeQuotations = ["sales", "pm", "director"].includes(user.role);
+  const canSeePayments = ["pm", "director", "ca_tax"].includes(user.role);
 
   // Amendment 46: GET /clients and /opportunities are gated to these four
   // roles; site_engineer/ca_tax got a nav item that could only ever show a
@@ -139,7 +139,12 @@ export default function Sidebar({
       ? [{ key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon }]
       : []),
     { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
-    { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon", icon: CalendarIcon },
+    // Amendment 50 (Section 54): a real header now, shown only to the roles
+    // that can open it (PM/Director write, CA/Tax reads) -- as Amendment 46
+    // did for Leads & Clients, so nobody gets an item that can only refuse them.
+    ...(canSeePayments
+      ? [{ key: "payments", label: "Payments", onClick: () => go("payments"), icon: CalendarIcon }]
+      : []),
     ...(canSeeRelationships
       ? [{ key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon }]
       : []),

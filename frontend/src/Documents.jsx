@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AttachmentsPanel from "./AttachmentsPanel";
+import PaymentsDetail from "./PaymentsDetail";
 import ClientSignatoriesPanel from "./ClientSignatoriesPanel";
 import CostSheetBuilder from "./CostSheetBuilder";
 import CoverNotePanel from "./CoverNotePanel";
@@ -7,7 +8,6 @@ import MessagesPanel from "./MessagesPanel";
 import {
   addCostSheetLine,
   addEstimateOptionAddon,
-  addWorkOrderPaymentEntry,
   approveSkipRequest,
   createCostSheet,
   createEstimate,
@@ -28,7 +28,6 @@ import {
   listSkipRequests,
   listSports,
   listSuggestedAddonsForProject,
-  listWorkOrderPaymentEntries,
   markQuotationLost,
   markQuotationWon,
   rebaseEstimate,
@@ -109,7 +108,7 @@ function RejectForm({ onSubmit, onCancel }) {
   );
 }
 
-export default function Documents({ token, project, role, onBack }) {
+export default function Documents({ token, project, role, onBack, onOpenPayments }) {
   const [projectSports, setProjectSports] = useState([]);
   const [sports, setSports] = useState([]);
   const [costSheets, setCostSheets] = useState([]);
@@ -230,6 +229,7 @@ export default function Documents({ token, project, role, onBack }) {
             quotations={quotations}
             activeCostSheet={activeCostSheet}
             onAction={withErrorHandling}
+            onOpenPayments={onOpenPayments}
           />
         </>
       )}
@@ -964,7 +964,7 @@ function OptionAddons({ token, projectId, optionId }) {
   );
 }
 
-function QuotationPanel({ token, project, role, estimates, quotations, activeCostSheet, onAction }) {
+function QuotationPanel({ token, project, role, estimates, quotations, activeCostSheet, onAction, onOpenPayments }) {
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const [discountValue, setDiscountValue] = useState("");
   const [gstMode, setGstMode] = useState("exclusive");
@@ -1282,7 +1282,14 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
           )}
           {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
           {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}
-          {q.status === "won" && role !== "sales" && <WorkOrderPanel token={token} quotationId={q.id} />}
+          {q.status === "won" && role !== "sales" && (
+            <WorkOrderPanel
+              token={token}
+              quotationId={q.id}
+              canEditPayments={["pm", "director"].includes(role)}
+              onOpenPayments={["pm", "director"].includes(role) ? onOpenPayments : undefined}
+            />
+          )}
         </div>
       ))}
 
@@ -1365,25 +1372,19 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
 const WORK_ORDER_NEXT_STATUS = { awarded: "in_progress", in_progress: "completed" };
 const WORK_ORDER_STATUS_LABEL = { awarded: "Awarded", in_progress: "In progress", completed: "Completed" };
 
-function WorkOrderPanel({ token, quotationId }) {
+function WorkOrderPanel({ token, quotationId, canEditPayments, onOpenPayments }) {
   const [workOrder, setWorkOrder] = useState(null);
-  const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAttachments, setShowAttachments] = useState(false);
-  const [entryForm, setEntryForm] = useState({ milestone_name: "", amount_received: "", received_date: "", gst_tds_amount: "", notes: "" });
 
   function load() {
-    return getWorkOrder(token, quotationId).then((wo) => {
-      setWorkOrder(wo);
-      return wo ? listWorkOrderPaymentEntries(token, wo.id) : [];
-    });
+    return getWorkOrder(token, quotationId).then(setWorkOrder);
   }
 
   useEffect(() => {
     setLoading(true);
     load()
-      .then(setEntries)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1392,7 +1393,7 @@ function WorkOrderPanel({ token, quotationId }) {
   async function refresh() {
     setError("");
     try {
-      setEntries(await load());
+      await load();
     } catch (err) {
       setError(err.message);
     }
@@ -1412,24 +1413,6 @@ function WorkOrderPanel({ token, quotationId }) {
     setError("");
     try {
       await updateWorkOrderStatus(token, workOrder.id, WORK_ORDER_NEXT_STATUS[workOrder.status]);
-      await refresh();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function handleAddEntry(e) {
-    e.preventDefault();
-    setError("");
-    try {
-      await addWorkOrderPaymentEntry(token, workOrder.id, {
-        milestone_name: entryForm.milestone_name,
-        amount_received: Number(entryForm.amount_received),
-        received_date: entryForm.received_date,
-        gst_tds_amount: entryForm.gst_tds_amount ? Number(entryForm.gst_tds_amount) : null,
-        notes: entryForm.notes || null,
-      });
-      setEntryForm({ milestone_name: "", amount_received: "", received_date: "", gst_tds_amount: "", notes: "" });
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -1467,62 +1450,21 @@ function WorkOrderPanel({ token, quotationId }) {
           </div>
           {showAttachments && <AttachmentsPanel token={token} docType="work_order" docId={workOrder.id} />}
 
-          <div className="space-y-1">
-            <p className="font-semibold text-text-secondary">
-              Payment reconciliation (not a blueprint RA-bill schema -- a lightweight milestone/amount/date log)
-            </p>
-            {entries.length === 0 && <p className="text-text-secondary">No payments recorded yet.</p>}
-            {entries.map((e) => (
-              <div key={e.id} className="flex items-center justify-between border border-border-dark rounded px-2 py-1">
-                <span>
-                  {e.milestone_name} · {e.received_date} {e.notes && `· ${e.notes}`}
-                  {e.gst_tds_amount != null && ` · GST-TDS Rs ${e.gst_tds_amount.toLocaleString()}`}
-                </span>
-                <span className="font-medium">Rs {e.amount_received.toLocaleString()}</span>
-              </div>
-            ))}
-            <form onSubmit={handleAddEntry} className="flex flex-wrap items-center gap-1">
-              <input
-                type="text"
-                placeholder="Milestone"
-                value={entryForm.milestone_name}
-                onChange={(e) => setEntryForm((f) => ({ ...f, milestone_name: e.target.value }))}
-                className="border border-border-dark bg-surface-raised text-text-primary rounded px-1.5 py-1 w-28"
-                required
-              />
-              <input
-                type="number"
-                placeholder="Amount"
-                value={entryForm.amount_received}
-                onChange={(e) => setEntryForm((f) => ({ ...f, amount_received: e.target.value }))}
-                className="border border-border-dark bg-surface-raised text-text-primary rounded px-1.5 py-1 w-24"
-                required
-              />
-              <input
-                type="date"
-                value={entryForm.received_date}
-                onChange={(e) => setEntryForm((f) => ({ ...f, received_date: e.target.value }))}
-                className="border border-border-dark bg-surface-raised text-text-primary rounded px-1.5 py-1"
-                required
-              />
-              <input
-                type="number"
-                placeholder="GST-TDS (optional)"
-                value={entryForm.gst_tds_amount}
-                onChange={(e) => setEntryForm((f) => ({ ...f, gst_tds_amount: e.target.value }))}
-                className="border border-border-dark bg-surface-raised text-text-primary rounded px-1.5 py-1 w-32"
-              />
-              <input
-                type="text"
-                placeholder="Notes (optional)"
-                value={entryForm.notes}
-                onChange={(e) => setEntryForm((f) => ({ ...f, notes: e.target.value }))}
-                className="border border-border-dark bg-surface-raised text-text-primary rounded px-1.5 py-1 w-32"
-              />
-              <button type="submit" className="bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover">
-                Add
-              </button>
-            </form>
+          <div className="space-y-2 border-t border-border-dark pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold text-text-secondary">Payments</p>
+              {onOpenPayments && (
+                <button onClick={onOpenPayments} className="text-gold hover:underline">
+                  Open in Payments →
+                </button>
+              )}
+            </div>
+            <PaymentsDetail
+              token={token}
+              workOrderId={workOrder.id}
+              canEdit={canEditPayments}
+              idPrefix={`wo-panel-${workOrder.id}`}
+            />
           </div>
         </div>
       )}
