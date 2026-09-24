@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getDashboard, listClients, listOpportunities } from "./api";
-import { CalendarIcon, ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
+import { ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
+import { CollectionsPanel, PaymentsOverdueTile } from "./OverviewPayments";
 
 // Small local duplicate of FollowUps.jsx's own due-date merge/sort (same
 // pattern ClientsAdmin.jsx's STATUS_PILL_STYLE comment already documents)
@@ -71,48 +72,14 @@ function useCountUp(target) {
 // found it noise, not signal, in real usage.
 //
 // Amendment 36 (Section 42): "Overview" shell, shell-first per Director
-// decision -- two tiles (Pending quotations, Active projects) reuse the
-// exact same real backend counts this screen already had; Payments overdue
-// and the "Orders & collections" panel have no backend yet (Payments is
-// Phase 7) and deliberately show "--" with "Coming soon" rather than a
-// fabricated "0" -- an unbuilt feature must never read as a real, empty
-// one. Follow-ups due (tile) and Your next moves (panel) got real data in
-// Amendment 43; Open opportunities (tile) and Sales pipeline (panel) in
-// Amendment 44 Phase D.
-function ComingSoonTile({ label, icon: IconComp }) {
-  return (
-    <div className="text-left bg-surface border border-border-dark rounded-lg p-5 opacity-70">
-      <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center justify-between">
-        <span className="flex items-center gap-1.5">
-          {IconComp && <IconComp className="w-3.5 h-3.5" />}
-          {label}
-        </span>
-        <span className="text-[10px] normal-case tracking-normal bg-surface-raised border border-border-dark rounded px-1.5 py-0.5">
-          Soon
-        </span>
-      </p>
-      <p className="text-2xl font-heading font-bold mt-2 text-text-secondary">--</p>
-    </div>
-  );
-}
-
+// decision -- an unbuilt feature never reads as a real, empty one (no
+// fabricated "0"). Follow-ups due (tile) and Your next moves (panel) got real
+// data in Amendment 43; Open opportunities (tile) and Sales pipeline (panel)
+// in Amendment 44 Phase D; Payments overdue (tile) and Orders & collections
+// (panel) in Amendment 50 Part C (see OverviewPayments.jsx).
 function CountUpValue({ value }) {
   const animated = useCountUp(value);
   return <>{animated}</>;
-}
-
-function ComingSoonPanel({ title, description }) {
-  return (
-    <div className="bg-surface border border-border-dark rounded-lg p-5 opacity-70">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-heading font-semibold text-text-primary text-base">{title}</h3>
-        <span className="text-[10px] uppercase tracking-wider bg-surface-raised border border-border-dark rounded px-1.5 py-0.5 text-text-secondary">
-          Coming soon
-        </span>
-      </div>
-      <p className="text-sm text-text-secondary">{description}</p>
-    </div>
-  );
 }
 
 // Amendment 43 (Section E step 4): "Your next moves" reuses the same
@@ -161,6 +128,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   }
 
   const { summary, recent_projects: recentProjects } = data;
+  const payments = data.payments || null; // null unless pm / director / ca_tax
   const nextMoves = clients ? dueFollowUps(clients, opportunities || []).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
 
   // Amendment 49 (Section 53): the drill-down behind "Pending quotations" --
@@ -294,15 +262,22 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             </div>
           )
         )}
-        <ComingSoonTile label="Payments overdue" icon={CalendarIcon} />
+        {payments && (
+          <PaymentsOverdueTile
+            payments={payments}
+            onOpen={() =>
+              onDrillDown(
+                "payments",
+                payments.tracked_milestones_count > 0 && payments.overdue_count > 0 ? { filter: "overdue" } : {}
+              )
+            }
+          />
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5 rise" style={{ "--d": "0.2s" }}>
-        <ComingSoonPanel
-          title="Orders & collections"
-          description="Won order value vs. cash received, by month -- arrives with Payments."
-        />
-        <div className="bg-surface border border-border-dark rounded-lg p-5">
+        {payments && <CollectionsPanel payments={payments} onOpen={() => onDrillDown("payments", {})} />}
+        <div className={`bg-surface border border-border-dark rounded-lg p-5 ${payments ? "" : "lg:col-span-2"}`}>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-heading font-semibold text-text-primary text-base">Sales pipeline</h3>
             {canSeeList && (
