@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
@@ -46,6 +46,10 @@ class ClientCreate(BaseModel):
     contact_name: str | None = None
     phone: str | None = None
     email: str | None = None
+    # Amendment 37: optional, never required -- many real clients never had it
+    # collected, and this exists to stop defaulting to the wrong city, not to
+    # add a data-entry burden.
+    city: str | None = Field(default=None, max_length=100)
     billing_address: str | None = None
     gstin: str | None = None
     pan: str | None = None
@@ -96,13 +100,15 @@ class ClientNotesUpdate(BaseModel):
 class ClientDetailsUpdate(BaseModel):
     # Amendment 47 (Section 52): correcting a typo in a client's own
     # details. Deliberately excludes type (it drives the default package
-    # and payment terms), billing/GST fields and payment_terms. The three
-    # optional fields are only touched when sent; null or a blank string
-    # clears them.
+    # and payment terms), billing/GST fields and payment_terms. The optional
+    # fields are only touched when sent; null or a blank string clears them.
+    # Amendment 37 adds city here -- the same routine, non-audited correction
+    # as phone/email.
     name: str
     contact_name: str | None = None
     phone: str | None = None
     email: str | None = None
+    city: str | None = Field(default=None, max_length=100)
 
 
 class ClientOut(BaseModel):
@@ -112,6 +118,7 @@ class ClientOut(BaseModel):
     contact_name: str | None
     phone: str | None
     email: str | None
+    city: str | None
     payment_terms: str | None
     overdue_flag: bool
     blacklist_flag: bool
@@ -144,6 +151,7 @@ def create_client(
     fields = payload.model_dump()
     if fields["payment_terms"] is None:
         fields["payment_terms"] = _default_payment_terms(db, payload.type)
+    fields["city"] = (fields["city"] or "").strip() or None
     client = Client(**fields)
     db.add(client)
     db.commit()
@@ -309,7 +317,7 @@ def update_client_details(
     client.name = name
 
     sent = payload.model_fields_set
-    for field in ("contact_name", "phone", "email"):
+    for field in ("contact_name", "phone", "email", "city"):
         if field in sent:
             value = getattr(payload, field)
             cleaned = value.strip() if value is not None else ""
