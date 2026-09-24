@@ -11,6 +11,26 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PR #192: Amendments 38 and 39 (dead cost-sheet form; bulk scope checklist controls)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `6956161` -> `e19880e` (includes PR #191's docs-only close-out)
+**Frontend-only** -- no migration, no backend rebuild (`Documents.jsx`, `ScopeChecklist.jsx`).
+
+`git pull` fast-forwarded `6956161..e19880e`; frontend Docker build clean; copied from
+`/tmp/nestaprime-frontend/dist/*`; the served page changed from `index-D8AQs2CR.js` to
+`index-BGiDOpm9.js` (the CSS file name, `index-1PE5H3qy.css`, did not change); `/api/health`
+`{"status":"ok"}`. Confirmed by downloading the served bundle: it contains "Select all", "Clear all",
+"could not be saved" and "The list shows what was saved."; it still contains "Revise (new R+1)", "Create
+Cost Sheet", "start an empty Cost Sheet" and "request to skip this stage"; the Create button's styling no
+longer carries `disabled:opacity-50`; and every earlier release (Payments, the Overview tile, Quotations,
+the What's-next hints, the Leads & Clients search, the phone layout) is still present.
+
+**Not verified in production:** a logged-in Documents or Scope Checklist screen (no login was used for
+this deploy; both were exercised in real Chrome locally against the identical code).
+
+---
+
 ## 2026-09-24 -- PRs #189 + #190: Amendment 50 Parts B and C (frontend deploy)
 
 **Run by:** R. Patni (with AI development assistance)
