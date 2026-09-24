@@ -1707,6 +1707,36 @@ frontend rebuild, no migration); Part A alone was never run in production.
   Amendments 37-39, Team & Access naming, the More-group placement decisions, global quick
   search, Section C quotation descriptiveness, and HTTPS on a proper domain.
 
+### Amendment No. 50 — Payments Header (Header Index Step 9; Gap 3 of Amendment 48's Audit)
+**Registered 24 September 2026**, on the Director's instruction, from Amendment 48's finding
+that Payments is the largest unbuilt header and has nothing registered for it. Grounded against
+current code:
+- **The header is a placeholder.** The sidebar item is muted with a "Soon" badge and routes to
+  `ComingSoon` (`Sidebar.jsx`, `App.jsx` `screen === "payments"`); the Overview's "Payments
+  overdue" tile and "Orders & collections" panel are `ComingSoonTile` / `ComingSoonPanel`
+  (`Dashboard.jsx`), shown to every role. Plan step 9 calls for exactly this header: "extend
+  `WorkOrderPaymentEntry` with due-dates/reminders; surface 'payments overdue'."
+- **Only money already received is recorded.** `WorkOrderPaymentEntry`
+  (`models/work_order.py`) holds `milestone_name`, `amount_received`, `received_date`,
+  `gst_tds_amount`, `notes`. There is no expected amount and no due date anywhere, so
+  "overdue" cannot be computed from any existing data.
+- **Add-only, PM/Director-only, one project at a time.** `work_orders.py` offers
+  `add_payment_entry` and `list_payment_entries` only (`ROLES = ("pm", "director")`): no edit
+  and no delete -- a mistyped amount is permanent, the same gap Amendment 47 closed for leads --
+  and no cross-project view. The only screen is `WorkOrderPanel` on a project's Documents
+  screen (`Documents.jsx:1285`), shown once a Quotation is Won and a Work Order exists.
+- **Order value has no field of its own.** A Work Order is one-per-Won-Quotation
+  (`create_work_order` requires `QuotationStatus.WON`); its value is that Quotation's frozen
+  `quotation_total`. `Client.payment_terms` is free text ("40/40/20"), defaulted per client type
+  at creation and echoed on the client; a whole-backend grep finds no use of it in any document
+  or calculation -- it is never turned into a schedule.
+- **There is no "won date".** `Quotation` has no `won_at` (`dashboard.py:148` documents the
+  gap and uses `released_at` as a proxy), so the reference's "won value vs cash received, by
+  month" chart cannot be drawn honestly from won dates; `WorkOrder.awarded_at` is the honest
+  anchor.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-54-specs.md`, approved 24 September 2026).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
