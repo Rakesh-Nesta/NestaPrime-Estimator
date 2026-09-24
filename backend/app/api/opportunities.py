@@ -62,6 +62,23 @@ class OpportunityNotesUpdate(BaseModel):
     notes: str | None = None
 
 
+def _clean_optional(value: str | None) -> str | None:
+    """Trim; a blank string means 'clear it', same as sending null."""
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+class OpportunityDetailsUpdate(BaseModel):
+    # Amendment 47 (Section 52): correcting a typo in a lead's own contact
+    # details. lead_phone/lead_email are only touched when sent; sending
+    # null or a blank string clears them.
+    lead_name: str
+    lead_phone: str | None = None
+    lead_email: str | None = None
+
+
 class OpportunityOut(BaseModel):
     id: uuid.UUID
     client_id: uuid.UUID | None
@@ -203,6 +220,35 @@ def link_opportunity_client(
         raise HTTPException(status_code=404, detail="Client not found")
 
     opportunity.client_id = payload.client_id
+    db.commit()
+    db.refresh(opportunity)
+    return opportunity
+
+
+@router.patch("/{opportunity_id}/details", response_model=OpportunityOut)
+def update_opportunity_details(
+    opportunity_id: uuid.UUID,
+    payload: OpportunityDetailsUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """Amendment 47 (Section 52): fixes a typo in name/phone/email. Allowed
+    at any stage, including Won/Lost -- it corrects a record, it is not a
+    workflow step. Not audit-logged, same as follow-up/notes."""
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    lead_name = payload.lead_name.strip()
+    if not lead_name:
+        raise HTTPException(status_code=400, detail="lead_name cannot be blank")
+
+    opportunity.lead_name = lead_name
+    sent = payload.model_fields_set
+    if "lead_phone" in sent:
+        opportunity.lead_phone = _clean_optional(payload.lead_phone)
+    if "lead_email" in sent:
+        opportunity.lead_email = _clean_optional(payload.lead_email)
     db.commit()
     db.refresh(opportunity)
     return opportunity

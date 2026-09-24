@@ -93,6 +93,18 @@ class ClientNotesUpdate(BaseModel):
     notes: str | None = None
 
 
+class ClientDetailsUpdate(BaseModel):
+    # Amendment 47 (Section 52): correcting a typo in a client's own
+    # details. Deliberately excludes type (it drives the default package
+    # and payment terms), billing/GST fields and payment_terms. The three
+    # optional fields are only touched when sent; null or a blank string
+    # clears them.
+    name: str
+    contact_name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
 class ClientOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -264,6 +276,44 @@ def update_client_follow_up(
     changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
         setattr(client, field, value)
+
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+@router.patch("/{client_id}/details", response_model=ClientOut)
+def update_client_details(
+    client_id: uuid.UUID,
+    payload: ClientDetailsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    # Same role set as create_client -- not the Director-only flags gate.
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name cannot be blank")
+
+    # A client's name prints on issued Quotations, so a rename is worth a
+    # trail; contact/phone/email corrections are routine and are not logged.
+    if client.name != name:
+        write_audit_log_entry(
+            db, current_user, "client", client.id, "name",
+            old_value=client.name, new_value=name, request=request,
+        )
+    client.name = name
+
+    sent = payload.model_fields_set
+    for field in ("contact_name", "phone", "email"):
+        if field in sent:
+            value = getattr(payload, field)
+            cleaned = value.strip() if value is not None else ""
+            setattr(client, field, cleaned or None)
 
     db.commit()
     db.refresh(client)

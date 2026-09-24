@@ -88,6 +88,15 @@ export async function updateClientNotes(token, clientId, payload) {
   return handle(res);
 }
 
+export async function updateClientDetails(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/details`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function listClientSignatories(token, clientId, includeInactive = false) {
   const params = includeInactive ? "?include_inactive=true" : "";
   const res = await fetch(`${API_BASE}/clients/${clientId}/signatories${params}`, { headers: authHeaders(token) });
@@ -194,6 +203,15 @@ export async function linkOpportunityClient(token, opportunityId, payload) {
 
 export async function updateOpportunityNotes(token, opportunityId, payload) {
   const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/notes`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateOpportunityDetails(token, opportunityId, payload) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/details`, {
     method: "PATCH",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),

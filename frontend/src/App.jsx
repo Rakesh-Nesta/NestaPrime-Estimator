@@ -278,7 +278,7 @@ export default function App() {
           <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "opportunities" && (
-          <Opportunities token={accessToken} onBack={() => setScreen(preNavScreen)} onStartProject={handleStartProject} />
+          <Opportunities token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} onStartProject={handleStartProject} />
         )}
         {screen === "followups" && (
           <FollowUps token={accessToken} userId={user.id} onBack={() => setScreen(preNavScreen)} />
