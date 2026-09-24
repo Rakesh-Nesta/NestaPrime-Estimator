@@ -51,6 +51,36 @@ class WorkOrder(Base):
     )
 
 
+class WorkOrderPaymentMilestone(Base):
+    """Amendment 50 (Section 54): an EXPECTED payment -- a promise to be paid,
+    as opposed to WorkOrderPaymentEntry, which is a fact (money received).
+    Without a due date and an amount there is nothing for "overdue" to be
+    computed from. Status (pending / part paid / paid), the received and
+    outstanding amounts and the overdue flag are all DERIVED from the receipts
+    linked to it (see app.services.payments) and never stored, so they can
+    never disagree with the receipts. Nothing here is inferred from the
+    client's free-text payment terms."""
+
+    __tablename__ = "work_order_payment_milestones"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    work_order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("work_orders.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount_due: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    due_date: Mapped[date] = mapped_column(nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
 class WorkOrderPaymentEntry(Base):
     """NOT a blueprint-named entity: Part L names 'milestone billing (RA
     bills)' with no fields, no entity and no workflow anywhere else in the
@@ -88,6 +118,11 @@ class WorkOrderPaymentEntry(Base):
     received_date: Mapped[date] = mapped_column(nullable=False)
     gst_tds_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Amendment 50: optionally records which expected payment this receipt is
+    # against. An unlinked receipt still counts toward the Work Order's totals.
+    milestone_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("work_order_payment_milestones.id"), nullable=True
+    )
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
