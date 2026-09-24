@@ -11,6 +11,24 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PR #181: Amendment 40 (What's-next hints on the Cost Sheet, Estimate, Quotation stages)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `e535432` -> `c555a3c` (includes PR #179's docs-only close-out)
+**Frontend-only** -- no migration, no backend rebuild (`Documents.jsx`).
+
+`git pull` fast-forwarded `e535432..c555a3c`; frontend Docker build clean; copied from
+`/tmp/nestaprime-frontend/dist/*`; `/api/health` `{"status":"ok"}`. Confirmed by the served
+bundle changing (`index-B7lZRA0W.js` -> `index-B2931D9s.js`) and by downloading it: it contains
+the "What's next:" label and the hint sentences (e.g. "Awaiting PM/Director to build the Cost
+Sheet.", "Verified -- the Estimate is below.", "Client rejected this Estimate.", "Won -- Work
+Order can be created."), and still contains the Leads & Clients search box and the phone layout.
+
+**Not verified in production:** a logged-in Documents screen (no login was used for this
+deploy); the hint wording has not yet had the Director's copy review the spec asks for.
+
+---
+
 ## 2026-09-24 -- PR #178: Amendment 47 Part B (Leads & Clients tabs, search, collapsible add forms)
 
 **Run by:** R. Patni (with AI development assistance)

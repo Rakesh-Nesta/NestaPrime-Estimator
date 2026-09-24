@@ -98,7 +98,6 @@ export default function Sidebar({
   canResumeProject,
   goToTopLevel,
   handleDrillDown,
-  handleNewProject,
   handleLogout,
   navMenuOpen,
   setNavMenuOpen,
@@ -113,14 +112,14 @@ export default function Sidebar({
     setNavMenuOpen(false);
   }
 
+  // Amendment 49 (Section 53): this opens the Quotations list for every role
+  // that can use it. It used to start a new project for everyone but the
+  // Director -- "+ New project" now lives on that screen and on the Overview.
   function onQuotationsClick() {
-    if (user.role === "director") {
-      handleDrillDown("quotations_admin", {});
-    } else {
-      handleNewProject();
-    }
+    handleDrillDown("quotations_admin", {});
     setNavMenuOpen(false);
   }
+  const canSeeQuotations = ["sales", "pm", "director"].includes(user.role);
 
   // Amendment 46: GET /clients and /opportunities are gated to these four
   // roles; site_engineer/ca_tax got a nav item that could only ever show a
@@ -136,7 +135,9 @@ export default function Sidebar({
           { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
         ]
       : []),
-    { key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon },
+    ...(canSeeQuotations
+      ? [{ key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon }]
+      : []),
     { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
     { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon", icon: CalendarIcon },
     ...(canSeeRelationships
