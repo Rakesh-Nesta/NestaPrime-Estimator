@@ -1635,6 +1635,31 @@ header (plan step 8). (3) Payments (plan step 9; needs a spec). Then the approve
 Team & Access naming (plan step 10) and the More-group placement decisions. Each becomes its own
 Amendment with its own spec.
 
+### Amendment No. 49 — Quotations Header (Header Index Step 8; Gap 1 of Amendment 48's Audit)
+**Registered 24 September 2026**, on the Director's instruction to spec the Quotations header
+after Amendment 40, from Amendment 48's audit finding that it is the most misleading item left
+in the sidebar. Grounded against current code:
+- **The "Quotations" nav item is not a Quotations screen for most roles.** `Sidebar.jsx`
+  `onQuotationsClick` opens the quotation list only for a Director; for every other role it
+  calls `handleNewProject()`. The Overview's "Quotations" tab does the same
+  (`Dashboard.jsx` `quotationsTabClick`, lines 205-208). `POST /projects` is limited to
+  `sales`/`pm`/`director` (`projects.py`), so `procurement`, `site_engineer` and `ca_tax` -- who
+  are all shown the item -- land on a project form they cannot submit.
+- **The only quotation list is Director-only.** `GET /quotations`
+  (`quotations_admin.py`, `ROLES = ("director",)`) returns cost, margin and below-floor per
+  row. The Overview's "Pending quotations" tile is therefore not clickable for anyone else
+  (`Dashboard.jsx:182`, `target: null`), although the per-project quotation view already
+  withholds exactly those figures from Sales (`documents.py:1900-1905`) -- so a Sales-safe list
+  has a ready-made rule.
+- **Estimates has no header.** `GET /estimates` is open to six roles and carries no
+  cost/margin (`estimates_admin.py`), but its screen is reachable only from a Dashboard tile or
+  a project's Documents screen (plan mismatch #2).
+- **No quotation shows which lead it came from.** `Project.opportunity_id` links a project to
+  the Won Opportunity it started from (Amendment 44 Phase C), so the link the plan calls for
+  (step 8) needs no new data, only to be surfaced.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-53-specs.md`, approved 24 September 2026).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
