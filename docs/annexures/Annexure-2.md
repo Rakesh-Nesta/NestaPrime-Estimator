@@ -1774,19 +1774,20 @@ Part C 51/51 (the tile, the panel totals and the month bars equal the API's figu
 count equals the Overdue tab's and its amount the Overdue card; the empty states; role gating), plus
 no sideways overflow at 375, 414 and 768px and no JS errors in any session.
 
-**Deployed to production: backend only, so far (`f10548e`, 24 September 2026).** The migration ran
-(`324c6521d698 -> b50a7c1d9e42`), both workers started cleanly, and production's OpenAPI lists all
-five new payment routes and the `payments` block on the dashboard, with anonymous calls answering
-401. The first frontend deploy **did not reach the web folder** -- the copy step was skipped -- so
-production still served the previous bundle (`index-BY1Qsrjh.js`), confirmed by downloading it.
-
-**[PENDING -- to be completed after the frontend deploy is verified.]** Frontend deploy of
-`6956161` (Parts B and C together): served bundle change, Payments screen and Overview text present
-in the downloaded bundle, "Coming soon" text gone.
+**Deployed to production in two steps, 24 September 2026.** (1) **Backend, `f10548e`:** the
+migration ran (`324c6521d698 -> b50a7c1d9e42`), both workers started cleanly, and production's
+OpenAPI lists all five new payment routes and the `payments` block on the dashboard, with anonymous
+calls answering 401. The first frontend deploy **did not reach the web folder** -- the copy step was
+skipped -- so production kept serving the previous bundle (`index-BY1Qsrjh.js`), confirmed by
+downloading it. (2) **Frontend, `6956161` (Parts B and C together):** redeployed with the copy
+step; the served bundle changed to `index-D8AQs2CR.js`. Downloaded from production, it contains the
+Payments screen ("What each Work Order is worth", "Expected payments", "Payments received",
+"Milestones & payments", "Open in Payments") and the Overview's payments tile and panel ("Payments
+overdue", "No due dates set", "counted by award date", and both empty-state messages), contains **no**
+"Coming soon" text, and still contains the Quotations screen, the What's-next hints, the Leads &
+Clients search and the phone layout.
 
 **Open items -- not verified or not done:**
-- *Frontend not yet live in production* (see above). Until then production users still see the
-  placeholder Payments page.
 - *The CA has not confirmed decision 3.* The app counts TDS withheld as settled (outstanding =
   order value - received - TDS). It is an accounting judgment the spec asked to have confirmed;
   if the CA disagrees it is a one-line change in `app/services/payments.py` and its tests.
