@@ -121,9 +121,9 @@ export default function Opportunities({ token, onBack, onStartProject }) {
   }
 
   return (
-    <div className="max-w-[1000px] mx-auto mt-6 mb-10 space-y-4 px-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="max-w-[1000px] mx-auto mt-6 mb-10 space-y-4 px-4 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
           <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1 flex items-center gap-2">
             <FunnelIcon className="w-6 h-6 text-gold" /> Opportunities
@@ -207,7 +207,7 @@ export default function Opportunities({ token, onBack, onStartProject }) {
                         value={draft.note}
                         onChange={(e) => setDraftField(o.id, "note", e.target.value)}
                         placeholder="Note (optional)"
-                        className="flex-1 min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
+                        className="w-full sm:w-auto sm:flex-1 sm:min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
                       />
                     </>
                   )}
@@ -216,7 +216,7 @@ export default function Opportunities({ token, onBack, onStartProject }) {
                       value={draft.lostReason || ""}
                       onChange={(e) => setDraftField(o.id, "lostReason", e.target.value)}
                       placeholder="Lost reason (optional)"
-                      className="flex-1 min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
+                      className="w-full sm:w-auto sm:flex-1 sm:min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
                     />
                   )}
 
@@ -236,7 +236,7 @@ export default function Opportunities({ token, onBack, onStartProject }) {
                     onChange={(e) => setNotesDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
                     rows={1}
                     placeholder="Notes / remarks (optional)"
-                    className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
+                    className="flex-1 min-w-0 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
                   />
                   <button onClick={() => saveNotes(o)} className="text-gold hover:underline shrink-0">
                     Save
@@ -244,7 +244,7 @@ export default function Opportunities({ token, onBack, onStartProject }) {
                 </div>
 
                 {o.stage === "won" && (
-                  <div className="flex items-center gap-2 text-xs border-t border-border-dark pt-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs border-t border-border-dark pt-2">
                     {o.project_id ? (
                       <span className="text-green-400">Project started.</span>
                     ) : o.client_id ? (
@@ -270,12 +270,12 @@ export default function Opportunities({ token, onBack, onStartProject }) {
                 )}
 
                 {!o.client_id && (
-                  <div className="flex items-center gap-2 text-xs border-t border-border-dark pt-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs border-t border-border-dark pt-2">
                     <span className="text-text-secondary">Link to an existing client:</span>
                     <select
                       value={linkPicks[o.id] || ""}
                       onChange={(e) => setLinkPicks((p) => ({ ...p, [o.id]: e.target.value }))}
-                      className="rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
+                      className="min-w-0 max-w-full rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
                     >
                       <option value="">Select a client…</option>
                       {clients.map((c) => (
