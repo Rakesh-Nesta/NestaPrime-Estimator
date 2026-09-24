@@ -34,6 +34,13 @@ class Client(Base):
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     billing_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Amendment 37 (Section 43): structured, separate from the free-text
+    # billing_address above -- lets Project Setup pre-fill a new project's city
+    # from an existing client's own record instead of always defaulting to
+    # "Mumbai". Nullable: there is deliberately NO backfill from billing_address
+    # (free-text parsing risks silently giving a real client the wrong city), so
+    # existing clients have no city until someone fills it in.
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Informational only per v5.1.9 K.4 — printed on the quotation if supplied,
     # never used to compute anything (the app applies no GST classification).
