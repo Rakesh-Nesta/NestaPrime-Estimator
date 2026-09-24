@@ -32,7 +32,7 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function Opportunities({ token, onBack }) {
+export default function Opportunities({ token, onBack, onStartProject }) {
   const [opportunities, setOpportunities] = useState([]);
   const [clients, setClients] = useState([]);
   const [relationship, setRelationship] = useState("");
@@ -238,6 +238,32 @@ export default function Opportunities({ token, onBack }) {
                     Save
                   </button>
                 </div>
+
+                {o.stage === "won" && (
+                  <div className="flex items-center gap-2 text-xs border-t border-border-dark pt-2">
+                    {o.project_id ? (
+                      <span className="text-green-400">Project started.</span>
+                    ) : o.client_id ? (
+                      <button
+                        onClick={() =>
+                          onStartProject({
+                            opportunityId: o.id,
+                            clientId: o.client_id,
+                            clientName: clientNameById[o.client_id] || "the linked client",
+                            leadName: o.lead_name,
+                          })
+                        }
+                        className="bg-gold text-base rounded px-3 py-1.5 font-semibold hover:bg-gold-hover"
+                      >
+                        Start Project →
+                      </button>
+                    ) : (
+                      <span className="text-text-secondary">
+                        Won -- link this Opportunity to a client below to start a Project.
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {!o.client_id && (
                   <div className="flex items-center gap-2 text-xs border-t border-border-dark pt-2">

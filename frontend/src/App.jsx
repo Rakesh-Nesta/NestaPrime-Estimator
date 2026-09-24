@@ -46,6 +46,9 @@ export default function App() {
   // filter (e.g. { status: "open" }, { statusGroup: "pending" }) into
   // whichever list screen it targets.
   const [drillPreset, setDrillPreset] = useState({});
+  // Amendment 44 Phase C: set by "Start Project" on a Won Opportunity, read
+  // by ProjectSetup, cleared as soon as any other path starts a project.
+  const [startFrom, setStartFrom] = useState(null);
 
   const TOP_LEVEL_SCREENS = [
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
@@ -73,6 +76,13 @@ export default function App() {
   }
 
   function handleNewProject() {
+    setStartFrom(null);
+    setActiveProject(null);
+    setScreen("sports");
+  }
+
+  function handleStartProject(hand_off) {
+    setStartFrom(hand_off);
     setActiveProject(null);
     setScreen("sports");
   }
@@ -109,6 +119,7 @@ export default function App() {
     setEmail("");
     setPassword("");
     setActiveProject(null);
+    setStartFrom(null);
     setScreen("dashboard");
     setPreNavScreen("dashboard");
     setDrillPreset({});
@@ -267,7 +278,7 @@ export default function App() {
           <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "opportunities" && (
-          <Opportunities token={accessToken} onBack={() => setScreen(preNavScreen)} />
+          <Opportunities token={accessToken} onBack={() => setScreen(preNavScreen)} onStartProject={handleStartProject} />
         )}
         {screen === "followups" && (
           <FollowUps token={accessToken} onBack={() => setScreen(preNavScreen)} />
@@ -286,8 +297,9 @@ export default function App() {
           // gap, not a missing form field.
           <ProjectSetup
             token={accessToken}
-            onProjectCreated={(project) => { setActiveProject(project); setScreen("sports"); }}
-            onQuickSetupComplete={(project) => { setActiveProject(project); setScreen("sports"); }}
+            startFrom={startFrom}
+            onProjectCreated={(project) => { setStartFrom(null); setActiveProject(project); setScreen("sports"); }}
+            onQuickSetupComplete={(project) => { setStartFrom(null); setActiveProject(project); setScreen("sports"); }}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (

@@ -78,8 +78,16 @@ const emptyForm = {
   existingBuildingClearHeightFt: "",
 };
 
-export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComplete }) {
-  const [form, setForm] = useState(emptyForm);
+// Amendment 44 Phase C: startFrom = { opportunityId, clientId, clientName,
+// leadName } when reached via "Start Project" on a Won Opportunity -- the
+// client is pre-selected and locked (the backend rejects a mismatch anyway),
+// and opportunity_id rides along on createProject so the new Project records
+// where it came from.
+export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComplete, startFrom = null }) {
+  const [form, setForm] = useState(
+    startFrom ? { ...emptyForm, clientMode: "existing", existingClientId: startFrom.clientId } : emptyForm
+  );
+  const opportunityField = startFrom ? { opportunity_id: startFrom.opportunityId } : {};
   const [clients, setClients] = useState([]);
   const [multipliers, setMultipliers] = useState([]);
   const [hubs, setHubs] = useState([]);
@@ -188,6 +196,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         number_of_courts: 1,
         unit_system: "feet",
         quick_setup: true,
+        ...opportunityField,
       });
 
       await addProjectSport(token, project.id, {
@@ -242,6 +251,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         existing_building_clear_height_ft: isExistingBuilding && form.existingBuildingClearHeightFt
           ? Number(form.existingBuildingClearHeightFt)
           : null,
+        ...opportunityField,
       });
 
       setResult(project);
@@ -296,12 +306,14 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
         >
           Select sports for this project &rarr;
         </button>
+        {!startFrom && (
         <button
           onClick={() => { setResult(null); setForm(emptyForm); }}
           className="mt-2 w-full bg-surface text-text-secondary border border-border-dark bg-surface-raised text-text-primary rounded py-2 font-medium hover:bg-surface-raised"
         >
           Start another project
         </button>
+        )}
       </div>
     );
   }
@@ -321,7 +333,12 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
         <fieldset className="space-y-3 border-t pt-4">
           <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Client</legend>
-          <div className="flex gap-4 text-sm">
+          {startFrom && (
+          <p className="text-xs text-gold bg-gold-muted rounded px-2 py-1.5">
+            Starting from Opportunity "{startFrom.leadName}" -- client is fixed to {startFrom.clientName}.
+          </p>
+          )}
+          <div className={`flex gap-4 text-sm ${startFrom ? "hidden" : ""}`}>
             <label className="flex items-center gap-1">
               <input type="radio" checked={form.clientMode === "new"} onChange={() => set("clientMode", "new")} />
               New client
@@ -332,7 +349,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
             </label>
           </div>
 
-          {form.clientMode === "new" ? (
+          {startFrom ? null : form.clientMode === "new" ? (
             <>
               <Text label="Client name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
               <Select label="Client type" value={form.clientType} onChange={(v) => set("clientType", v)} options={CLIENT_TYPES} />
@@ -424,7 +441,12 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
       <fieldset className="space-y-3 border-t pt-4">
         <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Client</legend>
-        <div className="flex gap-4 text-sm">
+        {startFrom && (
+        <p className="text-xs text-gold bg-gold-muted rounded px-2 py-1.5">
+          Starting from Opportunity "{startFrom.leadName}" -- client is fixed to {startFrom.clientName}.
+        </p>
+        )}
+        <div className={`flex gap-4 text-sm ${startFrom ? "hidden" : ""}`}>
           <label className="flex items-center gap-1">
             <input type="radio" checked={form.clientMode === "new"} onChange={() => set("clientMode", "new")} />
             New client
@@ -435,7 +457,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
           </label>
         </div>
 
-        {form.clientMode === "new" ? (
+        {startFrom ? null : form.clientMode === "new" ? (
           <>
             <Text label="Client name" value={form.clientName} onChange={(v) => set("clientName", v)} required />
             <Select label="Client type" value={form.clientType} onChange={(v) => set("clientType", v)} options={CLIENT_TYPES} />

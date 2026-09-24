@@ -275,3 +275,116 @@ def test_opportunity_changes_are_not_audit_logged(client, director_user):
         "/audit-log", params={"document_type": "opportunity", "document_id": row["id"]}, headers=headers
     ).json()
     assert entries == []
+
+
+# ---------------------------------------------------------------------------
+# Amendment 44 Phase C: Won -> Start Project hand-off
+# ---------------------------------------------------------------------------
+
+_PROJECT_FIELDS = {
+    "city": "Mumbai",
+    "site_condition": "level",
+    "soil_type": "normal",
+    "building_status": "open_air",
+    "site_access": "good",
+    "power_available": "yes",
+    "water_available": True,
+    "package": "standard",
+}
+
+
+def _won_linked_opportunity(client, headers):
+    client_row = _create_client_record(client, headers)
+    opp = _create_opportunity(client, headers, client_id=client_row["id"])
+    res = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    assert res.status_code == 200, res.text
+    return client_row, res.json()
+
+
+def test_start_project_from_a_won_linked_opportunity(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_row, opp = _won_linked_opportunity(client, headers)
+
+    res = client.post(
+        "/projects",
+        json={"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    project = res.json()
+    assert project["opportunity_id"] == opp["id"]
+
+    back = client.get(f"/opportunities/{opp['id']}", headers=headers).json()
+    assert back["project_id"] == project["id"]
+
+
+def test_start_project_rejects_a_non_won_opportunity(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_row = _create_client_record(client, headers)
+    opp = _create_opportunity(client, headers, client_id=client_row["id"])  # still "new"
+
+    res = client.post(
+        "/projects",
+        json={"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+def test_start_project_rejects_a_lead_only_opportunity(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_row = _create_client_record(client, headers)
+    opp = _create_opportunity(client, headers)  # no client_id
+    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+
+    res = client.post(
+        "/projects",
+        json={"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+def test_start_project_rejects_a_client_mismatch(client, director_user):
+    headers = _director_headers(client, director_user)
+    _, opp = _won_linked_opportunity(client, headers)
+    other_client = _create_client_record(client, headers, name="Some Other Client")
+
+    res = client.post(
+        "/projects",
+        json={"client_id": other_client["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+def test_an_opportunity_can_only_start_one_project(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_row, opp = _won_linked_opportunity(client, headers)
+    payload = {"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS}
+
+    assert client.post("/projects", json=payload, headers=headers).status_code == 201
+    assert client.post("/projects", json=payload, headers=headers).status_code == 400
+
+
+def test_start_project_with_unknown_opportunity_is_404(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_row = _create_client_record(client, headers)
+    res = client.post(
+        "/projects",
+        json={
+            "client_id": client_row["id"],
+            "opportunity_id": "00000000-0000-0000-0000-000000000000",
+            **_PROJECT_FIELDS,
+        },
+        headers=headers,
+    )
+    assert res.status_code == 404
+
+
+def test_an_ordinary_project_has_no_opportunity_id(client, director_user):
+    headers = _director_headers(client, director_user)
+    client_row = _create_client_record(client, headers)
+    res = client.post("/projects", json={"client_id": client_row["id"], **_PROJECT_FIELDS}, headers=headers)
+    assert res.status_code == 201, res.text
+    assert res.json()["opportunity_id"] is None

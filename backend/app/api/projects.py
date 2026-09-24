@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.client import Client, ClientType
 from app.models.document import Quotation, QuotationStatus
 from app.models.hub import Hub
+from app.models.opportunity import Opportunity, OpportunityStage
 from app.models.project import (
     BuildingStatus,
     Package,
@@ -98,6 +99,10 @@ class ProjectCreate(BaseModel):
     # below, since backfilling a project created before this flag existed
     # needs no new Project data, just this one field).
     is_calibration: bool = False
+    # Amendment 44 Phase C (Section E step 5): set only when reached via
+    # "Start Project" on a Won, Client-linked Opportunity -- validated in
+    # create_project() below, null for every other creation path.
+    opportunity_id: uuid.UUID | None = None
 
 
 class ProjectOut(BaseModel):
@@ -124,6 +129,7 @@ class ProjectOut(BaseModel):
     existing_building_clear_height_ft: float | None
     tender_mode: bool
     is_calibration: bool
+    opportunity_id: uuid.UUID | None
     soil_test_required: bool = False  # derived, not stored — D.4; _to_out() sets the real value
 
     # D.4 site-prep triggers (B.2's worked examples), all derived — none
@@ -159,6 +165,24 @@ def create_project(
     client = db.query(Client).filter(Client.id == payload.client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
+
+    # Amendment 44 Phase C: validated up front so a rejected hand-off never
+    # leaves an orphan Project behind. Only a Won Opportunity already
+    # linked to *this* Client, and not already converted, may start one.
+    opportunity = None
+    if payload.opportunity_id is not None:
+        opportunity = db.query(Opportunity).filter(Opportunity.id == payload.opportunity_id).first()
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+        if opportunity.stage != OpportunityStage.WON:
+            raise HTTPException(status_code=400, detail="Only a Won Opportunity can start a Project")
+        if opportunity.client_id != payload.client_id:
+            raise HTTPException(
+                status_code=400,
+                detail="The Opportunity must be linked to this Client before it can start a Project",
+            )
+        if opportunity.project_id is not None:
+            raise HTTPException(status_code=400, detail="This Opportunity has already started a Project")
 
     # Amendment 5 Phase 2 (Section 6, extended by Section 22):
     # soil_type/site_access/power_available/water_available are the four
@@ -220,6 +244,10 @@ def create_project(
         return project
 
     project = create_with_retry(db, _build_project)
+    if opportunity is not None:
+        opportunity.project_id = project.id
+        db.commit()
+        db.refresh(project)
     return _to_out(project)
 
 
