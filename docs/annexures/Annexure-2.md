@@ -1519,6 +1519,55 @@ starting the next header. Grounded against current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-52-specs.md`).
 
+**Spec approved 24 September 2026 ("approve as proposed, all decisions").** Delivered as three
+ordered PRs, each merged, deployed and checked against what production actually serves
+before the next began.
+
+**Part C -- phone layout (PR #176, deployed `10a58f6`).** Root cause fixed at `App.jsx:150`
+(`flex flex-col sm:flex-row`), plus wrapping/stacking of header rows and control clusters and
+responsive widths on the four screens. **Verified** in real Chrome mobile emulation (touch,
+correct viewport) as a Sales user: the width each screen needs went from 581 / 753 / 641 /
+522px to exactly the viewport width at **375, 414, 768 and 1280px**, with no overflowing
+elements, a working hamburger menu and zero JS errors.
+
+**Part A -- edit details (PR #177, deployed `8b71a35`).** `PATCH /opportunities/{id}/details`
+and `PATCH /clients/{id}/details`; blank names refused after trimming; omitted contact fields
+untouched, null/blank clears them; leads editable at any stage; clients `sales`/`pm`/`director`;
+client *type* not editable; only a client **name** change is audit-logged. Shared inline
+`EditDetailsForm` on Opportunities and Leads & Clients (hidden from Procurement); client cards
+now show their contact line. 17 new tests (68 related pass); real-Chrome check 12/12 at 375px.
+No migration.
+
+**Part B -- Leads & Clients restructure (PR #178, deployed `e535432`).** All / Leads / Clients
+tabs with counts (leads = lead-only, non-Lost Opportunities), Lead/Client badge per row, lead
+rows with Edit details and "Open in Opportunities ->", name/phone/email search, collapsible Add
+Enquiry / Add a client forms, restyled header, and a failed load no longer shows a false empty
+state. Frontend only. Real-Chrome check 24/24, including tab counts equal to the API's own
+numbers, no overflow on any tab at 375px, and a separate desktop pass at 1280px.
+
+**Verified live (24 September 2026):** after each deploy, by what the server returns rather
+than the pasted output alone -- the served bundle changed each time (`index-DeWY-Pec.js` ->
+`index-NczabCfy.js` -> `index-ida_2CSV.js` -> `index-B7lZRA0W.js`), the downloaded bundles
+contain the new layout / Edit details / tabs-and-search text, and production's OpenAPI lists
+both new `/details` routes (an unauthenticated PATCH returns 401, a nonexistent route 404).
+
+**Open items -- not verified or not done:**
+- *Real phone not yet tested.* All phone results are real-Chrome mobile emulation. The
+  Director could not open the site on their phone ("This site can't be reached"); the site is
+  plain HTTP on a bare IP, and phone browsers and mobile networks increasingly refuse or
+  rewrite that to HTTPS. The site itself was confirmed up over HTTP from the development machine. **Suggested, not
+  yet registered:** HTTPS on a proper domain name (also stops passwords crossing the network
+  unencrypted).
+- *No authenticated click-through on production.* Parts A and B were exercised through the real
+  UI locally; production was checked for the served code and the routes, not by logging in and
+  editing a record. No active production Sales account exists to test that role.
+- *Local test data quirk:* the local dev database has a client with a blank name; the new form
+  correctly refuses to save that client until it is given a name. Whether production has any
+  blank-named client was not checked.
+
+**Next:** the next header, What's-next guidance (Amendment 40, spec Section 46, already
+approved), resumes from the shelved work.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
