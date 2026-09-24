@@ -147,7 +147,7 @@ export default function App() {
     const canResumeProject = activeProject && TOP_LEVEL_SCREENS.includes(screen) && screen !== "dashboard";
 
     return (
-      <div className="flex min-h-screen bg-base">
+      <div className="flex flex-col sm:flex-row min-h-screen bg-base">
         <Sidebar
           user={user}
           screen={screen}

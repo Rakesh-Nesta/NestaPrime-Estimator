@@ -222,15 +222,15 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   ];
 
   return (
-    <div className="max-w-[1600px] mx-auto mt-6 mb-10 space-y-6 px-6">
+    <div className="max-w-[1600px] mx-auto mt-6 mb-10 space-y-6 px-4 sm:px-6">
       <div className="rise" style={{ "--d": "0.05s" }}>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
             <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1">Business overview.</h2>
             <p className="text-sm text-text-secondary mt-1">Every relationship. Every opportunity. One clear view.</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => onDrillDown("reports", {})}
               title="Pinned for quick access"
@@ -264,7 +264,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 rise" style={{ "--d": "0.12s" }}>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 rise" style={{ "--d": "0.12s" }}>
         {realTiles.map((tile) =>
           tile.target ? (
             <button
@@ -295,7 +295,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         <ComingSoonTile label="Payments overdue" icon={CalendarIcon} />
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-5 rise" style={{ "--d": "0.2s" }}>
+      <div className="grid lg:grid-cols-2 gap-5 rise" style={{ "--d": "0.2s" }}>
         <ComingSoonPanel
           title="Orders & collections"
           description="Won order value vs. cash received, by month -- arrives with Payments."
@@ -343,8 +343,8 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-5 rise" style={{ "--d": "0.28s" }}>
-        <div className="sm:col-span-2 bg-surface border border-border-dark rounded-lg p-5">
+      <div className="grid lg:grid-cols-3 gap-5 rise" style={{ "--d": "0.28s" }}>
+        <div className="lg:col-span-2 bg-surface border border-border-dark rounded-lg p-5">
           <h3 className="font-heading font-semibold text-text-primary text-base mb-3">Recent projects</h3>
           {recentProjects.length === 0 ? (
             <p className="text-sm text-text-secondary">No projects yet -- create one to get started.</p>
@@ -354,21 +354,21 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
                 <li key={project.id}>
                   <button
                     onClick={() => onOpenProject(project.id)}
-                    className="w-full text-left py-3 flex items-center justify-between hover:bg-surface-raised px-2 rounded hover:-translate-y-0.5 transition-all duration-250 ease-out"
+                    className="w-full text-left py-3 flex items-center justify-between gap-3 hover:bg-surface-raised px-2 rounded hover:-translate-y-0.5 transition-all duration-250 ease-out"
                   >
-                    <span className="flex items-center gap-3">
+                    <span className="flex items-center gap-3 min-w-0">
                       <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-gold bg-gold-muted border border-gold/30 rounded-full px-2 py-0.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-gold" />
                         Open
                       </span>
-                      <span>
+                      <span className="min-w-0 break-words">
                         <span className="font-medium text-text-primary font-mono text-sm">{project.project_no}</span>{" "}
                         <span className="text-text-secondary">
                           · {project.client_name} · {project.city}
                         </span>
                       </span>
                     </span>
-                    <span className="text-sm text-gold">Open →</span>
+                    <span className="text-sm text-gold shrink-0">Open →</span>
                   </button>
                 </li>
               ))}
@@ -391,7 +391,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             <ul className="divide-y divide-border-dark">
               {nextMoves.map((c) => (
                 <li key={`${c.kind}-${c.id}`} className="py-2 flex items-center justify-between gap-2">
-                  <span className="text-sm text-text-primary truncate">
+                  <span className="text-sm text-text-primary truncate min-w-0">
                     {c.name}
                     {c.kind === "opportunity" && (
                       <span className="ml-2 text-[10px] uppercase tracking-wider text-text-secondary">lead</span>

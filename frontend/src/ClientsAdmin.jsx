@@ -218,9 +218,9 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
+    <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6 px-4 sm:px-0">
       <div className="bg-surface shadow rounded-lg p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-text-primary">Leads &amp; Clients</h2>
           {onBack && (
             <button onClick={onBack} className="text-sm text-gold hover:underline">
@@ -240,7 +240,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
       {canCreateClient(role) && (
         <form onSubmit={handleCreateClient} className="bg-surface shadow rounded-lg p-6 space-y-3">
           <h3 className="text-sm font-semibold text-text-secondary">Add a client</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-text-secondary">Name</label>
               <input
@@ -283,7 +283,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-text-secondary">Email</label>
               <input
                 type="email"
@@ -292,7 +292,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-text-secondary">Notes / remarks</label>
               <textarea
                 value={form.notes}
@@ -320,7 +320,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
             A raw lead -- just a name and contact, not a full client record yet. Every enquiry needs a follow-up
             date; there is no way to leave one blank.
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-text-secondary">Name</label>
               <input
@@ -359,7 +359,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-text-secondary">Notes / remarks</label>
               <textarea
                 value={enquiryForm.notes}
@@ -386,12 +386,12 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
       <div className="bg-surface shadow rounded-lg p-6 space-y-2">
         {clients.map((c) => (
           <div key={c.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="min-w-0 break-words">
               <span className="font-medium">{c.name}</span>{" "}
               <span className="text-xs text-text-secondary">({c.type})</span>
             </span>
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
               {canEditFlags && (
                 <>
                   <label className="flex items-center gap-1">
@@ -412,7 +412,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                   </label>
                 </>
               )}
-              <span className={`flex items-center gap-4 ${canEditFlags ? "border-l border-border-dark pl-4" : ""}`}>
+              <span className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${canEditFlags ? "sm:border-l border-border-dark sm:pl-4" : ""}`}>
                 <label className="flex items-center gap-1" title="Only message this client on WhatsApp if they have agreed to it.">
                   <input
                     type="checkbox"
@@ -457,7 +457,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
 
           {canCreateClient(role) && (
             <div
-              className={`flex items-center gap-2 text-xs ${
+              className={`flex flex-wrap items-center gap-2 text-xs ${
                 c.next_follow_up_date && c.next_follow_up_date < new Date().toISOString().slice(0, 10)
                   ? "text-red-400"
                   : "text-text-secondary"
@@ -478,7 +478,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                   setFollowUpDrafts((d) => ({ ...d, [c.id]: { ...d[c.id], note: e.target.value } }))
                 }
                 placeholder="Note (optional)"
-                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
+                className="flex-1 min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
               />
               <button onClick={() => saveFollowUp(c.id)} className="text-gold hover:underline shrink-0">
                 Save
@@ -487,14 +487,14 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
           )}
 
           {canCreateClient(role) && (
-            <div className="flex items-start gap-2 text-xs text-text-secondary">
+            <div className="flex flex-wrap items-start gap-2 text-xs text-text-secondary">
               <span className="font-medium pt-1 shrink-0">Notes</span>
               <textarea
                 value={notesDrafts[c.id] ?? c.notes ?? ""}
                 onChange={(e) => setNotesDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
                 rows={1}
                 placeholder="Notes / remarks (optional)"
-                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
+                className="flex-1 min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
               />
               <button onClick={() => saveNotes(c.id)} className="text-gold hover:underline shrink-0">
                 Save
