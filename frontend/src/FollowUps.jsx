@@ -56,10 +56,14 @@ export default function FollowUps({ token, userId, onBack }) {
   const [error, setError] = useState("");
   const [drafts, setDrafts] = useState({});
   const [onlyMine, setOnlyMine] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     Promise.all([listClients(token).then(setClients), listOpportunities(token).then(setOpportunities)])
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        setError(err.message);
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
   }, [token]);
 
@@ -128,7 +132,7 @@ export default function FollowUps({ token, userId, onBack }) {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {items.length === 0 ? (
+      {items.length === 0 && loadFailed ? null : items.length === 0 ? (
         <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
           {onlyMine
             ? "None of your leads has a follow-up date set right now."

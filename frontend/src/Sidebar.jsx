@@ -122,14 +122,26 @@ export default function Sidebar({
     setNavMenuOpen(false);
   }
 
+  // Amendment 46: GET /clients and /opportunities are gated to these four
+  // roles; site_engineer/ca_tax got a nav item that could only ever show a
+  // permission error, so they no longer see it (same idea as Team & Access
+  // being hidden from Sales).
+  const canSeeRelationships = ["sales", "pm", "director", "procurement"].includes(user.role);
+
   const primaryItems = [
     { key: "dashboard", label: "Overview", onClick: () => go("dashboard"), icon: GridIcon },
-    { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
-    { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
+    ...(canSeeRelationships
+      ? [
+          { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
+          { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
+        ]
+      : []),
     { key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon },
     { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
     { key: "__payments", label: "Payments", onClick: () => go("payments"), muted: true, badge: "Soon", icon: CalendarIcon },
-    { key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon },
+    ...(canSeeRelationships
+      ? [{ key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon }]
+      : []),
     ...(showTeamAccess ? [{ key: "settings", label: "Team & Access", onClick: () => go("settings"), icon: UsersIcon }] : []),
   ];
 
