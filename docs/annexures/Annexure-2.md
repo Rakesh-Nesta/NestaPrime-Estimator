@@ -1568,6 +1568,42 @@ both new `/details` routes (an unauthenticated PATCH returns 401, a nonexistent 
 **Next:** the next header, What's-next guidance (Amendment 40, spec Section 46, already
 approved), resumes from the shelved work.
 
+### Amendment No. 48 — CRM Header Gap Audit (All Eight Sidebar Headers vs. the Plan)
+**Registered 24 September 2026**, from the Director's request, after Amendment 47 closed the
+first three headers, to audit every CRM sidebar header against the plan
+(`docs/planning/2026-09-Sales-Experience-and-Dashboard-Plan.md`, Sections D0 and E) and the
+current code before choosing what to build next. **This entry is a record of findings, not a
+change:** it implements nothing, and each gap below needs its own Director-approved spec under
+this register's Change Process before being built.
+
+Findings (read from the code and register, not from memory; no live click-through):
+
+| Header | Status | Gaps |
+|---|---|---|
+| Overview | Done (36, 41, 46) | "Payments overdue" tile and "Orders & collections" panel are honest placeholders until Payments exists |
+| Leads & Clients | Done (42, 45, 46, 47) | `Client` has no owner field, so no per-rep "my clients" |
+| Opportunities | Done (44) | No link from a Quotation back to the Opportunity that produced it (plan step 8); "Open in Opportunities" opens the screen, not the record |
+| Follow-ups | Done (43, 44D) | None known |
+| Quotations | **Not done** | `Sidebar.jsx` `onQuotationsClick`: for every role except Director the item calls `handleNewProject()` -- it starts a new project rather than showing quotations; only the Director reaches a quotation list. Estimates still has no nav entry (plan mismatch #2) |
+| Projects | **Partly done** | Amendment 35 shipped. Approved but **not shipped:** 37 (city auto-fill -- `ProjectSetup.jsx:64` still hard-codes `city: "Mumbai"`), 38 (cost-sheet form stays live), 39 (scope-checklist bulk "not applicable"), 40 (what's-next guidance; half-built, shelved in `git stash@{0}`) |
+| Payments | **Not built** | Routes to `ComingSoon`; `WorkOrderPaymentEntry` exists but has no due dates, overdue tracking or screen; **nothing registered** for it |
+| Team & Access | **Never audited** | Nav item opens the Master Settings screen (User management and Role permissions tabs) -- a naming mismatch; contents confirmed by code read only |
+| More (Vendor, Tools, Reports, Admin, Education) | Placement decisions never signed off | Plan E.1 still lists them "needs a decision"; Help still sits inside Admin (mismatch #3); Reports gives Sales no note that only the Pipeline type is available (mismatch #4) |
+
+Cross-cutting gaps: **global quick search** (plan B.3) does not exist -- the only search is the
+one added to Leads & Clients in Amendment 47. **Quotation descriptiveness** (plan Section C) was
+never registered as an amendment; the Terms & Conditions setting already exists
+(`quotation_terms_and_conditions`), but whether the richer cover letter, descriptive scope of
+work and bank details exist was not confirmed. **Unverified in production:** the layout on a
+real phone (the operator's phone could not open the plain-HTTP, bare-IP site; HTTPS on a proper
+domain is suggested and still unregistered) and the Sales role (no active production account).
+
+**Recommended order (Director to confirm each):** (1) Amendment 40, What's-next guidance --
+approved, half-built; **started 24 September 2026 on the Director's instruction.** (2) Quotations
+header (plan step 8). (3) Payments (plan step 9; needs a spec). Then the approved leftovers 37-39,
+Team & Access naming (plan step 10) and the More-group placement decisions. Each becomes its own
+Amendment with its own spec.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
