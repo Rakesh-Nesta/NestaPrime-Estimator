@@ -11,6 +11,42 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PR #171: Amendment 44 Phase D (Dashboard wiring + combined Follow-ups)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `2806240` -> `0caf69d` (includes PR #172's docs-only close-out)
+**No migration.** Backend rebuild (`dashboard.py`) and frontend rebuild (`Dashboard.jsx`,
+`FollowUps.jsx`, `App.jsx`) both needed.
+
+The last piece of Amendment 44 / Section E step 5. The Dashboard's "Open opportunities" tile
+and "Sales pipeline" panel show real counts (counts only -- no fabricated value);
+`followups_due_count` now sums due Clients and due open Opportunities; "Your next moves"
+lists due leads alongside clients; the Follow-ups screen is one combined queue with a
+"My follow-ups" toggle that narrows leads to the signed-in user's own
+(`Opportunity.created_by_id`), keeping Clients visible with an explanatory note since
+Client has no owner field.
+
+**Rebuild was clean** -- `git pull` fast-forwarded `2806240..0caf69d`, no `Running upgrade`
+line (correct), backend log stamped 03:32:17 with both gunicorn workers `Application
+startup complete`, `/api/health` `{"status":"ok"}`. The deploy was not run immediately
+after the merge, so I confirmed it landed by polling production's `/api/dashboard` for the
+new `open_opportunities_count` field and the frontend bundle name changing, rather than
+assuming it. An earlier paste turned out to be the previous (Phase C) deploy's output
+again -- identified by its unchanged commit hashes and `02:42` log stamps -- which is why
+a deploy should be confirmed by what the *server* returns, not only by pasted output.
+
+**Live-verified in production:** created a throwaway due-today lead ("... Phase D Verify
+Lead (delete me)"); the API moved to 1 open / 1 new / 1 follow-up due; in the real UI the
+Dashboard showed Open opportunities 1, Follow-ups due 1, the New bar in Sales pipeline, and
+the lead in "Your next moves"; the Follow-ups screen listed it as "Due today" with the
+"My follow-ups" toggle showing its explanatory note; saving a note in place persisted.
+Closed the lead as Lost afterward and confirmed every count returned to 0.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-24 -- PR #170: Amendment 44 Phase C (Won -> Start Project hand-off)
 
 **Run by:** R. Patni (with AI development assistance)
