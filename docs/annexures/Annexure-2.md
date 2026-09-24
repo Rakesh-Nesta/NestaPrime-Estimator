@@ -1360,6 +1360,24 @@ confirmed it appeared on the Opportunities screen under "Leads", linked it to an
 throwaway "(delete me)" Client (confirmed it moved to the "Clients" filter), then set its
 stage to Lost -- left in that terminal, harmless state.
 
+**Implemented, Phase C, 24 September 2026 (PR #170, deployed to production same day).**
+Ships the Won -> Start Project hand-off (spec item 6): a "Start Project" button on a Won,
+Client-linked Opportunity opens New Project Setup with the client locked; `POST /projects`
+accepts `opportunity_id` and validates it before creating anything (must exist, be Won, be
+linked to the same Client, not already converted); the Project's `opportunity_id` and the
+Opportunity's `project_id` are set together. 7 new backend tests. No migration.
+
+**Live-verified in production:** `git pull` fast-forwarded to `2806240`, no migration line
+(correct), both gunicorn workers `Application startup complete`, `/api/health` OK. As
+`verify-director@nestaprime.local`, started a Project from a Won throwaway Opportunity
+through the real UI (P-2609-0020, on a "(delete me)" client), confirmed the two-way link
+via the API, and confirmed a second project from the same Opportunity is rejected (400).
+
+**Phase D, merged 24 September 2026 (PR #171, `1dfbbb0`), not yet deployed.** Dashboard
+wiring (real "Open opportunities" tile and "Sales pipeline" panel, counts only) and the
+combined Clients + Opportunities Follow-ups queue with the "My follow-ups" toggle (spec
+items 7-9). Amendment 44 closes once Phase D is deployed and live-verified.
+
 ### Amendment No. 45 — Leads & Clients Polish: Hide Admin-Only Flags, Add Notes Field
 **Registered 23 September 2026**, from a direct Director review of the Sales-facing
 surface audit above. Two related fixes to the Leads & Clients / Opportunities screens,
