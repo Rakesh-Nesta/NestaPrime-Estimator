@@ -89,7 +89,7 @@ next header starts.
 6. **Phone targets:** 375px and 414px, with 768px as a sanity check. Proposed: **yes**.
 
 ### Approval
-☐ Approved as proposed, all decisions
+☑ Approved as proposed, all decisions
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
