@@ -1492,6 +1492,33 @@ and Sales-role behaviours were verified locally on the same build (no such produ
 - *Sales role not exercised in production* for these headers (no active production Sales
   account); verified locally and in the deployed code path only.
 
+### Amendment No. 47 — Complete the First Three Headers (Lead/Client Details, Leads & Clients Tabs, Phone Layout)
+**Registered 24 September 2026**, from the Director's decision on the open items Amendment 46's
+audit recorded: complete Overview, Leads & Clients and Opportunities -- specifically (1) editing
+lead details, (2) Lead/Client tabs on Leads & Clients, and (3) the phone layout -- *before*
+starting the next header. Grounded against current code:
+- **No way to correct a name/phone/email.** `opportunities.py` has only `stage`, `follow-up`,
+  `link-client` and `notes` PATCH endpoints (lines 135/168/189/211); `clients.py`'s
+  `PATCH /{client_id}` (line 181) is the Director-only flags endpoint, alongside `consent`,
+  `follow-up`, `notes` (215/248/273). A typo in a lead's *or a client's* name, phone or email is
+  permanent today -- the same gap on both entities, though only the lead half was raised.
+- **Leads & Clients is one flat client list.** `ClientsAdmin.jsx` (`max-w-3xl`, line 221) renders
+  "Add a client" (242) and "Add Enquiry" (318) *above* the list (387), so a rep scrolls past two
+  forms to reach anyone; no search; leads (lead-only Opportunities) do not appear on it at all --
+  the Lead/Client distinction from the 23 September design input exists only on Opportunities.
+- **Phone layout is broken on all four completed headers.** Measured in real Chrome mobile
+  emulation (touch, 375px, correct viewport meta -- not the earlier unreliable pane emulator):
+  the width each screen needs is Overview **581px**, Leads & Clients **753px**, Opportunities
+  **641px**, Follow-ups **522px**, against a 375px phone. Screenshots show real damage
+  (truncated headings "Opportunit...", cut-off buttons, controls overflowing their cards).
+  **Root cause of the largest part:** `App.jsx:150` wraps the page in
+  `<div className="flex min-h-screen">` (a *row*); `Sidebar.jsx`'s mobile top bar (`sm:hidden`,
+  line ~258) is a sibling of `<main>`, so on a phone it becomes a ~180px left *column* beside the
+  content instead of a bar above it -- squeezing the real content to roughly 190px. The rest is
+  fixed-width controls (`w-32`, `min-w-[8rem]`, `shrink-0` clusters) and non-wrapping header rows.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-52-specs.md`).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
