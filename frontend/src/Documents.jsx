@@ -451,7 +451,13 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, estima
           {openLinesFor === cs.id && <RateBlindLinesPanel token={token} costSheetId={cs.id} role={role} />}
         </div>
       ))}
-      {role !== "sales" && (
+      {/* Amendment 38 (Section 44): this one input/button pair does two jobs --
+          "Create Cost Sheet" when none exists, and "Revise (new R+1)" for a
+          Verified one. It used to stay on screen for a Draft/Unverified sheet
+          too, as a live-looking input over a permanently greyed-out button.
+          It now renders only when it can act, so the Revise flow is untouched
+          (spec item 2) and the dead state is gone. */}
+      {role !== "sales" && (!active || active.status === "verified") && (
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -460,7 +466,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, estima
             onChange={(e) => setCostTotal(e.target.value)}
             className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
           />
-          {active && active.status === "verified" ? (
+          {active ? (
             <button
               onClick={() => handleRevise(active.id)}
               className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover"
@@ -470,8 +476,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, estima
           ) : (
             <button
               onClick={handleCreate}
-              disabled={!!active}
-              className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
+              className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover"
             >
               Create Cost Sheet
             </button>
