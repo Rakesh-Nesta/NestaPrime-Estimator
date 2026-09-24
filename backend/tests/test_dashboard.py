@@ -373,3 +373,90 @@ def test_recent_activity_visible_to_director_only(client, director_user, db_sess
     sales_res = client.get("/dashboard", headers=sales_headers)
     assert sales_res.status_code == 200, sales_res.text
     assert sales_res.json()["recent_activity"] is None
+
+
+# ---------------------------------------------------------------------------
+# Amendment 44 Phase D: Opportunities behind the Dashboard's numbers
+# ---------------------------------------------------------------------------
+
+
+def _create_opportunity(client, headers, follow_up, name="Dash Lead"):
+    res = client.post(
+        "/opportunities",
+        json={"lead_name": name, "next_follow_up_date": follow_up},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    return res.json()["id"]
+
+
+def test_followups_due_count_includes_opportunities_due_today_but_not_future_ones(client, director_user):
+    headers = _director_headers(client, director_user)
+    today = date.today().isoformat()
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    _create_opportunity(client, headers, today, "Due Today Lead")
+    _create_opportunity(client, headers, tomorrow, "Future Lead")
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["summary"]["followups_due_count"] == 1
+
+
+def test_followups_due_count_sums_clients_and_opportunities(client, director_user):
+    headers = _director_headers(client, director_user)
+    today = date.today().isoformat()
+    client_id = _create_client_record(client, headers)
+    client.patch(f"/clients/{client_id}/follow-up", json={"next_follow_up_date": today}, headers=headers)
+    _create_opportunity(client, headers, today)
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.json()["summary"]["followups_due_count"] == 2
+
+
+def test_won_and_lost_opportunities_never_count_as_due(client, director_user):
+    headers = _director_headers(client, director_user)
+    today = date.today().isoformat()
+    won_id = _create_opportunity(client, headers, today, "Won Lead")
+    lost_id = _create_opportunity(client, headers, today, "Lost Lead")
+    client.patch(f"/opportunities/{won_id}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(f"/opportunities/{lost_id}/stage", json={"stage": "lost"}, headers=headers)
+
+    res = client.get("/dashboard", headers=headers)
+    assert res.json()["summary"]["followups_due_count"] == 0
+
+
+def test_open_opportunities_and_pipeline_stage_counts(client, director_user):
+    headers = _director_headers(client, director_user)
+    future = (date.today() + timedelta(days=5)).isoformat()
+    _create_opportunity(client, headers, future, "New A")
+    _create_opportunity(client, headers, future, "New B")
+    contacted_id = _create_opportunity(client, headers, future, "Contacted A")
+    qualified_id = _create_opportunity(client, headers, future, "Qualified A")
+    won_id = _create_opportunity(client, headers, future, "Won A")
+    lost_id = _create_opportunity(client, headers, future, "Lost A")
+    client.patch(
+        f"/opportunities/{contacted_id}/stage",
+        json={"stage": "contacted", "next_follow_up_date": future},
+        headers=headers,
+    )
+    client.patch(
+        f"/opportunities/{qualified_id}/stage",
+        json={"stage": "qualified", "next_follow_up_date": future},
+        headers=headers,
+    )
+    client.patch(f"/opportunities/{won_id}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(f"/opportunities/{lost_id}/stage", json={"stage": "lost"}, headers=headers)
+
+    summary = client.get("/dashboard", headers=headers).json()["summary"]
+    assert summary["opportunities_new_count"] == 2
+    assert summary["opportunities_contacted_count"] == 1
+    assert summary["opportunities_qualified_count"] == 1
+    # Won and Lost are closed, so they are not "open".
+    assert summary["open_opportunities_count"] == 4
+
+
+def test_opportunity_counts_are_zero_when_there_are_none(client, director_user):
+    headers = _director_headers(client, director_user)
+    summary = client.get("/dashboard", headers=headers).json()["summary"]
+    assert summary["open_opportunities_count"] == 0
+    assert summary["opportunities_new_count"] == 0
