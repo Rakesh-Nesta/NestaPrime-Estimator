@@ -209,12 +209,16 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   }
   const tabs = [
     { key: "dashboard", label: "Overview", active: true },
-    { key: "clients_admin", label: "Leads & Clients", onClick: () => onDrillDown("clients_admin", {}) },
-    { key: "opportunities", label: "Opportunities", onClick: () => onDrillDown("opportunities", {}) },
+    ...(canSeeList
+      ? [
+          { key: "clients_admin", label: "Leads & Clients", onClick: () => onDrillDown("clients_admin", {}) },
+          { key: "opportunities", label: "Opportunities", onClick: () => onDrillDown("opportunities", {}) },
+        ]
+      : []),
     { key: "quotations", label: "Quotations", onClick: quotationsTabClick },
     { key: "projects_admin", label: "Projects", onClick: () => onDrillDown("projects_admin", {}) },
     { key: "payments", label: "Payments", onClick: () => onDrillDown("payments", {}) },
-    { key: "followups", label: "Follow-ups", onClick: () => onDrillDown("followups", {}) },
+    ...(canSeeList ? [{ key: "followups", label: "Follow-ups", onClick: () => onDrillDown("followups", {}) }] : []),
   ];
 
   return (
@@ -294,7 +298,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       <div className="grid sm:grid-cols-2 gap-5 rise" style={{ "--d": "0.2s" }}>
         <ComingSoonPanel
           title="Orders & collections"
-          description="Won order value vs. cash received, by month -- lands with Payments (Phase 7)."
+          description="Won order value vs. cash received, by month -- arrives with Payments."
         />
         <div className="bg-surface border border-border-dark rounded-lg p-5">
           <div className="flex items-center justify-between mb-3">

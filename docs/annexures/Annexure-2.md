@@ -1441,6 +1441,52 @@ and confirmed it persisted, created an Opportunity via "Add Enquiry" with notes 
 confirmed the same, then cleared the client's notes and moved the Opportunity to Lost
 (terminal, harmless) -- no live test data left active. Amendment 45 is now fully closed.
 
+### Amendment No. 46 — Completed-Header Audit Fixes (Overview, Leads & Clients, Opportunities, Follow-ups)
+**Registered and implemented 24 September 2026**, at the Director's instruction to check the
+completed headers before starting the next one. Small corrections to already-delivered work,
+made directly (same category as this register's earlier sizing/structural fixes -- no new
+capability, no schema or API change). Method: an API role matrix (`sales`, `pm`, `director`,
+`procurement`, and throwaway local `site_engineer`/`ca_tax` accounts) against `/dashboard`,
+`/clients`, `/opportunities`; real-UI walkthroughs as `site_engineer`, `ca_tax`, `sales` and
+`director`; a scripted click-through of all four screens with error capture (zero JS errors);
+and a code scan for placeholder/developer wording.
+
+**What held up:** every role gets `/dashboard` with the Phase D fields (200); `pm`/`procurement`
+can read clients and opportunities; `site_engineer`/`ca_tax` are correctly refused (403) on the
+two lists, and the Dashboard degrades cleanly for them (real counts, no "View all" link,
+"Follow-up details aren't available for your role").
+
+**Defects found and fixed:**
+1. *Data-honesty bug.* For a role refused by the API, Follow-ups, Opportunities and Leads &
+   Clients showed the permission error **and** an empty-state line ("No client or lead has a
+   follow-up date set right now") -- false, since records existed; the role simply could not
+   see them. The empty-state line is now suppressed when the load itself failed.
+2. *Dead navigation.* `site_engineer`/`ca_tax` were offered Leads & Clients, Opportunities and
+   Follow-ups (sidebar and Overview tab strip), which could only ever error. Hidden for those
+   roles (`Sidebar.jsx`, `Dashboard.jsx`), same idea as Team & Access being hidden from Sales.
+3. *Naming/copy.* The "Leads & Clients" header opened a page titled "Clients" with a paragraph
+   of blueprint text ("Part O: overdue_flag ..."); consent tooltips cited "M.7.2 rule 5" and
+   "Amendment 8"; the Overview panel said "lands with Payments (Phase 7)". All replaced with
+   plain user-facing wording; the Director-only flags sentence now shows only to a Director.
+
+**Verified after the fixes (local, real UI):** `ca_tax` sidebar/tab strip = Overview,
+Quotations, Projects, Payments, Team & Access; Sales sees "Leads & Clients", the plain blurb,
+no Overdue/Blacklisted controls, plain tooltips and the full nav; Director additionally sees
+the flags sentence and the Overdue/Blacklisted checkboxes.
+
+**Open items -- deliberately NOT fixed here, need a Director decision or a real device:**
+- *No way to correct a lead's name/phone/email* after "Add Enquiry" (only stage, follow-up,
+  notes and client link are editable). A typo in a telecaller's lead is permanent. Small
+  endpoint + UI; recommended.
+- *Leads & Clients is still one flat client list in the old admin styling.* The Lead/Client
+  tabs from the Director's 23 September design input were built on the Opportunities screen
+  instead. Decision needed: add the tabs to Leads & Clients too, or accept the current split.
+- *Phone-width layout is unverified.* The browser emulator reported a 581px viewport for a
+  375px request and rendered the desktop sidebar, so its result is not trustworthy; needs a
+  check on a real phone or resized real browser.
+- *Sales role not exercised in production* for these headers (no active production Sales
+  account); verified locally and in the deployed code path only.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

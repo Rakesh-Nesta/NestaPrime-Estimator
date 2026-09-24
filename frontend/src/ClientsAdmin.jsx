@@ -221,7 +221,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
     <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
       <div className="bg-surface shadow rounded-lg p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-primary">Clients</h2>
+          <h2 className="text-lg font-semibold text-text-primary">Leads &amp; Clients</h2>
           {onBack && (
             <button onClick={onBack} className="text-sm text-gold hover:underline">
               &larr; Back
@@ -229,9 +229,10 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
           )}
         </div>
         <p className="text-xs text-text-secondary mt-1">
-          Part O: "overdue_flag (blocks new Quotation release until Director clears), blacklist_flag (blocks new
-          Estimates)." Overdue/Blacklisted are Director-only -- only shown to a Director, not just disabled for
-          everyone else; consent toggles are open to Sales/PM/Director.
+          Everyone you sell to, with their consent preferences and follow-up reminders. New enquiries that
+          aren&apos;t a client yet go in &quot;Add Enquiry&quot; below.
+          {canEditFlags &&
+            " Overdue blocks releasing new Quotations and Blacklisted blocks new Estimates -- only a Director can set either."}
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
@@ -412,7 +413,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 </>
               )}
               <span className={`flex items-center gap-4 ${canEditFlags ? "border-l border-border-dark pl-4" : ""}`}>
-                <label className="flex items-center gap-1" title="M.7.2 rule 5 (DPDP Act)">
+                <label className="flex items-center gap-1" title="Only message this client on WhatsApp if they have agreed to it.">
                   <input
                     type="checkbox"
                     checked={c.whatsapp_opt_in}
@@ -420,7 +421,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                   />
                   WhatsApp opt-in
                 </label>
-                <label className="flex items-center gap-1" title="M.7.2 rule 5 (DPDP Act)">
+                <label className="flex items-center gap-1" title="Leave ticked unless the client has asked not to receive email.">
                   <input
                     type="checkbox"
                     checked={c.email_opt_in}
@@ -430,7 +431,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
                 </label>
                 <label
                   className="flex items-center gap-1"
-                  title="Amendment 8: a bot can only message a chat that has messaged it first"
+                  title="A Telegram bot can only message a chat that has messaged it first."
                 >
                   <input
                     type="checkbox"
@@ -538,7 +539,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
           </div>
         </div>
         ))}
-        {clients.length === 0 && <p className="text-sm text-text-secondary">No clients yet.</p>}
+        {clients.length === 0 && !error && <p className="text-sm text-text-secondary">No clients yet.</p>}
       </div>
     </div>
   );

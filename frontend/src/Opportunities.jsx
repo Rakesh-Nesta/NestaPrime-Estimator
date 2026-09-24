@@ -41,6 +41,7 @@ export default function Opportunities({ token, onBack, onStartProject }) {
   const [drafts, setDrafts] = useState({});
   const [linkPicks, setLinkPicks] = useState({});
   const [notesDrafts, setNotesDrafts] = useState({});
+  const [loadFailed, setLoadFailed] = useState(false);
 
   function load() {
     return listOpportunities(token, { relationship: relationship || undefined }).then(setOpportunities);
@@ -49,7 +50,10 @@ export default function Opportunities({ token, onBack, onStartProject }) {
   useEffect(() => {
     setLoading(true);
     Promise.all([load(), listClients(token).then(setClients)])
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        setError(err.message);
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, relationship]);
@@ -152,7 +156,7 @@ export default function Opportunities({ token, onBack, onStartProject }) {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {opportunities.length === 0 ? (
+      {opportunities.length === 0 && loadFailed ? null : opportunities.length === 0 ? (
         <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
           No opportunities in this view yet.
         </p>
