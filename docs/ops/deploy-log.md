@@ -11,6 +11,59 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PRs #193 + #194: Amendment 37 (client city and Project Setup auto-fill)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `e19880e` -> `54ff6a0`
+**Backend rebuild WITH a migration (`c37a4e8b2f19`) + frontend rebuild** (`clients.py`, `models/client.py`,
+`ClientsAdmin.jsx`, `EditDetailsForm.jsx`, `ProjectSetup.jsx`).
+
+**A first attempt did not deploy anything.** The frontend was rebuilt and copied while the server was
+still at `e19880e` -- `git pull` had not been run -- so the build was of the old code and the served
+bundle stayed `index-BGiDOpm9.js`; production's API also still had no `city`. Found by re-checking
+production's served bundle name and its OpenAPI rather than trusting the paste. (Same failure class as
+the earlier wrong copy path and skipped copy step: only what the server serves proves a deploy.)
+
+**The successful run, in order:** `git pull` fast-forwarded `e19880e..54ff6a0`; `docker compose -f
+docker-compose.prod.yml up -d --build backend` rebuilt and restarted the backend and its log shows
+`Running upgrade b50a7c1d9e42 -> c37a4e8b2f19, add city to clients (Amendment 37)` then "Application
+startup complete" from both workers, no error; `/api/health` `{"status":"ok"}`; then the frontend was
+built and copied from `/tmp/nestaprime-frontend/dist/*` and the served page changed to
+`index-BPfOBPdb.js` (CSS `index-1PE5H3qy.css` unchanged). Verified from production: OpenAPI has `city` on
+`ClientOut`, `ClientCreate` and `ClientDetailsUpdate` (100-character limit on the last two), the payments
+routes are still present, and anonymous `GET /clients` and `PATCH /clients/{id}/details` return 401; the
+downloaded bundle contains "City (optional)" and "Pre-fills the city of this client" and every earlier
+release's text.
+
+**Note:** the server's working tree shows uncommitted local changes to `deploy/backup_db.sh` and
+`deploy/restore_drill.sh` (`git status` on the server); they did not affect this deploy and were not
+investigated.
+
+**Not verified in production:** a logged-in Add a client / Edit details / Project Setup screen; behaviour
+on real data (existing clients have no city).
+
+---
+
+## 2026-09-24 -- PR #192: Amendments 38 and 39 (dead cost-sheet form; bulk scope checklist controls)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `6956161` -> `e19880e` (includes PR #191's docs-only close-out)
+**Frontend-only** -- no migration, no backend rebuild (`Documents.jsx`, `ScopeChecklist.jsx`).
+
+`git pull` fast-forwarded `6956161..e19880e`; frontend Docker build clean; copied from
+`/tmp/nestaprime-frontend/dist/*`; the served page changed from `index-D8AQs2CR.js` to
+`index-BGiDOpm9.js` (the CSS file name, `index-1PE5H3qy.css`, did not change); `/api/health`
+`{"status":"ok"}`. Confirmed by downloading the served bundle: it contains "Select all", "Clear all",
+"could not be saved" and "The list shows what was saved."; it still contains "Revise (new R+1)", "Create
+Cost Sheet", "start an empty Cost Sheet" and "request to skip this stage"; the Create button's styling no
+longer carries `disabled:opacity-50`; and every earlier release (Payments, the Overview tile, Quotations,
+the What's-next hints, the Leads & Clients search, the phone layout) is still present.
+
+**Not verified in production:** a logged-in Documents or Scope Checklist screen (no login was used for
+this deploy; both were exercised in real Chrome locally against the identical code).
+
+---
+
 ## 2026-09-24 -- PRs #189 + #190: Amendment 50 Parts B and C (frontend deploy)
 
 **Run by:** R. Patni (with AI development assistance)

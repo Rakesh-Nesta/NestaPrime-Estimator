@@ -1146,6 +1146,64 @@ ever copied into `form.city`. Root cause is structural, not a missed line: `Clie
 regardless of that client's real city, and must remember to correct it. Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Spec approved 22 September 2026 ("approve as proposed, all decisions"). Implemented 24
+September 2026 as two ordered PRs (#193 backend + migration, #194 screens), merged as `ba95381`
+and `54ff6a0`.**
+- **Part A (PR #193).** A nullable `Client.city` (String 100) -- the definition reused from the old
+  paused branch `amendment-37-client-city-autofill`, whose open scope question (create-only vs. also
+  editing) Amendment 47's client editing settled -- via hand-written migration `c37a4e8b2f19` (run
+  up, down and up on the development database). `ClientCreate`, `ClientDetailsUpdate` (Amendment 47's
+  edit endpoint) and `ClientOut` gain `city`: optional, trimmed, blank means none, at most 100
+  characters (422 beyond), touched on edit only when sent. **Not audit-logged**, like phone and email
+  (only a client rename is); same `sales`/`pm`/`director` gate as the other detail edits. **Not
+  backfilled from `billing_address`** -- free-text parsing could silently give a real client the
+  wrong city. A client's city never changes an existing project.
+- **Part B (PR #194).** An optional City field on "Add a client" and on the client's "Edit details"
+  form (pre-filled on edit). In Project Setup, choosing an existing client pre-fills the project's
+  city from that client's own record **only when it has one**; a client with no city leaves whatever
+  the user already had (never forced back to "Mumbai" or blank). It applies once per selected
+  client, so the user's own later change is never overwritten, and it also works from a Won lead's
+  "Start Project" (client already locked).
+- **Two things beyond the spec's literal wording, both needed for correctness.** (1) The spec says to
+  extend the effect that fills package and payment terms, but that effect only re-runs when the client
+  **type** changes, so two clients of the same type would never re-trigger a city fill -- the city
+  fill is its own effect keyed on the selected client. (2) The city dropdown (`SelectWithOther`)
+  decides whether to show its "Others" text box only when it first appears, so a client city that is
+  not on its list (e.g. Nagpur) needs a remount key. **Verified by removal:** without the key, picking
+  a Nagpur client leaves the field showing "Mumbai" -- a project would be submitted under the wrong
+  city with no sign of it.
+- **Deliberately not done:** city is not shown as a column in the client list (spec decision 2), and
+  it is not copied from a project's city when a client is created inline in Project Setup (not in the
+  spec; a head-office city and a project's site city can differ).
+
+**Verified locally.** 13 new backend tests (75 pass across them and the related client suites:
+defaults to null; create with a city, trimmed; blank creates none; over-long refused on create and
+edit; add / omit / clear on edit; no audit row; sales may edit and procurement may not; an existing
+project's city unchanged; city not derived from the billing address); the migration run up, down and
+up; and real Chrome against the local API -- 31/31 checks (Add a client and Edit details; Project Setup
+filling a listed city, an unlisted city shown in the Others box, leaving the user's value when the
+client has none, not overwriting the user's own choice, filling for a second client of the same type,
+and switching back to the dropdown; the Won-lead "Start Project" path; Sales; no sideways overflow at
+375 and 414px; no JS errors).
+
+**Deployed to production 24 September 2026 (`54ff6a0`), backend first and then the frontend.** The
+migration ran (`b50a7c1d9e42 -> c37a4e8b2f19`) and both workers started cleanly. Production's OpenAPI
+now has `city` on `ClientOut`, `ClientCreate` and `ClientDetailsUpdate` (the last two capped at 100
+characters), with the payments routes still present and anonymous `GET /clients` and `PATCH
+/clients/{id}/details` answering 401. The served bundle changed (`index-BGiDOpm9.js` ->
+`index-BPfOBPdb.js`); downloaded from production it contains the City field ("City (optional)" on both
+forms, and the placeholder "Pre-fills the city of this client's new projects") and still contains every
+earlier release. **A first attempt shipped nothing:** the frontend was rebuilt and copied while the server
+was still at the older commit `e19880e` (no `git pull` first), so it rebuilt the old code and the bundle
+name did not change -- caught by checking the served bundle name and the API, not the paste.
+
+**Open items -- not verified or not done:**
+- *Existing clients have no city*, and none is guessed, so the auto-fill will do nothing for them
+  until someone fills the City in from Leads & Clients; it only starts to help as cities are entered.
+- *No logged-in check on production*, and no production client's city has been looked at: the auto-fill's behaviour on real data is unverified (every existing client has no city until one is entered).
+- The paused branch `amendment-37-client-city-autofill` (one WIP commit) is superseded and can be
+  deleted; it has not been.
+
 ### Amendment No. 38 — Create-Cost-Sheet Form Stays Live After a Sheet Already Exists
 **Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
 Section A.2, re-confirmed by direct read). `frontend/src/Documents.jsx:451-477`: the
@@ -1159,6 +1217,34 @@ today only because the gate is role-based, not existence-based -- although Sales
 submit it either way (`COST_ROLES`). Needs a Director-approved spec before implementation,
 per this register's own Change Process.
 
+**Spec approved 22 September 2026 ("approve as proposed, all decisions"). Implemented 24 September
+2026 (PR #192, merged and deployed as `e19880e`; Amendments 38 and 39 shipped together).** Frontend
+only (`Documents.jsx`).
+
+**One deliberate deviation from the spec's literal wording.** Item 1 says to add `&& !active`. But the
+input/button pair does two jobs: "Create Cost Sheet" when none exists, and **"Revise (new R+1)"** for a
+**Verified** sheet. `&& !active` would have removed the Revise flow, contradicting the spec's own item 2
+("no change to ... the Revise flow"). The pair is therefore shown when there is **no sheet (create) or
+a Verified sheet (revise)** and hidden for **Draft** and **Unverified** (skip-generated) sheets, the only
+states where it did nothing (a live-looking input over a permanently greyed-out button). Sales behaviour
+is unchanged.
+
+**Verified.** Real Chrome against the local API, per Cost Sheet state: no sheet -- the create form is
+exactly as before, with the skip-request flow and the "start an empty Cost Sheet" link unaffected;
+**Draft -- form gone entirely** (no input, no disabled button); **Unverified -- gone**; **Verified -- the
+Revise flow still there**; Sales sees no form in any state; **Create still works** (the sheet appears and
+the form then disappears) and **Revise still works** (a new R2 draft, R1 superseded); no sideways
+overflow at 375 and 414px; no JS errors.
+
+**Deployed to production 24 September 2026 (`e19880e`).** Confirmed by the served bundle changing
+(`index-D8AQs2CR.js` -> `index-BGiDOpm9.js`) and by downloading it: it still contains "Revise (new R+1)",
+"Create Cost Sheet", "start an empty Cost Sheet" and "request to skip this stage", and the Create
+button's styling no longer carries the `disabled:opacity-50` class that marked the dead state.
+
+**Open items:** no logged-in check on production; the Sales role was checked on one project only; the
+spec's wording (item 1) was not followed literally, for the reason above -- the Director may prefer to
+amend the spec text.
+
 ### Amendment No. 39 — Scope Checklist Has No Bulk "Not Applicable" Control
 **Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
 Section A.3, re-confirmed by direct read -- the Director noted this had already been
@@ -1170,6 +1256,30 @@ by design (Part I, Exclusions) -- correct behaviour -- but a Sales rep who wants
 exclude most of the 30 items (the common case for a simple single-sport project) must
 click each one individually with no shortcut. Needs a Director-approved spec before
 implementation, per this register's own Change Process.
+
+**Spec approved 22 September 2026 ("approve as proposed, all decisions"). Implemented 24 September
+2026 (PR #192, merged and deployed as `e19880e`, with Amendment 38).** Frontend only
+(`ScopeChecklist.jsx`): each of the six groups gains **Select all** and **Clear all**, scoped to that
+group, using the same add/remove calls a single tick already makes (no new endpoint, no new "reviewed"
+state), plus a per-group "(n of m)" count. Select all disables when the group is full and Clear all when
+it is empty. **Each item saves independently, so the list only ever shows what really saved:** if some
+fail, the successes stay and the message says how many did not. No confirmation dialog (spec decision 2).
+
+**Verified.** Real Chrome against the local API on a fresh project: starts at 0 of 30 with every Clear
+all disabled; Select all on Electrical checks exactly its 7 items and the API holds exactly those 7, other
+groups untouched and the "N of 30 included" line updating; an individual tick still works; Select all after
+a manual tick adds only the missing items (no duplicates, no error); Clear all removes that group only and
+the API agrees; **a forced HTTP 500 on one item left the screen and the API both at 3 of 4** with "1 of 4
+items could not be saved (forced failure). The list shows what was saved."; no sideways overflow at 375 and
+414px; no JS errors.
+
+**Deployed to production 24 September 2026 (`e19880e`).** The downloaded bundle `index-BGiDOpm9.js`
+contains "Select all", "Clear all", "could not be saved" and "The list shows what was saved.", and still
+contains every earlier release (Payments, Quotations, the What's-next hints, the Leads & Clients search).
+
+**Open items:** no logged-in check on production; the checklist was not clicked through as a Sales user
+(it has no role gating); a bulk action sends one request per item at once (at most nine for the largest
+group).
 
 ### Amendment No. 40 — No "What's Next" Guidance for Sales Across the Document Stages
 **Registered 22 September 2026** (from the Director's screenshot-reported UX complaints,
