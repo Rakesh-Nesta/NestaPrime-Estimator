@@ -15,8 +15,12 @@ from app.models.document import Estimate, EstimateStatus, Quotation, QuotationSt
 from app.models.opportunity import TERMINAL_STAGES, Opportunity, OpportunityStage
 from app.models.project import Project
 from app.models.user import User, UserRole
+from app.services import payments as payments_service
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+# Amendment 50: the roles that may open the Payments header (see payments.py).
+PAYMENTS_ROLES = ("pm", "director", "ca_tax")
 
 # Amendment 4 (Annexure 2): "business-summary dashboard ... the app itself
 # is the training." Recent activity reuses the audit log's own existing
@@ -51,9 +55,40 @@ class RecentProjectOut(BaseModel):
     created_at: datetime
 
 
+class PaymentsMonthOut(BaseModel):
+    month: str  # "YYYY-MM"
+    awarded_value: float
+    cash_received: float
+
+
+class PaymentsOverview(BaseModel):
+    """Amendment 50 (Section 54): behind the Overview's "Payments overdue"
+    tile and "Orders & collections" panel. Every figure is derived by
+    app.services.payments from entered milestones and receipts -- nothing is
+    estimated. overdue_count is the number of Work Orders with an overdue
+    milestone (the same number the Payments screen's Overdue tab lists);
+    tracked_milestones_count is 0 until someone enters a due date, and the
+    screen then shows "--", never a fabricated zero."""
+
+    tracked_milestones_count: int
+    overdue_count: int
+    overdue_milestones_count: int
+    overdue_amount: float
+    work_orders_count: int
+    awarded_value_total: float
+    cash_received_total: float
+    tds_total: float
+    outstanding_total: float
+    months: list[PaymentsMonthOut]
+
+
 class DashboardOut(BaseModel):
     summary: DashboardSummary
     recent_projects: list[RecentProjectOut]
+    # None for roles that cannot open the Payments header (everyone but
+    # pm / director / ca_tax) -- same "return only what the role may see"
+    # rule as recent_activity below.
+    payments: PaymentsOverview | None = None
     # None for every role but Director -- matches audit_log.py's own
     # Director-only gate rather than inventing a broader one here.
     recent_activity: list[AuditLogEntryOut] | None
@@ -202,4 +237,9 @@ def get_dashboard(
         ),
         recent_projects=recent_projects,
         recent_activity=recent_activity,
+        payments=(
+            PaymentsOverview(**payments_service.build_overview(db, date.today()))
+            if current_user.role.value in PAYMENTS_ROLES
+            else None
+        ),
     )
