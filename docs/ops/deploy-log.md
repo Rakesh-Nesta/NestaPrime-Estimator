@@ -11,6 +11,63 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PRs #189 + #190: Amendment 50 Parts B and C (frontend deploy)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `f10548e` -> `6956161` (the backend for this Amendment was already live from the
+previous entry)
+**Frontend-only** -- no migration, no backend rebuild (`Payments.jsx`, `PaymentsDetail.jsx`,
+`money.js`, `Documents.jsx`, `Sidebar.jsx`, `Dashboard.jsx`, `OverviewPayments.jsx`, `api.js`,
+`App.jsx`; `ComingSoon.jsx` removed).
+
+`git pull` fast-forwarded `f10548e..6956161`; frontend Docker build clean; **this time the files were
+copied** (`sudo cp -r /tmp/nestaprime-frontend/dist/* /var/www/nestaprime/dist/`) and the served
+page changed from `index-BY1Qsrjh.js` / `index-DD5OqEbn.css` to `index-D8AQs2CR.js` /
+`index-1PE5H3qy.css`; `/api/health` `{"status":"ok"}`. Confirmed by downloading the served bundle:
+it contains the Payments screen ("What each Work Order is worth", "Expected payments", "Payments
+received", "Milestones & payments", "Open in Payments") and the Overview's tile and panel
+("Payments overdue", "No due dates set", "counted by award date", "Nothing awarded or received in the
+last six months.", "No Work Orders yet"); it contains **no** "Coming soon", "arrives with Payments"
+or "lands in a later phase" text; and it still contains the Quotations screen text, the What's-next
+hints, the Leads & Clients search and the phone layout.
+
+**Not verified in production:** a logged-in Payments screen or Overview (no login was used for this
+deploy; the UI was exercised in real Chrome locally against the identical code); what production's
+existing Work Orders look like on first load; the Sales, PM and CA/Tax roles (no such production
+accounts were used).
+
+---
+
+## 2026-09-24 -- PRs #188 + #189: Amendment 50 Parts A and B (backend deployed; frontend copy skipped)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `12b0e68` -> `f10548e` (includes the docs-only spec PR #187)
+**Backend rebuild + frontend build, WITH a migration** (`b50a7c1d9e42`). **Only the backend went
+live.**
+
+`git pull` fast-forwarded `12b0e68..f10548e`; `docker compose -f docker-compose.prod.yml up -d
+--build backend` rebuilt and restarted the backend (db healthy). The backend log shows `Running
+upgrade 324c6521d698 -> b50a7c1d9e42, add work order payment milestones and receipt-to-milestone
+link (Amendment 50)` followed by "Application startup complete" from both workers, with no error;
+`/api/health` `{"status":"ok"}`. Production's OpenAPI now lists `GET /payments`, `GET/POST
+/work-orders/{id}/payment-milestones`, `GET /work-orders/{id}/payment-summary`, `PATCH/DELETE
+/payment-milestones/{id}` and `PATCH /payment-entries/{id}`, and `DashboardOut` has the `payments`
+block; anonymous `GET /payments` and the milestone routes return 401.
+
+**The frontend was built on the server but never copied into the web folder.** The pasted commands
+went from the frontend `docker build` straight to the check, skipping `sudo cp -r
+/tmp/nestaprime-frontend/dist/* /var/www/nestaprime/dist/`. Caught by downloading the served
+bundle: `index-BY1Qsrjh.js` was unchanged from the previous release and contained none of the new
+Payments text. Production therefore still served the old placeholder Payments page while the API
+behind it was already new. (Same failure class as the wrong copy path on 24 September's first
+Part C deploy: `git pull` and `docker build` succeeding does not mean the site changed -- only the
+served bundle proves it.)
+
+**Not verified in production at this point:** anything about the Payments screen -- the frontend was
+deployed afterwards; see the next entry up.
+
+---
+
 ## 2026-09-24 -- PRs #184 + #185: Amendment 49 (Quotations header)
 
 **Run by:** R. Patni (with AI development assistance)
