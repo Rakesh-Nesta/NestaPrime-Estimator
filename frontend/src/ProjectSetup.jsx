@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addProjectSport,
   createClient,
@@ -127,6 +127,30 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
   const selectedExistingClient = clients.find((c) => c.id === form.existingClientId);
   const effectiveClientType = form.clientMode === "new" ? form.clientType : selectedExistingClient?.type;
+
+  // Amendment 37 (Section 43): choosing an existing client pre-fills the
+  // project's city from that client's own record -- but ONLY when the client has
+  // one. A client with no city on record leaves whatever the user already had;
+  // it never forces the field back to "Mumbai" or blank. It only changes what
+  // the form starts with (like package/payment terms), never an existing project.
+  // Its own effect, applied once per selected client: the type-defaults effect
+  // below only re-runs when the client TYPE changes, so two clients of the same
+  // type would never re-trigger it.
+  const cityFilledFor = useRef(null);
+  // SelectWithOther decides whether to show its "Others" text box once, when it
+  // first appears. A client's free-text city (e.g. "Nagpur") is not in the
+  // dropdown's list, so bumping this key remounts the field with the new value
+  // and it shows the real city instead of a blank "Select...".
+  const [cityFieldKey, setCityFieldKey] = useState(0);
+  useEffect(() => {
+    if (form.clientMode !== "existing" || !selectedExistingClient) return;
+    if (cityFilledFor.current === selectedExistingClient.id) return;
+    cityFilledFor.current = selectedExistingClient.id;
+    if (selectedExistingClient.city) {
+      setForm((f) => ({ ...f, city: selectedExistingClient.city }));
+      setCityFieldKey((k) => k + 1);
+    }
+  }, [form.clientMode, selectedExistingClient]);
 
   // B.2: "Client = School -> Package Standard . Payment 40/40/20" -- both
   // prefilled here as a starting suggestion whenever the effective client
@@ -385,7 +409,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
           </p>
         )}
 
-        <SelectWithOther label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES} required />
+        <SelectWithOther key={cityFieldKey} label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES} required />
         {cityInfo && !cityInfo.is_confirmed && (
           <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
             Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
@@ -498,7 +522,7 @@ export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComp
 
       <fieldset className="space-y-3 border-t pt-4">
         <legend className="text-sm font-medium text-text-secondary -mt-7 bg-surface pr-2">Site</legend>
-        <SelectWithOther label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES} required />
+        <SelectWithOther key={cityFieldKey} label="City / district" value={form.city} onChange={(v) => set("city", v)} options={CITIES} required />
         {cityInfo && !cityInfo.is_confirmed && (
           <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1">
             Regional multipliers for {form.city} are seeded placeholders, not yet Director-confirmed.
