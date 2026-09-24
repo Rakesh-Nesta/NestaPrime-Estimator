@@ -11,6 +11,38 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PR #174: Amendment 46 (completed-header audit fixes)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `0caf69d` -> `1ab5a89` (includes PR #173's docs-only close-out)
+**Frontend-only** -- no migration, no backend rebuild. Diffed against the previous deploy
+before handing over commands: only `Sidebar.jsx`, `Dashboard.jsx`, `ClientsAdmin.jsx`,
+`FollowUps.jsx`, `Opportunities.jsx` (plus docs) changed, nothing under `backend/`.
+
+Fixes from the pre-next-header audit: a role refused by the API no longer sees a false
+"nothing here" empty state; `site_engineer`/`ca_tax` no longer get Leads & Clients /
+Opportunities / Follow-ups nav items and tabs; the Leads & Clients page is titled to match
+its nav item with plain-language copy and tooltips; the Overview placeholder no longer says
+"Phase 7".
+
+**Rebuild was clean** -- `git pull` fast-forwarded `0caf69d..1ab5a89`, the frontend Docker
+build completed, `/api/health` `{"status":"ok"}`. Deployment confirmed by the served frontend
+bundle changing (`index-CTIu5qul.js` -> `index-DeWY-Pec.js`), not only by the pasted output.
+
+**Live-verified in production** as `verify-director@nestaprime.local` (real UI): Leads &
+Clients heading, the plain-language blurb including the Director-only flags sentence, the
+Overdue/Blacklisted checkboxes present for a Director, the plain WhatsApp tooltip, the
+Overview placeholder reading "arrives with Payments", and the full Director nav/tab strip
+intact (nothing over-hidden). **Not verifiable in production:** the restricted-role
+behaviours (`site_engineer`/`ca_tax` nav hiding, Sales not seeing the flags) -- no such
+active production accounts exist. Those were verified in the real UI locally against the
+identical code, and production is serving that same build.
+
+**Smoke test:** confirmed working end-to-end as described above, not just a health-check
+curl.
+
+---
+
 ## 2026-09-24 -- PR #171: Amendment 44 Phase D (Dashboard wiring + combined Follow-ups)
 
 **Run by:** R. Patni (with AI development assistance)
