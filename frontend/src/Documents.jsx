@@ -205,6 +205,7 @@ export default function Documents({ token, project, role, onBack }) {
             role={role}
             costSheets={costSheets}
             skipRequests={skipRequests}
+            estimates={estimates}
             onAction={withErrorHandling}
             onBuild={setBuilderCostSheet}
           />
@@ -217,6 +218,7 @@ export default function Documents({ token, project, role, onBack }) {
             projectSports={projectSports}
             sportsById={sportsById}
             estimates={estimates}
+            quotations={quotations}
             onAction={withErrorHandling}
           />
 
@@ -339,7 +341,7 @@ function RateBlindLinesPanel({ token, costSheetId, role, onChanged }) {
   );
 }
 
-function CostSheetPanel({ token, project, role, costSheets, skipRequests, onAction, onBuild }) {
+function CostSheetPanel({ token, project, role, costSheets, skipRequests, estimates, onAction, onBuild }) {
   const [costTotal, setCostTotal] = useState("");
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
@@ -382,6 +384,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
   return (
     <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-text-secondary">Cost Sheet (M.1 stage 1)</h3>
+      <StageHint text={costSheetHint(costSheets, skipRequests, estimates)} />
       {costSheets.map((cs) => (
         <div key={cs.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
           <div className="flex items-center justify-between">
@@ -542,7 +545,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, onActi
   );
 }
 
-function EstimatePanel({ token, project, role, activeCostSheet, projectSports, sportsById, estimates, onAction }) {
+function EstimatePanel({ token, project, role, activeCostSheet, projectSports, sportsById, estimates, quotations, onAction }) {
   const [optionForm, setOptionForm] = useState({ project_sport_id: "", package: "standard", cost_for_option: "" });
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
@@ -598,6 +601,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
   return (
     <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-text-secondary">Estimate (M.1 stage 2)</h3>
+      <StageHint text={estimateHint(activeCostSheet, estimates, quotations)} />
       {pdfError && <p className="text-xs text-red-400">{pdfError}</p>}
 
       {estimates.map((est) => (
@@ -1066,6 +1070,13 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
   return (
     <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-text-secondary">Quotation (M.1 stage 3)</h3>
+      <StageHint
+        text={quotationHint(
+          estimates,
+          quotations,
+          ["resurfacing", "repair"].includes(project.project_type) && activeCostSheet?.status === "verified"
+        )}
+      />
       {pdfError && <p className="text-xs text-red-400">{pdfError}</p>}
 
       {quotations.map((q) => (
@@ -1516,6 +1527,92 @@ function WorkOrderPanel({ token, quotationId }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Amendment 40 (Section 46): a plain-language "what's next" line under each
+// stage header, computed purely from the status data each panel already
+// holds -- no new endpoint, no new field, visible to every role. Never
+// contradicts the badge next to it: every branch keys off the same status
+// values the badges print, and a state with no honest hint returns null
+// rather than guessing.
+function costSheetHint(costSheets, skipRequests, estimates) {
+  const active = costSheets.find((c) => c.status !== "superseded");
+  if (!active) {
+    if (skipRequests.some((r) => r.status === "pending")) {
+      return "Skip requested -- awaiting PM/Director approval.";
+    }
+    return "Awaiting PM/Director to build the Cost Sheet.";
+  }
+  // Once an Estimate exists the next move has moved on to the Estimate stage.
+  const hasEstimate = estimates.some((e) => e.status !== "superseded");
+  if (active.status === "verified") {
+    return hasEstimate ? "Verified -- the Estimate is below." : "Ready -- an Estimate can now be created.";
+  }
+  // A skip-generated Cost Sheet is Unverified but already permits the next
+  // stage (M.1 rule 3) -- the hint must not say otherwise.
+  if (active.status === "unverified") {
+    return hasEstimate
+      ? "Skip-generated -- awaiting PM/Director to verify."
+      : "Skip-generated -- awaiting PM/Director to verify; an Estimate can already be created.";
+  }
+  if (active.status === "draft") return "Awaiting PM/Director to verify.";
+  return null;
+}
+
+function estimateHint(activeCostSheet, estimates, quotations) {
+  // Once a Quotation exists the "a Quotation can now be created" lines below
+  // would be stale -- the next move has moved on to the Quotation stage.
+  const hasQuotation = quotations.some((q) => q.status !== "superseded");
+  const live = estimates.filter((e) => e.status !== "superseded");
+  if (live.length === 0) {
+    return activeCostSheet?.status === "verified" || activeCostSheet?.status === "unverified"
+      ? "Awaiting PM/Director to create the Estimate."
+      : "Waiting on a verified Cost Sheet before an Estimate can be created.";
+  }
+  if (live.some((e) => e.client_status === "approved")) {
+    return hasQuotation ? "Client approved -- see the Quotation below." : "Client approved -- a Quotation can now be created.";
+  }
+  if (live.some((e) => e.client_status === "demand_received")) {
+    return hasQuotation
+      ? "Client asked for a Quotation -- see the Quotation below."
+      : "Client has asked for a Quotation -- one can now be created.";
+  }
+  // Rejected is checked before draft/sent so the hint never contradicts the
+  // "rejected" badge shown on the same Estimate.
+  if (live.some((e) => e.client_status === "rejected")) return "Client rejected this Estimate.";
+  if (live.some((e) => e.status === "sent" && e.client_status === "pending")) return "Awaiting client response.";
+  if (live.some((e) => e.status === "draft")) return "Awaiting send to client.";
+  if (live.every((e) => e.status === "expired")) return "Estimate expired -- create a new one.";
+  return null;
+}
+
+function quotationHint(estimates, quotations, canFastTrack) {
+  const live = quotations.filter((q) => q.status !== "superseded");
+  if (live.length === 0) {
+    const hasApprovedOption = estimates.some((e) =>
+      e.options.some((o) => o.client_status === "approved" || o.client_status === "demand_received")
+    );
+    if (hasApprovedOption) return "Awaiting PM/Director to create the Quotation.";
+    return canFastTrack
+      ? "Waiting on a client-approved Estimate -- or PM/Director can Fast-track this small job from the Cost Sheet."
+      : "Waiting on a client-approved Estimate before a Quotation can be created.";
+  }
+  if (live.some((q) => q.status === "won")) return "Won -- Work Order can be created.";
+  if (live.some((q) => q.status === "sent")) return "Awaiting client decision.";
+  if (live.some((q) => q.status === "released")) return "Ready to send to client.";
+  if (live.some((q) => q.status === "draft")) return "Awaiting release.";
+  if (live.some((q) => q.status === "lost")) return "Lost -- a new Quotation can be raised to re-bid.";
+  if (live.every((q) => q.status === "expired")) return "Quotation expired -- raise a new one.";
+  return null;
+}
+
+function StageHint({ text }) {
+  if (!text) return null;
+  return (
+    <p className="text-xs text-text-secondary -mt-1">
+      <span className="text-gold font-medium">What&apos;s next:</span> {text}
+    </p>
   );
 }
 
