@@ -91,7 +91,7 @@ header starts.
    the old nav item to start a project still find it.
 
 ### Approval
-☐ Approved as proposed, all decisions
+☑ Approved — "approve as proposed, all decisions" (24 September 2026)
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
