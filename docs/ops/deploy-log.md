@@ -11,6 +11,36 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PRs #188 + #189: Amendment 50 Parts A and B (backend deployed; frontend copy skipped)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `12b0e68` -> `f10548e` (includes the docs-only spec PR #187)
+**Backend rebuild + frontend build, WITH a migration** (`b50a7c1d9e42`). **Only the backend went
+live.**
+
+`git pull` fast-forwarded `12b0e68..f10548e`; `docker compose -f docker-compose.prod.yml up -d
+--build backend` rebuilt and restarted the backend (db healthy). The backend log shows `Running
+upgrade 324c6521d698 -> b50a7c1d9e42, add work order payment milestones and receipt-to-milestone
+link (Amendment 50)` followed by "Application startup complete" from both workers, with no error;
+`/api/health` `{"status":"ok"}`. Production's OpenAPI now lists `GET /payments`, `GET/POST
+/work-orders/{id}/payment-milestones`, `GET /work-orders/{id}/payment-summary`, `PATCH/DELETE
+/payment-milestones/{id}` and `PATCH /payment-entries/{id}`, and `DashboardOut` has the `payments`
+block; anonymous `GET /payments` and the milestone routes return 401.
+
+**The frontend was built on the server but never copied into the web folder.** The pasted commands
+went from the frontend `docker build` straight to the check, skipping `sudo cp -r
+/tmp/nestaprime-frontend/dist/* /var/www/nestaprime/dist/`. Caught by downloading the served
+bundle: `index-BY1Qsrjh.js` was unchanged from the previous release and contained none of the new
+Payments text. Production therefore still served the old placeholder Payments page while the API
+behind it was already new. (Same failure class as the wrong copy path on 24 September's first
+Part C deploy: `git pull` and `docker build` succeeding does not mean the site changed -- only the
+served bundle proves it.)
+
+**Not verified in production:** anything about the Payments screen -- the frontend deploy is still
+to be done and checked (see the pending entry to be added below once it is).
+
+---
+
 ## 2026-09-24 -- PRs #184 + #185: Amendment 49 (Quotations header)
 
 **Run by:** R. Patni (with AI development assistance)

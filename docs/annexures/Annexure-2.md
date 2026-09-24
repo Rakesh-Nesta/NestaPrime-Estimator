@@ -1737,6 +1737,75 @@ current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-54-specs.md`, approved 24 September 2026).
 
+**Spec approved 24 September 2026 ("approve as proposed, all decisions"). Implemented 24
+September 2026 as three ordered PRs (#188 backend, #189 screen, #190 Overview).** Reconciliation
+only -- nothing computes GST, TDS or invoices, and nothing is inferred from the client's
+free-text payment terms.
+- **Part A (PR #188, backend + migration `b50a7c1d9e42`).** New `work_order_payment_milestones`
+  table (name, amount due, due date, notes) and a nullable `milestone_id` on receipts. Milestone
+  status (pending / part paid / paid), received / TDS / settled / outstanding amounts and the
+  overdue flag are **derived** in `app/services/payments.py`, never stored; overdue is strictly
+  past the due date and unpaid. Endpoints for milestones (create, list, edit, delete), receipt
+  edit (receipts are never deleted), a per-Work-Order summary and `GET /payments`; a `payments`
+  block on `GET /dashboard`. Milestones may not total more than the order value (the Won
+  Quotation's frozen `quotation_total`); receipts may exceed it and are flagged `over_received`;
+  a milestone with receipts against it cannot be deleted; a receipt may only link to its own Work
+  Order's milestone. Every milestone create/edit/delete and every receipt create/edit is
+  audit-logged (**receipt creation was not audited before -- a behaviour change**). Writes stay
+  `pm`/`director`; `ca_tax` reads; `sales`/`procurement`/`site_engineer` are refused.
+- **Part B (PR #189, frontend).** Payments is a real screen: summary cards equal to the sum of the
+  rows shown, All / Overdue tabs, search, and one row per Work Order expanding to its milestones
+  and receipts, with add / edit / delete for PM and Director and a read-only view for CA/Tax. The
+  Work Order panel on Documents uses the same shared component and links to Payments. The
+  client's payment terms appear as a reminder only. The nav item and Overview tab are shown only to
+  `pm`/`director`/`ca_tax`; the unused `ComingSoon` component was removed.
+- **Part C (PR #190, frontend).** The Overview's "Payments overdue" tile (amount + number of Work
+  Orders, "--" / "No due dates set" -- never 0 -- until a due date exists) and "Orders &
+  collections" panel (totals + six-month awarded-value vs cash-received bars, with honest empty
+  states) replace the last two "Coming soon" placeholders; roles without access see neither.
+
+**Verified locally.** 28 new backend tests (81 pass across payments, work orders, dashboard and
+audit log); the migration run up, down and up on the development database; real Chrome per role
+against the local API -- Part B 51/51 checks (the summary cards equal the API rows' sums; a milestone
+total above the order value refused; recording the balance marks a milestone paid and clears its
+overdue flag; a corrected receipt writes an audit entry with old and new values; receipts have no
+Delete; CA/Tax has no write controls; Sales/Procurement/Site Engineer have no Payments item) and
+Part C 51/51 (the tile, the panel totals and the month bars equal the API's figures; the tile's
+count equals the Overdue tab's and its amount the Overdue card; the empty states; role gating), plus
+no sideways overflow at 375, 414 and 768px and no JS errors in any session.
+
+**Deployed to production: backend only, so far (`f10548e`, 24 September 2026).** The migration ran
+(`324c6521d698 -> b50a7c1d9e42`), both workers started cleanly, and production's OpenAPI lists all
+five new payment routes and the `payments` block on the dashboard, with anonymous calls answering
+401. The first frontend deploy **did not reach the web folder** -- the copy step was skipped -- so
+production still served the previous bundle (`index-BY1Qsrjh.js`), confirmed by downloading it.
+
+**[PENDING -- to be completed after the frontend deploy is verified.]** Frontend deploy of
+`6956161` (Parts B and C together): served bundle change, Payments screen and Overview text present
+in the downloaded bundle, "Coming soon" text gone.
+
+**Open items -- not verified or not done:**
+- *Frontend not yet live in production* (see above). Until then production users still see the
+  placeholder Payments page.
+- *The CA has not confirmed decision 3.* The app counts TDS withheld as settled (outstanding =
+  order value - received - TDS). It is an accounting judgment the spec asked to have confirmed;
+  if the CA disagrees it is a one-line change in `app/services/payments.py` and its tests.
+- *No logged-in click-through on production*, and no production data was inspected: what production
+  shows on first load (existing Work Orders with "No expected payments set") is unverified.
+- *"Overdue" uses the server's date (UTC).* For a user in India a milestone due today becomes
+  overdue at 05:30 IST rather than at midnight.
+- *Receipts created before this Amendment have no "created" audit entry* (creation was not
+  audited); only later creates and all edits are.
+- *The Overview counts Work Orders, not Won quotations:* a Won quotation with no Work Order yet is
+  not in "Orders & collections" (spec decision 8; the panel says so).
+- *Director review of the screens is pending*, and nothing has been tested on a real phone (the
+  site is still plain HTTP on a bare IP).
+- *Test data:* throwaway "(delete me)" clients, projects, Work Orders and milestones exist in the
+  local development database only; nothing was created in production.
+- *Still open from Amendment 48's audit:* the three approved Projects fixes (Amendments 37-39),
+  Team & Access naming, the More-group placement decisions, global quick search, Section C
+  quotation content, and HTTPS on a proper domain.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
