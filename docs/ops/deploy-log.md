@@ -11,6 +11,34 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PRs #184 + #185: Amendment 49 (Quotations header)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `c555a3c` -> `12b0e68`
+**Backend rebuild + frontend rebuild, no migration** (`quotations_admin.py`;
+`AllQuotations.jsx`, `AllEstimates.jsx`, `Sidebar.jsx`, `Dashboard.jsx`, `App.jsx`). Both PRs
+were merged before the first deploy, so they shipped together (the spec's proposed
+Part-A-first deploy did not happen).
+
+`git pull` fast-forwarded `c555a3c..12b0e68`; `docker compose -f docker-compose.prod.yml up -d
+--build backend` rebuilt and restarted the backend (db healthy; logs show both workers booting
+and "Application startup complete", no errors); frontend build clean and copied from
+`/tmp/nestaprime-frontend/dist/*`; `/api/health` `{"status":"ok"}`. (The pasted `git log` line
+failed with `fatal: '1?'` -- a stray carriage return in the pasted command -- but the pull's own
+output shows the fast-forward to the merge commit.) Confirmed by the served bundle changing
+(`index-B2931D9s.js` -> `index-BY1Qsrjh.js`) and by downloading it: it contains the new
+Quotations screen text ("Every quotation and estimate across every project", "+ New project",
+"From lead:", "Open in Opportunities", "Export CSV") and still contains the What's-next hints,
+the Leads & Clients search and the phone layout. Production's OpenAPI lists `lead_name` and
+`opportunity_id` on `QuotationSummaryOut` with `cost_total`/`margin_percent`/`below_floor`
+nullable; anonymous `GET /quotations` and `GET /quotations/export` both return 401.
+
+**Not verified in production:** a logged-in Quotations screen, and the Sales and PM roles (no
+active production account for either); those were verified in real Chrome locally against the
+identical code.
+
+---
+
 ## 2026-09-24 -- PR #181: Amendment 40 (What's-next hints on the Cost Sheet, Estimate, Quotation stages)
 
 **Run by:** R. Patni (with AI development assistance)
