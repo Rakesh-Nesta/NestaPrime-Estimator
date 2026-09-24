@@ -163,11 +163,12 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   const { summary, recent_projects: recentProjects } = data;
   const nextMoves = clients ? dueFollowUps(clients, opportunities || []).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
 
-  // "Pending quotations" carries cost/margin figures (K.3), so its
-  // drill-down -- AllQuotations -- keeps the same Director-only gate it
-  // already has everywhere else in the nav; every other role still sees
-  // the count, just not a live link into it.
+  // Amendment 49 (Section 53): the drill-down behind "Pending quotations" --
+  // the Quotations screen -- is open to Sales, PM and Director (the API
+  // withholds cost/margin from Sales), so the tile links for them; other
+  // roles still see the count, just not a live link into it.
   const canSeeList = CAN_SEE_CLIENT_LIST.includes(role);
+  const canSeeQuotations = ["sales", "pm", "director"].includes(role);
   const realTiles = [
     {
       label: "Open opportunities",
@@ -179,7 +180,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
     {
       label: "Pending quotations",
       value: summary.pending_quotations_count,
-      target: role === "director" ? "quotations_admin" : null,
+      target: canSeeQuotations ? "quotations_admin" : null,
       preset: { statusGroup: "pending" },
       icon: DocumentIcon,
     },
@@ -204,8 +205,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   // "Overview" is always the active one here since Dashboard only renders
   // on that screen; every other tab navigates away entirely.
   function quotationsTabClick() {
-    if (role === "director") onDrillDown("quotations_admin", {});
-    else onNewProject();
+    onDrillDown("quotations_admin", {});
   }
   const tabs = [
     { key: "dashboard", label: "Overview", active: true },
@@ -215,7 +215,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
           { key: "opportunities", label: "Opportunities", onClick: () => onDrillDown("opportunities", {}) },
         ]
       : []),
-    { key: "quotations", label: "Quotations", onClick: quotationsTabClick },
+    ...(canSeeQuotations ? [{ key: "quotations", label: "Quotations", onClick: quotationsTabClick }] : []),
     { key: "projects_admin", label: "Projects", onClick: () => onDrillDown("projects_admin", {}) },
     { key: "payments", label: "Payments", onClick: () => onDrillDown("payments", {}) },
     ...(canSeeList ? [{ key: "followups", label: "Follow-ups", onClick: () => onDrillDown("followups", {}) }] : []),
