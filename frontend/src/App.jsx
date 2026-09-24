@@ -281,7 +281,7 @@ export default function App() {
           <Opportunities token={accessToken} onBack={() => setScreen(preNavScreen)} onStartProject={handleStartProject} />
         )}
         {screen === "followups" && (
-          <FollowUps token={accessToken} onBack={() => setScreen(preNavScreen)} />
+          <FollowUps token={accessToken} userId={user.id} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "payments" && (
           <ComingSoon

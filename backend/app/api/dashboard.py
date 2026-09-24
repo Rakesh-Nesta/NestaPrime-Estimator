@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.audit_log import AuditLogEntry
 from app.models.client import Client
 from app.models.document import Estimate, EstimateStatus, Quotation, QuotationStatus
+from app.models.opportunity import TERMINAL_STAGES, Opportunity, OpportunityStage
 from app.models.project import Project
 from app.models.user import User, UserRole
 
@@ -32,6 +33,13 @@ class DashboardSummary(BaseModel):
     pending_quotations_count: int
     overdue_clients_count: int
     followups_due_count: int
+    # Amendment 44 Phase D: real counts behind the "Open opportunities" tile
+    # and the "Sales pipeline" panel. Counts only -- an Opportunity has no
+    # estimate/quotation value yet, and showing one would be fabricated.
+    open_opportunities_count: int
+    opportunities_new_count: int
+    opportunities_contacted_count: int
+    opportunities_qualified_count: int
     won_this_month_total: float
 
 
@@ -107,10 +115,34 @@ def get_dashboard(
     # strictly overdue -- matches the overdue-red convention Amendment 42's
     # Client Admin follow-up row already uses (< today, not <= today, shown
     # red; today itself is "due" rather than "overdue").
-    followups_due_count = (
+    # Amendment 44 Phase D: Opportunities count too, so the number matches
+    # the combined Follow-ups screen. Won/Lost carry a null date by
+    # construction, but are excluded explicitly rather than relied on.
+    today = date.today()
+    client_followups_due = (
         db.query(Client)
-        .filter(Client.next_follow_up_date.isnot(None), Client.next_follow_up_date <= date.today())
+        .filter(Client.next_follow_up_date.isnot(None), Client.next_follow_up_date <= today)
         .count()
+    )
+    opportunity_followups_due = (
+        db.query(Opportunity)
+        .filter(
+            Opportunity.next_follow_up_date.isnot(None),
+            Opportunity.next_follow_up_date <= today,
+            Opportunity.stage.notin_(list(TERMINAL_STAGES)),
+        )
+        .count()
+    )
+    followups_due_count = client_followups_due + opportunity_followups_due
+
+    stage_counts = dict(
+        db.query(Opportunity.stage, func.count(Opportunity.id)).group_by(Opportunity.stage).all()
+    )
+    opportunities_new_count = stage_counts.get(OpportunityStage.NEW, 0)
+    opportunities_contacted_count = stage_counts.get(OpportunityStage.CONTACTED, 0)
+    opportunities_qualified_count = stage_counts.get(OpportunityStage.QUALIFIED, 0)
+    open_opportunities_count = (
+        opportunities_new_count + opportunities_contacted_count + opportunities_qualified_count
     )
 
     # Quotation has no dedicated "won_at" timestamp (same gap reports.py's
@@ -162,6 +194,10 @@ def get_dashboard(
             pending_quotations_count=pending_quotations_count,
             overdue_clients_count=overdue_clients_count,
             followups_due_count=followups_due_count,
+            open_opportunities_count=open_opportunities_count,
+            opportunities_new_count=opportunities_new_count,
+            opportunities_contacted_count=opportunities_contacted_count,
+            opportunities_qualified_count=opportunities_qualified_count,
             won_this_month_total=float(won_this_month_total),
         ),
         recent_projects=recent_projects,

@@ -1,20 +1,30 @@
 import { useEffect, useRef, useState } from "react";
-import { getDashboard, listClients } from "./api";
+import { getDashboard, listClients, listOpportunities } from "./api";
 import { CalendarIcon, ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
 
-// Small local duplicate of FollowUps.jsx's own due-date filter/sort (same
+// Small local duplicate of FollowUps.jsx's own due-date merge/sort (same
 // pattern ClientsAdmin.jsx's STATUS_PILL_STYLE comment already documents)
-// -- both read the same next_follow_up_date field from GET /clients.
-function dueFollowUps(clients) {
+// -- Clients (Amendment 43) and Opportunities (Amendment 44 Phase D) share
+// one queue. Won/Lost Opportunities carry no date, so drop out naturally.
+function dueFollowUps(clients, opportunities) {
   const today = new Date().toISOString().slice(0, 10);
-  return clients
-    .filter((c) => c.next_follow_up_date)
+  return [
+    ...clients.map((c) => ({ id: c.id, kind: "client", name: c.name, next_follow_up_date: c.next_follow_up_date })),
+    ...opportunities.map((o) => ({ id: o.id, kind: "opportunity", name: o.lead_name, next_follow_up_date: o.next_follow_up_date })),
+  ]
+    .filter((i) => i.next_follow_up_date)
     .sort((a, b) => a.next_follow_up_date.localeCompare(b.next_follow_up_date))
-    .map((c) => ({
-      ...c,
-      status: c.next_follow_up_date < today ? "overdue" : c.next_follow_up_date === today ? "due" : "upcoming",
+    .map((i) => ({
+      ...i,
+      status: i.next_follow_up_date < today ? "overdue" : i.next_follow_up_date === today ? "due" : "upcoming",
     }));
 }
+
+const PIPELINE_STAGES = [
+  { key: "opportunities_new_count", label: "New" },
+  { key: "opportunities_contacted_count", label: "Contacted" },
+  { key: "opportunities_qualified_count", label: "Qualified" },
+];
 
 // Amendment 41 (Section 47): animates a KPI tile's arrival, real data only
 // (Pending Quotations/Active Projects) -- never applied to a placeholder
@@ -62,13 +72,13 @@ function useCountUp(target) {
 //
 // Amendment 36 (Section 42): "Overview" shell, shell-first per Director
 // decision -- two tiles (Pending quotations, Active projects) reuse the
-// exact same real backend counts this screen already had; the other two
-// (Open opportunities, Payments overdue) and the "Orders & collections"/
-// "Sales pipeline" panels have no backend yet (Opportunities/Payments are
-// Phases 5/7) and deliberately show "--" with "Coming soon" rather than a
+// exact same real backend counts this screen already had; Payments overdue
+// and the "Orders & collections" panel have no backend yet (Payments is
+// Phase 7) and deliberately show "--" with "Coming soon" rather than a
 // fabricated "0" -- an unbuilt feature must never read as a real, empty
 // one. Follow-ups due (tile) and Your next moves (panel) got real data in
-// Amendment 43.
+// Amendment 43; Open opportunities (tile) and Sales pipeline (panel) in
+// Amendment 44 Phase D.
 function ComingSoonTile({ label, icon: IconComp }) {
   return (
     <div className="text-left bg-surface border border-border-dark rounded-lg p-5 opacity-70">
@@ -123,6 +133,7 @@ const CAN_SEE_CLIENT_LIST = ["sales", "pm", "director", "procurement"];
 export default function Dashboard({ token, role, onOpenProject, onNewProject, onDrillDown }) {
   const [data, setData] = useState(null);
   const [clients, setClients] = useState(null);
+  const [opportunities, setOpportunities] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -135,6 +146,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       listClients(token)
         .then(setClients)
         .catch(() => setClients(null));
+      listOpportunities(token)
+        .then(setOpportunities)
+        .catch(() => setOpportunities(null));
     }
   }, [token, role]);
 
@@ -147,13 +161,21 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   }
 
   const { summary, recent_projects: recentProjects } = data;
-  const nextMoves = clients ? dueFollowUps(clients).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
+  const nextMoves = clients ? dueFollowUps(clients, opportunities || []).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
 
   // "Pending quotations" carries cost/margin figures (K.3), so its
   // drill-down -- AllQuotations -- keeps the same Director-only gate it
   // already has everywhere else in the nav; every other role still sees
   // the count, just not a live link into it.
+  const canSeeList = CAN_SEE_CLIENT_LIST.includes(role);
   const realTiles = [
+    {
+      label: "Open opportunities",
+      value: summary.open_opportunities_count,
+      target: canSeeList ? "opportunities" : null,
+      preset: {},
+      icon: FunnelIcon,
+    },
     {
       label: "Pending quotations",
       value: summary.pending_quotations_count,
@@ -239,7 +261,6 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 rise" style={{ "--d": "0.12s" }}>
-        <ComingSoonTile label="Open opportunities" icon={FunnelIcon} />
         {realTiles.map((tile) =>
           tile.target ? (
             <button
@@ -275,10 +296,47 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
           title="Orders & collections"
           description="Won order value vs. cash received, by month -- lands with Payments (Phase 7)."
         />
-        <ComingSoonPanel
-          title="Sales pipeline"
-          description="Open opportunities by stage and value -- lands with Opportunities (Phase 5)."
-        />
+        <div className="bg-surface border border-border-dark rounded-lg p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-heading font-semibold text-text-primary text-base">Sales pipeline</h3>
+            {canSeeList && (
+              <button
+                onClick={() => onDrillDown("opportunities", {})}
+                className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover"
+              >
+                View all →
+              </button>
+            )}
+          </div>
+          {summary.open_opportunities_count === 0 ? (
+            <p className="text-sm text-text-secondary">
+              No open opportunities yet -- add an enquiry from Leads &amp; Clients.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {PIPELINE_STAGES.map(({ key, label }) => {
+                const n = summary[key];
+                const pct = Math.round((n / summary.open_opportunities_count) * 100);
+                return (
+                  <li key={key}>
+                    <div className="flex items-center justify-between text-xs text-text-secondary mb-1">
+                      <span>{label}</span>
+                      <span className="font-mono text-text-primary">
+                        <CountUpValue value={n} />
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                      <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p className="text-[11px] text-text-secondary/70 mt-3">
+            Counts only -- values appear once an estimate exists.
+          </p>
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-5 rise" style={{ "--d": "0.28s" }}>
@@ -328,8 +386,13 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
           ) : (
             <ul className="divide-y divide-border-dark">
               {nextMoves.map((c) => (
-                <li key={c.id} className="py-2 flex items-center justify-between gap-2">
-                  <span className="text-sm text-text-primary truncate">{c.name}</span>
+                <li key={`${c.kind}-${c.id}`} className="py-2 flex items-center justify-between gap-2">
+                  <span className="text-sm text-text-primary truncate">
+                    {c.name}
+                    {c.kind === "opportunity" && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wider text-text-secondary">lead</span>
+                    )}
+                  </span>
                   <span className={`text-xs shrink-0 ${c.status === "overdue" ? "text-red-400" : "text-text-secondary"}`}>
                     {c.next_follow_up_date}
                   </span>
