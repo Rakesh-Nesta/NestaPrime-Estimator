@@ -217,7 +217,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       : []),
     ...(canSeeQuotations ? [{ key: "quotations", label: "Quotations", onClick: quotationsTabClick }] : []),
     { key: "projects_admin", label: "Projects", onClick: () => onDrillDown("projects_admin", {}) },
-    { key: "payments", label: "Payments", onClick: () => onDrillDown("payments", {}) },
+    ...(["pm", "director", "ca_tax"].includes(role)
+      ? [{ key: "payments", label: "Payments", onClick: () => onDrillDown("payments", {}) }]
+      : []),
     ...(canSeeList ? [{ key: "followups", label: "Follow-ups", onClick: () => onDrillDown("followups", {}) }] : []),
   ];
 

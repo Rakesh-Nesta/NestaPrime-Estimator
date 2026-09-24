@@ -5,7 +5,6 @@ import AllProjects from "./AllProjects";
 import AllQuotations from "./AllQuotations";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
-import ComingSoon from "./ComingSoon";
 import CrossSellAdmin from "./CrossSellAdmin";
 import CustomNotesPanel from "./CustomNotesPanel";
 import Dashboard from "./Dashboard";
@@ -15,6 +14,7 @@ import FollowUps from "./FollowUps";
 import Help from "./Help";
 import MasterSettings from "./MasterSettings";
 import Opportunities from "./Opportunities";
+import Payments from "./Payments";
 import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
 import ProjectSetup from "./ProjectSetup";
@@ -54,10 +54,8 @@ export default function App() {
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
     "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help",
     "projects_admin", "estimates_admin", "calculator", "education",
-    // Amendment 36 (Section 42): Payments is still a placeholder header --
-    // visible in the sidebar per the CRM reference, no real backend yet
-    // (Phase 7). Follow-ups got its real screen in Amendment 43;
-    // Opportunities got its own in Amendment 44.
+    // Follow-ups got its real screen in Amendment 43; Opportunities got its
+    // own in Amendment 44; Payments in Amendment 50 (was a placeholder).
     "opportunities", "followups", "payments",
   ];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
@@ -286,11 +284,13 @@ export default function App() {
         {screen === "followups" && (
           <FollowUps token={accessToken} userId={user.id} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "payments" && (
-          <ComingSoon
-            title="Payments"
-            description="Forward-looking payment due-dates and overdue tracking -- lands in a later phase of the CRM restructure."
-            onBack={() => setScreen("dashboard")}
+        {screen === "payments" && ["pm", "director", "ca_tax"].includes(user.role) && (
+          <Payments
+            token={accessToken}
+            role={user.role}
+            initialFilter={drillPreset.filter || ""}
+            onOpenProject={handleOpenProject}
+            onBack={() => setScreen(preNavScreen)}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && !activeProject && (
@@ -345,6 +345,7 @@ export default function App() {
             token={accessToken}
             project={activeProject}
             role={user.role}
+            onOpenPayments={() => goToTopLevel("payments")}
             onBack={() => setScreen("scope")}
           />
         )}
