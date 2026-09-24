@@ -15,6 +15,7 @@ from app.core.export_safety import sanitize_row
 from app.db.session import get_db
 from app.models.client import Client
 from app.models.document import Quotation, QuotationStatus
+from app.models.opportunity import Opportunity
 from app.models.project import Project
 
 quotations_admin_router = APIRouter(tags=["quotations-admin"])
@@ -28,6 +29,14 @@ quotations_admin_router = APIRouter(tags=["quotations-admin"])
 # used for a single project's own Documents screen.
 ROLES = ("director",)
 
+# Amendment 49 (Section 53): the same list, opened to Sales and PM so the
+# "Quotations" header can be a real Quotations screen for them. It applies the
+# per-project view's own K.3 rule -- Sales never receives cost, margin or
+# below-floor, PM and Director do -- so the wider gate widens no cost/margin
+# exposure. The CSV export below keeps the Director-only ROLES gate: it is a
+# bulk dump of exactly those cost/margin fields.
+LIST_ROLES = ("sales", "pm", "director")
+
 
 class QuotationSummaryOut(BaseModel):
     id: uuid.UUID
@@ -37,14 +46,19 @@ class QuotationSummaryOut(BaseModel):
     project_no: str
     client_name: str
     sports: list[str]
-    cost_total: float
+    cost_total: float | None  # stripped to None for Sales (K.3)
     selling_after_discount: float
     quotation_total: float
-    margin_percent: float
-    below_floor: bool
+    margin_percent: float | None  # stripped to None for Sales (K.3)
+    below_floor: bool | None  # stripped to None for Sales (K.3)
     created_at: datetime
     released_at: datetime | None
     sent_at: datetime | None
+    # Amendment 49: set only when the project was started from a Won
+    # Opportunity (Project.opportunity_id, Amendment 44 Phase C) -- surfaces
+    # an existing link, creates none.
+    opportunity_id: uuid.UUID | None = None
+    lead_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,7 +111,14 @@ def _filtered_query(
     return query.order_by(Quotation.created_at.desc())
 
 
-def _to_summary(db: Session, quotation: Quotation, project: Project, client: Client) -> QuotationSummaryOut:
+def _to_summary(
+    db: Session, quotation: Quotation, project: Project, client: Client, role: str = "director"
+) -> QuotationSummaryOut:
+    lead_name = None
+    if project.opportunity_id is not None:
+        opportunity = db.query(Opportunity).filter(Opportunity.id == project.opportunity_id).first()
+        lead_name = opportunity.lead_name if opportunity else None
+    is_sales = role == "sales"
     return QuotationSummaryOut(
         id=quotation.id,
         document_no=quotation.document_no,
@@ -106,14 +127,16 @@ def _to_summary(db: Session, quotation: Quotation, project: Project, client: Cli
         project_no=project.project_no,
         client_name=client.name,
         sports=_sports_for_quotation(db, quotation.id),
-        cost_total=float(quotation.cost_total),
+        cost_total=None if is_sales else float(quotation.cost_total),
         selling_after_discount=float(quotation.selling_after_discount),
         quotation_total=float(quotation.quotation_total),
-        margin_percent=float(quotation.margin_percent),
-        below_floor=quotation.below_floor,
+        margin_percent=None if is_sales else float(quotation.margin_percent),
+        below_floor=None if is_sales else quotation.below_floor,
         created_at=quotation.created_at,
         released_at=quotation.released_at,
         sent_at=quotation.sent_at,
+        opportunity_id=project.opportunity_id if lead_name is not None else None,
+        lead_name=lead_name,
     )
 
 
@@ -126,14 +149,14 @@ def list_all_quotations(
     date_from: date | None = None,
     date_to: date | None = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*ROLES)),
+    current_user=Depends(require_roles(*LIST_ROLES)),
 ):
     rows = _filtered_query(db, status, status_group, project_id, client_id, date_from, date_to).all()
     out = []
     for q in rows:
         project = db.query(Project).filter(Project.id == q.project_id).first()
         client = db.query(Client).filter(Client.id == project.client_id).first()
-        out.append(_to_summary(db, q, project, client))
+        out.append(_to_summary(db, q, project, client, current_user.role.value))
     return out
 
 
