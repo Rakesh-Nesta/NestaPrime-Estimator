@@ -1660,6 +1660,53 @@ in the sidebar. Grounded against current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-53-specs.md`, approved 24 September 2026).
 
+**Spec approved 24 September 2026 ("approve as proposed, all decisions"). Implemented 24
+September 2026 as two ordered PRs (#184 backend, #185 frontend); deployed together (`12b0e68`).**
+- **Part A (PR #184, `quotations_admin.py`).** `GET /quotations` admits `sales`/`pm`/`director`.
+  Sales rows return `cost_total`, `margin_percent` and `below_floor` as null (the per-project
+  K.3 rule), keeping the client-facing totals; PM/Director rows unchanged. Each row carries
+  `opportunity_id` and `lead_name`, surfacing the existing `Project.opportunity_id` link. The CSV
+  export stays Director-only; `procurement`/`site_engineer`/`ca_tax` are still refused. 7 new
+  tests and one rewritten -- the file went from 9 to 15 tests, and the old "Sales cannot list"
+  test now asserts the new contract. (PR #184's description and commit message say "9 new
+  tests"; that count was wrong.)
+- **Part B (PR #185, frontend).** The "Quotations" nav item and the Overview tab open the list
+  for Sales/PM/Director instead of starting a project, and are hidden for the three roles that
+  cannot use it. The screen has Quotations and Estimates tabs (the existing Estimates list
+  embedded), no Margin % column for Sales, Export CSV for the Director only, a "From lead:"
+  line with an "Open in Opportunities" link, a "+ New project" button, stacked cards on phones,
+  and no false "No quotations match" when a load fails. The Overview "Pending quotations" tile
+  now links for Sales and PM.
+
+**Verified.** Locally: 44 related backend tests pass; real Chrome per role -- 45 of 46
+automated checks (the one miss was a test looking for placeholder text; the Estimates tab was
+inspected directly and works), covering Sales/PM/Director columns and buttons, the three
+refused roles' nav, list counts equal to the API's own (20 = 20; Pending 15 = 15 = 15 across the
+list, the Overview tile and the API), a quotation seeded from a Won lead showing its lead line,
+no sideways overflow at 375, 414 and 768px, and no JS errors. **On production**, from what the
+server returns: the served bundle changed (`index-B2931D9s.js` -> `index-BY1Qsrjh.js`) and
+contains the new screen text; OpenAPI lists `lead_name`/`opportunity_id` and the three nullable
+K.3 fields on the quotation list; anonymous `GET /quotations` and `/quotations/export` return
+401; the backend restarted cleanly.
+
+**Deployed together, not one at a time.** The spec proposed deploying and checking Part A before
+Part B. Both were merged before the first deploy, so one deploy shipped both (backend rebuild +
+frontend rebuild, no migration); Part A alone was never run in production.
+
+**Open items -- not verified or not done:**
+- *No logged-in check on production.* The served code and API schema were checked; nobody
+  logged in and opened the Quotations screen there, and no production Sales or PM account exists
+  to test those roles.
+- *Copy and layout not yet reviewed by the Director.*
+- *The Overview's "Pending estimates" tile still opens the standalone Estimates screen*
+  (`estimates_admin`), not the new Estimates tab; both exist. Admin > "All Quotations"
+  (Director) is unchanged, per the spec.
+- *Test data:* a throwaway "(delete me)" client and project were created in the local
+  development database for the checks; nothing was created in production.
+- *Still open from Amendment 48's audit:* Payments (unbuilt, unregistered), approved
+  Amendments 37-39, Team & Access naming, the More-group placement decisions, global quick
+  search, Section C quotation descriptiveness, and HTTPS on a proper domain.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
