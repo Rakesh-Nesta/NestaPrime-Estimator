@@ -1474,6 +1474,11 @@ Quotations, Projects, Payments, Team & Access; Sales sees "Leads & Clients", the
 no Overdue/Blacklisted controls, plain tooltips and the full nav; Director additionally sees
 the flags sentence and the Overdue/Blacklisted checkboxes.
 
+**Deployed to production 24 September 2026 (PR #174, `1ab5a89`).** Frontend-only; deployment
+confirmed by the served bundle changing. Verified live as a Director (heading, blurb incl. the
+flags sentence, checkboxes, tooltip, Overview wording, nav intact); the `site_engineer`/`ca_tax`
+and Sales-role behaviours were verified locally on the same build (no such production accounts).
+
 **Open items -- deliberately NOT fixed here, need a Director decision or a real device:**
 - *No way to correct a lead's name/phone/email* after "Add Enquiry" (only stage, follow-up,
   notes and client link are editable). A typo in a telecaller's lead is permanent. Small
