@@ -1186,16 +1186,21 @@ client has none, not overwriting the user's own choice, filling for a second cli
 and switching back to the dropdown; the Won-lead "Start Project" path; Sales; no sideways overflow at
 375 and 414px; no JS errors).
 
-**[PENDING -- Amendment 37 is not deployed to production.]** As of drafting, production's OpenAPI has
-no `city` on the client schemas and the served bundle is unchanged (`index-BGiDOpm9.js`). To be
-completed, and only then merged, once the backend (with migration `c37a4e8b2f19`) and then the
-frontend are deployed and verified.
+**Deployed to production 24 September 2026 (`54ff6a0`), backend first and then the frontend.** The
+migration ran (`b50a7c1d9e42 -> c37a4e8b2f19`) and both workers started cleanly. Production's OpenAPI
+now has `city` on `ClientOut`, `ClientCreate` and `ClientDetailsUpdate` (the last two capped at 100
+characters), with the payments routes still present and anonymous `GET /clients` and `PATCH
+/clients/{id}/details` answering 401. The served bundle changed (`index-BGiDOpm9.js` ->
+`index-BPfOBPdb.js`); downloaded from production it contains the City field ("City (optional)" on both
+forms, and the placeholder "Pre-fills the city of this client's new projects") and still contains every
+earlier release. **A first attempt shipped nothing:** the frontend was rebuilt and copied while the server
+was still at the older commit `e19880e` (no `git pull` first), so it rebuilt the old code and the bundle
+name did not change -- caught by checking the served bundle name and the API, not the paste.
 
 **Open items -- not verified or not done:**
-- *Not deployed* (see above).
 - *Existing clients have no city*, and none is guessed, so the auto-fill will do nothing for them
   until someone fills the City in from Leads & Clients; it only starts to help as cities are entered.
-- *No logged-in check on production* and no production data inspected once deployed.
+- *No logged-in check on production*, and no production client's city has been looked at: the auto-fill's behaviour on real data is unverified (every existing client has no city until one is entered).
 - The paused branch `amendment-37-client-city-autofill` (one WIP commit) is superseded and can be
   deleted; it has not been.
 
