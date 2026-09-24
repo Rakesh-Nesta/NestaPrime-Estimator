@@ -3,10 +3,12 @@ import {
   linkOpportunityClient,
   listClients,
   listOpportunities,
+  updateOpportunityDetails,
   updateOpportunityFollowUp,
   updateOpportunityNotes,
   updateOpportunityStage,
 } from "./api";
+import EditDetailsForm from "./EditDetailsForm";
 import { FunnelIcon } from "./Icons";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
@@ -32,8 +34,13 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function Opportunities({ token, onBack, onStartProject }) {
+// Same write set as the backend's WRITE_ROLES -- Procurement can read the
+// pipeline but not change it.
+const canEditDetails = (role) => ["sales", "pm", "director"].includes(role);
+
+export default function Opportunities({ token, role, onBack, onStartProject }) {
   const [opportunities, setOpportunities] = useState([]);
+  const [editingId, setEditingId] = useState(null);
   const [clients, setClients] = useState([]);
   const [relationship, setRelationship] = useState("");
   const [loading, setLoading] = useState(true);
@@ -116,6 +123,18 @@ export default function Opportunities({ token, onBack, onStartProject }) {
     }
   }
 
+  // Amendment 47 (Section 52): fixing a typo in name/phone/email, allowed at
+  // any stage. Sending blank contact fields clears them.
+  async function saveDetails(o, values) {
+    await updateOpportunityDetails(token, o.id, {
+      lead_name: values.name,
+      lead_phone: values.phone || null,
+      lead_email: values.email || null,
+    });
+    setEditingId(null);
+    await load();
+  }
+
   if (loading) {
     return <p className="text-center text-text-secondary mt-10">Loading Opportunities…</p>;
   }
@@ -177,10 +196,26 @@ export default function Opportunities({ token, onBack, onStartProject }) {
                       {(o.lead_phone || o.lead_email) && ` · ${[o.lead_phone, o.lead_email].filter(Boolean).join(" · ")}`}
                     </p>
                   </div>
-                  <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STAGE_PILL_STYLE[o.stage]}`}>
-                    {o.stage}
-                  </span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {canEditDetails(role) && editingId !== o.id && (
+                      <button onClick={() => setEditingId(o.id)} className="text-xs text-gold hover:underline">
+                        Edit details
+                      </button>
+                    )}
+                    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STAGE_PILL_STYLE[o.stage]}`}>
+                      {o.stage}
+                    </span>
+                  </div>
                 </div>
+
+                {editingId === o.id && (
+                  <EditDetailsForm
+                    idPrefix={`opp-${o.id}`}
+                    initial={{ name: o.lead_name, phone: o.lead_phone, email: o.lead_email }}
+                    onSave={(values) => saveDetails(o, values)}
+                    onCancel={() => setEditingId(null)}
+                  />
+                )}
 
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <select

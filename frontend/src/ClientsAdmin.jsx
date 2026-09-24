@@ -5,10 +5,12 @@ import {
   listClients,
   listProjects,
   updateClientConsent,
+  updateClientDetails,
   updateClientFlags,
   updateClientFollowUp,
   updateClientNotes,
 } from "./api";
+import EditDetailsForm from "./EditDetailsForm";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
 const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", notes: "" };
@@ -50,6 +52,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   const [chatIdDrafts, setChatIdDrafts] = useState({});
   const [followUpDrafts, setFollowUpDrafts] = useState({});
   const [notesDrafts, setNotesDrafts] = useState({});
+  const [editingClientId, setEditingClientId] = useState(null);
   const [form, setForm] = useState(emptyClientForm);
   const [submitting, setSubmitting] = useState(false);
   const [enquiryForm, setEnquiryForm] = useState(emptyEnquiryForm);
@@ -211,6 +214,20 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  // Amendment 47 (Section 52): fixing a typo in a client's name / contact
+  // details. Type is deliberately not editable here (it drives the default
+  // package and payment terms).
+  async function saveDetails(clientId, values) {
+    await updateClientDetails(token, clientId, {
+      name: values.name,
+      contact_name: values.contact_name || null,
+      phone: values.phone || null,
+      email: values.email || null,
+    });
+    setEditingClientId(null);
+    await load();
   }
 
   if (loading) {
@@ -454,6 +471,29 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
               </span>
             </div>
           </div>
+
+          {(c.contact_name || c.phone || c.email || canCreateClient(role)) && editingClientId !== c.id && (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-text-secondary">
+              <span className="min-w-0 break-words">
+                {[c.contact_name, c.phone, c.email].filter(Boolean).join(" · ") || "No contact details yet"}
+              </span>
+              {canCreateClient(role) && (
+                <button onClick={() => setEditingClientId(c.id)} className="text-gold hover:underline shrink-0">
+                  Edit details
+                </button>
+              )}
+            </div>
+          )}
+
+          {editingClientId === c.id && (
+            <EditDetailsForm
+              idPrefix={`client-${c.id}`}
+              withContactName
+              initial={{ name: c.name, contact_name: c.contact_name, phone: c.phone, email: c.email }}
+              onSave={(values) => saveDetails(c.id, values)}
+              onCancel={() => setEditingClientId(null)}
+            />
+          )}
 
           {canCreateClient(role) && (
             <div
