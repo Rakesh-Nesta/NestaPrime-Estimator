@@ -1183,6 +1183,37 @@ the exact bottleneck the Director named as the app's central problem to solve
 ("my hole point round to sales persons or his actual bottle neck"). Needs a
 Director-approved spec before implementation, per this register's own Change Process.
 
+**Spec approved 22 September 2026 ("approve as proposed, all decisions"). Implemented
+24 September 2026 (PR #181, deployed `c555a3c`).** Frontend only (`Documents.jsx`), no
+migration: a one-line "What's next:" hint under the Cost Sheet, Estimate and Quotation stage
+headers, computed client-side from statuses the panels already hold, visible to every role; a
+state with no honest hint shows nothing. The Work Order stage is deliberately not covered (the
+spec lists three stages).
+
+**Verified.** Every hint was read in real Chrome (Sales user) against real local projects in
+all 16 distinct (cost sheet | estimates | quotations) states, next to the status badges on the
+same screen, at 1280px and 375px (no JS errors, 0px sideways overflow). That comparison found
+and fixed four cases where a hint would have contradicted the screen -- the spec's own
+acceptance criterion: a skip-generated (Unverified) Cost Sheet already permits an Estimate
+(backend `create_estimate` and the UI both allow it) but the hint said a Verified one was
+required; the Cost Sheet kept saying "an Estimate can now be created" after one existed and the
+Estimate kept saying "a Quotation can now be created" after one existed; and a rejected
+Estimate read "Awaiting send to client" beside a "rejected" badge.
+
+**Deployed to production 24 September 2026 (`c555a3c`).** Confirmed by the served bundle
+changing (`index-B7lZRA0W.js` -> `index-B2931D9s.js`) and by downloading it and finding the
+"What's next:" label and the hint sentences.
+
+**Open items:**
+- *Copy not yet reviewed by the Director.* The spec (Open Decision 1) asks for the wording to
+  be reviewed against a live preview; the wording shipped is the spec's indicative copy.
+- *No logged-in check on production.* The served files were checked; a project's Documents
+  screen was not opened on production.
+- *States not seen rendered:* a Sent-and-awaiting Estimate, a Lost Quotation and a
+  demand-received option do not occur in the local data; those code paths exist but were only
+  reasoned about. Roles other than Sales were not clicked through (the hints have no role
+  gating).
+
 ### Amendment No. 41 — Overview Visual Reskin (Serif/Amber Theme, Live Clock, Motion)
 **Registered 22 September 2026**, from a Director-supplied HTML/CSS/JS reference file
 (`Desktop\NPS-APP\HTML_Code.html`) and a direct side-by-side comparison against the live
