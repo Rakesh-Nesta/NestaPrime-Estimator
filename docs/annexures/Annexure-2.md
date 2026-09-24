@@ -1627,7 +1627,7 @@ in the sidebar. Grounded against current code:
   the Won Opportunity it started from (Amendment 44 Phase C), so the link the plan calls for
   (step 8) needs no new data, only to be surfaced.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-53-specs.md`).
+(spec: `docs/annexures/Section-53-specs.md`, approved 24 September 2026).
 
 ## Register Notes (non-software, business-process)
 
