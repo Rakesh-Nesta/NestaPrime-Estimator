@@ -156,7 +156,6 @@ export default function App() {
           canResumeProject={canResumeProject}
           goToTopLevel={goToTopLevel}
           handleDrillDown={handleDrillDown}
-          handleNewProject={handleNewProject}
           handleLogout={handleLogout}
           navMenuOpen={navMenuOpen}
           setNavMenuOpen={setNavMenuOpen}
@@ -246,11 +245,14 @@ export default function App() {
         {screen === "audit_log" && user.role === "director" && (
           <AuditLogView token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "quotations_admin" && user.role === "director" && (
+        {screen === "quotations_admin" && ["sales", "pm", "director"].includes(user.role) && (
           <AllQuotations
             token={accessToken}
+            role={user.role}
             initialStatusGroup={drillPreset.statusGroup || ""}
             onOpenProject={handleOpenProject}
+            onOpenOpportunities={() => goToTopLevel("opportunities")}
+            onNewProject={handleNewProject}
             onBack={() => setScreen(preNavScreen)}
           />
         )}

@@ -6,18 +6,26 @@ const STATUS_OPTIONS = ["draft", "sent", "won", "lost", "expired", "superseded"]
 // Amendment 12 (Section 11): the Dashboard's "Pending Estimates" tile had
 // no screen behind it -- only the count. Cross-project, searchable,
 // status-filterable, matching AllQuotations.jsx's own shape.
-export default function AllEstimates({ token, initialStatus = "", onOpenProject, onBack }) {
+// Amendment 49 (Section 53): also rendered as the "Estimates" tab of the
+// Quotations screen. `embedded` drops this screen's own title card and page
+// width -- the parent supplies the header -- and everything else (filters,
+// list, row behaviour) is the same list, unchanged.
+export default function AllEstimates({ token, initialStatus = "", onOpenProject, onBack, embedded = false }) {
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(initialStatus);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     listAllEstimates(token, { status: status || undefined })
       .then(setRows)
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        setError(err.message);
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
   }, [token, status]);
 
@@ -33,18 +41,20 @@ export default function AllEstimates({ token, initialStatus = "", onOpenProject,
   }
 
   return (
-    <div className="max-w-4xl mx-auto mt-8 mb-10 space-y-6 px-4">
-      <div className="bg-surface shadow rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-primary">All Estimates</h2>
-          {onBack && (
-            <button onClick={onBack} className="text-sm text-gold hover:underline">
-              &larr; Back
-            </button>
-          )}
-        </div>
+    <div className={embedded ? "space-y-4" : "max-w-4xl mx-auto mt-8 mb-10 space-y-6 px-4"}>
+      <div className={embedded ? "" : "bg-surface shadow rounded-lg p-6"}>
+        {!embedded && (
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-text-primary">All Estimates</h2>
+            {onBack && (
+              <button onClick={onBack} className="text-sm text-gold hover:underline">
+                &larr; Back
+              </button>
+            )}
+          </div>
+        )}
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-        <div className="flex flex-wrap items-center gap-2 mt-3">
+        <div className={`flex flex-wrap items-center gap-2 ${embedded ? "" : "mt-3"}`}>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -88,7 +98,7 @@ export default function AllEstimates({ token, initialStatus = "", onOpenProject,
             </span>
           </button>
         ))}
-        {visibleRows.length === 0 && (
+        {visibleRows.length === 0 && !loadFailed && (
           <p className="text-sm text-text-secondary text-center py-6">No estimates match these filters.</p>
         )}
       </div>
