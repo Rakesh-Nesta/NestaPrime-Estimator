@@ -11,6 +11,72 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-24 -- PR #178: Amendment 47 Part B (Leads & Clients tabs, search, collapsible add forms)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `8b71a35` -> `e535432`
+**Frontend-only** -- no migration, no backend rebuild (`ClientsAdmin.jsx`, `App.jsx`).
+
+`git pull` fast-forwarded `8b71a35..e535432`; frontend Docker build clean; `/api/health`
+`{"status":"ok"}`. Confirmed by the served bundle changing (`index-ida_2CSV.js` ->
+`index-B7lZRA0W.js`) and by downloading it: it contains the Leads & Clients search box, "+ Add
+Enquiry", "Open in Opportunities", the no-match message, Edit details and the phone layout, and
+no longer contains the old page's blurb.
+
+**Not verified in production:** an authenticated click-through (no active Sales account; not
+logged in as a Director for this deploy). The UI was exercised in real Chrome locally, 24/24
+checks, against the identical code.
+
+---
+
+## 2026-09-24 -- PR #177: Amendment 47 Part A (edit a lead's or client's details)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `10a58f6` -> `8b71a35`
+**Backend rebuild + frontend rebuild, no migration** (`clients.py`, `opportunities.py`,
+`EditDetailsForm.jsx`, `Opportunities.jsx`, `ClientsAdmin.jsx`, `api.js`).
+
+`git pull` fast-forwarded `10a58f6..8b71a35`; `docker compose -f docker-compose.prod.yml up -d
+--build backend` rebuilt and restarted the backend container (db healthy); frontend build
+clean; `/api/health` `{"status":"ok"}`. Confirmed by the served bundle changing
+(`index-NczabCfy.js` -> `index-ida_2CSV.js`) and by production's OpenAPI now listing
+`/clients/{client_id}/details` and `/opportunities/{opportunity_id}/details`; an unauthenticated
+PATCH to each returns 401 while a nonexistent route returns 404, so the routes exist and are
+auth-protected.
+
+**Not verified in production:** an authenticated edit of a real record.
+
+---
+
+## 2026-09-24 -- PR #176: Amendment 47 Part C (phone layout)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `1ab5a89` -> `10a58f6` (includes the Amendment 47 registration and spec)
+**Frontend-only** -- no migration, no backend rebuild (`App.jsx`, `Dashboard.jsx`,
+`ClientsAdmin.jsx`, `FollowUps.jsx`, `Opportunities.jsx`).
+
+**A first attempt did not deploy anything, and the pasted output alone would have hidden it.**
+The git pull, Docker build, copy and `/api/health` all appeared to succeed, but the site still
+served the old bundle (`index-DeWY-Pec.js`). Cause: `docker build --output /tmp/nestaprime-frontend`
+produces `/tmp/nestaprime-frontend/dist/`, and the handed-over copy command used
+`/tmp/nestaprime-frontend/*`, which copied the `dist` folder itself into
+`/var/www/nestaprime/dist/dist/` instead of the files. Caught by downloading the served bundle
+and finding the old root layout class in it. **Correct command:**
+`sudo cp -r /tmp/nestaprime-frontend/dist/* /var/www/nestaprime/dist/`. A stray
+`/var/www/nestaprime/dist/dist/` folder was left behind (harmless, nothing links to it); its
+removal was suggested to the operator and is not confirmed. A second handed-over command block
+also contained a stray markup fragment and failed to parse, so it changed nothing.
+
+After the corrected copy the site served `index-NczabCfy.js` / `index-DLwX9K2C.css`; the
+downloaded bundle is byte-for-byte identical to a local build of `main` and contains the new
+`flex flex-col sm:flex-row min-h-screen bg-base` root layout and none of the old one.
+`/api/health` `{"status":"ok"}`.
+
+**Not verified in production:** the layout on a real phone -- the operator's phone could not
+reach the site (plain HTTP on a bare IP); phone results are real-Chrome mobile emulation.
+
+---
+
 ## 2026-09-24 -- PR #174: Amendment 46 (completed-header audit fixes)
 
 **Run by:** R. Patni (with AI development assistance)
