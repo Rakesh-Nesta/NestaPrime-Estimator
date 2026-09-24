@@ -4,12 +4,13 @@ import { useState } from "react";
 // (Opportunities) and client cards (Leads & Clients). The caller decides
 // what a save means -- this only collects name / [contact name] / phone /
 // email and reports the values back.
-export default function EditDetailsForm({ initial, withContactName = false, idPrefix, onSave, onCancel }) {
+export default function EditDetailsForm({ initial, withContactName = false, withCity = false, idPrefix, onSave, onCancel }) {
   const [values, setValues] = useState({
     name: initial.name || "",
     contact_name: initial.contact_name || "",
     phone: initial.phone || "",
     email: initial.email || "",
+    city: initial.city || "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -84,6 +85,19 @@ export default function EditDetailsForm({ initial, withContactName = false, idPr
             className={inputClass}
           />
         </div>
+        {withCity && (
+          <div>
+            <label htmlFor={`${idPrefix}-city`} className={labelClass}>City (optional)</label>
+            <input
+              id={`${idPrefix}-city`}
+              type="text"
+              maxLength={100}
+              value={values.city}
+              onChange={(e) => setField("city", e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        )}
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
       <div className="flex items-center gap-4 text-xs">

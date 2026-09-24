@@ -16,7 +16,7 @@ import EditDetailsForm from "./EditDetailsForm";
 import { UsersIcon } from "./Icons";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
-const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", notes: "" };
+const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", city: "", notes: "" };
 const canCreateClient = (role) => ["sales", "pm", "director"].includes(role);
 
 // Amendment 44 (Section E step 5, Design input 2026-09-23): a quick-capture
@@ -165,6 +165,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
         contact_name: form.contact_name || null,
         phone: form.phone || null,
         email: form.email || null,
+        city: form.city || null,
         notes: form.notes || null,
       });
       setForm(emptyClientForm);
@@ -286,6 +287,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
       contact_name: values.contact_name || null,
       phone: values.phone || null,
       email: values.email || null,
+      city: values.city || null,
     });
     setEditingClientId(null);
     await load();
@@ -435,12 +437,26 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label className="block text-sm font-medium text-text-secondary">Email</label>
               <input
                 type="email"
                 value={form.email}
                 onChange={(e) => setField("email", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label htmlFor="new-client-city" className="block text-sm font-medium text-text-secondary">
+                City (optional)
+              </label>
+              <input
+                id="new-client-city"
+                type="text"
+                maxLength={100}
+                value={form.city}
+                onChange={(e) => setField("city", e.target.value)}
+                placeholder="Pre-fills the city of this client's new projects"
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
               />
             </div>
@@ -694,7 +710,8 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
             <EditDetailsForm
               idPrefix={`client-${c.id}`}
               withContactName
-              initial={{ name: c.name, contact_name: c.contact_name, phone: c.phone, email: c.email }}
+              withCity
+              initial={{ name: c.name, contact_name: c.contact_name, phone: c.phone, email: c.email, city: c.city }}
               onSave={(values) => saveDetails(c.id, values)}
               onCancel={() => setEditingClientId(null)}
             />
