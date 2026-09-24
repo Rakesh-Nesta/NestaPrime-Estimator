@@ -3,3 +3,8 @@
 export function formatRs(value) {
   return `Rs ${Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
+
+// Whole rupees, for a tile where paise would only crowd the number.
+export function formatRsWhole(value) {
+  return `Rs ${Math.round(Number(value)).toLocaleString("en-IN")}`;
+}
