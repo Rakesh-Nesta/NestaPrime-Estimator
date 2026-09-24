@@ -259,6 +259,7 @@ export default function App() {
             token={accessToken}
             role={user.role}
             onOpenProject={handleOpenProject}
+            onOpenOpportunities={() => goToTopLevel("opportunities")}
             onBack={() => setScreen(preNavScreen)}
           />
         )}

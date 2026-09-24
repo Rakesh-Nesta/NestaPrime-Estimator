@@ -3,14 +3,17 @@ import {
   createClient,
   createOpportunity,
   listClients,
+  listOpportunities,
   listProjects,
   updateClientConsent,
   updateClientDetails,
   updateClientFlags,
   updateClientFollowUp,
   updateClientNotes,
+  updateOpportunityDetails,
 } from "./api";
 import EditDetailsForm from "./EditDetailsForm";
+import { UsersIcon } from "./Icons";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
 const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", notes: "" };
@@ -45,10 +48,57 @@ const STATUS_PILL_STYLE = {
   lost: "bg-red-500/10 text-red-400",
 };
 
-export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
+// Amendment 47 Part B (Section 52): the directory has three views. "Leads"
+// are lead-only Opportunities that are not Lost (Lost ones stay visible on
+// the Opportunities screen); "Clients" are the client cards.
+const TABS = [
+  { key: "all", label: "All" },
+  { key: "leads", label: "Leads" },
+  { key: "clients", label: "Clients" },
+];
+
+// Same small-local-duplicate style as Opportunities.jsx.
+const STAGE_PILL_STYLE = {
+  new: "bg-surface-raised text-text-secondary",
+  contacted: "bg-gold/10 text-gold",
+  qualified: "bg-gold-muted text-gold",
+  won: "bg-green-500/10 text-green-400",
+  lost: "bg-red-500/10 text-red-400",
+};
+
+const RELATIONSHIP_BADGE_STYLE = {
+  lead: "bg-gold/10 text-gold",
+  client: "bg-surface-raised text-text-secondary",
+};
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function matchesSearch(needle, ...fields) {
+  if (!needle) return true;
+  return fields.some((f) => (f || "").toLowerCase().includes(needle));
+}
+
+// Soonest follow-up first; a lead with no date (a Won one) goes last.
+function byFollowUp(a, b) {
+  if (a.next_follow_up_date === b.next_follow_up_date) return 0;
+  if (!a.next_follow_up_date) return 1;
+  if (!b.next_follow_up_date) return -1;
+  return a.next_follow_up_date < b.next_follow_up_date ? -1 : 1;
+}
+
+export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onBack }) {
   const [clients, setClients] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [showClientForm, setShowClientForm] = useState(false);
+  const [showEnquiryForm, setShowEnquiryForm] = useState(false);
+  const [editingLeadId, setEditingLeadId] = useState(null);
   const [chatIdDrafts, setChatIdDrafts] = useState({});
   const [followUpDrafts, setFollowUpDrafts] = useState({});
   const [notesDrafts, setNotesDrafts] = useState({});
@@ -84,12 +134,18 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
   }
 
   function load() {
-    return listClients(token).then(setClients);
+    return Promise.all([
+      listClients(token).then(setClients),
+      listOpportunities(token, { relationship: "lead" }).then((rows) => setLeads(rows.filter((o) => o.stage !== "lost"))),
+    ]);
   }
 
   useEffect(() => {
     load()
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        setError(err.message);
+        setLoadFailed(true);
+      })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -112,6 +168,8 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
         notes: form.notes || null,
       });
       setForm(emptyClientForm);
+      setShowClientForm(false);
+      if (tab === "leads") setTab("clients");
       await load();
     } catch (err) {
       setError(err.message);
@@ -145,6 +203,9 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
         notes: "",
       });
       setEnquirySaved(true);
+      setShowEnquiryForm(false);
+      if (tab === "clients") setTab("leads");
+      await load();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -230,32 +291,106 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
     await load();
   }
 
-  if (loading) {
-    return <p className="text-center text-text-secondary mt-10">Loading clients…</p>;
+  async function saveLeadDetails(leadId, values) {
+    await updateOpportunityDetails(token, leadId, {
+      lead_name: values.name,
+      lead_phone: values.phone || null,
+      lead_email: values.email || null,
+    });
+    setEditingLeadId(null);
+    await load();
   }
 
+  if (loading) {
+    return <p className="text-center text-text-secondary mt-10">Loading leads and clients…</p>;
+  }
+
+  const needle = search.trim().toLowerCase();
+  const visibleLeads = leads
+    .filter((o) => matchesSearch(needle, o.lead_name, o.lead_phone, o.lead_email))
+    .sort(byFollowUp);
+  const visibleClients = clients
+    .filter((c) => matchesSearch(needle, c.name, c.phone, c.email))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const rows = [
+    ...(tab !== "clients" ? visibleLeads.map((o) => ({ kind: "lead", key: `lead-${o.id}`, o })) : []),
+    ...(tab !== "leads" ? visibleClients.map((c) => ({ kind: "client", key: `client-${c.id}`, c })) : []),
+  ];
+  const tabCount = { all: visibleLeads.length + visibleClients.length, leads: visibleLeads.length, clients: visibleClients.length };
+
   return (
-    <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6 px-4 sm:px-0">
-      <div className="bg-surface shadow rounded-lg p-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-text-primary">Leads &amp; Clients</h2>
-          {onBack && (
-            <button onClick={onBack} className="text-sm text-gold hover:underline">
-              &larr; Back
-            </button>
-          )}
+    <div className="max-w-[1000px] mx-auto mt-6 mb-10 space-y-4 px-4 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
+          <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1 flex items-center gap-2">
+            <UsersIcon className="w-6 h-6 text-gold" /> Leads &amp; Clients
+          </h2>
+          <p className="text-sm text-text-secondary mt-1">
+            Everyone you sell to -- new enquiries and existing clients -- with consent preferences and follow-up
+            reminders. Stage changes for a lead happen on the Opportunities screen.
+            {canEditFlags &&
+              " Overdue blocks releasing new Quotations and Blacklisted blocks new Estimates -- only a Director can set either."}
+          </p>
         </div>
-        <p className="text-xs text-text-secondary mt-1">
-          Everyone you sell to, with their consent preferences and follow-up reminders. New enquiries that
-          aren&apos;t a client yet go in &quot;Add Enquiry&quot; below.
-          {canEditFlags &&
-            " Overdue blocks releasing new Quotations and Blacklisted blocks new Estimates -- only a Director can set either."}
-        </p>
-        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+        {onBack && (
+          <button onClick={onBack} className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover shrink-0">
+            ← Back
+          </button>
+        )}
       </div>
 
-      {canCreateClient(role) && (
-        <form onSubmit={handleCreateClient} className="bg-surface shadow rounded-lg p-6 space-y-3">
+      <div className="flex items-center gap-5 border-b border-border-dark overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`text-sm pb-2.5 border-b-2 whitespace-nowrap transition-colors duration-200 ${
+              tab === t.key
+                ? "text-gold border-gold font-medium"
+                : "text-text-secondary border-transparent hover:text-text-primary"
+            }`}
+          >
+            {t.label} <span className="text-xs text-text-secondary">({tabCount[t.key]})</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          id="leads-clients-search"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, phone or email"
+          aria-label="Search leads and clients"
+          className="flex-1 min-w-[12rem] rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
+        />
+        {canCreateClient(role) && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setShowEnquiryForm((v) => !v)}
+              className="bg-gold text-base text-sm rounded px-4 py-2 font-semibold hover:bg-gold-hover"
+            >
+              {showEnquiryForm ? "Close enquiry form" : "+ Add Enquiry"}
+            </button>
+            <button
+              onClick={() => setShowClientForm((v) => !v)}
+              className="border border-gold text-gold text-sm rounded px-4 py-2 font-semibold hover:bg-gold/10"
+            >
+              {showClientForm ? "Close client form" : "+ Add a client"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {enquirySaved && !showEnquiryForm && (
+        <p className="text-xs text-gold">Enquiry saved -- it is in the Leads list below.</p>
+      )}
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      {canCreateClient(role) && showClientForm && (
+        <form onSubmit={handleCreateClient} className="bg-surface border border-border-dark rounded-lg p-5 space-y-3">
           <h3 className="text-sm font-semibold text-text-secondary">Add a client</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -330,8 +465,8 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
         </form>
       )}
 
-      {canCreateClient(role) && (
-        <form onSubmit={handleCreateEnquiry} className="bg-surface shadow rounded-lg p-6 space-y-3">
+      {canCreateClient(role) && showEnquiryForm && (
+        <form onSubmit={handleCreateEnquiry} className="bg-surface border border-border-dark rounded-lg p-5 space-y-3">
           <h3 className="text-sm font-semibold text-text-secondary">Add Enquiry</h3>
           <p className="text-xs text-text-secondary">
             A raw lead -- just a name and contact, not a full client record yet. Every enquiry needs a follow-up
@@ -395,17 +530,87 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
             >
               {submittingEnquiry ? "Saving…" : "Save enquiry"}
             </button>
-            {enquirySaved && <span className="text-xs text-gold">Saved -- see it in Opportunities.</span>}
           </div>
         </form>
       )}
 
-      <div className="bg-surface shadow rounded-lg p-6 space-y-2">
-        {clients.map((c) => (
-          <div key={c.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
+      <div className="space-y-3">
+        {rows.map((row) => {
+          if (row.kind === "lead") {
+            const o = row.o;
+            const overdue = o.next_follow_up_date && o.next_follow_up_date < todayStr();
+            return (
+              <div key={row.key} className="bg-surface border border-border-dark rounded-lg px-4 py-3 text-sm space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <span className="min-w-0 break-words">
+                    <span className="font-medium">{o.lead_name}</span>{" "}
+                    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE.lead}`}>
+                      Lead
+                    </span>
+                  </span>
+                  <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STAGE_PILL_STYLE[o.stage]}`}>
+                    {o.stage}
+                  </span>
+                </div>
+
+                {editingLeadId !== o.id && (
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-text-secondary">
+                    <span className="min-w-0 break-words">
+                      {[o.lead_phone, o.lead_email].filter(Boolean).join(" · ") || "No contact details yet"}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {canCreateClient(role) && (
+                        <button onClick={() => setEditingLeadId(o.id)} className="text-gold hover:underline">
+                          Edit details
+                        </button>
+                      )}
+                      {onOpenOpportunities && (
+                        <button onClick={onOpenOpportunities} className="text-gold hover:underline">
+                          Open in Opportunities →
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {editingLeadId === o.id && (
+                  <EditDetailsForm
+                    idPrefix={`lead-${o.id}`}
+                    initial={{ name: o.lead_name, phone: o.lead_phone, email: o.lead_email }}
+                    onSave={(values) => saveLeadDetails(o.id, values)}
+                    onCancel={() => setEditingLeadId(null)}
+                  />
+                )}
+
+                {o.next_follow_up_date && (
+                  <p className={`text-xs ${overdue ? "text-red-400" : "text-text-secondary"}`}>
+                    <span className="font-medium">Follow-up</span> {o.next_follow_up_date}
+                    {overdue && " (overdue)"}
+                    {o.follow_up_note && ` · ${o.follow_up_note}`}
+                  </p>
+                )}
+                {o.notes && (
+                  <p className="text-xs text-text-secondary whitespace-pre-wrap break-words">
+                    <span className="font-medium">Notes</span> {o.notes}
+                  </p>
+                )}
+                {o.stage === "won" && (
+                  <p className="text-xs text-text-secondary">
+                    Won -- open it in Opportunities and link a client to start a Project.
+                  </p>
+                )}
+              </div>
+            );
+          }
+          const c = row.c;
+          return (
+          <div key={row.key} className="bg-surface border border-border-dark rounded-lg px-4 py-3 text-sm space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="min-w-0 break-words">
               <span className="font-medium">{c.name}</span>{" "}
+              <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE.client}`}>
+                Client
+              </span>{" "}
               <span className="text-xs text-text-secondary">({c.type})</span>
             </span>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
@@ -578,8 +783,19 @@ export default function ClientsAdmin({ token, role, onOpenProject, onBack }) {
             )}
           </div>
         </div>
-        ))}
-        {clients.length === 0 && !error && <p className="text-sm text-text-secondary">No clients yet.</p>}
+          );
+        })}
+        {rows.length === 0 && !loadFailed && (
+          <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
+            {needle
+              ? "Nothing matches that search."
+              : tab === "leads"
+                ? "No open leads yet -- use \"Add Enquiry\" to capture one."
+                : tab === "clients"
+                  ? "No clients yet."
+                  : "No leads or clients yet."}
+          </p>
+        )}
       </div>
     </div>
   );
