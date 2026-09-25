@@ -2057,6 +2057,73 @@ More item role-accurate where it is). Grounded against current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-56-specs.md`, approved 25 September 2026).
 
+**Spec approved 25 September 2026 ("approve as proposed, all decisions"). Implemented and deployed the
+same day** as one frontend PR (#202) plus a text-only follow-up (#203); the spec and register entry
+were #201.
+
+**Implemented (frontend only; no backend or role-gate change, `navAccess.js` untouched).**
+- *Help and Education* are two links in the sidebar footer, shown to every role, one click with no menu
+  opened first (also in the phone overlay). They left "More"/Admin.
+- *"More"* is two always-open sections instead of five accordion groups: **Tools & reports** (Reports,
+  Rate Sheet, Price Calculator, Price Requests, Vendor Master, One Simple Calculator) and **Admin**
+  (Sports & Scope, Master Settings, Cross-Sell Add-ons, Audit Log); a section with nothing left to
+  show is hidden. Each item is still shown to exactly the roles `navAccess.js` lists.
+- *"All Quotations"* was removed from Admin -- it made the same call as the Quotations header and
+  opened the same screen.
+- *Reports* says which types the role can generate: Sales and PM each get one line (Sales: only the
+  Quotation Pipeline; PM: Override Summary is for the Director); the Director sees none.
+- *Handbook wording* (`handbookData.js`), corrected in #202: the Pricing Calculator entry named "Daily
+  Work", which no longer exists; the Reports entry listed the wrong roles for the Pipeline type ("all
+  roles except site_engineer/procurement" -- `ca_tax` is refused too; it is Sales, PM and Director) and
+  now names its location; the "All Quotations" entry still described a Director-only register although
+  Amendment 49 opened the list to Sales and PM (now the "Quotations" entry, with cost/margin for PM and
+  Director only and CSV for the Director); the All Estimates entry now says it is the Estimates tab of
+  Quotations. **Two more phrases were missed** and found only by grepping the deployed bundle -- the
+  Estimates entry's "the stricter gate All Quotations has" and the Pricing Calculator's "lives under
+  Tools" -- and corrected in #203.
+
+**Verified locally.** Frontend build clean at each PR; no frontend test suite exists, so verification
+was a real-Chrome audit against the local API, as each of the six roles: the More menu equals the spec's
+per-role table exactly and in order; Help and Education are present with More closed; opening every More
+item and both footer links caused **0 refused (4xx) calls** and no permission-error text; the Reports
+note shows for Sales and PM and not for the Director; no sideways scroll at 375, 414 and 768px (Director
+and Sales) and the footer Help link is reachable. **The first run of that audit caught a bug I had
+introduced:** an edit to `Sidebar.jsx` dropped the `visibleItems` helper, so opening More crashed the
+page to blank ("visibleItems is not defined"). The build and the linter (oxlint) did not flag it -- an
+undefined reference is a runtime error -- and it would have shipped had the audit been skipped; it was
+fixed before the commit and the whole audit re-run and passed. CI ran the full backend suite green on
+#201, #202 and #203 (each with a `push` and a `pull_request` run); no backend code changed.
+
+**Deployed to production in two frontend steps, 25 September 2026.** (1) **`dcc3f09` (#202, with the docs
+merged since #199):** the served bundle changed from `index-BfhevSxH.js` to `index-DvJ-4ya-.js`; downloaded
+from production it contains "Tools & reports", both Reports notes, "More > Tools & reports", Vendor Master,
+One Simple Calculator, Cross-Sell Add-ons and Audit Log, and no longer contains "Daily Work", the
+Director-only register wording or the wrong Pipeline role list; Team & Access, Roles & permissions and the
+PM read-only line are still present. (2) **`68cb19a` (#203):** the bundle changed to `index-CndvG5Op.js`,
+which contains "stricter cost/margin rules the Quotations list applies" and "lives under More > Tools &
+reports" and neither old phrase. Both deploys were correct first time (each `git pull` fast-forwarded);
+`/api/health` ok and an anonymous `GET /api/role-permissions` still 401 after each.
+
+**Open items -- not verified or not done:**
+- *No logged-in click-through on production.* The sidebar footer, the More sections and the Reports
+  notes were verified in real Chrome against the local database and, on production, only from the served
+  bundle's text; the Help and Education footer links are wired in code but were not seen rendered there.
+- *On a phone with More open, the list scrolls inside the menu* (the footer and log-out stay pinned): at
+  375x812 a Director sees the first item or so of More before scrolling. It fits and is reachable, but a
+  Director may prefer the footer to collapse; not changed.
+- *The Help handbook needed two corrections after the main PR* (#203). The search for old location
+  wording was by name (Admin, More, Master Settings, All Quotations, Vendor, Tools, Education) and did not
+  catch phrases that describe a gate ("the stricter gate All Quotations has"); the handbook is
+  hand-written and nothing checks it against the navigation.
+- *The navigation table is still hand-written* (`navAccess.js`, plus the section lists in `Sidebar.jsx`);
+  the Director's Team & Access > Roles & permissions screen is the way to re-check it.
+- *Director review pending* of the new sidebar (footer links, "Tools & reports" wording, Vendor Master
+  moved under tools) and of the Quotations, Payments and Team & Access screens; nothing has been tested on
+  a real phone (the site is still plain HTTP on a bare IP).
+- *Still open from Amendment 48's audit:* global quick search, Section C quotation content (richer cover
+  letter, descriptive scope of work, bank details), and HTTPS on a proper domain. The header-by-header
+  build and the placement decisions are otherwise complete.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

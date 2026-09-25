@@ -11,6 +11,41 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-25 -- PRs #201-#203: Amendment 52 (placement of the More group)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `6bba458` -> `68cb19a`, in two steps (includes PR #200's and #201's docs-only merges)
+**Frontend-only both times** -- no migration, no backend rebuild (`Sidebar.jsx`, `Reports.jsx`,
+`handbookData.js`).
+
+**Step 1 (`dcc3f09`, PR #202):** `git pull` fast-forwarded `6bba458..dcc3f09` (`Reports.jsx`, `Sidebar.jsx`,
+`handbookData.js` plus the docs); frontend Docker build ran (`npm run build`); copied from
+`/tmp/nestaprime-frontend/dist/.`. The served page changed from `index-BfhevSxH.js` to `index-DvJ-4ya-.js`
+(CSS `index-1PE5H3qy.css` unchanged). Downloaded from production, the bundle contains "Tools & reports",
+"You can generate the Quotation Pipeline report", "Override Summary is for the Director", "More > Tools &
+reports", Vendor Master, One Simple Calculator, Cross-Sell Add-ons and Audit Log, and no longer contains
+"Daily Work", "Director-only, cross-project Quotation register" or "all roles except
+site_engineer/procurement"; Team & Access, Roles & permissions, "only the Director can change them" and
+"Open to every role" are still there. `/api/health` `{"status":"ok"}`; anonymous `/api/role-permissions` 401.
+
+**A grep of that bundle turned up two more stale handbook phrases** -- "the stricter gate All Quotations
+has" and "lives under Tools" -- fixed in PR #203.
+
+**Step 2 (`68cb19a`, PR #203):** `git pull` fast-forwarded `dcc3f09..68cb19a` (`handbookData.js` only); the
+build ran fresh; copied; the served page changed to `index-CndvG5Op.js`, which contains "stricter
+cost/margin rules the Quotations list applies" and "lives under More > Tools & reports", contains neither
+old phrase, and still contains everything from step 1. `/api/health` ok; anonymous `/api/role-permissions`
+401.
+
+Both steps were correct first time (each pull moved the server forward, unlike the earlier un-pulled
+attempts); the pasted output was checked against what production served rather than trusted.
+
+**Not verified in production:** the sidebar as a logged-in user (the footer Help/Education links and the
+More sections were verified in real Chrome against the local database, and on production only from the
+served bundle's text).
+
+---
+
 ## 2026-09-25 -- PRs #196-#199: Amendment 51 (Team & Access and role-accurate navigation)
 
 **Run by:** R. Patni (with AI development assistance)
