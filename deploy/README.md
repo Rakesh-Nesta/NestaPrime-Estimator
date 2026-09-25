@@ -1,6 +1,8 @@
 # Deploying to the Lightsail production server
 
 Target: Ubuntu 24.04, static IP `65.1.234.78`, Docker + nginx already installed, 2GB RAM.
+Served over **HTTPS on a domain** (Amendment 55): everywhere below, `your.domain.example` stands for the
+real domain. A server still on plain HTTP by IP follows **"Cutover to HTTPS"** (further down) once.
 Everything below is meant to be pasted into the Lightsail browser SSH terminal, in order.
 No SSH key setup needed -- the browser terminal is already a shell on the box.
 
@@ -49,7 +51,7 @@ cat > .env <<EOF
 POSTGRES_PASSWORD=${POSTGRES_PW}
 DATABASE_URL=postgresql+psycopg://nestaprime:${POSTGRES_PW}@db:5432/nestaprime_estimator
 SECRET_KEY=${JWT_SECRET}
-CORS_ORIGINS=http://65.1.234.78
+CORS_ORIGINS=https://your.domain.example
 EOF
 
 echo "Wrote .env -- Postgres password and JWT secret generated, not shown above on purpose."
@@ -127,7 +129,7 @@ you type here only needs to get you logged in once.
 ```bash
 sudo mkdir -p /var/www/nestaprime
 docker build -f frontend/Dockerfile --target export \
-  --build-arg VITE_API_URL=http://65.1.234.78/api \
+  --build-arg VITE_API_URL=https://your.domain.example/api \
   --output /tmp/nestaprime-frontend \
   frontend
 sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/
@@ -145,12 +147,10 @@ alone won't pick it up.
 
 ## 6. Point nginx at it
 
-```bash
-sudo cp deploy/nginx/nestaprime.conf /etc/nginx/sites-available/nestaprime
-sudo ln -sf /etc/nginx/sites-available/nestaprime /etc/nginx/sites-enabled/nestaprime
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
-```
+**On a fresh server the certificate does not exist yet**, so this happens in two steps -- the
+bootstrap config first, then (after certbot) the final one. Follow **"Cutover to HTTPS"** below;
+its steps 2 to 5 are this step. (`deploy/nginx/nestaprime.conf` carries a `__DOMAIN__` placeholder and
+must be installed through the `sed` line in that section, never copied as it is.)
 
 `nginx -t` validates the config before reloading -- if it errors, nginx keeps running
 the old config rather than going down, so it's safe to fix and retry.
@@ -167,10 +167,10 @@ an already-deployed config on its own.
 ## 7. Smoke test
 
 ```bash
-curl http://65.1.234.78/api/health
+curl https://your.domain.example/api/health
 ```
 
-Expect `{"status":"ok"}`. Then in a real browser: go to `http://65.1.234.78`, log in
+Expect `{"status":"ok"}`. Then in a real browser: go to `https://your.domain.example`, log in
 with the Director account from step 4, create a project, add any sport, build and
 verify its Cost Sheet, and create an Estimate option. This exact sequence was verified
 locally against these same Docker images before this was handed to you -- if it doesn't
@@ -185,7 +185,7 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build backend
 # Only if the frontend changed:
 docker build -f frontend/Dockerfile --target export \
-  --build-arg VITE_API_URL=http://65.1.234.78/api \
+  --build-arg VITE_API_URL=https://your.domain.example/api \
   --output /tmp/nestaprime-frontend frontend
 sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/
 sudo chmod -R 755 /var/www/nestaprime
@@ -207,6 +207,109 @@ docker compose -f docker-compose.prod.yml exec -T -e PYTHONPATH=/app backend pyt
 ```
 Every script here is re-run-safe (skips anything that already exists by its natural
 key), so running one that turns out not to be needed is harmless.
+
+## Cutover to HTTPS (one time; Amendment 55, Section 59)
+
+For a server that is still plain HTTP on the bare IP. Run each numbered step in order; every command
+block is its own step -- **give the `sudo cp` frontend copy its own block and check the served bundle
+afterwards**. Check each step from outside before the next. `your.domain.example` is the real domain.
+
+**0. Before anything (Director).** (a) Add a DNS `A` record for the domain pointing at `65.1.234.78` and
+confirm it resolves. (b) In the Lightsail console, Networking tab, open **TCP 443** (port 80 stays open).
+(c) If WhatsApp/Telegram callbacks are configured, check none targets `http://65.1.234.78/...` -- a
+redirect would break it; point it at the HTTPS domain, or at loopback if it runs on this host.
+
+```bash
+getent hosts your.domain.example
+```
+
+**1. Keep the way back.**
+
+```bash
+sudo cp /etc/nginx/sites-available/nestaprime /etc/nginx/sites-available/nestaprime.pre-https
+```
+
+**2. Install certbot and the webroot folder.**
+
+```bash
+sudo apt-get update && sudo apt-get install -y certbot
+sudo mkdir -p /var/www/certbot
+```
+
+**3. Bootstrap config (HTTP only; the app keeps working), then get the certificate.**
+
+```bash
+cd /home/ubuntu/NestaPrime-Estimator && git pull
+sed "s/__DOMAIN__/your.domain.example/g" deploy/nginx/nestaprime-bootstrap.conf | sudo tee /etc/nginx/sites-available/nestaprime > /dev/null
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+```bash
+sudo certbot certonly --webroot -w /var/www/certbot -d your.domain.example
+```
+
+Expect "Successfully received certificate". If it fails, nothing has changed for users -- the site is
+still the old HTTP one; fix the DNS/port cause and rerun this step.
+
+**4. Point the backend at the HTTPS origin and rebuild it** (the forwarded-headers change ships in the
+same rebuild):
+
+```bash
+sed -i 's|^CORS_ORIGINS=.*|CORS_ORIGINS=https://your.domain.example|' .env
+docker compose -f docker-compose.prod.yml up -d --build backend
+```
+
+**5. Install the final config.** `nginx -t` is the gate; if it errors, nothing has changed.
+
+```bash
+sed "s/__DOMAIN__/your.domain.example/g" deploy/nginx/nestaprime.conf | sudo tee /etc/nginx/sites-available/nestaprime > /dev/null
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**6. Rebuild the frontend for the HTTPS address and copy it -- the copy as its own step.**
+
+```bash
+docker build -f frontend/Dockerfile --target export --build-arg VITE_API_URL=https://your.domain.example/api --output /tmp/nestaprime-frontend frontend
+```
+
+```bash
+sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/ && sudo chmod -R 755 /var/www/nestaprime
+```
+
+**7. Renewal.** Certificates last 90 days; certbot installs a systemd timer that renews them. Prove it:
+
+```bash
+sudo certbot renew --dry-run
+systemctl list-timers | grep certbot
+```
+
+The renewal replaces the certificate files but nginx must reload to use them -- certbot's own deploy
+hook does not do that here, so add one:
+
+```bash
+printf '#!/bin/sh\nsystemctl reload nginx\n' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh > /dev/null
+sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+```
+
+**Rollback (any time up to and including step 6).** Restore the kept config, reload, and rebuild the
+frontend for the old address; the site is then the plain-HTTP one again:
+
+```bash
+sudo cp /etc/nginx/sites-available/nestaprime.pre-https /etc/nginx/sites-available/nestaprime
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+then rebuild the frontend with `--build-arg VITE_API_URL=http://65.1.234.78/api`, copy it, and set
+`CORS_ORIGINS=http://65.1.234.78` in `.env` (rebuild the backend). Browsers that saw the five-minute
+HSTS header forget it after five minutes.
+
+**Raising HSTS.** After a clean week, change `max-age=300` to `max-age=15552000` in
+`deploy/nginx/nestaprime.conf` (the repository test pins the form), reinstall through the `sed` line in
+step 5, `nginx -t`, reload.
+
+**If the certificate cannot renew** (an expiry warning in the browser is the symptom): `sudo certbot
+renew` shows why -- almost always port 80 blocked, the DNS record gone, or the `/var/www/certbot`
+webroot missing. The HTTP server block must keep serving `/.well-known/acme-challenge/`.
 
 ## Backups & restore drill (Note R2)
 
