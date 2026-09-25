@@ -2124,6 +2124,34 @@ reports" and neither old phrase. Both deploys were correct first time (each `git
   letter, descriptive scope of work, bank details), and HTTPS on a proper domain. The header-by-header
   build and the placement decisions are otherwise complete.
 
+### Amendment No. 53 — Global Quick Search (plan B.3; cross-cutting gap of Amendment 48's Audit)
+**Registered 25 September 2026**, on the Director's instruction to register and spec the global quick
+search, after Amendments 51 and 52 completed the header-by-header build and the placement of everything
+under "More". Grounded against current code:
+- **There is no global search.** The only text searches are inside four separate screens, each
+  filtering only its own list: Leads & Clients (`ClientsAdmin.jsx` `matchesSearch`, Amendment 47),
+  All Projects, the Quotations screen and its Estimates tab. The sidebar (`Sidebar.jsx`) and the phone top
+  bar have none; nothing finds a client, a lead, a project and a quotation from one box. Plan B.3 named
+  the harm: a rep on a call with a client has no fast way to pull up that client's record. (B.3's
+  other half, that Sales could not reach the quotation list, was fixed by Amendment 49.)
+- **The searches that exist are client-side or partial.** Leads & Clients filters, in the browser,
+  the client and lead lists it has already loaded (name, phone, email); `GET /clients` and
+  `GET /opportunities` have **no search parameter**. Only `GET /projects` (project number and client
+  name) and `GET /estimates` search on the server, and `GET /projects` builds its `LIKE` pattern from the
+  raw text, so a typed `%` matches every project (a small existing defect, out of scope here and noted
+  in the spec).
+- **Visibility is per kind, and already defined.** `GET /clients` and `GET /opportunities` admit
+  `sales`/`pm`/`director`/`procurement`; `GET /projects` admits all six roles; `GET /quotations` admits
+  `sales`/`pm`/`director` (Amendment 49) and withholds cost and margin from Sales (K.3). A search must
+  reproduce exactly those limits and add no new exposure; the fields a project row already returns to all
+  six roles (project number, client name, city) are the ceiling for `site_engineer` and `ca_tax`.
+- **Opening a record has no direct route for clients and leads.** A project opens through the existing
+  open-a-project call (`handleOpenProject`, to Documents); a client or lead has no per-record view or
+  deep link -- the open gap Amendment 48 noted ("Open in Opportunities" opens the screen, not the
+  record) -- so a result can only land on Leads & Clients, where the list is filterable.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-57-specs.md`, approved 25 September 2026).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
