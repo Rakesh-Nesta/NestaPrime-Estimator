@@ -11,6 +11,55 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-25 -- PRs #213-#215: Amendment 55 (HTTPS on `app.nestaprime.in`) and Amendment 56 (name "NestaPrime CRM")
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `bf3a704`/`caaeb3d` -> `3eb6be0` (repository PRs #213, #214 and #215; server steps below)
+Not a normal deploy: a DNS record, a firewall rule, a certificate, a backend rebuild and two nginx
+configurations, run one step at a time from the runbook in `deploy/README.md` ("Cutover to HTTPS").
+
+**Before the server.** DNS: `A app -> 65.1.234.78` (TTL 600) added at GoDaddy for `nestaprime.in`; from Google,
+Cloudflare and Quad9 and from GoDaddy's own nameserver it resolved to the server (my own resolver kept a cached
+"no such name"). Firewall: `https://65.1.234.78` timed out until an HTTPS rule (TCP 443, Anywhere IPv4) was
+saved in Lightsail -- the first attempt had the source left on "Custom" with no address -- after which a
+connection was refused (open, nothing listening). WhatsApp/Telegram: none of `WA_GATEWAY_BASE_URL`,
+`WA_GATEWAY_WEBHOOK_SECRET`, `TELEGRAM_BOT_TOKEN` exists in the server's `.env`.
+
+**Steps, in order (all UTC).** (1) `nestaprime.pre-https` copy of the live config. (2) certbot 2.9.0 installed
+(timer enabled), `/var/www/certbot` created. (3) `git pull` (`bf3a704..3fbbfee`), the bootstrap config installed
+through `sed`, `nginx -t` ok, reload; from outside the app still answered 200 over HTTP and the challenge path
+404 from nginx; `certbot certonly --webroot --dry-run` passed, then the real run: "Successfully received
+certificate", expiring 2026-12-24. (4) `.env` copied to `.env.pre-https`, `CORS_ORIGINS=https://app.nestaprime.in`,
+backend rebuilt at 14:19 (both workers "Application startup complete", no `Running upgrade`, `/api/health` ok);
+from outside the HTTPS origin was granted CORS and the IP origin was not. (5) The final config installed,
+`nginx -t` ok, reloaded. (6) Frontend rebuilt fresh (820.26kB) with `VITE_API_URL=https://app.nestaprime.in/api`
+and copied as its own step (`index-B2k8NfsA.js` -> `index-27Gwdoeu.js`). (7) `certbot renew --dry-run`
+succeeded; `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` installed (33 bytes, executable).
+
+**Verified from outside afterwards:** the certificate verifies (issuer Let's Encrypt, `CN=app.nestaprime.in`, valid
+2026-09-25 to 2026-12-24); HTTP on the domain and on the IP both 301 to the same path on HTTPS; the four security
+headers with `Strict-Transport-Security: max-age=300`; `/api/health` ok, anonymous protected call 401; CORS only
+for the HTTPS origin; a trailing-slash request redirects to `https://`; TLS 1.1 refused, 1.2 and 1.3 work; the new
+bundle calls the HTTPS API only and contains the Amendment 51-54 text; real Chrome, desktop and 375px, loads the
+login page with no failed or mixed-content requests and answers a wrong login with 401 and "Incorrect email or
+password"; an `http://` visit ends on the HTTPS address. The Director's phone opened the site (first typed as
+`aap.nestaprime.in`, a typo).
+
+**Amendment 56 (PR #215), same day:** `git pull` `3fbbfee..3eb6be0` (`education.py`, `index.html`, `App.jsx`,
+`Help.jsx`); backend rebuilt at 14:58 UTC (no migration); frontend rebuilt fresh (820.24kB) with the HTTPS API
+address and copied; bundle `index-27Gwdoeu.js` -> `index-Cz85QJox.js`; the live login page in real Chrome shows the
+tab title and heading "NestaPrime CRM". The health check handed over with this deploy used `http://127.0.0.1/...`
+and printed "301 Moved Permanently" -- correct after the cutover (HTTP now redirects), the command was stale; the
+backend was verified over HTTPS instead.
+
+**Not verified in production:** a logged-in session over HTTPS (Director, Sales, the phone), the Amendment 54
+signatory and PDF check, a 2 MB upload, and the in-app help chat's new self-description.
+
+**Left on the server:** `nestaprime.pre-https` and `.env.pre-https` (rollback), a pending kernel restart, HSTS at
+`max-age=300` (raise after a clean week).
+
+---
+
 ## 2026-09-25 -- PRs #209-#211: Amendment 54 (quotation content)
 
 **Run by:** R. Patni (with AI development assistance)

@@ -2417,6 +2417,123 @@ Director's phone cannot open the site. Grounded against the repository and the l
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-59-specs.md`, approved 25 September 2026; the domain name is still to be supplied).
 
+**Spec approved 25 September 2026 ("approve as proposed, all decisions"). Implemented, run on the server
+and verified the same day.** The repository work was PR #214 (after #213, spec and register); the
+server cutover followed the runbook it added, one step at a time, with the Director pasting each step's
+output and each step checked from outside before the next.
+
+**The Director's decisions on the open inputs.** The Director has no login for `nestaprime.com` (its DNS is
+at Hostinger), so the domain is **`app.nestaprime.in`**: `nestaprime.in`'s DNS is at GoDaddy, where the
+Director has a login, and a single `A` record was added there -- `app` -> `65.1.234.78`, TTL 600, the other
+six records untouched (checked in a screenshot). DNS in AWS was considered and not needed. The Lightsail
+static IP `NestaPrime-ip` is attached to the instance `NestaPrime-App`, so the address will not change.
+The check for WhatsApp/Telegram settings in the server's `.env` printed nothing -- none of the three keys
+exists -- so no callback could be broken by the redirect.
+
+**Implemented (PR #214).** `deploy/nginx/nestaprime.conf` rewritten (installed through a `__DOMAIN__`
+`sed` line): port 80 answers the ACME challenge and 301-redirects everything else to HTTPS; the bare IP
+301-redirects to the domain; port 443 (`ssl http2`, TLS 1.2 and 1.3 only) with the existing `/api/` proxy,
+SPA fallback and `client_max_body_size 100M`, and the headers `Strict-Transport-Security` (staged at
+`max-age=300`, no subdomains, no preload), `X-Content-Type-Options`, `X-Frame-Options: DENY` and
+`Referrer-Policy`. `deploy/nginx/nestaprime-bootstrap.conf` (HTTP only, plus the challenge path) for the one
+step that precedes a certificate. `Dockerfile`: gunicorn `--forwarded-allow-ips='*'`. `deploy/README.md`: the
+HTTPS addresses and a "Cutover to HTTPS" runbook with a written rollback, how to raise HSTS and what to do
+if renewal fails. Seven tests (`tests/test_deploy_config.py`) pin those directives.
+
+**Verified before the server was touched.** The tests are mutation-checked (removing a header or changing
+301 to 302 fails two). The two configs pass `nginx -t` on real nginx 1.24, and in a running nginx 1.24
+container with a throwaway certificate: `http://domain/path?x=1` -> 301 to the same path on HTTPS,
+`http://<IP>/quotes?id=2` -> 301 to `https://<domain>/quotes?id=2`, the challenge path answers 200 over HTTP,
+HTTPS answers 200 with all four headers (also on a 502 from `/api/`), SPA deep links work, TLS 1.1 is refused
+and 1.2 works. The backend trap was reproduced in the built image: two gunicorn containers reached over the
+Docker bridge, as nginx reaches production -- without the flag a trailing-slash request carrying
+`X-Forwarded-Proto: https` redirected to `http://`, with it to `https://` (`uvicorn_worker` passes gunicorn's
+`forwarded_allow_ips` to uvicorn, checked in its source). CI ran the full suite green on #213 and #214.
+
+**Run on the server, 25 September 2026 (UTC).** *Firewall:* before anything, `https://65.1.234.78` timed out
+(port 443 closed); the Director added the rule in Lightsail -- the first attempt had the source left on
+"Custom" with no address, corrected to "Anywhere IPv4" -- after which a connection was *refused* (the
+firewall open, nothing listening yet). *Step 1:* the current config was copied to `nestaprime.pre-https`.
+*Step 2:* certbot 2.9.0 installed (its renewal timer enabled) and `/var/www/certbot` created. *Step 3:* the
+bootstrap config was installed (`nginx -t` passed; the app kept serving over HTTP, and the challenge path
+answered 404 from nginx itself, as intended); a `--dry-run` passed, then the real certificate was issued.
+*Step 4:* `.env` copied to `.env.pre-https`, `CORS_ORIGINS=https://app.nestaprime.in`, backend rebuilt at
+14:19 UTC (both workers started, no migration). *Step 5:* the final config installed, `nginx -t` passed,
+reloaded. *Step 6:* the frontend rebuilt fresh with `VITE_API_URL=https://app.nestaprime.in/api` and copied
+(the copy as its own step, as agreed after the earlier failed one). *Step 7:* `certbot renew --dry-run`
+succeeded and a deploy hook (`reload-nginx.sh`) was installed so nginx reloads on each renewal.
+
+**Verified from outside afterwards.** The certificate verifies without `-k` (subject `CN=app.nestaprime.in`,
+issuer Let's Encrypt, valid 25 September to **24 December 2026**); `http://app.nestaprime.in/...` and
+`http://65.1.234.78/...` both answer 301 to the same path on `https://app.nestaprime.in`; HTTPS carries
+`Strict-Transport-Security: max-age=300`, `X-Content-Type-Options`, `X-Frame-Options` and `Referrer-Policy`;
+`/api/health` is ok and an anonymous protected call answers 401; the CORS header is granted to
+`https://app.nestaprime.in` and not to `http://65.1.234.78`; a trailing-slash request is redirected to an
+`https://` location; TLS 1.1 is refused while 1.2 and 1.3 work; the served bundle changed
+(`index-B2k8NfsA.js` to `index-27Gwdoeu.js`), calls `https://app.nestaprime.in/api` and no longer contains the
+old `http://65.1.234.78/api`, and still contains the Amendment 51-54 text. **Real Chrome against the live
+site**, desktop and 375px: the login page loads over HTTPS, a deliberately wrong login is answered
+`401 /api/auth/login` with "Incorrect email or password" shown, no failed requests and no mixed-content or
+blocked-request warnings (the only console line is that 401), no sideways scroll, and an `http://` visit
+ends on `https://app.nestaprime.in/`. **The Director's phone:** the first attempt typed `aap.nestaprime.in`
+(a typo: `DNS_PROBE_FINISHED_NXDOMAIN`, the name does not exist); with `app.nestaprime.in` it **opened**.
+
+**Open items -- not verified or not done:**
+- *Nobody has logged in over HTTPS on production.* The real Director login, a project and a quotation, the
+  Amendment 54 signatory and PDF check, a 2 MB logo upload, and the Amendment 51-54 screens as each role were
+  verified on the local copy and, on production, only as far as the login page and a wrong login. The
+  phone was confirmed to *open* the site; logging in on it, and whether it was on mobile data, were not reported.
+- *HSTS is still `max-age=300`.* Raise it to `15552000` (180 days) after a clean week (about 2 October) --
+  edit `deploy/nginx/nestaprime.conf` (the test accepts only those two values), reinstall through the
+  `sed` line, `nginx -t`, reload.
+- *The certificate expires 24 December 2026.* Renewal is automatic and its dry-run passed, with a reload
+  hook; there is no monitoring beyond Let's Encrypt's expiry emails to the address the Director entered
+  (the Director also answered "yes" to the optional EFF newsletter question).
+- *Rollback files remain on the server:* `/etc/nginx/sites-available/nestaprime.pre-https` and
+  `.env.pre-https`. Remove them once HTTPS has run cleanly.
+- *The server reports a pending kernel restart* (noticed during the certbot install; not part of this change).
+- *A backend-built redirect keeps its scheme but drops the `/api` prefix* (a trailing-slash request to
+  `/api/clients/` answers `https://app.nestaprime.in/clients`): nginx strips `/api` before the backend sees the
+  path. Existing behaviour, and the app never sends such a request; the scheme is what this amendment fixed.
+- *IPv6:* the instance is dual-stack, but there is no `AAAA` record, nginx listens on IPv4 only and the new
+  firewall rule is IPv4 only.
+- *No "Team login" link yet on `nestaprime.com`* (the Director has no Hostinger login); the app is reached at
+  `https://app.nestaprime.in`. `nestaprime.com` could later get `app.nestaprime.com` as a second name.
+- *Not done, by design (out of scope):* a security scan of production over HTTPS, a Content-Security-Policy,
+  rate limiting or a WAF. **Every future frontend build must use `VITE_API_URL=https://app.nestaprime.in/api`**
+  -- the old `http://65.1.234.78/api` form would break the site.
+- *With this, every Amendment 48 audit item is done or resolved;* what remains open is the Director's own to do
+  (T&C review, the CA's TDS confirmation, reviewing the newer screens, the production click-through).
+
+### Amendment No. 56 — App name shown as "NestaPrime CRM"
+**Registered 25 September 2026**, on the Director's instruction that the opening login page should read
+**CRM**, not Estimator. **The instruction was first read the wrong way round:** "Name Nestaprime Estimator
+instead of Nesta-Prime CRM" was taken as a request to remove "CRM". Searching the code and the live site found
+no "Nesta-Prime CRM" anywhere -- the login page already said "NestaPrime Estimator" -- so the Director was
+told what the page showed and asked for a screenshot; the Director then wrote "I said can we change estimator
+to CRM", and chose the spelling **"NestaPrime CRM"** (no hyphen, matching the brand elsewhere) over the hyphenated
+form they had typed.
+
+**Implemented (PR #215, four lines).** The login heading (`App.jsx`), the browser tab title (`index.html`), the
+Help page heading (`Help.jsx`) and the in-app help assistant's self-description (`education.py`). Deliberately
+unchanged: the Help tab "Estimator Guide" (the guide for people who prepare estimates, not the app's name), the
+FastAPI docs title ("NestaPrime Estimator API"), the PDFs (they print NESTAPRIME SPORTS INFRASTRUCTURE) and the
+sidebar tagline.
+
+**Verified.** Real Chrome against the local copy (login heading and tab title read "NestaPrime CRM", screenshot
+checked; the only remaining "Estimator" in visible text is "Estimator Guide"); no test refers to the old string;
+CI green on #215 (both runs). **Deployed 25 September 2026:** the pull fast-forwarded `3fbbfee..3eb6be0`, the
+backend was rebuilt (14:58 UTC) and the frontend rebuilt with the HTTPS API address; the served bundle changed
+from `index-27Gwdoeu.js` to `index-Cz85QJox.js`, contains two "CRM" brand spans and none reading "Estimator",
+still calls `https://app.nestaprime.in/api`, and still contains the Amendment 51-54 text; in real Chrome the
+live login page shows the tab title "NestaPrime CRM" and the heading "NestaPrime CRM".
+
+**Open items:** the in-app help chat was not seen answering as "NestaPrime CRM" (needs a login); a phone may
+show the old name until the page is reloaded; the API docs title and the wording of documents in `docs/` still
+say "Estimator". One of my own commands was out of date after HTTPS: the backend health check handed over with
+this deploy used `http://127.0.0.1/...`, which now correctly answers 301 -- the check was wrong, the server was
+fine, and it was verified over HTTPS instead.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
