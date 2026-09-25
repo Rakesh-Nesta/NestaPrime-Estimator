@@ -3,7 +3,6 @@ import {
   bulkUpdateSettings,
   createMessageTemplate,
   createSettingVersion,
-  createUser,
   downloadCompanyLogoBlob,
   exportSettingsBlob,
   getCompanyLogoMeta,
@@ -13,17 +12,12 @@ import {
   listFieldSettings,
   listMessageTemplates,
   listSettings,
-  listUsers,
   previewQuotationTemplateBlob,
-  resetUserPassword,
   updateFieldSetting,
   updateMessageTemplate,
-  updateUser,
   uploadCompanyLogo,
 } from "./api";
-import RolePermissionsViewer from "./RolePermissionsViewer";
-
-const USER_ROLES = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"];
+import MiniField from "./MiniField";
 
 function downloadBlobAsFile(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -34,8 +28,13 @@ function downloadBlobAsFile(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+// Amendment 51 (Section 55): Master Settings is now only the settings -- user
+// management and the role view moved to the Director-only Team & Access screen.
+// PM can read settings (GET /settings) but every write endpoint is Director-only,
+// so for PM the write controls are simply not shown; the Director's screen is
+// unchanged.
 export default function MasterSettings({ token, onBack, currentUser }) {
-  const [activeTab, setActiveTab] = useState("settings"); // "settings" | "users"
+  const readOnly = currentUser?.role !== "director";
 
   const [settings, setSettings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -192,53 +191,13 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           )}
         </div>
         <p className="text-xs text-text-secondary mt-1">
-          Q.2: editing a setting creates a new version, effective from today by default — it never
-          alters a document that already froze the old value. Director-only; PM is read-only.
+          {readOnly
+            ? "You can view the settings; only the Director can change them."
+            : "Q.2: editing a setting creates a new version, effective from today by default — it never alters a document that already froze the old value. Director-only; PM is read-only."}
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-        <div className="flex gap-1 mt-4 border-b border-border-dark">
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={`text-sm px-3 py-2 border-b-2 -mb-px ${
-              activeTab === "settings" ? "border-gold text-gold font-medium" : "border-transparent text-text-secondary hover:text-text-secondary"
-            }`}
-          >
-            Settings
-          </button>
-          {currentUser?.role === "director" && (
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`text-sm px-3 py-2 border-b-2 -mb-px ${
-                activeTab === "users" ? "border-gold text-gold font-medium" : "border-transparent text-text-secondary hover:text-text-secondary"
-              }`}
-            >
-              User management
-            </button>
-          )}
-          {currentUser?.role === "director" && (
-            <button
-              onClick={() => setActiveTab("permissions")}
-              className={`text-sm px-3 py-2 border-b-2 -mb-px ${
-                activeTab === "permissions" ? "border-gold text-gold font-medium" : "border-transparent text-text-secondary hover:text-text-secondary"
-              }`}
-            >
-              Role & Permissions
-            </button>
-          )}
-        </div>
       </div>
 
-      {activeTab === "users" && currentUser?.role === "director" && (
-        <UserManagementTab token={token} currentUser={currentUser} />
-      )}
-
-      {activeTab === "permissions" && currentUser?.role === "director" && (
-        <div className="bg-surface shadow rounded-lg p-6">
-          <RolePermissionsViewer />
-        </div>
-      )}
-
-      {activeTab === "settings" && (
       <>
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-1">Company logo</h3>
@@ -263,16 +222,18 @@ export default function MasterSettings({ token, onBack, currentUser }) {
                 </span>
               </p>
             )}
-            <label className="inline-block mt-1 text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
-              {uploadingLogo ? "Uploading…" : logoMeta ? "Replace logo" : "Upload logo"}
-              <input type="file" accept="image/png,image/svg+xml" onChange={handleLogoUpload} className="hidden" disabled={uploadingLogo} />
-            </label>
+            {!readOnly && (
+              <label className="inline-block mt-1 text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
+                {uploadingLogo ? "Uploading…" : logoMeta ? "Replace logo" : "Upload logo"}
+                <input type="file" accept="image/png,image/svg+xml" onChange={handleLogoUpload} className="hidden" disabled={uploadingLogo} />
+              </label>
+            )}
             {logoError && <p className="text-xs text-red-400 mt-1">{logoError}</p>}
           </div>
         </div>
       </div>
 
-      <CompanyDetailsCard token={token} />
+      <CompanyDetailsCard token={token} readOnly={readOnly} />
 
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-1">Excel export / import</h3>
@@ -288,16 +249,18 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           >
             Export to Excel
           </button>
-          <label className="text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
-            {importingExcel ? "Importing…" : "Import from Excel"}
-            <input
-              type="file"
-              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              onChange={handleImportExcel}
-              className="hidden"
-              disabled={importingExcel}
-            />
-          </label>
+          {!readOnly && (
+            <label className="text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
+              {importingExcel ? "Importing…" : "Import from Excel"}
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handleImportExcel}
+                className="hidden"
+                disabled={importingExcel}
+              />
+            </label>
+          )}
         </div>
         {importResult && (
           <div className="mt-3 text-xs bg-surface-raised border border-border-dark rounded p-3">
@@ -324,11 +287,11 @@ export default function MasterSettings({ token, onBack, currentUser }) {
         )}
       </div>
 
-      <QuotationTemplateCard token={token} />
+      <QuotationTemplateCard token={token} readOnly={readOnly} />
 
-      <MessageTemplatesCard token={token} />
+      <MessageTemplatesCard token={token} readOnly={readOnly} />
 
-      <FieldSettingsCard token={token} />
+      <FieldSettingsCard token={token} readOnly={readOnly} />
 
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-3">Current settings ({settings.length})</h3>
@@ -337,7 +300,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
             <div key={s.key} className="border border-border-dark rounded px-3 py-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="font-medium">{s.key}</span>
-                {editKey !== s.key && (
+                {!readOnly && editKey !== s.key && (
                   <button onClick={() => startEdit(s)} className="text-gold hover:underline text-xs">
                     Edit
                   </button>
@@ -386,6 +349,7 @@ export default function MasterSettings({ token, onBack, currentUser }) {
         </div>
       </div>
 
+      {!readOnly && (
       <form onSubmit={handleCreateNew} className="bg-surface shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-text-secondary">Add a new setting</h3>
         <p className="text-xs text-text-secondary">
@@ -438,7 +402,9 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           Create setting
         </button>
       </form>
+      )}
 
+      {!readOnly && (
       <form onSubmit={handleBulkUpdate} className="bg-surface shadow rounded-lg p-6 space-y-3">
         <h3 className="text-sm font-semibold text-text-secondary">Bulk update (Q.2 rule 5)</h3>
         <p className="text-xs text-text-secondary">
@@ -482,222 +448,8 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           Apply bulk update
         </button>
       </form>
+      )}
       </>
-      )}
-    </div>
-  );
-}
-
-function emptyUserForm() {
-  return { name: "", email: "", role: "sales", password: "" };
-}
-
-function UserManagementTab({ token, currentUser }) {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState(emptyUserForm());
-
-  const [resettingId, setResettingId] = useState(null);
-  const [resetPassword, setResetPassword] = useState("");
-
-  function load() {
-    return listUsers(token).then(setUsers);
-  }
-
-  useEffect(() => {
-    setLoading(true);
-    load()
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  async function handleCreate(e) {
-    e.preventDefault();
-    setError("");
-    try {
-      await createUser(token, createForm);
-      setCreateForm(emptyUserForm());
-      setCreating(false);
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function handleRoleChange(u, role) {
-    if (role === u.role) return;
-    setError("");
-    try {
-      await updateUser(token, u.id, { role });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function handleToggleActive(u) {
-    setError("");
-    try {
-      await updateUser(token, u.id, { is_active: !u.is_active });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function handleResetPassword(u) {
-    setError("");
-    try {
-      await resetUserPassword(token, u.id, resetPassword);
-      setResettingId(null);
-      setResetPassword("");
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  if (loading) return null;
-
-  return (
-    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-text-secondary mb-1">User management</h3>
-        <p className="text-xs text-text-secondary">
-          Director-only. A newly created or reset account must change its password on first login --
-          enforced on the backend, not just hidden in this screen. Two guardrails apply server-side too:
-          you can't deactivate your own account, and you can't demote or deactivate the last active Director.
-        </p>
-      </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
-
-      <div className="space-y-2">
-        {users.map((u) => {
-          const isSelf = u.id === currentUser?.id;
-          return (
-            <div key={u.id} className={`border rounded px-3 py-2 text-sm ${u.is_active ? "border-border-dark" : "border-border-dark bg-surface-raised opacity-60"}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="font-medium">{u.name}</span>{" "}
-                  <span className="text-xs text-text-secondary">
-                    ({u.email}){isSelf && " · you"}
-                  </span>
-                  {u.must_change_password && (
-                    <span className="ml-2 text-[10px] uppercase rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-400">
-                      Password change pending
-                    </span>
-                  )}
-                  {!u.is_active && <span className="ml-2 text-xs text-text-secondary">· inactive</span>}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={u.role}
-                    onChange={(e) => handleRoleChange(u, e.target.value)}
-                    className="text-xs rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1"
-                  >
-                    {USER_ROLES.map((r) => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => handleToggleActive(u)}
-                    disabled={isSelf && u.is_active}
-                    title={isSelf && u.is_active ? "You cannot deactivate your own account" : undefined}
-                    className="text-xs text-text-secondary hover:underline disabled:text-text-secondary disabled:cursor-not-allowed disabled:hover:no-underline"
-                  >
-                    {u.is_active ? "Deactivate" : "Reactivate"}
-                  </button>
-                  {resettingId === u.id ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="password"
-                        placeholder="New password"
-                        value={resetPassword}
-                        onChange={(e) => setResetPassword(e.target.value)}
-                        className="text-xs rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 w-32"
-                      />
-                      <button
-                        onClick={() => handleResetPassword(u)}
-                        className="text-xs bg-gold text-base rounded px-2 py-1 hover:bg-gold-hover"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => { setResettingId(null); setResetPassword(""); }}
-                        className="text-xs text-text-secondary hover:underline"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setResettingId(u.id); setResetPassword(""); }}
-                      className="text-xs text-gold hover:underline"
-                    >
-                      Reset password
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {creating ? (
-        <form onSubmit={handleCreate} className="border border-green-500/30 bg-green-500/10 rounded p-3 space-y-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <MiniField label="Name" value={createForm.name} onChange={(v) => setCreateForm((f) => ({ ...f, name: v }))} required />
-            <MiniField label="Email" value={createForm.email} onChange={(v) => setCreateForm((f) => ({ ...f, email: v }))} required />
-            <div>
-              <label className="block text-xs text-text-secondary">Role</label>
-              <select
-                value={createForm.role}
-                onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
-              >
-                {USER_ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-text-secondary">Initial password</label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={createForm.password}
-                onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
-              />
-            </div>
-          </div>
-          <p className="text-xs text-text-secondary">
-            The new user must change this password before they can use the app.
-          </p>
-          <div className="flex gap-2">
-            <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1 hover:bg-green-700">
-              Create user
-            </button>
-            <button
-              type="button"
-              onClick={() => { setCreating(false); setCreateForm(emptyUserForm()); }}
-              className="text-xs text-text-secondary hover:underline"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button onClick={() => setCreating(true)} className="text-xs text-gold hover:underline">
-          + Create a user
-        </button>
-      )}
     </div>
   );
 }
@@ -720,7 +472,7 @@ const FIELD_LABELS = {
 };
 const FIELD_STATES = ["compulsory", "optional", "hidden"];
 
-function FieldSettingsCard({ token }) {
+function FieldSettingsCard({ token, readOnly }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -766,6 +518,9 @@ function FieldSettingsCard({ token }) {
         {rows.map((r) => (
           <div key={r.field_key} className="flex items-center justify-between border border-border-dark rounded px-3 py-2 text-sm">
             <span>{FIELD_LABELS[r.field_key] || r.field_key}</span>
+            {readOnly ? (
+              <span className="text-text-secondary">{r.state.charAt(0).toUpperCase() + r.state.slice(1)}</span>
+            ) : (
             <select
               value={r.state}
               disabled={savingKey === r.field_key}
@@ -778,6 +533,7 @@ function FieldSettingsCard({ token }) {
                 </option>
               ))}
             </select>
+            )}
           </div>
         ))}
       </div>
@@ -796,7 +552,7 @@ const COMPANY_DETAIL_FIELDS = [
   { key: "company_bank_ifsc", label: "Bank IFSC" },
 ];
 
-function CompanyDetailsCard({ token }) {
+function CompanyDetailsCard({ token, readOnly }) {
   const [values, setValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -851,9 +607,9 @@ function CompanyDetailsCard({ token }) {
     <div className="bg-surface shadow rounded-lg p-6 space-y-3">
       <h3 className="text-sm font-semibold text-text-secondary mb-1">Company details</h3>
       <p className="text-xs text-text-secondary mb-2">
-        Part O COMPANY / Section 14: these already fed the Quotation PDF before this panel existed -- they just had
-        to be set through the raw "Add a new setting" key/value form below. This is the same data, with real labels.
-        A blank field is simply omitted from the PDF, never printed as placeholder text.
+        {readOnly
+          ? "These print on every Quotation PDF. A blank field is simply omitted from the PDF, never printed as placeholder text."
+          : 'Part O COMPANY / Section 14: these already fed the Quotation PDF before this panel existed -- they just had to be set through the raw "Add a new setting" key/value form below. This is the same data, with real labels. A blank field is simply omitted from the PDF, never printed as placeholder text.'}
       </p>
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
       {savedMessage && <p className="text-xs text-green-400 mb-2">{savedMessage}</p>}
@@ -861,26 +617,32 @@ function CompanyDetailsCard({ token }) {
         {COMPANY_DETAIL_FIELDS.map((f) => (
           <div key={f.key}>
             <label className="block text-xs font-medium text-text-secondary mb-1">{f.label}</label>
-            <input
-              value={values[f.key] || ""}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              className="w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
-            />
+            {readOnly ? (
+              <p className="text-sm text-text-primary break-words">{values[f.key] || <span className="text-text-secondary">Not set</span>}</p>
+            ) : (
+              <input
+                value={values[f.key] || ""}
+                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                className="w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
+              />
+            )}
           </div>
         ))}
       </div>
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="text-xs bg-gold text-base rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
-      >
-        {saving ? "Saving…" : "Save changes"}
-      </button>
+      {!readOnly && (
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="text-xs bg-gold text-base rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save changes"}
+        </button>
+      )}
     </div>
   );
 }
 
-function QuotationTemplateCard({ token }) {
+function QuotationTemplateCard({ token, readOnly }) {
   const [termsText, setTermsText] = useState("");
   const [warrantyRows, setWarrantyRows] = useState([]);
   const [quotations, setQuotations] = useState([]);
@@ -892,7 +654,9 @@ function QuotationTemplateCard({ token }) {
   const [savedMessage, setSavedMessage] = useState("");
 
   function load() {
-    return Promise.all([getQuotationTemplateDefaults(token), listAllQuotations(token)]).then(
+    // The quotation list only feeds the Director's Preview picker (preview-pdf is
+    // Director-only), so a read-only viewer does not fetch it.
+    return Promise.all([getQuotationTemplateDefaults(token), readOnly ? [] : listAllQuotations(token)]).then(
       ([defaults, allQuotations]) => {
         setTermsText(defaults.terms.join("\n"));
         setWarrantyRows(defaults.warranty_table.map(([item, basis]) => ({ item, basis })));
@@ -998,6 +762,7 @@ function QuotationTemplateCard({ token }) {
         <textarea
           value={termsText}
           onChange={(e) => setTermsText(e.target.value)}
+          readOnly={readOnly}
           rows={8}
           className="w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm font-mono"
         />
@@ -1011,26 +776,33 @@ function QuotationTemplateCard({ token }) {
               <input
                 value={row.item}
                 onChange={(e) => updateWarrantyRow(i, "item", e.target.value)}
+                readOnly={readOnly}
                 placeholder="Item"
-                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
+                className="flex-1 min-w-0 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
               />
               <input
                 value={row.basis}
                 onChange={(e) => updateWarrantyRow(i, "basis", e.target.value)}
+                readOnly={readOnly}
                 placeholder="Basis"
-                className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
+                className="flex-1 min-w-0 rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
               />
-              <button onClick={() => removeWarrantyRow(i)} className="text-xs text-red-400 hover:underline">
-                Remove
-              </button>
+              {!readOnly && (
+                <button onClick={() => removeWarrantyRow(i)} className="text-xs text-red-400 hover:underline">
+                  Remove
+                </button>
+              )}
             </div>
           ))}
         </div>
-        <button onClick={addWarrantyRow} className="text-xs text-gold hover:underline mt-1.5">
-          + Add row
-        </button>
+        {!readOnly && (
+          <button onClick={addWarrantyRow} className="text-xs text-gold hover:underline mt-1.5">
+            + Add row
+          </button>
+        )}
       </div>
 
+      {!readOnly && (
       <div className="flex items-center gap-3 pt-1">
         <select
           value={previewQuotationId}
@@ -1059,11 +831,12 @@ function QuotationTemplateCard({ token }) {
           {saving ? "Saving…" : "Save changes"}
         </button>
       </div>
+      )}
     </div>
   );
 }
 
-function MessageTemplatesCard({ token }) {
+function MessageTemplatesCard({ token, readOnly }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1235,14 +1008,16 @@ function MessageTemplatesCard({ token }) {
                   )}
                   {!t.is_active && <span className="text-text-secondary"> · inactive</span>}
                 </span>
-                <div className="flex items-center gap-3 shrink-0">
-                  <button onClick={() => startEdit(t)} className="text-gold hover:underline text-xs">
-                    Edit
-                  </button>
-                  <button onClick={() => toggleActive(t)} className="text-text-secondary hover:underline text-xs">
-                    {t.is_active ? "Deactivate" : "Reactivate"}
-                  </button>
-                </div>
+                {!readOnly && (
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button onClick={() => startEdit(t)} className="text-gold hover:underline text-xs">
+                      Edit
+                    </button>
+                    <button onClick={() => toggleActive(t)} className="text-text-secondary hover:underline text-xs">
+                      {t.is_active ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </div>
+                )}
               </div>
               {t.subject && <p className="text-xs text-text-secondary mt-1">Subject: {t.subject}</p>}
               <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-wrap">{t.body}</p>
@@ -1250,11 +1025,13 @@ function MessageTemplatesCard({ token }) {
           )
         )}
         {templates.length === 0 && !adding && (
-          <p className="text-xs text-text-secondary">No message templates yet -- add one below.</p>
+          <p className="text-xs text-text-secondary">
+            {readOnly ? "No message templates yet." : "No message templates yet -- add one below."}
+          </p>
         )}
       </div>
 
-      {adding ? (
+      {readOnly ? null : adding ? (
         <form onSubmit={handleCreate} className="border border-green-500/30 bg-green-500/10 rounded p-2 space-y-2 text-sm">
           <div className="grid grid-cols-2 gap-2">
             <MiniField label="Name" value={addForm.name} onChange={(v) => setAddForm((f) => ({ ...f, name: v }))} required />
@@ -1317,21 +1094,6 @@ function MessageTemplatesCard({ token }) {
           + Add template
         </button>
       )}
-    </div>
-  );
-}
-
-function MiniField({ label, value, onChange, required = false }) {
-  return (
-    <div>
-      <label className="block text-xs text-text-secondary">{label}</label>
-      <input
-        type="text"
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"
-      />
     </div>
   );
 }

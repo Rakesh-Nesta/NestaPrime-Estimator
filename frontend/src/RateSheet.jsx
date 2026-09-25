@@ -14,6 +14,7 @@ import {
   updateRateItem,
   updateRateValue,
 } from "./api";
+import { canOpen } from "./navAccess";
 import SelectWithOther from "./SelectWithOther";
 
 function downloadBlobAsFile(blob, filename) {
@@ -38,7 +39,7 @@ const emptyForm = {
   labour_category_id: "",
 };
 
-export default function RateSheet({ token, onBack }) {
+export default function RateSheet({ token, role, onBack }) {
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [vendorNames, setVendorNames] = useState([]);
@@ -55,9 +56,10 @@ export default function RateSheet({ token, onBack }) {
       listLabourCategories(token),
       // Amendment 7: Rate Sheet's vendor field is now a real picker sourced
       // from the Vendor master. site_engineer can see Rate Sheet but not
-      // Vendors (PROCUREMENT_ROLES) -- a 403 here just falls back to the
-      // Others-only free-text mode SelectWithOther already supports.
-      listVendors(token).catch(() => []),
+      // Vendors (PROCUREMENT_ROLES): Amendment 51 stops asking them, rather than
+      // firing a request the API is bound to refuse -- the vendor field falls back
+      // to the Others-only free-text mode SelectWithOther already supports.
+      canOpen("vendors_admin", role) ? listVendors(token).catch(() => []) : [],
     ]).then(([itemsRes, categoriesRes, vendorsRes]) => {
       setItems(itemsRes);
       setCategories(categoriesRes);

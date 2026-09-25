@@ -22,7 +22,9 @@ import RateSheet from "./RateSheet";
 import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
 import Sidebar from "./Sidebar";
+import TeamAccess from "./TeamAccess";
 import { BellIcon } from "./Icons";
+import { canOpen } from "./navAccess";
 import LiveClock from "./LiveClock";
 import SimpleCalculator from "./SimpleCalculator";
 import SiteSurvey from "./SiteSurvey";
@@ -57,6 +59,8 @@ export default function App() {
     // Follow-ups got its real screen in Amendment 43; Opportunities got its
     // own in Amendment 44; Payments in Amendment 50 (was a placeholder).
     "opportunities", "followups", "payments",
+    // Amendment 51: the real Team & Access screen (was Master Settings).
+    "team_access",
   ];
   const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
 
@@ -228,16 +232,19 @@ export default function App() {
         {screen === "education" && (
           <Education token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "rates" && user.role !== "sales" && (
-          <RateSheet token={accessToken} onBack={() => setScreen(preNavScreen)} />
+        {screen === "rates" && canOpen("rates", user.role) && (
+          <RateSheet token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "pricing" && user.role !== "sales" && (
+        {screen === "pricing" && canOpen("pricing", user.role) && (
           <PricingCalculator token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "settings" && user.role !== "sales" && (
+        {screen === "settings" && canOpen("settings", user.role) && (
           <MasterSettings token={accessToken} currentUser={user} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "sports_scope_admin" && user.role !== "sales" && (
+        {screen === "team_access" && canOpen("team_access", user.role) && (
+          <TeamAccess token={accessToken} currentUser={user} onBack={() => setScreen(preNavScreen)} />
+        )}
+        {screen === "sports_scope_admin" && canOpen("sports_scope_admin", user.role) && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "audit_log" && user.role === "director" && (
@@ -263,16 +270,16 @@ export default function App() {
             onBack={() => setScreen(preNavScreen)}
           />
         )}
-        {screen === "price_requests" && user.role !== "sales" && (
+        {screen === "price_requests" && canOpen("price_requests", user.role) && (
           <PriceRequests token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "vendors_admin" && ["pm", "director", "procurement"].includes(user.role) && (
+        {screen === "vendors_admin" && canOpen("vendors_admin", user.role) && (
           <VendorsAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "cross_sell_admin" && user.role === "director" && (
           <CrossSellAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "reports" && (
+        {screen === "reports" && canOpen("reports", user.role) && (
           <Reports token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "help" && (
