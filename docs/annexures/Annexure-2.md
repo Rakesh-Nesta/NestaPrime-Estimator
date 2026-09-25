@@ -2250,6 +2250,46 @@ Nothing about the code was wrong.
 - *Still open from Amendment 48's audit:* Section C quotation content (richer cover letter, descriptive
   scope of work, bank details) and HTTPS on a proper domain.
 
+### Amendment No. 54 — Quotation Content (plan Section C: cover letter, descriptive scope of work, company details)
+**Registered 25 September 2026**, on the Director's instruction to register and spec Section C -- the
+plan's three-part request, made after the Director shared a real historical quotation
+(`SEP-85 Quotation for 54 Er Rg Badminton 14.72L.pdf`, not in the repository) -- as the last open item from
+Amendment 48's audit that concerns the client-facing document. Constraint unchanged: **pricing stays
+lump-sum**; descriptive detail must carry no per-line price. Grounded against current code (the plan text
+is from 22 September and predates Section 14):
+- **Piece 3 (configurable terms, bank details, notes) is already built.** Section 14 made the
+  quotation's terms and conditions and warranty table Director-editable
+  (`quotation_terms_and_conditions`, `quotation_warranty_table`, edited in Master Settings), and the
+  company details the reference PDF carries -- legal name, PAN, GSTIN and the four bank fields -- are
+  settings edited in the Company details card and printed by `build_quotation_pdf` (identity lines at the
+  top, a "Payment to" block, only when set). Free-text remarks print as "Special Remarks"
+  (`project.custom_notes`). What is not known is what production has *configured*: nothing in the code or
+  logs says whether the bank fields, or the terms, have been filled in, and the reference PDF is not
+  available to compare clause by clause.
+- **Piece 2 (descriptive scope of work) is missing from the Quotation PDF but exists for the Estimate PDF.**
+  The Quotation PDF's private-client table has one row per sport -- name and tier, dimensions and court
+  count, "Lump sum, turnkey", amount -- and nothing about what is included. `build_estimate_pdf` already
+  prints, per option, the Director-authored package content for that sport and tier (flooring, structure,
+  lighting, scope lines, warranty years -- `_package_content_flow`) and the Part I inclusions list;
+  `build_quotation_pdf` computes the inclusions (`_inclusions_and_exclusions`) but never prints them and
+  never calls the package-content builder. So the earlier, non-binding document describes the work and the
+  binding one does not. Tender-mode quotations print a category-grouped BOQ instead. An unconfigured
+  package prints "Package content not yet configured" in the Estimate PDF -- fine for an internal
+  estimate, wrong for a client's document.
+- **Piece 1 (the cover letter) is a two-to-three sentence paragraph with no letter around it.**
+  `POST /quotations/{id}/draft-cover-note` (Amendment 13) prompts for a short introduction from client,
+  city, sport, package and total only, and says "no greeting, no sign-off"; the PDF prints the saved note
+  as a plain paragraph after the client block. There is no addressee line although the client's contact
+  and active signatories (Part O `ClientSignatory`) are in the data, no subject line, and no NestaPrime
+  sign-off -- the only signature line is "Accepted by client". AI drafting is live on production
+  (`ANTHROPIC_API_KEY` configured 16 September 2026, verified with a real call).
+- **The PDF is built live at download time,** so any new section also appears on a re-download of a quotation
+  already sent (Section 14's own note) -- a client-facing document changing after the client received it.
+- **Gaps are silent.** A blank company field is skipped, so a quotation can go out with no payment
+  instructions and nobody is told.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-58-specs.md`, awaiting approval).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
