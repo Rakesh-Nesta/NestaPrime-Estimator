@@ -11,6 +11,39 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-25 -- PRs #205-#207: Amendment 53 (global quick search)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `68cb19a` -> `deec482`, in two steps (includes PR #204's and #205's docs-only merges)
+**Step 1 -- backend rebuild, no migration** (`4799ac2`: `search.py`, `clients.py`, `projects.py`,
+`role_permissions.py`, `main.py`). **Step 2 -- frontend rebuild** (`deec482`: `QuickSearch.jsx`, `App.jsx`,
+`Sidebar.jsx`, `ClientsAdmin.jsx`, `Icons.jsx`, `api.js`, `handbookData.js`).
+
+**Step 1:** `git pull` fast-forwarded `68cb19a..4799ac2`; `docker compose -f docker-compose.prod.yml up -d
+--build backend` rebuilt and restarted the backend; the log shows "Application startup complete" from both
+workers and no `Running upgrade` line. Verified from production: `/api/health` `{"status":"ok"}`; OpenAPI
+lists `/search` (GET, one `q` parameter; 206 paths, was 205) and `SearchOut`, `SearchGroupOut`,
+`SearchItemOut`, whose item fields are exactly `client_id, id, kind, opportunity_id, primary, project_id,
+secondary`; anonymous `/api/search` answers 401 "Not authenticated", as do `/clients`, `/projects` and
+`/quotations`; the role-permissions, payments and quotations routes are still present.
+
+**Step 2's early attempt fetched nothing.** A frontend redeploy run before #207 merged printed "Already
+up to date" at `4799ac2` and a `CACHED` build, and the served page stayed `index-CndvG5Op.js` -- the
+"deployed" report was checked against production and found unchanged. After the merge `git pull`
+fast-forwarded `4799ac2..deec482` (`QuickSearch.jsx` new), the build ran fresh (`npm run build`; 818.66kB
+against the cached 809.51kB), and the served page changed from `index-CndvG5Op.js` to `index-DepxIVDC.js`
+(CSS `index-1PE5H3qy.css` to `index-DbTWb8mr.css`). Downloaded from production the bundle contains
+"Search clients, leads, projects and quotations", "Type a name, phone number, email", "Type at least",
+"Searching...", "Nothing matches", "Try again", "Showing the first", `/search?q=` and the Help "Quick
+search" entry, and still contains "Tools & reports", "Team & Access > People", "only the Director can
+change them" and "Open to every role". `/api/health` ok; anonymous `/api/search` and `/api/role-permissions`
+401.
+
+**Not verified in production:** the palette as a logged-in user or with production data (verified in real
+Chrome against the local database, and on production only from the served bundle's text and OpenAPI).
+
+---
+
 ## 2026-09-25 -- PRs #201-#203: Amendment 52 (placement of the More group)
 
 **Run by:** R. Patni (with AI development assistance)

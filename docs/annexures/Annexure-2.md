@@ -2152,6 +2152,104 @@ under "More". Grounded against current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-57-specs.md`, approved 25 September 2026).
 
+**Spec approved 25 September 2026 ("approve as proposed, all decisions"). Implemented and deployed the
+same day** as two ordered PRs -- #206 (backend) and #207 (frontend) -- after #205 (spec and register).
+
+**Implemented.**
+- *Part A (PR #206, `app/api/search.py`).* `GET /search?q=`, open to all six roles, returns groups
+  `client`, `lead`, `project`, `quotation`, each capped at 6 with the true `total`; a role receives only
+  the kinds it can already read. The gates are reused, not copied: `clients.READ_ROLES` and
+  `projects.LIST_ROLES` became named constants for the tuples those list endpoints already used
+  (behaviour unchanged), beside the existing `opportunities.READ_ROLES` and `quotations_admin.LIST_ROLES`.
+  Matching is case-insensitive substring over: clients (name, contact, phone, email, city), leads (lead
+  name, phone, email), projects (project number, client name, city) and quotations (document number,
+  project number, client name); `%` and `_` are literal; under 2 characters is a 422 ("Type at least 2
+  characters to search"); a query made only of digits and phone punctuation, with at least 3 digits,
+  also matches phone numbers by digits; results are exact, then prefix, then the rest, then newest. Item
+  keys are exactly `kind, id, primary, secondary, client_id, project_id, opportunity_id` -- no cost,
+  margin, price or amount exists in the response. The Roles & permissions screen (Amendment 51) shows
+  the route as "Quick search (results limited to what the role can read)".
+- *Part B (PR #207).* `QuickSearch.jsx`, a palette overlay (a full-screen sheet on phones), opened from a
+  Search button at the top of the sidebar, a magnifier in the phone top bar, `/` (when no field has focus)
+  and Ctrl/Cmd+K. Results appear about 250 ms after the last key and stale requests are aborted; arrow
+  keys, Enter and Esc work. Each state reads differently: the hint, "Type at least 2 characters",
+  "Searching...", `Nothing matches "xyz"`, an error with **Try again** (a failed search never looks
+  empty), and "Showing the first 6 of N ..." per group. A project or quotation opens that project
+  through the existing open-a-project call; a client or lead opens Leads & Clients with the exact name
+  pre-filled (`ClientsAdmin` gained an `initialSearch`), cleared when you leave. The Help handbook has a
+  new "Quick search" entry.
+- **One deliberate departure from the spec's wording.** The spec said leads are "Opportunities not yet
+  linked to a client, or any Opportunity by its lead fields". Implemented: **unlinked and not lost** --
+  the set Leads & Clients itself lists -- because a linked Opportunity is that client (shown under
+  Clients) and a lost lead is hidden on the screen a result lands on, so it would have vanished.
+
+**Verified locally.** 16 new backend tests (`tests/test_search.py`): anonymous 401; each role receives
+exactly its kinds (`site_engineer` and `ca_tax` projects only); the search constants equal the live
+route gates of `GET /clients`, `/opportunities`, `/projects` and `/quotations` (read through the Roles &
+permissions generator, so a changed list gate fails CI instead of silently diverging); the permissions
+label; the 2-character minimum; `%` and `_` literal; name, contact, phone, email and city; phone digits
+with different spacing; blacklisted and overdue clients still found; the lead rules; projects and
+quotations found and carrying what opens them; no amount, cost or margin word or field for any of the
+six roles; the 6-row cap with the true total; exact-before-prefix ordering; a new record found at once.
+105 tests passed across role-permissions, clients/projects, the projects list, opportunities,
+quotations-admin, client flags and auth; CI ran the full suite green on #205, #206 and #207 (each with
+a `push` and a `pull_request` run). Real Chrome against the local API: as each of the six roles the
+palette opens from the sidebar button, `/` and Ctrl+K, takes focus, closes on Esc; each role sees only its
+own groups; **0 refused (4xx) calls**; the hint, the 1-character message, "Nothing matches" and the
+"Showing the first 6 of N" text appear; no cost, margin or price text in the results; as Director, a
+client result opens Leads & Clients with the name pre-filled and the record listed, leaving and
+returning clears it, a project result and a quotation result open and close the palette, `/` typed into
+an input does not open it, and a blocked `/search` request shows the error and Try again, not "Nothing
+matches"; no sideways scroll at 375, 414 and 768px with the palette open, and the phone magnifier
+visible. The earlier audits were re-run as a regression check -- the Amendment 52 audit (More menu and
+footer links) and the Amendment 51 audit (every item, all roles): both passed, 0 refused calls.
+**Two checks of mine were wrong before they were right**, both in the test harness, not the product: a
+"no cost/price text" pattern first matched the letters "rs" inside the word "first" (so it failed for
+every role), and the rewrite was then silently broken -- a `\b` had been turned into a backspace
+character, making the check pass vacuously. It was caught by looking at the file's actual bytes;
+rewritten without backslashes and confirmed to fail on "Rs 8,50,000" and pass on real results. An
+earlier backend test likewise tripped on a client I had named "Amount Test School".
+
+**Deployed to production in two steps, 25 September 2026.** (1) **Backend, `4799ac2` (#206):** `git pull`
+fast-forwarded `68cb19a..4799ac2`; the backend rebuilt; both workers started cleanly with no `Running
+upgrade` line (no migration). Production's OpenAPI lists `/search` (206 paths, was 205) with its `q`
+parameter and the `SearchOut`, `SearchGroupOut` and `SearchItemOut` schemas, whose item fields are exactly
+the seven listed above; an anonymous call answers 401, as do `/clients`, `/projects` and `/quotations`.
+(2) **Frontend, `deec482` (#207):** a redeploy run before the merge fetched nothing (`git pull`:
+"Already up to date" at `4799ac2`; build `CACHED`) and changed nothing -- production kept serving
+`index-CndvG5Op.js`, which is how it was known. After the merge `git pull` fast-forwarded
+`4799ac2..deec482`, the build ran fresh, and the served page changed from `index-CndvG5Op.js` to
+`index-DepxIVDC.js` (CSS `index-1PE5H3qy.css` to `index-DbTWb8mr.css`). Downloaded from production it
+contains the palette's text ("Search clients, leads, projects and quotations", "Type a name, phone number,
+email", "Type at least", "Searching...", "Nothing matches", "Try again", "Showing the first"), the
+`/search?q=` request and the Help "Quick search" entry, and still contains the Tools & reports section,
+Team & Access and the PM read-only line; `/api/health` ok afterwards.
+
+**CI note.** #207's `pull_request` run was still going after about 28 minutes (the same code's `push` run took
+12; the usual is 12-19), so I cancelled it and re-ran it. That second attempt took about 31 minutes and
+passed -- the runner was slow, not stuck. At the moment it finished I issued another cancel-and-re-run from
+a check that was a minute out of date: the cancel was refused ("cannot cancel a completed run") and the
+re-run restarted a run that had already passed, costing about 12 minutes; that third attempt passed in 12.
+Nothing about the code was wrong.
+
+**Open items -- not verified or not done:**
+- *No logged-in click-through on production.* The palette was verified in real Chrome against the local
+  database and, on production, only from the served bundle's text and OpenAPI; nobody has yet searched a
+  real client there.
+- *No per-record view.* A client or lead result lands on Leads & Clients with its name filtered; a
+  Director may want a real client page (Amendment 48's open gap).
+- *`GET /projects`' own `search` parameter still treats `%` and `_` as wildcards* (an existing defect noted
+  in the spec and not touched; the new endpoint escapes them).
+- *The search is a plain substring match over unindexed columns* -- fine at current data volumes,
+  unmeasured beyond that; no fuzzy or typo-tolerant matching; no recent or saved searches (decision 7).
+- *Search queries are not logged or audited* (they are read-only lookups of records the person can
+  already open).
+- *Director review pending* of the palette (wording, the `/` shortcut, the sidebar button) and of the
+  screens from Amendments 49-52; nothing has been tested on a real phone (the site is still plain HTTP on a
+  bare IP).
+- *Still open from Amendment 48's audit:* Section C quotation content (richer cover letter, descriptive
+  scope of work, bank details) and HTTPS on a proper domain.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
