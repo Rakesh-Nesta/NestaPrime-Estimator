@@ -46,6 +46,7 @@ from app.models.scope_item import ProjectScopeItem, ScopeItem
 from app.models.setting import DocumentType
 from app.models.sport import ProjectSport, Sport
 from app.pdf_utils import amount_in_words_inr, format_inr, round_to_nearest_10
+from app.services import quotation_content
 
 pdf_documents_router = APIRouter(tags=["pdf-documents"])
 
@@ -607,6 +608,54 @@ def get_estimate_pdf(
 # ---------------------------------------------------------------------------
 
 
+def _scope_of_work_flow(db: Session, styles, sport_rows: list[dict], inclusions: list[str]) -> list:
+    """Amendment 54 (Section 58): what is being delivered, in words, with no price
+    on any line -- the Director-authored package content for each sport and tier
+    (a sport with none is left out, never printed as 'not configured'), then the
+    project's Part I inclusions. Empty when there is nothing to show, so the
+    heading is omitted too."""
+    blocks: list = []
+    for row in sport_rows:
+        if quotation_content.package_content_for(db, row["sport"], row["option"]) is not None:
+            blocks.extend(_package_content_flow(db, styles, row["sport"], row["option"]))
+            blocks.append(Spacer(1, 2 * mm))
+    if inclusions:
+        blocks.append(Paragraph("<b>Included in the scope of work</b>", styles["Normal"]))
+        blocks.extend(Paragraph("&bull; " + _xml_escape(item), styles["Normal"]) for item in inclusions)
+    if not blocks:
+        return []
+    return [Paragraph("Scope of work", styles["SectionHeading"]), *blocks]
+
+
+def _cover_letter_flow(db: Session, styles, quotation: Quotation, project: Project, client: Client, sport_rows: list[dict]) -> list:
+    """Amendment 54 (Section 58): the addressee, subject, the saved cover note and a
+    sign-off. Printed only when the quotation has a cover note (an unused note
+    changes nothing, Amendment 13's promise). Every free-typed value is escaped."""
+    flow: list = []
+    who = quotation_content.addressee(db, client)
+    if who:
+        name, designation = who
+        text = f"<b>Kind attention:</b> {_xml_escape(name)}" + (f", {_xml_escape(designation)}" if designation else "")
+        flow.append(Paragraph(text, styles["Normal"]))
+    sport_names = ", ".join(row["sport"].name for row in sport_rows)
+    subject = f"Quotation {quotation.document_no}" + (f" -- {sport_names}" if sport_names else "")
+    subject += f" at {project.site_address or project.city}"
+    flow.append(Paragraph(f"<b>Subject:</b> {_xml_escape(subject)}", styles["Normal"]))
+    flow.append(Spacer(1, 3 * mm))
+    flow.append(Paragraph(_xml_escape(quotation.cover_note).replace("\n", "<br/>"), styles["Normal"]))
+    flow.append(Spacer(1, 3 * mm))
+    flow.append(Paragraph("Yours faithfully,", styles["Normal"]))
+    flow.append(Paragraph(f"For <b>{_xml_escape(quotation_content.company_name(db))}</b>", styles["Normal"]))
+    signatory_name, signatory_designation = quotation_content.signatory_settings(db)
+    if signatory_name:
+        flow.append(Spacer(1, 6 * mm))
+        flow.append(Paragraph(f"<b>{_xml_escape(signatory_name)}</b>", styles["Normal"]))
+        if signatory_designation:
+            flow.append(Paragraph(_xml_escape(signatory_designation), styles["Normal"]))
+    flow.append(Spacer(1, 4 * mm))
+    return flow
+
+
 def _granular_boq_rows_for_sport(
     db: Session, cost_sheet_id: uuid.UUID, project_sport_id: uuid.UUID, sport_ex_gst: float
 ) -> list[dict] | None:
@@ -690,6 +739,9 @@ def build_quotation_pdf(
     estimate = db.query(Estimate).filter(Estimate.id == quotation.estimate_id).first()
     qlines = db.query(QuotationLine).filter(QuotationLine.quotation_id == quotation_id).all()
     inclusions, exclusions = _inclusions_and_exclusions(db, project.id)
+    # Amendment 54: the scope of work, the letter block and a warranty table without
+    # an invented duration appear only on a quotation not yet sent, never in tender mode.
+    enhanced = quotation_content.is_enhanced(quotation, project)
 
     # Line amounts apportioned pro-rata to each sport's own share of the
     # underlying cost (cost_for_option / cost_total) -- the app prices the
@@ -741,7 +793,9 @@ def build_quotation_pdf(
     # unset, so an unused cover_note changes today's PDF not at all.
     # Escaped for the same reason as project.custom_notes below (genuinely
     # free-typed text, not a derived/enum string).
-    if quotation.cover_note:
+    if quotation.cover_note and enhanced:
+        story.extend(_cover_letter_flow(db, styles, quotation, project, client, sport_rows))
+    elif quotation.cover_note:
         cover_note_html = _xml_escape(quotation.cover_note).replace("\n", "<br/>")
         story.append(Paragraph(cover_note_html, styles["Normal"]))
         story.append(Spacer(1, 4 * mm))
@@ -864,6 +918,9 @@ def build_quotation_pdf(
     story.append(Paragraph("GST as applicable is included in the above cost.", styles["Normal"]))
     story.append(Paragraph(f"<b>Amount in words:</b> {amount_in_words_inr(total_rounded)}", styles["Normal"]))
 
+    if enhanced:
+        story.extend(_scope_of_work_flow(db, styles, sport_rows, inclusions))
+
     story.append(Spacer(1, 5 * mm))
     story.append(Paragraph("Delivery timeline &amp; payment schedule", styles["SectionHeading"]))
     for row in sport_rows:
@@ -903,12 +960,18 @@ def build_quotation_pdf(
 
     story.append(Paragraph("Warranty", styles["SectionHeading"]))
     warranty_years = _warranty_years(db, client.type if client else None)
-    duration_text = f"{warranty_years} year(s)" if warranty_years is not None else "Not yet configured (Q.1)"
-    warranty_rows = [["Item", "Basis", "Duration"]] + [
-        [item, basis, duration_text]
-        for item, basis in (warranty_table_override or _current_warranty_table(db))
-    ]
-    warranty_table = Table(warranty_rows, colWidths=[65 * mm, 70 * mm, 40 * mm])
+    warranty_source = warranty_table_override or _current_warranty_table(db)
+    if warranty_years is None and enhanced:
+        # Amendment 54: no duration is configured for this client type, so the table
+        # has no duration column rather than saying "not yet configured" to a client
+        # (pdf_gaps tells the person preparing the quotation).
+        warranty_rows = [["Item", "Basis"]] + [[item, basis] for item, basis in warranty_source]
+        warranty_widths = [65 * mm, 110 * mm]
+    else:
+        duration_text = f"{warranty_years} year(s)" if warranty_years is not None else "Not yet configured (Q.1)"
+        warranty_rows = [["Item", "Basis", "Duration"]] + [[item, basis, duration_text] for item, basis in warranty_source]
+        warranty_widths = [65 * mm, 70 * mm, 40 * mm]
+    warranty_table = Table(warranty_rows, colWidths=warranty_widths)
     warranty_table.setStyle(_TABLE_GRID)
     story.append(warranty_table)
 
