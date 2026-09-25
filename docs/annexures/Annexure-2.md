@@ -1979,9 +1979,10 @@ once, none both gated and ungated; 13 hard-coded gate spot-checks (e.g. `GET /pa
 `pm`/`director`/`ca_tax`, `POST /settings` and `POST /users` are `director`, `GET /quotations` is
 `sales`/`pm`/`director`); ungated classification; labels; and a gated route added inside a test appears
 with no other change and is cleaned up. CI ran the full backend suite green on #196, #197, #198 and #199
-(each with a `push` and a `pull_request` run). *No complete local run of the full suite is claimed:* a
-first attempt overlapped a second one on the shared test database and errored at setup, the affected
-file passed when re-run alone, and the second full run was not seen to finish. Real Chrome against the
+(each with a `push` and a `pull_request` run). A first local full-suite attempt overlapped
+a second one on the shared test database and errored at setup (the affected file passed when re-run
+alone); the second, run alone on the Part A code, finished later with **1346 passed, 0 failed**
+(85 minutes, slowed by everything else running). Real Chrome against the
 local API, as each of the six roles opening **every** sidebar and More item (the acceptance criterion):
 **0 refused (4xx) calls in every session and no permission-error text** (the earlier audit had 1-12 per
 item for `procurement`, `site_engineer` and `ca_tax`); Team & Access (both tabs) and PM's Master Settings
