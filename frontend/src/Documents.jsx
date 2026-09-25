@@ -7,6 +7,7 @@ import CoverNotePanel from "./CoverNotePanel";
 import MessagesPanel from "./MessagesPanel";
 import {
   addCostSheetLine,
+  addEstimateOption,
   addEstimateOptionAddon,
   approveSkipRequest,
   createCostSheet,
@@ -34,6 +35,7 @@ import {
   rejectCostSheet,
   rejectQuotation,
   releaseQuotation,
+  removeEstimateOption,
   removeEstimateOptionAddon,
   reviseCostSheet,
   reviseEstimate,
@@ -228,6 +230,9 @@ export default function Documents({ token, project, role, onBack, onOpenPayments
             estimates={estimates}
             quotations={quotations}
             activeCostSheet={activeCostSheet}
+            sportNames={Object.fromEntries(
+              projectSports.map((ps) => [ps.id, sportsById[ps.sport_id]?.name ?? ps.sport_id])
+            )}
             onAction={withErrorHandling}
             onOpenPayments={onOpenPayments}
           />
@@ -550,8 +555,83 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, estima
   );
 }
 
+const PACKAGE_LABELS = { budget: "Budget", standard: "Standard", premium: "Premium" };
+
+// One sport / package / cost row -- used by Create Estimate (one per sport) and by "+ Add sport option".
+function OptionRowFields({ row, projectSports, sportsById, onChange, idPrefix, onRemove }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        id={`${idPrefix}-sport`}
+        aria-label="Sport"
+        value={row.project_sport_id}
+        onChange={(e) => onChange({ project_sport_id: e.target.value })}
+        className="flex-1 min-w-[10rem] rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
+      >
+        <option value="">Select a sport…</option>
+        {projectSports.map((ps) => (
+          <option key={ps.id} value={ps.id}>
+            {sportsById[ps.sport_id]?.name ?? ps.sport_id}
+          </option>
+        ))}
+      </select>
+      <select
+        id={`${idPrefix}-package`}
+        aria-label="Package"
+        value={row.package}
+        onChange={(e) => onChange({ package: e.target.value })}
+        className="rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
+      >
+        {Object.entries(PACKAGE_LABELS).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <input
+        id={`${idPrefix}-cost`}
+        aria-label="Cost for this option (Rs)"
+        type="number"
+        placeholder="Cost for this option (Rs)"
+        value={row.cost_for_option}
+        onChange={(e) => onChange({ cost_for_option: e.target.value })}
+        className="flex-1 min-w-[10rem] rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
+      />
+      {onRemove && (
+        <button onClick={onRemove} className="text-xs text-red-400 hover:underline">
+          Remove
+        </button>
+      )}
+    </div>
+  );
+}
+
+function emptyOptionRow() {
+  return { project_sport_id: "", package: "standard", cost_for_option: "" };
+}
+
+// Amendment 57 (Section 60): the rows of a new Estimate. Returns why the rows can't be submitted yet
+// (empty string when they can): every row needs a sport and a cost, and the same sport with the same
+// package twice is refused by the API -- a different package of one sport is an alternative.
+function optionRowsProblem(rows) {
+  const seen = new Set();
+  for (const row of rows) {
+    if (!row.project_sport_id || !(Number(row.cost_for_option) > 0)) return "Choose a sport and enter a cost for every option.";
+    const key = `${row.project_sport_id}:${row.package}`;
+    if (seen.has(key)) return "The same sport and package appears twice -- change one package or remove a row.";
+    seen.add(key);
+  }
+  return "";
+}
+
+function formatRs(value) {
+  return `Rs ${Math.round(value).toLocaleString("en-IN")}`;
+}
+
 function EstimatePanel({ token, project, role, activeCostSheet, projectSports, sportsById, estimates, quotations, onAction }) {
-  const [optionForm, setOptionForm] = useState({ project_sport_id: "", package: "standard", cost_for_option: "" });
+  const [optionRows, setOptionRows] = useState([emptyOptionRow()]);
+  const [addOptionFor, setAddOptionFor] = useState(null); // estimateId whose "add sport option" form is open
+  const [addOptionRow, setAddOptionRow] = useState(emptyOptionRow());
   const [openAttachmentsFor, setOpenAttachmentsFor] = useState(null);
   const [openMessagesFor, setOpenMessagesFor] = useState(null);
   const [openOptionAttachmentsFor, setOpenOptionAttachmentsFor] = useState(null);
@@ -577,18 +657,38 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
     projectSports.map((ps) => [ps.id, sportsById[ps.sport_id]?.name ?? ps.sport_id])
   );
 
+  const updateOptionRow = (index, patch) =>
+    setOptionRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  const optionRowsTotal = optionRows.reduce((sum, row) => sum + (Number(row.cost_for_option) || 0), 0);
+  const optionRowsSportCount = new Set(optionRows.map((row) => row.project_sport_id).filter(Boolean)).size;
+  const rowsProblem = optionRowsProblem(optionRows);
+  // A sport listed with two packages means the rows are alternatives, so their sum is not what the
+  // job costs -- only compare with the Cost Sheet when every sport appears once.
+  const rowsAreAlternatives = optionRowsSportCount < optionRows.filter((row) => row.project_sport_id).length;
+  const costSheetTotal = activeCostSheet?.cost_total;
+  const totalDiffers =
+    !rowsAreAlternatives && optionRows.length > 1 && costSheetTotal != null && Math.abs(optionRowsTotal - costSheetTotal) >= 1;
+
   const handleCreate = onAction(async () => {
     await createEstimate(token, project.id, {
-      options: [
-        {
-          project_sport_id: optionForm.project_sport_id,
-          package: optionForm.package,
-          cost_for_option: Number(optionForm.cost_for_option),
-        },
-      ],
+      options: optionRows.map((row) => ({
+        project_sport_id: row.project_sport_id,
+        package: row.package,
+        cost_for_option: Number(row.cost_for_option),
+      })),
     });
-    setOptionForm({ project_sport_id: "", package: "standard", cost_for_option: "" });
+    setOptionRows([emptyOptionRow()]);
   });
+  const handleAddOption = onAction(async (estimateId) => {
+    await addEstimateOption(token, estimateId, {
+      project_sport_id: addOptionRow.project_sport_id,
+      package: addOptionRow.package,
+      cost_for_option: Number(addOptionRow.cost_for_option),
+    });
+    setAddOptionFor(null);
+    setAddOptionRow(emptyOptionRow());
+  });
+  const handleRemoveOption = onAction(async (estimateId, optionId) => removeEstimateOption(token, estimateId, optionId));
   const handleSend = onAction(async (id) => sendEstimate(token, id));
   const handleRebase = onAction(async (id) => rebaseEstimate(token, id));
   const handleRevise = onAction(async (estimateId, options, refreshPricing) => {
@@ -611,7 +711,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
 
       {estimates.map((est) => (
         <div key={est.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span>
               {est.document_no} · <StatusBadge status={est.status} /> · client:{" "}
               <StatusBadge status={est.client_status} />
@@ -619,10 +719,21 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                 <span className="text-red-400 text-xs"> · cost basis changed — rebase required</span>
               )}
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {est.cost_basis_rebase_required && (
                 <button onClick={() => handleRebase(est.id)} className="text-xs text-red-400 hover:underline">
                   Rebase
+                </button>
+              )}
+              {est.status === "draft" && canRevise && (
+                <button
+                  onClick={() => {
+                    setAddOptionRow(emptyOptionRow());
+                    setAddOptionFor(addOptionFor === est.id ? null : est.id);
+                  }}
+                  className="text-xs text-gold hover:underline"
+                >
+                  {addOptionFor === est.id ? "Cancel add" : "+ Add sport option"}
                 </button>
               )}
               {est.status === "draft" && (
@@ -670,6 +781,41 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
           </div>
           {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
           {openMessagesFor === est.id && <MessagesPanel token={token} docType="estimate" docId={est.id} />}
+          {addOptionFor === est.id && (
+            <div className="bg-surface-raised rounded px-3 py-2 space-y-2 text-xs">
+              <p className="text-text-secondary">
+                Add another sport (or another package of a sport) to this Draft Estimate. Once it is sent, changes
+                need a revision.
+              </p>
+              <OptionRowFields
+                row={addOptionRow}
+                projectSports={projectSports}
+                sportsById={sportsById}
+                onChange={(patch) => setAddOptionRow((r) => ({ ...r, ...patch }))}
+                idPrefix={`add-${est.id}`}
+              />
+              <button
+                onClick={() => handleAddOption(est.id)}
+                disabled={
+                  !addOptionRow.project_sport_id ||
+                  !(Number(addOptionRow.cost_for_option) > 0) ||
+                  est.options.some(
+                    (o) => o.project_sport_id === addOptionRow.project_sport_id && o.package === addOptionRow.package
+                  )
+                }
+                className="bg-gold text-base text-xs rounded px-3 py-1.5 hover:bg-gold-hover disabled:opacity-50"
+              >
+                Add option
+              </button>
+              {est.options.some(
+                (o) => o.project_sport_id === addOptionRow.project_sport_id && o.package === addOptionRow.package
+              ) && (
+                <p className="text-amber-400">
+                  That sport and package is already on this Estimate -- pick another package.
+                </p>
+              )}
+            </div>
+          )}
           {openReviseFor === est.id && (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded px-3 py-2 space-y-2 text-xs">
               <p className="text-amber-400">
@@ -734,7 +880,7 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                     <span className="text-text-secondary"> ({opt.rejection_reason})</span>
                   )}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {canWaive && (
                     <input
                       type="text"
@@ -781,6 +927,15 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
                   >
                     {openOptionAddonsFor === opt.id ? "Hide add-ons" : "Add-ons"}
                   </button>
+                  {canRevise && est.status === "draft" && est.options.length > 1 && opt.client_status === "pending" && (
+                    <button
+                      onClick={() => handleRemoveOption(est.id, opt.id)}
+                      className="text-red-400 hover:underline"
+                      title="Remove this sport option from the Draft Estimate"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               </div>
               {openOptionAttachmentsFor === opt.id && (
@@ -802,43 +957,53 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
               Director release and can't be marked Won until it's Verified.
             </p>
           )}
-          <select
-            value={optionForm.project_sport_id}
-            onChange={(e) => setOptionForm((f) => ({ ...f, project_sport_id: e.target.value }))}
-            className="w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
-          >
-            <option value="">Select a sport…</option>
-            {projectSports.map((ps) => (
-              <option key={ps.id} value={ps.id}>
-                {sportsById[ps.sport_id]?.name ?? ps.sport_id}
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-2">
-            <select
-              value={optionForm.package}
-              onChange={(e) => setOptionForm((f) => ({ ...f, package: e.target.value }))}
-              className="rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
-            >
-              <option value="budget">Budget</option>
-              <option value="standard">Standard</option>
-              <option value="premium">Premium</option>
-            </select>
-            <input
-              type="number"
-              placeholder="Cost for this option (Rs)"
-              value={optionForm.cost_for_option}
-              onChange={(e) => setOptionForm((f) => ({ ...f, cost_for_option: e.target.value }))}
-              className="flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
-            />
-            <button
-              onClick={handleCreate}
-              disabled={!optionForm.project_sport_id || !optionForm.cost_for_option}
-              className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
-            >
-              Create Estimate
-            </button>
-          </div>
+          {canRevise ? (
+            <>
+              <p className="text-xs text-text-secondary">
+                One Estimate can cover several sports. Add a row for each sport; use two rows of the same sport for
+                alternative packages the client compares.
+              </p>
+              {optionRows.map((row, index) => (
+                <div key={index} className="space-y-1">
+                  <OptionRowFields
+                    row={row}
+                    projectSports={projectSports}
+                    sportsById={sportsById}
+                    onChange={(patch) => updateOptionRow(index, patch)}
+                    idPrefix={`new-${index}`}
+                    onRemove={optionRows.length > 1 ? () => setOptionRows((rows) => rows.filter((_, i) => i !== index)) : null}
+                  />
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => setOptionRows((rows) => [...rows, emptyOptionRow()])}
+                  className="text-xs text-gold hover:underline"
+                >
+                  + Add another sport
+                </button>
+                {optionRows.length > 1 && (
+                  <span className="text-xs text-text-secondary">Options total {formatRs(optionRowsTotal)}</span>
+                )}
+              </div>
+              {totalDiffers && (
+                <p className="text-[11px] text-amber-400 bg-amber-500/10 rounded px-2 py-1">
+                  The options add up to {formatRs(optionRowsTotal)}, but the active Cost Sheet is {formatRs(costSheetTotal)}.
+                  You can still create the Estimate.
+                </p>
+              )}
+              {optionRows.length > 1 && rowsProblem && <p className="text-[11px] text-amber-400">{rowsProblem}</p>}
+              <button
+                onClick={handleCreate}
+                disabled={Boolean(rowsProblem)}
+                className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
+              >
+                Create Estimate
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-text-secondary">Only a PM or Director creates an Estimate (it carries costs).</p>
+          )}
         </div>
       ) : (
         <p className="text-xs text-text-secondary">Requires a Verified cost sheet (M.2 rule 1).</p>
@@ -969,8 +1134,9 @@ function OptionAddons({ token, projectId, optionId }) {
   );
 }
 
-function QuotationPanel({ token, project, role, estimates, quotations, activeCostSheet, onAction, onOpenPayments }) {
+function QuotationPanel({ token, project, role, estimates, quotations, activeCostSheet, sportNames, onAction, onOpenPayments }) {
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
+  const [packageChoice, setPackageChoice] = useState({}); // project_sport_id -> option id (only needed when a sport has several approved packages)
   const [discountValue, setDiscountValue] = useState("");
   const [gstMode, setGstMode] = useState("exclusive");
   const [fastTrackPackage, setFastTrackPackage] = useState("standard");
@@ -1021,18 +1187,33 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
       .map((o) => ({ ...o, estimateId: est.id }))
   );
 
+  // Amendment 57 (Section 60): a Quotation carries one package per sport. Group the approved options of
+  // the chosen Estimate by sport; a sport with a single approved package is included as is, one with
+  // several needs a choice.
+  const sportGroups = [];
+  for (const o of estimates.find((e) => e.id === selectedEstimateId)?.options ?? []) {
+    if (o.client_status !== "approved" && o.client_status !== "demand_received") continue;
+    let group = sportGroups.find((g) => g.projectSportId === o.project_sport_id);
+    if (!group) {
+      group = { projectSportId: o.project_sport_id, options: [] };
+      sportGroups.push(group);
+    }
+    group.options.push(o);
+  }
+  const chosenOptions = sportGroups.map((g) =>
+    g.options.length === 1 ? g.options[0] : g.options.find((o) => o.id === packageChoice[g.projectSportId])
+  );
+  const allSportsChosen = sportGroups.length > 0 && chosenOptions.every(Boolean);
+
   const handleCreate = onAction(async () => {
-    const options = estimates.find((e) => e.id === selectedEstimateId)?.options ?? [];
-    const includedIds = options
-      .filter((o) => o.client_status === "approved" || o.client_status === "demand_received")
-      .map((o) => o.id);
     await createQuotation(token, project.id, {
       estimate_id: selectedEstimateId,
-      included_option_ids: includedIds,
+      included_option_ids: chosenOptions.map((o) => o.id),
       ...(discountValue ? { discount_type: "amount", discount_value: Number(discountValue) } : {}),
       ...(project.tender_mode ? { gst_mode: gstMode } : {}),
     });
     setDiscountValue("");
+    setPackageChoice({});
   });
   const handleFastTrack = onAction(async () => {
     await createFastTrackQuotation(token, project.id, {
@@ -1053,14 +1234,18 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
   const handleCoverNoteSaved = onAction(async () => {});
   const handleRevise = onAction(async (quotation) => {
     const draft = reviseDrafts[quotation.id] || {};
-    // The API can revise onto any option set; this form keeps whatever
-    // is currently Client approved / demand received on the linked
-    // Estimate (the common case) rather than exposing a full line
-    // editor here -- changing which sports a Quotation covers still
-    // needs a fresh /quotations POST today.
+    // The API can revise onto any option set; this form keeps the options this Quotation already
+    // includes (those still Client approved / demand received) rather than exposing a full line
+    // editor here -- changing which sports a Quotation covers still needs a fresh /quotations POST.
+    // (Amendment 57: not "every approved option of the Estimate" -- that would put two packages of
+    // one sport in.)
     const estimate = estimates.find((e) => e.id === quotation.estimate_id);
     const includedIds = (estimate?.options ?? [])
-      .filter((o) => o.client_status === "approved" || o.client_status === "demand_received")
+      .filter(
+        (o) =>
+          quotation.included_option_ids.includes(o.id) &&
+          (o.client_status === "approved" || o.client_status === "demand_received")
+      )
       .map((o) => o.id);
     await reviseQuotation(token, quotation.id, {
       included_option_ids: includedIds,
@@ -1299,10 +1484,14 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
       ))}
 
       {approvableOptions.length > 0 ? (
-        <div className="flex items-center gap-2">
+        <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedEstimateId}
-            onChange={(e) => setSelectedEstimateId(e.target.value)}
+            onChange={(e) => {
+              setSelectedEstimateId(e.target.value);
+              setPackageChoice({});
+            }}
             className="rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
           >
             <option value="">Select estimate…</option>
@@ -1332,11 +1521,47 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
           )}
           <button
             onClick={handleCreate}
-            disabled={!selectedEstimateId}
+            disabled={!selectedEstimateId || !allSportsChosen}
             className="bg-gold text-base text-xs rounded px-3 py-2 hover:bg-gold-hover disabled:opacity-50"
           >
             Create Quotation
           </button>
+        </div>
+        {selectedEstimateId && sportGroups.length > 0 && (
+          <div className="text-xs space-y-1 bg-surface-raised rounded px-3 py-2">
+            <p className="text-text-secondary">
+              This quotation will include{" "}
+              {sportGroups.length === 1 ? "this sport" : `these ${sportGroups.length} sports`}:
+            </p>
+            {sportGroups.map((g) => {
+              const name = sportNames?.[g.projectSportId] ?? g.projectSportId;
+              if (g.options.length === 1) {
+                const o = g.options[0];
+                return (
+                  <p key={g.projectSportId}>
+                    {name} ({PACKAGE_LABELS[o.package] ?? o.package}) · {formatRs(o.price_low)} - {formatRs(o.price_high)} incl. GST
+                  </p>
+                );
+              }
+              return (
+                <fieldset key={g.projectSportId} className="space-y-1">
+                  <legend className="text-amber-400">{name}: the client approved more than one package -- choose one</legend>
+                  {g.options.map((o) => (
+                    <label key={o.id} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`package-${g.projectSportId}`}
+                        checked={packageChoice[g.projectSportId] === o.id}
+                        onChange={() => setPackageChoice((c) => ({ ...c, [g.projectSportId]: o.id }))}
+                      />
+                      {PACKAGE_LABELS[o.package] ?? o.package} · {formatRs(o.price_low)} - {formatRs(o.price_high)} incl. GST
+                    </label>
+                  ))}
+                </fieldset>
+              );
+            })}
+          </div>
+        )}
         </div>
       ) : (
         <p className="text-xs text-text-secondary">

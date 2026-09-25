@@ -760,6 +760,24 @@ export async function createEstimate(token, projectId, payload) {
   return handle(res);
 }
 
+// Amendment 57: add / remove a sport option on a Draft Estimate (PM/Director).
+export async function addEstimateOption(token, estimateId, option) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/options`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(option),
+  });
+  return handle(res);
+}
+
+export async function removeEstimateOption(token, estimateId, optionId) {
+  const res = await fetch(`${API_BASE}/estimates/${estimateId}/options/${optionId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
 export async function sendEstimate(token, estimateId) {
   const res = await fetch(`${API_BASE}/estimates/${estimateId}/send`, {
     method: "POST",

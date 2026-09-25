@@ -148,8 +148,9 @@ export const FULL_HANDBOOK = [
     screen: "Documents — Estimate, Quotation & Work Order",
     what: "Once the Cost Sheet is Verified (or an approved skip made it Unverified-but-usable), this screen carries the project through Estimate → Quotation → Won → Work Order.",
     fields: [
-      "Estimate: Sport + Package (Budget/Standard/Premium) + a cost figure per option — one option per submit, several options can exist side by side for the client to compare.",
-      "Quotation: pick the Estimate, an optional discount, and (Tender Mode only) whether GST is quoted exclusive or inclusive of the base price.",
+      "Estimate (PM/Director): one row per sport — Sport + Package (Budget/Standard/Premium) + a cost figure. For a project with several sports, use \"+ Add another sport\" to put them all in one Estimate; \"Options total\" shows the running sum and a note appears if it differs from the Cost Sheet (you can still create it). Two rows of the same sport with different packages are alternatives for the client to compare; the same sport and package twice is refused.",
+      "On a Draft Estimate, \"+ Add sport option\" adds another sport or package, and Remove takes off one the client has not decided on (never the last one). Once the Estimate is Sent it is read-only — changes are a revision.",
+      "Quotation: pick the Estimate, an optional discount, and (Tender Mode only) whether GST is quoted exclusive or inclusive of the base price. The screen lists which sports the quotation will include. A quotation carries one package per sport: if the client approved more than one package of a sport, choose which one — Create Quotation stays disabled until you have.",
       "Cover Note (Quotation) — \"Draft with AI\" proposes two short paragraphs written only from what is set for the quotation (client, site, sports, package content, timeline); a human always reviews and explicitly saves it. Once saved, and until the quotation is sent, the Quotation PDF opens as a letter: Kind attention (the client's active signatory, else the contact name), a subject line, your note, and a sign-off with the authorised signatory from Master Settings. The Scope of work (package content and what is included, with no prices) also prints on a quotation not yet sent. A quiet \"The PDF will leave out:\" list under the note says what is missing.",
       "Messages (on Cost Sheet/Estimate/Quotation rows) — a panel to send or log outbound communication about that document: channel (Email/WhatsApp/Telegram), template, recipient (required), subject, message text, and a \"Draft with AI\" button that proposes the message text for you to review before sending.",
     ],
@@ -310,12 +311,12 @@ export const ESTIMATOR_GUIDE = {
     {
       title: "3. Estimate",
       body:
-        "Once a PM/Director has verified the Cost Sheet and priced your proposed lines, you can create an Estimate option per sport/package combination, send it, and record the client's response (Approved, Rejected with a reason, or Demand Received). You'll see the client-facing price range, never the underlying cost.",
+        "Once a PM/Director has verified the Cost Sheet and priced your proposed lines, you can create an Estimate — one Estimate can cover several sports — send it, and record the client's response (Approved, Rejected with a reason, or Demand Received). You'll see the client-facing price range, never the underlying cost.",
     },
     {
       title: "4. Quotation",
       body:
-        "Once at least one option is client-approved, create the Quotation, then Release and Send it as two separate steps. Track it to Won or Lost from \"Sent\" — not from \"Released.\" A Won quotation hands off to a PM/Director for the Work Order stage. A Quotation can also carry an AI-drafted Cover Note — you always review and save it yourself before it appears on the client's PDF, it's never sent on its own.",
+        "Once at least one option is client-approved, create the Quotation (it can cover several sports, one package each), then Release and Send it as two separate steps. Track it to Won or Lost from \"Sent\" — not from \"Released.\" A Won quotation hands off to a PM/Director for the Work Order stage. A Quotation can also carry an AI-drafted Cover Note — you always review and save it yourself before it appears on the client's PDF, it's never sent on its own.",
     },
     {
       title: "5. Rate Sheet — what to do when a rate is missing",
