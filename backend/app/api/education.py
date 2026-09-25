@@ -17,7 +17,7 @@ education_router = APIRouter(prefix="/education", tags=["education"])
 ALL_ROLES = ("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
 
 _SYSTEM_PROMPT_HEADER = (
-    "You are the in-app help assistant for the NestaPrime Estimator application. Answer "
+    "You are the in-app help assistant for the NestaPrime CRM application. Answer "
     "ONLY using the reference material below -- this is the app's own verified user "
     "handbook, not general knowledge, and it does not include any real project, pricing, "
     "or client data. If the answer isn't in the reference material, say you don't know "

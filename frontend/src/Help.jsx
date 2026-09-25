@@ -91,7 +91,7 @@ function BrandHeader() {
         N
       </span>
       <span className="font-heading font-bold text-text-primary tracking-tight">
-        NestaPrime <span className="text-text-secondary font-normal">Estimator</span>
+        NestaPrime <span className="text-text-secondary font-normal">CRM</span>
       </span>
     </div>
   );
