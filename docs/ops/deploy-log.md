@@ -11,6 +11,52 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-25 -- PRs #196-#199: Amendment 51 (Team & Access and role-accurate navigation)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `54ff6a0` -> `6bba458`, in three steps
+**Step 1 -- backend rebuild, no migration** (`b77a46c`: `role_permissions.py`, `core/auth.py`, `main.py`).
+**Step 2 -- frontend rebuild** (`45172de`: PR #198). **Step 3 -- frontend rebuild** (`6bba458`: PR #199,
+handbook wording only).
+
+**Step 1's first attempt did not deploy anything.** `git pull` had not been run (the server was still at
+`54ff6a0`), so the backend rebuilt from old code; production's OpenAPI had no `/role-permissions` and
+`GET /api/role-permissions` returned 404 (two checks 20 seconds apart, to rule out a restart delay). The
+pasted `git log` confirmed it. Redone with `git pull` (`54ff6a0..b77a46c` fast-forward) and
+`docker compose -f docker-compose.prod.yml up -d --build backend`.
+
+**Verified from production after step 1:** `/api/health` `{"status":"ok"}`; OpenAPI lists
+`/role-permissions` (GET; 205 paths, was 204) and its `RolePermissionsOut`, `AreaOut`, `GroupOut`,
+`RouteItemOut` and `UngatedRouteOut` schemas; an anonymous call answers 401 "Not authenticated";
+`/users`, `/payments` and `/clients` still 401; the payments and quotations routes are still present.
+
+**Step 2:** `git pull` fast-forwarded `b77a46c..45172de`; frontend Docker build ran (`npm run build`);
+copied from `/tmp/nestaprime-frontend/dist/.` (one stray `sudo: command not found` in the paste was
+terminal markers pasted into the command line, and the clean re-run worked). The served page changed from
+`index-BPfOBPdb.js` to `index-D-BkS1ab.js` (CSS `index-1PE5H3qy.css` unchanged). Downloaded from
+production, the bundle contains "Roles & permissions", the `/role-permissions` request, "Who can sign in",
+"You can view the settings; only the Director can change them" and "Open to every role", and no longer
+contains the old hand-kept mirror text or the "Dashboard summary only" CA/Tax note.
+
+**Step 2 left stale Help text.** The bundle still contained "Master Settings > User Management" and
+"mirrored from the backend" -- the Help handbook's wording, missed in the code change. Fixed in PR #199.
+
+**Step 3:** two deploys run before #199 merged fetched nothing (`git pull`: "Already up to date" at
+`45172de`) and changed nothing -- the served bundle stayed `index-D-BkS1ab.js`, which is how it was
+known. After the merge `git pull` fast-forwarded `45172de..6bba458` (`handbookData.js`,
+`RolePermissionsViewer.jsx`), the build ran fresh, and the served page changed to `index-BfhevSxH.js`,
+which contains "Team & Access > People", "Team & Access > Roles & permissions" and "read live from the
+access checks", and none of "mirrored from the backend", "Master Settings > User Management" or
+"Master Settings > Role". `/api/health` ok and anonymous `/api/role-permissions` 401 afterwards.
+
+**Note:** the server's working tree still shows uncommitted local changes to `deploy/backup_db.sh` and
+`deploy/restore_drill.sh`; they did not affect this deploy and were not investigated.
+
+**Not verified in production:** a logged-in Team & Access screen (the Director's live Roles & permissions
+data) or PM's read-only Master Settings; both were verified only against the local database.
+
+---
+
 ## 2026-09-24 -- PRs #193 + #194: Amendment 37 (client city and Project Setup auto-fill)
 
 **Run by:** R. Patni (with AI development assistance)
