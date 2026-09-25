@@ -2290,6 +2290,97 @@ is from 22 September and predates Section 14):
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-58-specs.md`, approved 25 September 2026).
 
+**Spec approved 25 September 2026 ("approve as proposed, all decisions"). Implemented and deployed the
+same day** as two ordered PRs -- #210 (backend) and #211 (frontend) -- after #209 (spec and register). (The
+merge go-ahead for #210 was given before that PR existed; it was opened with that number, as said.)
+
+**Implemented.**
+- *Part A (PR #210; `app/services/quotation_content.py`, `pdf_documents.py`, `documents.py`).* On a
+  private-client Quotation PDF that has **not yet been sent** and is not in tender mode: a **Scope of work**
+  section after the totals -- per sport the Director-authored package content (flooring, structure,
+  lighting, scope lines, warranty years), then the project's Part I inclusions -- with **no price on any
+  line** and the total still one lump sum; a sport with no package content is omitted (never printed as
+  "not configured") and with nothing to show the heading is omitted too. A **letter block** when the
+  quotation has a cover note: "Kind attention" (the client's first active signatory, else the contact
+  name, else nothing), "Subject: Quotation <no.> -- <sports> at <site>", the note, and "Yours faithfully /
+  For <company legal name, else NestaPrime Sports Infrastructure>" with the signatory name and
+  designation from two new settings, `company_signatory_name` and `company_signatory_designation`; every
+  free-typed value is escaped. **`draft-cover-note`** now prompts for two short paragraphs written only
+  from the facts that are set (client, addressee, site, each sport with courts, dimensions, tier, package
+  content and timeline, validity, the total), with explicit no-invention rules; it still returns a draft,
+  saves nothing and answers 503 on an AI failure. **`QuotationOut.pdf_gaps`** lists in plain sentences what
+  the PDF will leave out (package content, no cover note, signatory, warranty duration, bank details); it
+  carries no amounts and never blocks anything. A sent, won or lost quotation, and every tender-mode PDF,
+  render as before.
+- **One addition beyond the spec's wording, on the same principle.** The existing warranty table printed
+  "Not yet configured (Q.1)" in its Duration column for every client type without a configured duration
+  (only School has a default) -- text on a client's document. On *unsent* quotations the table now drops
+  the Duration column when none is set, and `pdf_gaps` says so; sent quotations keep the old rendering.
+- *Part B (PR #211).* Company details (Master Settings) gains **Authorised signatory name** and
+  **designation** (PM sees them read-only); the cover-note panel has a taller note box, a line saying what
+  the AI draft uses and that it is only a draft, and a quiet "The PDF will leave out:" list from
+  `pdf_gaps`; the Help handbook's cover-note and Company details entries describe the letter block, the
+  Scope of work, the signatory and the gaps list.
+
+**Verified locally.** 13 new backend tests (`tests/test_quotation_content.py`): the scope section lists
+package content and inclusions with no `Rs`; omission of an unconfigured sport with no "not configured"
+anywhere; sent and tender PDFs have none of the new sections; the letter block only with a note; addressee
+order (signatory, then contact, then nobody; a deactivated signatory is skipped); escaping of free-typed
+values; the warranty column; the `pdf_gaps` lifecycle down to empty; the draft prompt's facts, its
+omissions and its no-invention rules (AI stubbed); the 503 path with nothing saved; and the bank keys in
+step with the PDF. The tests were **mutation-checked**: disabling the sent-and-tender gate fails 7 of them,
+and removing only the "not yet sent" condition fails 3. The existing 37 PDF and cover-note tests pass. CI
+ran the full backend suite green on #209, #210 and #211 (each with a `push` and a `pull_request` run).
+*A wider local run of the 38 quotation-related test files ended at 535 passed with 1 failure and 2 errors,
+all in `test_work_orders.py` -- caused by my starting a second test run against the shared test database
+while the first was still going (the same mistake as before); `test_work_orders.py` alone passes, 19 tests.*
+End to end against the local API: a released quotation with a cover note produced a PDF with the subject, the
+note, "Yours faithfully / For NestaPrime Sports Infrastructure / R. Patni / Director", and a Scope of work
+with the package content and warranty years, and no "not yet configured" text. Real Chrome: the two
+signatory fields load their saved values and saving the card writes the setting (checked through the API and
+restored); PM sees the signatory as text with no input; the cover-note panel shows the helper text, the
+six-row note box and the gaps list; 0 refused calls. At 375 and 414px the Company details card (right edge
+375, its inputs 351) and the gaps notice (right edge 322) fit.
+
+**Deployed to production in two steps, 25 September 2026.** (1) **Backend, `caaeb3d` (#210):** `git pull`
+fast-forwarded `deec482..caaeb3d`; the backend rebuilt; both workers started cleanly and there is no
+`Running upgrade` line (no migration). Production's OpenAPI shows `pdf_gaps` (a list of strings, default
+empty) on `QuotationOut`, the draft-cover-note and PDF routes still present (206 paths), and anonymous calls
+answer 401. (2) **Frontend, `bf3a704` (#211):** the pull fast-forwarded `caaeb3d..bf3a704` and the build ran
+fresh (820.25kB against 809.51kB earlier), **but the first copy did nothing** -- the command line reached the
+shell wrapped in terminal paste markers (`^[[200~ ... ~`), which answered `sudo: command not found`, so
+production kept serving `index-DepxIVDC.js` (found by checking the served page, not the paste). After the
+copy line was run on its own the served page changed to `index-B2k8NfsA.js` (CSS `index-DbTWb8mr.css` to
+`index-DukNL2By.css`). Downloaded from production it contains "Authorised signatory name" and
+"Authorised signatory designation", "signs off the cover letter", "The PDF will leave out:", "writes two
+short paragraphs" and "Kind attention" (the handbook), and still contains the quick search, "Tools &
+reports", Team & Access and the PM read-only line; `/api/health` ok.
+
+**Open items -- not verified or not done:**
+- *No logged-in click-through on production, and no PDF from production data has been seen.* Package
+  content, bank details, the signatory and warranty durations may all be unset there; the gaps list is
+  meant to say so the first time a Director opens a quotation.
+- *The AI draft is unverified with the real model.* The tests stub the AI; nobody has read a draft from the
+  new prompt against production data (the prompt asks for two short paragraphs from set facts only, and the
+  Director reviews it before it is saved).
+- *The Director's terms-and-conditions review is still owed* (decision 9): the reference PDF is not in the
+  repository, so its clauses were not compared; the clause list is edited in Master Settings.
+- *The Estimate PDF still prints "Package content not yet configured"* for an unconfigured package -- an
+  internal, non-binding document, deliberately left alone.
+- *The new sections apply only to quotations not yet sent* (decision 8): a quotation sent before this
+  amendment, or sent later, does not get them on re-download; by design.
+- *The Duration column is dropped on unsent quotations for client types with no configured warranty
+  duration.* Setting `warranty_years_<client type>` in Master Settings brings it back.
+- *`pdf_gaps` is computed in every quotation response* (several small queries each); unmeasured, fine at
+  current volumes.
+- *Two existing rows overflow a 375px phone:* the Quotation terms card's Preview/Save row on Master
+  Settings, and the Estimate rows on Documents. They were not touched; the elements this amendment added fit.
+- *Director review pending* of the letter and Scope of work layout; nothing tested on a real phone (the
+  site is still plain HTTP on a bare IP).
+- *Still open from Amendment 48's audit:* HTTPS on a proper domain. With this amendment plan Section C's
+  three pieces are done or resolved (terms and bank details already existed; the T&C review is the
+  Director's).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
