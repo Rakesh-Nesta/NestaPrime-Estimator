@@ -16,33 +16,26 @@ import { canOpen } from "./navAccess";
 // to their existing, already-working screens, unchanged. Follow-ups got its
 // real screen in Amendment 43; Opportunities got its own in Amendment 44;
 // Payments in Amendment 50.
-// Vendor/Tools/Reports/Admin/Education keep their exact old
-// sub-groupings (Open Decision 3), relocated under a temporary "More"
-// section pending the Phase 8 placement decision -- nothing is hidden or
-// removed, only moved one level deeper.
-// Amendment 51: each item is shown only to the roles navAccess.js lists for it
-// (Amendment 46's rule, applied to the whole menu); a group with nothing left to
-// show is not listed at all.
-const MORE_GROUPS = [
-  {
-    key: "vendor",
-    label: "Vendor",
-    items: [{ key: "vendors_admin", label: "Vendor Master" }],
-  },
+//
+// Amendment 52 (Section 56): the screens that never got a header of their own
+// live under "More", now as two always-open sections instead of five accordion
+// groups (Vendor joins the tools; Reports is a plain item), and Help and
+// Education -- which every role can use -- moved out of it to the sidebar
+// footer. "All Quotations" is gone from Admin: it opened the same screen as the
+// Quotations header. Each item is shown only to the roles navAccess.js lists for
+// it (Amendment 51's rule); a section with nothing left to show is not listed.
+const MORE_SECTIONS = [
   {
     key: "tools",
-    label: "Tools",
+    label: "Tools & reports",
     items: [
-      { key: "pricing", label: "Price Calculator" },
+      { key: "reports", label: "Reports" },
       { key: "rates", label: "Rate Sheet" },
-      { key: "calculator", label: "One Simple Calculator" },
+      { key: "pricing", label: "Price Calculator" },
       { key: "price_requests", label: "Price Requests" },
+      { key: "vendors_admin", label: "Vendor Master" },
+      { key: "calculator", label: "One Simple Calculator" },
     ],
-  },
-  {
-    key: "reports",
-    label: "Reports",
-    items: [{ key: "reports", label: "All Types of Reports" }],
   },
   {
     key: "admin",
@@ -52,19 +45,18 @@ const MORE_GROUPS = [
       { key: "settings", label: "Master Settings" },
       { key: "cross_sell_admin", label: "Cross-Sell Add-ons", show: (role) => role === "director" },
       { key: "audit_log", label: "Audit Log", show: (role) => role === "director" },
-      { key: "quotations_admin", label: "All Quotations", show: (role) => role === "director", preset: {} },
-      { key: "help", label: "Help" },
     ],
-  },
-  {
-    key: "education",
-    label: "Education",
-    items: [{ key: "education", label: "Education" }],
   },
 ];
 
-function visibleItems(group, role) {
-  return group.items.filter((it) => canOpen(it.key, role) && (!it.show || it.show(role)));
+// Open to every role, so not under More or Admin (Amendment 52).
+const FOOTER_LINKS = [
+  { key: "help", label: "Help" },
+  { key: "education", label: "Education" },
+];
+
+function visibleItems(section, role) {
+  return section.items.filter((it) => canOpen(it.key, role) && (!it.show || it.show(role)));
 }
 
 function NavLink({ label, active, onClick, badge, muted, icon: IconComp }) {
@@ -104,7 +96,6 @@ export default function Sidebar({
   navMenuOpen,
   setNavMenuOpen,
 }) {
-  const [expandedMoreGroup, setExpandedMoreGroup] = useState(null);
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Amendment 51: Team & Access is user management and the role/permission
@@ -201,40 +192,27 @@ export default function Sidebar({
             onClick={() => setMoreOpen((v) => !v)}
           />
           {moreOpen && (
-            <div className="pl-2 space-y-0.5 mt-1">
-              {MORE_GROUPS.filter((g) => visibleItems(g, user.role).length > 0).map((group) => (
-                <div key={group.key}>
-                  <button
-                    onClick={() => setExpandedMoreGroup(expandedMoreGroup === group.key ? null : group.key)}
-                    className="w-full text-left text-xs uppercase tracking-wide text-text-secondary/70 px-3 py-2 hover:text-text-secondary"
-                  >
-                    {group.label}
-                  </button>
-                  {expandedMoreGroup === group.key && (
-                    <div className="pl-3 space-y-0.5">
-                      {visibleItems(group, user.role).map((it) => (
-                        <NavLink
-                          key={it.key}
-                          label={it.label}
-                          active={screen === it.key}
-                          onClick={() => {
-                            if (it.preset) {
-                              handleDrillDown(it.key, it.preset);
-                              setNavMenuOpen(false);
-                            } else {
-                              go(it.key);
-                            }
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
+            <div className="pl-2 space-y-2 mt-1">
+              {MORE_SECTIONS.filter((sec) => visibleItems(sec, user.role).length > 0).map((section) => (
+                <div key={section.key}>
+                  <p className="text-xs uppercase tracking-wide text-text-secondary/70 px-3 py-1.5">{section.label}</p>
+                  <div className="pl-3 space-y-0.5">
+                    {visibleItems(section, user.role).map((it) => (
+                      <NavLink key={it.key} label={it.label} active={screen === it.key} onClick={() => go(it.key)} />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
       </nav>
+
+      <div className="border-t border-border-dark px-2 pt-2 space-y-0.5">
+        {FOOTER_LINKS.map((link) => (
+          <NavLink key={link.key} label={link.label} active={screen === link.key} onClick={() => go(link.key)} />
+        ))}
+      </div>
 
       <div className="border-t border-border-dark px-4 py-3 space-y-2">
         {canResumeProject && (

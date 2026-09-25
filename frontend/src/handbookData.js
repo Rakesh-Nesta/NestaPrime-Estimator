@@ -169,15 +169,15 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "All Estimates",
-    what: "Cross-project Estimate list, filterable by status (Draft/Sent/Won/Lost/Expired/Superseded) — the same shape as All Projects and All Quotations.",
+    what: "Cross-project Estimate list, filterable by status (Draft/Sent/Won/Lost/Expired/Superseded) — the Estimates tab of the Quotations screen, the same shape as All Projects.",
     fields: ["Status filter", "Search (project number or client name)"],
     whenMissing: "Nothing required — read-only browse/filter, same as All Projects.",
     watch:
       "Open to every role that can see Estimates at all (Sales through site_engineer), not Director-only — an Estimate only ever shows the client-facing price range, never the underlying cost, so it doesn't need the stricter gate All Quotations has.",
   },
   {
-    screen: "All Quotations",
-    what: "Director-only, cross-project Quotation register — every Quotation across every project, with CSV export and a per-row PDF download. This is Amendment 6b's \"review all quotations\" screen.",
+    screen: "Quotations",
+    what: "The cross-project Quotation list, opened from the Quotations header by Sales, PM and Director — every Quotation across every project, with a per-row PDF download and, for the Director only, a CSV export. The Estimates list is its second tab. This is Amendment 6b's \"review all quotations\" screen, opened to Sales and PM by Amendment 49.",
     fields: [
       "Status filter, or the quicker All / Pending / Old group pills (Pending = draft+released+sent; Old = every finished status) — picking an exact status overrides the group pill",
       "Date from / Date to — filters on when the Quotation was created, not when it was released or sent",
@@ -186,7 +186,7 @@ export const FULL_HANDBOOK = [
     ],
     whenMissing: "All filters are optional and combine together — leave everything blank to see every Quotation.",
     watch:
-      "This is the one cross-project list that shows real cost and margin figures, including a red \"(below floor)\" flag — that's exactly why it's Director-only, stricter than the single-project Documents screen Sales/PM can also see. The date filter is on creation date, not the date it was actually released or sent.",
+      "Cost and margin, including the red \"(below floor)\" flag, are shown to PM and Director only — Sales sees the client-facing totals with those figures left out, the same rule as the single-project Documents screen. Export CSV is Director-only. The date filter is on creation date, not the date it was actually released or sent.",
   },
   {
     screen: "Cross-Sell Admin",
@@ -203,16 +203,16 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Pricing Calculator",
-    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from Daily Work (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate. (For quick arithmetic that doesn't need margin/GST logic at all, a plain +/-/×/÷/% calculator lives under Tools instead, open to every role.)",
+    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from More > Tools & reports (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate. (For quick arithmetic that doesn't need margin/GST logic at all, a plain +/-/×/÷/% calculator lives under Tools instead, open to every role.)",
     fields: ["Cost incl. contingency (Rs)", "Client type", "Discount type (None/Percent/Amount) + value"],
     whenMissing: "There's nothing to fill beyond the cost figure and client type — everything else is optional.",
     watch: null,
   },
   {
     screen: "Reports",
-    what: "Generate a computed, hash-verified snapshot report (Pipeline / Margin / Override Summary) over a period, then Release it once it's ready to stand as the official record for that range. Pinned as a Dashboard shortcut for quick access.",
+    what: "Generate a computed, hash-verified snapshot report (Pipeline / Margin / Override Summary) over a period, then Release it once it's ready to stand as the official record for that range. Open it from More > Tools & reports (Sales, PM and Director) or the Overview shortcut.",
     fields: [
-      "Report type (Pipeline — all roles except site_engineer/procurement; Margin — PM/Director; Override Summary — Director only)",
+      "Report type (Pipeline — Sales, PM and Director; Margin — PM/Director; Override Summary — Director only). The screen tells you which types your role can generate.",
       "Period — Today / This Week / This Month / This Year, or Custom with manual start/end dates",
       "Generate/Regenerate summary — a \"Draft with AI\" style button that writes a narrative paragraph over the report's own already-computed content; never persisted, regenerate any time",
       "Download Excel / Download PDF — the report's real, shareable form; there's no on-screen raw data view any more",
