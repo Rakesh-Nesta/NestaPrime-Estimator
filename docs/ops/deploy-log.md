@@ -11,6 +11,40 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-25 -- PRs #209-#211: Amendment 54 (quotation content)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `deec482` -> `bf3a704`, in two steps (includes PR #208's and #209's docs-only merges)
+**Step 1 -- backend rebuild, no migration** (`caaeb3d`: `services/quotation_content.py`, `pdf_documents.py`,
+`documents.py`). **Step 2 -- frontend rebuild** (`bf3a704`: `CoverNotePanel.jsx`, `MasterSettings.jsx`,
+`handbookData.js`).
+
+**Step 1:** `git pull` fast-forwarded `deec482..caaeb3d`; `docker compose -f docker-compose.prod.yml up -d
+--build backend` rebuilt and restarted the backend; the log shows "Application startup complete" from both
+workers at 11:19 UTC and no `Running upgrade` line. Verified from production: `/api/health` ok; the OpenAPI
+`QuotationOut` has `pdf_gaps` (array of strings, default `[]`); the `/quotations/{id}/draft-cover-note` and
+`/quotations/{id}/pdf` routes are still present (206 paths); `/search`, `/role-permissions` and `/payments`
+are still present; anonymous `/api/quotations`, `/api/search`, `/api/role-permissions` and a quotation PDF
+request answer 401.
+
+**Step 2's first copy did nothing.** `git pull` fast-forwarded `caaeb3d..bf3a704` (`CoverNotePanel.jsx`,
+`MasterSettings.jsx`, `handbookData.js`) and the build ran fresh (`npm run build`; 820.25kB against the
+previous 809.51kB), but the copy line reached the shell wrapped in terminal paste markers (`^[[200~` and a
+trailing `~`), which answered `sudo: command not found`. Production kept serving `index-DepxIVDC.js` -- found
+by checking the served page. The copy line was then run on its own (`sudo cp -r
+/tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/ && sudo chmod -R 755 /var/www/nestaprime`) and the
+served page changed from `index-DepxIVDC.js` to `index-B2k8NfsA.js` (CSS `index-DbTWb8mr.css` to
+`index-DukNL2By.css`). Downloaded from production the bundle contains "Authorised signatory name",
+"Authorised signatory designation", "signs off the cover letter", "The PDF will leave out:", "writes two short
+paragraphs" and "Kind attention", and still contains "Search clients, leads, projects and quotations",
+"Tools & reports", "Team & Access > People" and "only the Director can change them". `/api/health` ok.
+
+**Not verified in production:** a logged-in Company details card, the cover-note panel, or any PDF from
+production data (verified against the local database, and on production only from the served bundle's text
+and OpenAPI); the AI draft with the real model.
+
+---
+
 ## 2026-09-25 -- PRs #205-#207: Amendment 53 (global quick search)
 
 **Run by:** R. Patni (with AI development assistance)
