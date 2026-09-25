@@ -2027,6 +2027,36 @@ Management" wording.
 - *Test data:* the extra test users (`audit-site_engineer@`, `audit-ca_tax@`) exist in the local
   development database only; nothing was created in production.
 
+### Amendment No. 52 — Placement of the "More" Group (Vendor, Tools, Reports, Admin, Education, Help)
+**Registered 25 September 2026**, on the Director's instruction to register and spec the placement
+decisions Amendment 48's audit left open and Amendment 51 deliberately did not take (it made every
+More item role-accurate where it is). Grounded against current code:
+- **The eight headers are done; everything else is still in the temporary "More" accordion.**
+  Amendment 36 (Phase 1) parked Vendor, Tools, Reports, Admin and Education there "pending the Phase 8
+  placement decision" (`Sidebar.jsx` comment); plan E.1 still lists all of them "needs a decision"
+  and no such decision was ever signed off.
+- **Help is filed under "Admin"** (`MORE_GROUPS`), the group whose other items are `pm`/`director`
+  only -- the one item open to every role, in the menu a Sales rep has no reason to open (plan
+  mismatch #3, still open). **Education** is a one-item group of its own although the plan describes
+  it as a standalone link.
+- **The groups are mostly one or two items.** Vendor: 1 (Vendor Master). Reports: 1. Education: 1.
+  Tools: 4. Admin: 6. Every item costs three taps -- More, the group, the item -- and for a Sales
+  rep (whose whole More is a calculator, Reports and Help) that is most of the menu.
+- **"All Quotations" in Admin is a duplicate.** It calls `handleDrillDown("quotations_admin", {})`,
+  the same call the Quotations header makes, and opens the same screen; since Amendment 49 the header
+  is open to `sales`/`pm`/`director`, so the Admin entry adds nothing.
+- **Reports does not tell Sales what it can generate** (plan mismatch #4): the Type selector lists only
+  Quotation Pipeline for Sales, with no note that Margin Performance (`pm`/`director`) and Override
+  Summary (`director`) exist.
+- **The Help handbook is out of step in places.** `handbookData.js` entry "All Quotations" still
+  describes a Director-only register, although Amendment 49 opened the Quotations list to Sales and PM;
+  and Amendment 51's own miss (the handbook still naming Master Settings for user management, fixed in
+  #199) shows the location text has to be searched for whenever a screen moves.
+- **Resolved already:** Estimates (plan mismatch #2) is now the second tab of the Quotations screen
+  (Amendment 49), so it needs no entry of its own.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-56-specs.md`, approved 25 September 2026).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
