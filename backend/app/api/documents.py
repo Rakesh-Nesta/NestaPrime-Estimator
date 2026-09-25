@@ -2007,6 +2007,9 @@ class QuotationOut(BaseModel):
     # Amendment 54: plain sentences naming what the PDF will leave out (no amounts);
     # empty when nothing is missing. Never blocks release or sending.
     pdf_gaps: list[str] = []
+    # Amendment 57: which Estimate options this Quotation includes (ids only, no amounts), so the
+    # screen can revise a Quotation without re-guessing which packages it covers.
+    included_option_ids: list[uuid.UUID] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -2036,6 +2039,10 @@ def _quotation_to_out(db: Session, quotation: Quotation, role: str) -> Quotation
     if quotation.status == QuotationStatus.DRAFT:
         out.sla_breached = _sla_breached(db, quotation.created_at)
     out.pdf_gaps = quotation_content.pdf_gaps(db, quotation)
+    out.included_option_ids = [
+        line.estimate_option_id
+        for line in db.query(QuotationLine).filter(QuotationLine.quotation_id == quotation.id).all()
+    ]
     return out
 
 
@@ -2406,6 +2413,7 @@ def revise_quotation(
                 detail=f"Option {option_id} is not Client approved or Client demand received",
             )
         included_options.append(option)
+    _require_one_package_per_sport(db, included_options, payload.included_option_ids)
 
     prior_option_ids = {
         line.estimate_option_id

@@ -237,3 +237,35 @@ def test_a_single_sport_quotation_is_unchanged(client, director_user):
         f"/projects/{project_id}/quotations", json={"estimate_id": estimate["id"], "included_option_ids": [option_id]}, headers=headers
     )
     assert res.status_code == 201 and res.json()["cost_total"] == pytest.approx(850000.0)
+
+
+def test_revising_a_quotation_keeps_one_package_per_sport_and_reports_what_it_includes(client, director_user):
+    headers = _director(client, director_user)
+    project_id, ps = _project(client, headers, "Revise School", ("badminton", "table_tennis"))
+    estimate = _create_estimate(
+        client, headers, project_id,
+        [_option(ps["badminton"]), _option(ps["badminton"], "premium", 1100000), _option(ps["table_tennis"], cost=500000)],
+    ).json()
+    standard, premium, tt = estimate["options"]
+    for option in (standard, premium, tt):
+        _approve(client, headers, estimate["id"], option["id"])
+    quotation = client.post(
+        f"/projects/{project_id}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [standard["id"], tt["id"]]},
+        headers=headers,
+    ).json()
+    assert sorted(quotation["included_option_ids"]) == sorted([standard["id"], tt["id"]])
+    assert client.post(f"/quotations/{quotation['id']}/release", headers=headers).status_code == 200
+
+    body = {"discount_type": None, "discount_value": 0, "refresh_pricing": False}
+    both = client.post(
+        f"/quotations/{quotation['id']}/revise",
+        json={**body, "included_option_ids": [standard["id"], premium["id"], tt["id"]]},
+        headers=headers,
+    )
+    assert both.status_code == 400 and "Choose one package for Badminton" in both.json()["detail"]
+
+    same = client.post(
+        f"/quotations/{quotation['id']}/revise", json={**body, "included_option_ids": [standard["id"], tt["id"]]}, headers=headers
+    )
+    assert same.status_code == 200, same.text
