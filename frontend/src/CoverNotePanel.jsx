@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { draftQuotationCoverNote, updateQuotationCoverNote } from "./api";
 
+// Amendment 54 (Section 58): the note now prints as a letter (addressee, subject,
+// this note, sign-off) on a quotation not yet sent, the AI draft is two short
+// paragraphs from the facts that are set, and `quotation.pdf_gaps` says what the
+// PDF will leave out -- a quiet note, never an error and never a block.
 // Amendment 13 (Section 12): a Quotation's optional cover_note -- AI can
 // draft it, but nothing is saved until a person reviews/edits the text
 // here and clicks Save, same review-then-save shape as CustomNotesPanel.
@@ -51,11 +55,25 @@ export default function CoverNotePanel({ token, quotation, onSaved }) {
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        rows={3}
-        placeholder="A short introduction paragraph -- appears at the top of the Quotation PDF, right after the header. Leave blank for no change to the PDF."
+        rows={6}
+        placeholder="The body of the cover letter -- with the addressee, a subject line and a sign-off it prints at the top of the Quotation PDF (until the quotation is sent). Leave blank for no letter."
         className="w-full max-w-2xl rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-sm"
       />
+      <p className="text-xs text-text-secondary max-w-2xl">
+        &ldquo;Draft with AI&rdquo; writes two short paragraphs from the client, site, sports, package content and
+        timeline that are set for this quotation. It is only a draft &mdash; check it before saving.
+      </p>
       {error && <p className="text-xs text-red-400">{error}</p>}
+      {quotation.pdf_gaps?.length > 0 && (
+        <div className="max-w-2xl text-xs text-text-secondary border-l-2 border-border-dark pl-3">
+          <p className="mb-0.5">The PDF will leave out:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            {quotation.pdf_gaps.map((gap) => (
+              <li key={gap} className="break-words">{gap}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <button
         onClick={handleSave}
         disabled={saving}
