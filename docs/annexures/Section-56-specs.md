@@ -112,7 +112,7 @@ serves, then a docs-only close-out.
 10. **One frontend PR** rather than one per part (nothing here depends on the backend). Proposed: **yes.**
 
 ### Approval
-☐ Approved — "approve as proposed, all decisions"
+☑ Approved — "approve as proposed, all decisions" (25 September 2026)
 ☐ Approved with changes (noted above)
 ☐ Not approved
 

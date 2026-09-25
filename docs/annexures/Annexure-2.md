@@ -2055,7 +2055,7 @@ More item role-accurate where it is). Grounded against current code:
 - **Resolved already:** Estimates (plan mismatch #2) is now the second tab of the Quotations screen
   (Amendment 49), so it needs no entry of its own.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-56-specs.md`, awaiting approval).
+(spec: `docs/annexures/Section-56-specs.md`, approved 25 September 2026).
 
 ## Register Notes (non-software, business-process)
 
