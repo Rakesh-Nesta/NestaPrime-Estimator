@@ -1951,7 +1951,7 @@ code and real-Chrome sessions as each of the six roles:
 - **What is sound:** user management (`users.py`) cannot deactivate your own account, protects the last
   active Director, audit-logs every write and forces a password change on first login.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-55-specs.md`).
+(spec: `docs/annexures/Section-55-specs.md`, approved 25 September 2026).
 
 ## Register Notes (non-software, business-process)
 

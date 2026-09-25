@@ -115,7 +115,7 @@ Director-only Role & Permissions tab is a hand-kept mirror that has drifted from
 7. **Two ordered PRs** (backend, then frontend). Proposed: **yes.**
 
 ### Approval
-☐ Approved as proposed, all decisions
+☑ Approved — "approve as proposed, all decisions" (25 September 2026)
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
