@@ -234,7 +234,7 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Master Settings",
-    what: "Director-only. Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, User Management, and the Role & Permissions viewer (Section 5).",
+    what: "Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, quotation terms and message templates. The Director edits them; the PM can view them but not change them. (User management and the role view now live under Team & Access.)",
     fields: [
       "Varies by setting — each is a versioned value, editable only by the Director; PM can view but not edit.",
       "Company details (Section 14) — a labeled panel for the company identity/bank fields (legal name, PAN, GSTIN, registered office city, bank details) that print on the Quotation PDF — the same underlying Settings the raw key/value form below always could edit, just with real labels now.",
@@ -333,14 +333,14 @@ export const DIRECTOR_ADMIN_GUIDE = {
         "PM/Director build and Verify Cost Sheets; Reject sends one back to Draft with a reason category and note. A below-floor margin on any pricing calculation needs Director approval (visible as an amber warning) before it can proceed.",
     },
     {
-      title: "User Management",
+      title: "Team & Access — People",
       body:
-        "Create users, assign roles, reset passwords, deactivate/reactivate accounts. Two guardrails are server-enforced and can't be worked around from the UI: you can't deactivate your own account, and you can't deactivate or demote the last active Director — both exist because User Management is itself Director-only, so hitting zero active Directors would need a raw database script to recover from.",
+        "Create users, assign roles, reset passwords, deactivate/reactivate accounts. Two guardrails are server-enforced and can't be worked around from the UI: you can't deactivate your own account, and you can't deactivate or demote the last active Director — both exist because Team & Access is itself Director-only, so hitting zero active Directors would need a raw database script to recover from.",
     },
     {
-      title: "Role & Permissions viewer",
+      title: "Team & Access — Roles & permissions",
       body:
-        "Master Settings → Role & Permissions shows exactly what each role can currently see/do, mirrored from the backend's real access checks. It's read-only by design — some rules (cost/margin visibility, Director-only release gates, the Director-count guardrail above) are deliberately not adjustable from any screen.",
+        "Team & Access → Roles & permissions shows exactly what each role can do, read live from the access checks the server enforces, so it cannot fall out of date. It's read-only by design — some rules (cost/margin visibility, Director-only release gates, the Director-count guardrail above) are deliberately not adjustable from any screen.",
     },
     {
       title: "All Quotations — reviewing every quotation, not just one project's",
@@ -378,7 +378,7 @@ export const DIRECTOR_ADMIN_GUIDE = {
 export const FAQ = [
   {
     q: "I forgot my password — what do I do?",
-    a: "Ask a Director to reset it from Master Settings → User Management. You'll be forced to set your own password on next login.",
+    a: "Ask a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login.",
   },
   {
     q: "The Rate Sheet doesn't have the rate I need — what now?",
@@ -394,7 +394,7 @@ export const FAQ = [
   },
   {
     q: "Why can't I deactivate this Director account?",
-    a: "The app blocks deactivating or demoting the last active Director, and blocks deactivating your own account — both by design, since User Management is Director-only and losing every active Director would be unrecoverable without a database script.",
+    a: "The app blocks deactivating or demoting the last active Director, and blocks deactivating your own account — both by design, since Team & Access is Director-only and losing every active Director would be unrecoverable without a database script.",
   },
   {
     q: "What does \"below floor\" mean on a pricing calculation?",
@@ -406,11 +406,11 @@ export const FAQ = [
   },
   {
     q: "How do I create a new user?",
-    a: "Master Settings → User Management (Director only). New accounts are forced to change their assigned password on first login.",
+    a: "Team & Access → People (Director only). New accounts are forced to change their assigned password on first login.",
   },
   {
     q: "Can I reset someone else's password?",
-    a: "Yes, from User Management (Director only) — it forces that user to set their own new password on next login, same as any newly created account.",
+    a: "Yes, from Team & Access → People (Director only) — it forces that user to set their own new password on next login, same as any newly created account.",
   },
   {
     q: "How do I print a Quotation for a client?",
