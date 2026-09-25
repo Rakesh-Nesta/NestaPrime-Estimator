@@ -44,6 +44,7 @@ from app.api import (
     reports,
     role_permissions,
     schedule,
+    search,
     scope_items,
     settings,
     site_surveys,
@@ -151,6 +152,7 @@ app.include_router(purchase_orders.purchase_orders_router)
 app.include_router(work_orders.work_orders_router)
 app.include_router(payments.router)
 app.include_router(role_permissions.router)
+app.include_router(search.router)
 app.include_router(skip_requests.skip_requests_router)
 app.include_router(education.education_router)
 
