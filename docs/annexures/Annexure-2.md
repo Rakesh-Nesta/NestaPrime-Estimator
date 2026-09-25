@@ -2563,7 +2563,7 @@ against current code:
   Particulars table, which sits uneasily beside the plan's "lump sum, no itemised prices" constraint for a
   multi-sport job -- put to the Director as an open decision, not changed.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-60-specs.md`, awaiting approval).
+(spec: `docs/annexures/Section-60-specs.md`, approved 25 September 2026).
 
 ## Register Notes (non-software, business-process)
 
