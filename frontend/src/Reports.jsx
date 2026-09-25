@@ -198,6 +198,17 @@ export default function Reports({ token, role, onBack }) {
             </select>
           </div>
         </div>
+        {/* Amendment 52: say which types this role can generate, instead of
+            leaving the shorter list to be discovered by trial. */}
+        {!canSeeMargin && (
+          <p className="text-xs text-text-secondary">
+            You can generate the Quotation Pipeline report. Margin Performance and Override Summary are for PM and
+            Director.
+          </p>
+        )}
+        {canSeeMargin && !canSeeOverrideSummary && (
+          <p className="text-xs text-text-secondary">Override Summary is for the Director.</p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-text-secondary">Period from</label>
