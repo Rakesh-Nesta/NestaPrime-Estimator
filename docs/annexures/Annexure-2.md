@@ -2534,6 +2534,37 @@ say "Estimator". One of my own commands was out of date after HTTPS: the backend
 this deploy used `http://127.0.0.1/...`, which now correctly answers 301 -- the check was wrong, the server was
 fine, and it was verified over HTTPS instead.
 
+### Amendment No. 57 — Multi-Sport Quotation
+**Registered 25 September 2026**, on the Director's instruction to register and spec putting more than one
+sport in one Quotation -- a point the Director says has been raised many times. It appears nowhere in this
+register, the plan, or the project notes, so it was **never registered or built**, only discussed. Grounded
+against current code:
+- **The backend already supports it.** `POST /projects/{id}/estimates` takes a list of options (one per
+  sport and package, each with its own cost and price range); a Quotation is built from one Estimate and one
+  `QuotationLine` per included option; its cost is the sum, its floor and target are the K.2 cost-weighted
+  average of each sport's effective floor, its GST is cost-weighted, and the PDF prints a row per sport
+  (`test_quotation_multi_sport_floor_is_cost_weighted_average_of_effective_floors`: badminton 8,50,000 plus
+  table tennis 5,00,000 gives a 13,50,000 Quotation).
+- **The Documents screen cannot build one.** "Create Estimate" (`Documents.jsx`) sends `options: [ {one} ]`,
+  so each click makes a separate one-sport Estimate; a Quotation is made from a single Estimate, so it is
+  always one sport. There is no way to add a sport to an existing Estimate ("Revise" changes costs only).
+  "Create Quotation" also includes **every approved option of the chosen Estimate, without showing which**.
+- **A hazard sits behind that gap.** Nothing in `create_quotation` stops two options of the *same sport*
+  (for example Standard and Premium of badminton, both approved) from being included: their costs are summed
+  and the sport prints twice. **Reproduced against the real backend:** an Estimate holding badminton Standard
+  (8,50,000) and Premium (11,00,000), both approved, gave a Quotation with a cost of **19,50,000** and a PDF with
+  both a "Badminton (Standard)" and a "Badminton (Premium)" row. Today it can only happen through the API, so it
+  has not been seen; the moment the screen can build multi-option Estimates it becomes easy to hit.
+- **Costs are typed, not derived.** Estimate creation is PM/Director only (K.3) and takes a typed "cost for
+  this option"; nothing shows whether the options add up to the active Cost Sheet.
+- **Around it, as designed:** fast-track (small Resurfacing/Repair jobs) refuses multi-sport projects; a Sent
+  Estimate is read-only and edits create a revision (M.2 rule 4); a Sent Quotation cannot gain or lose sports
+  (a new Quotation is needed); and the Quotation PDF prints each sport's apportioned share in its
+  Particulars table, which sits uneasily beside the plan's "lump sum, no itemised prices" constraint for a
+  multi-sport job -- put to the Director as an open decision, not changed.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-60-specs.md`, approved 25 September 2026).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
