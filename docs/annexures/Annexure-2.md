@@ -2150,7 +2150,7 @@ under "More". Grounded against current code:
   deep link -- the open gap Amendment 48 noted ("Open in Opportunities" opens the screen, not the
   record) -- so a result can only land on Leads & Clients, where the list is filterable.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-57-specs.md`, awaiting approval).
+(spec: `docs/annexures/Section-57-specs.md`, approved 25 September 2026).
 
 ## Register Notes (non-software, business-process)
 
