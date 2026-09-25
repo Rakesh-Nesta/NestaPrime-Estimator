@@ -8,6 +8,7 @@ import {
   GridIcon,
   UsersIcon,
 } from "./Icons";
+import { canOpen } from "./navAccess";
 
 // Amendment 36 (Section 42): Phase 1 of the header-by-header CRM restructure
 // -- replaces the old top-nav dropdowns with a left sidebar. Confirmed
@@ -19,37 +20,36 @@ import {
 // sub-groupings (Open Decision 3), relocated under a temporary "More"
 // section pending the Phase 8 placement decision -- nothing is hidden or
 // removed, only moved one level deeper.
+// Amendment 51: each item is shown only to the roles navAccess.js lists for it
+// (Amendment 46's rule, applied to the whole menu); a group with nothing left to
+// show is not listed at all.
 const MORE_GROUPS = [
   {
     key: "vendor",
     label: "Vendor",
-    show: (role) => ["pm", "director", "procurement"].includes(role),
     items: [{ key: "vendors_admin", label: "Vendor Master" }],
   },
   {
     key: "tools",
     label: "Tools",
-    show: () => true,
     items: [
-      { key: "pricing", label: "Price Calculator", show: (role) => role !== "sales" },
-      { key: "rates", label: "Rate Sheet", show: (role) => role !== "sales" },
+      { key: "pricing", label: "Price Calculator" },
+      { key: "rates", label: "Rate Sheet" },
       { key: "calculator", label: "One Simple Calculator" },
-      { key: "price_requests", label: "Price Requests", show: (role) => role !== "sales" },
+      { key: "price_requests", label: "Price Requests" },
     ],
   },
   {
     key: "reports",
     label: "Reports",
-    show: () => true,
     items: [{ key: "reports", label: "All Types of Reports" }],
   },
   {
     key: "admin",
     label: "Admin",
-    show: () => true, // Help stays visible to every role even though the rest of this group isn't -- filtered per-item below
     items: [
-      { key: "sports_scope_admin", label: "Sports & Scope", show: (role) => role !== "sales" },
-      { key: "settings", label: "Master Settings", show: (role) => role !== "sales" },
+      { key: "sports_scope_admin", label: "Sports & Scope" },
+      { key: "settings", label: "Master Settings" },
       { key: "cross_sell_admin", label: "Cross-Sell Add-ons", show: (role) => role === "director" },
       { key: "audit_log", label: "Audit Log", show: (role) => role === "director" },
       { key: "quotations_admin", label: "All Quotations", show: (role) => role === "director", preset: {} },
@@ -59,10 +59,13 @@ const MORE_GROUPS = [
   {
     key: "education",
     label: "Education",
-    show: () => true,
     items: [{ key: "education", label: "Education" }],
   },
 ];
+
+function visibleItems(group, role) {
+  return group.items.filter((it) => canOpen(it.key, role) && (!it.show || it.show(role)));
+}
 
 function NavLink({ label, active, onClick, badge, muted, icon: IconComp }) {
   return (
@@ -104,7 +107,9 @@ export default function Sidebar({
   const [expandedMoreGroup, setExpandedMoreGroup] = useState(null);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const showTeamAccess = user.role !== "sales";
+  // Amendment 51: Team & Access is user management and the role/permission
+  // view -- both Director-only at the API -- and no longer Master Settings.
+  const showTeamAccess = canOpen("team_access", user.role);
 
   function go(target) {
     goToTopLevel(target);
@@ -148,7 +153,7 @@ export default function Sidebar({
     ...(canSeeRelationships
       ? [{ key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon }]
       : []),
-    ...(showTeamAccess ? [{ key: "settings", label: "Team & Access", onClick: () => go("settings"), icon: UsersIcon }] : []),
+    ...(showTeamAccess ? [{ key: "team_access", label: "Team & Access", onClick: () => go("team_access"), icon: UsersIcon }] : []),
   ];
 
   const sidebarBody = (
@@ -197,7 +202,7 @@ export default function Sidebar({
           />
           {moreOpen && (
             <div className="pl-2 space-y-0.5 mt-1">
-              {MORE_GROUPS.filter((g) => g.show(user.role)).map((group) => (
+              {MORE_GROUPS.filter((g) => visibleItems(g, user.role).length > 0).map((group) => (
                 <div key={group.key}>
                   <button
                     onClick={() => setExpandedMoreGroup(expandedMoreGroup === group.key ? null : group.key)}
@@ -207,23 +212,21 @@ export default function Sidebar({
                   </button>
                   {expandedMoreGroup === group.key && (
                     <div className="pl-3 space-y-0.5">
-                      {group.items
-                        .filter((it) => !it.show || it.show(user.role))
-                        .map((it) => (
-                          <NavLink
-                            key={it.key}
-                            label={it.label}
-                            active={screen === it.key}
-                            onClick={() => {
-                              if (it.preset) {
-                                handleDrillDown(it.key, it.preset);
-                                setNavMenuOpen(false);
-                              } else {
-                                go(it.key);
-                              }
-                            }}
-                          />
-                        ))}
+                      {visibleItems(group, user.role).map((it) => (
+                        <NavLink
+                          key={it.key}
+                          label={it.label}
+                          active={screen === it.key}
+                          onClick={() => {
+                            if (it.preset) {
+                              handleDrillDown(it.key, it.preset);
+                              setNavMenuOpen(false);
+                            } else {
+                              go(it.key);
+                            }
+                          }}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
