@@ -42,6 +42,7 @@ from app.api import (
     rate_items,
     regional_multipliers,
     reports,
+    role_permissions,
     schedule,
     scope_items,
     settings,
@@ -149,6 +150,7 @@ app.include_router(site_surveys.site_surveys_router)
 app.include_router(purchase_orders.purchase_orders_router)
 app.include_router(work_orders.work_orders_router)
 app.include_router(payments.router)
+app.include_router(role_permissions.router)
 app.include_router(skip_requests.skip_requests_router)
 app.include_router(education.education_router)
 

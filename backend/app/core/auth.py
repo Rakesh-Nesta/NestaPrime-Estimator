@@ -55,4 +55,9 @@ def require_roles(*allowed_roles: str):
             )
         return current_user
 
+    # Amendment 51 (Section 55): expose the role list this gate enforces so the
+    # Role & Permissions screen can be generated from the live route table
+    # (app.api.role_permissions) instead of a hand-kept mirror that drifts. It
+    # only describes the gate -- it changes nothing about how it behaves.
+    dependency.allowed_roles = tuple(allowed_roles)
     return dependency
