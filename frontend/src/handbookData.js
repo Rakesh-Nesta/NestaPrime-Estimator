@@ -173,7 +173,7 @@ export const FULL_HANDBOOK = [
     fields: ["Status filter", "Search (project number or client name)"],
     whenMissing: "Nothing required — read-only browse/filter, same as All Projects.",
     watch:
-      "Open to every role that can see Estimates at all (Sales through site_engineer), not Director-only — an Estimate only ever shows the client-facing price range, never the underlying cost, so it doesn't need the stricter gate All Quotations has.",
+      "Open to every role that can see Estimates at all (Sales through site_engineer), not Director-only — an Estimate only ever shows the client-facing price range, never the underlying cost, so it doesn't need the stricter cost/margin rules the Quotations list applies (cost and margin shown to PM and Director only).",
   },
   {
     screen: "Quotations",
@@ -203,7 +203,7 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Pricing Calculator",
-    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from More > Tools & reports (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate. (For quick arithmetic that doesn't need margin/GST logic at all, a plain +/-/×/÷/% calculator lives under Tools instead, open to every role.)",
+    what: "A standalone what-if margin/GST calculator, reachable by PM/Director from More > Tools & reports (K.3 -- Sales never sees this screen, enforced both in the nav and server-side) — type a cost figure and a client type, see the target margin, selling price, and GST breakdown. Nothing here is saved, and it isn't linked to any real project, Cost Sheet, or Estimate. (For quick arithmetic that doesn't need margin/GST logic at all, a plain +/-/×/÷/% calculator lives under More > Tools & reports instead, open to every role.)",
     fields: ["Cost incl. contingency (Rs)", "Client type", "Discount type (None/Percent/Amount) + value"],
     whenMissing: "There's nothing to fill beyond the cost figure and client type — everything else is optional.",
     watch: null,
