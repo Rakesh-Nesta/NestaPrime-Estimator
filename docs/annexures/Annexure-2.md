@@ -1917,6 +1917,42 @@ Clients search and the phone layout.
   Team & Access naming, the More-group placement decisions, global quick search, Section C
   quotation content, and HTTPS on a proper domain.
 
+### Amendment No. 51 — Team & Access and Role-Accurate Navigation (Gap 4 of Amendment 48's Audit)
+**Registered 25 September 2026**, from the audit of the Team & Access header (24 September) that
+Amendment 48 left open, extended the next morning to the whole "More" menu. Grounded against current
+code and real-Chrome sessions as each of the six roles:
+- **"Team & Access" is not a team-and-access screen.** The sidebar item (`Sidebar.jsx`,
+  `showTeamAccess = role !== "sales"`) opens `MasterSettings`, titled "Master Settings", on its
+  *Settings* tab; the two team tabs (User management, Role & Permissions) are Director-only and
+  secondary. `Admin > Master Settings` opens the identical screen under a different name.
+- **The item is shown to roles the API refuses.** `GET /settings` is `pm`/`director` only
+  (`settings.py`), yet `procurement`, `site_engineer` and `ca_tax` are shown the item. For them the
+  screen fires **five refused (403) calls**, prints permission-error text, and says **"Current
+  settings (0)"** when 29 exist -- a false empty state, the class Amendment 46 fixed for other items.
+- **The same fault runs through the "More" menu.** Opening every item as each role and counting
+  refused calls: Director and PM none; Sales none (its items are already hidden). `procurement`:
+  Price Calculator 1, Reports 1, Sports & Scope 2, Master Settings 5. `site_engineer`: Price
+  Calculator 1, Rate Sheet 1 (`/vendors`), Price Requests 2, Reports 1, Sports & Scope 2, Master
+  Settings 5. `ca_tax`: Price Calculator 1, Rate Sheet 3, Price Requests 3, Reports 1, Sports & Scope
+  12, Master Settings 5. Each `Sidebar.jsx` gate is `role !== "sales"` (or absent), not the roles the
+  API admits.
+- **PM is shown forms the API refuses.** The Master Settings Settings tab has no role check inside
+  it, so PM sees Add a new setting, Bulk update, logo upload, company details, templates and field
+  settings; probing the local API as PM, **all 18 write endpoints behind that screen and Admin return
+  403**, including `POST /settings`, `POST /settings/bulk-update` and `POST /users`. The screen's own
+  text says "PM is read-only".
+- **The Role & Permissions tab is a stale hand-kept mirror.** `rolePermissionsData.js` was written
+  13 September against "192 call sites across 41 files"; the code now has 243 across 49 and the file has
+  never been updated. Today it says CA/Tax has Dashboard-only access (false since Payments), lists Work
+  Orders & Payments as `pm`/`director` "add/list payment entries" only (missing milestones, receipt edits,
+  the org list and CA/Tax read access), lists "update client flags/consent" for Sales (flags are
+  Director-only), and has nothing on Opportunities, Follow-ups, the Quotations list or the Overview
+  payments block -- on the one screen a Director consults to learn who can do what.
+- **What is sound:** user management (`users.py`) cannot deactivate your own account, protects the last
+  active Director, audit-logs every write and forces a password change on first login.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-55-specs.md`).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
