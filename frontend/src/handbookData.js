@@ -150,7 +150,7 @@ export const FULL_HANDBOOK = [
     fields: [
       "Estimate: Sport + Package (Budget/Standard/Premium) + a cost figure per option — one option per submit, several options can exist side by side for the client to compare.",
       "Quotation: pick the Estimate, an optional discount, and (Tender Mode only) whether GST is quoted exclusive or inclusive of the base price.",
-      "Cover Note (Quotation) — \"Draft with AI\" proposes an opening paragraph from the project's own details; a human always reviews and explicitly saves it before it appears on the Quotation PDF, exactly like the AI draft never auto-sends anywhere else in the app.",
+      "Cover Note (Quotation) — \"Draft with AI\" proposes two short paragraphs written only from what is set for the quotation (client, site, sports, package content, timeline); a human always reviews and explicitly saves it. Once saved, and until the quotation is sent, the Quotation PDF opens as a letter: Kind attention (the client's active signatory, else the contact name), a subject line, your note, and a sign-off with the authorised signatory from Master Settings. The Scope of work (package content and what is included, with no prices) also prints on a quotation not yet sent. A quiet \"The PDF will leave out:\" list under the note says what is missing.",
       "Messages (on Cost Sheet/Estimate/Quotation rows) — a panel to send or log outbound communication about that document: channel (Email/WhatsApp/Telegram), template, recipient (required), subject, message text, and a \"Draft with AI\" button that proposes the message text for you to review before sending.",
     ],
     whenMissing:
@@ -249,7 +249,7 @@ export const FULL_HANDBOOK = [
     what: "Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, quotation terms and message templates. The Director edits them; the PM can view them but not change them. (User management and the role view now live under Team & Access.)",
     fields: [
       "Varies by setting — each is a versioned value, editable only by the Director; PM can view but not edit.",
-      "Company details (Section 14) — a labeled panel for the company identity/bank fields (legal name, PAN, GSTIN, registered office city, bank details) that print on the Quotation PDF — the same underlying Settings the raw key/value form below always could edit, just with real labels now.",
+      "Company details (Section 14) — a labeled panel for the company identity/bank fields (legal name, PAN, GSTIN, registered office city, bank details) that print on the Quotation PDF — the same underlying Settings the raw key/value form below always could edit, just with real labels now. It also holds the authorised signatory's name and designation, which sign off the cover letter.",
       "Quotation terms & warranty (Section 14) — the Quotation PDF's own T&C clauses and warranty table, editable as plain text; \"Preview\" renders the draft against a real Quotation before you save, so a wording mistake is caught before it's live on every future Quotation.",
     ],
     whenMissing: "Every setting ships with a sensible default (see Q.1/Q.2) — nothing here blocks daily work if left untouched. The T&C/warranty editor is seeded with today's actual PDF wording, so leaving it alone changes nothing.",

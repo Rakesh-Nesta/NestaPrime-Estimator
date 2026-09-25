@@ -550,6 +550,9 @@ const COMPANY_DETAIL_FIELDS = [
   { key: "company_bank_account_name", label: "Bank account name" },
   { key: "company_bank_account_number", label: "Bank account number" },
   { key: "company_bank_ifsc", label: "Bank IFSC" },
+  // Amendment 54: the cover letter's sign-off ("Yours faithfully, For <company>, <name>, <designation>").
+  { key: "company_signatory_name", label: "Authorised signatory name" },
+  { key: "company_signatory_designation", label: "Authorised signatory designation" },
 ];
 
 function CompanyDetailsCard({ token, readOnly }) {
@@ -608,8 +611,8 @@ function CompanyDetailsCard({ token, readOnly }) {
       <h3 className="text-sm font-semibold text-text-secondary mb-1">Company details</h3>
       <p className="text-xs text-text-secondary mb-2">
         {readOnly
-          ? "These print on every Quotation PDF. A blank field is simply omitted from the PDF, never printed as placeholder text."
-          : 'Part O COMPANY / Section 14: these already fed the Quotation PDF before this panel existed -- they just had to be set through the raw "Add a new setting" key/value form below. This is the same data, with real labels. A blank field is simply omitted from the PDF, never printed as placeholder text.'}
+          ? "These print on the Quotation PDF; the authorised signatory signs off its cover letter. A blank field is simply omitted from the PDF, never printed as placeholder text."
+          : 'Part O COMPANY / Section 14: these already fed the Quotation PDF before this panel existed -- they just had to be set through the raw "Add a new setting" key/value form below. This is the same data, with real labels. The authorised signatory (Amendment 54) signs off the cover letter that prints when a Quotation has a cover note. A blank field is simply omitted from the PDF, never printed as placeholder text.'}
       </p>
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
       {savedMessage && <p className="text-xs text-green-400 mb-2">{savedMessage}</p>}
