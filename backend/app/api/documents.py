@@ -1436,6 +1436,79 @@ def _price_estimate_option(
     )
 
 
+def _sport_label(db: Session, project_sport_id: uuid.UUID) -> str:
+    """The sport's name for messages ("Badminton"), never a bare id."""
+    from app.models.sport import Sport
+
+    project_sport = db.query(ProjectSport).filter(ProjectSport.id == project_sport_id).first()
+    sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first() if project_sport else None
+    return sport.name if sport else "this sport"
+
+
+def _reject_duplicate_options(db: Session, existing: list[tuple[uuid.UUID, Package]], new: list) -> None:
+    """Amendment 57 (Section 60): the same sport and the same package twice in one Estimate is a
+    mistake; the same sport with a *different* package is allowed -- those are the alternatives
+    (Budget/Standard/Premium) the client compares."""
+    seen = set(existing)
+    for option in new:
+        key = (option.project_sport_id, option.package)
+        if key in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{_sport_label(db, option.project_sport_id)} ({option.package.value.capitalize()}) "
+                "is already an option on this Estimate",
+            )
+        seen.add(key)
+
+
+def _build_estimate_option(
+    db: Session,
+    project_id: uuid.UUID,
+    cost_sheet: CostSheet,
+    client: Client,
+    estimate_id: uuid.UUID,
+    option_payload: "EstimateOptionCreate",
+    policy=None,
+    gst_rate_percent: float | None = None,
+    price_range_percent: float | None = None,
+) -> EstimateOption:
+    """Prices and builds one Estimate option (not yet added to the session). Shared by
+    create_estimate and Amendment 57's add-option endpoint so both price identically."""
+    project_sport = (
+        db.query(ProjectSport)
+        .filter(ProjectSport.id == option_payload.project_sport_id, ProjectSport.project_id == project_id)
+        .first()
+    )
+    if not project_sport:
+        raise HTTPException(
+            status_code=404, detail=f"Sport selection {option_payload.project_sport_id} not on this project"
+        )
+    policy = policy or _get_margin_policy(db, client.type)
+    if gst_rate_percent is None:
+        gst_rate_percent = get_gst_rate_percent(db)
+    if price_range_percent is None:
+        price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
+
+    # K.2 / M.1: each option is priced at ITS OWN target margin -- a
+    # sport-type floor override (Director-set) replaces the client
+    # floor only for that sport, so options for different sports in
+    # the same Estimate can carry different targets. GST is likewise
+    # blended from this sport's own cost-sheet lines (Note R1), not
+    # just the flat global rate.
+    option_gst_rate_percent = effective_gst_rate_percent(db, cost_sheet.id, project_sport.id, gst_rate_percent)
+    price_low, price_high = _price_estimate_option(
+        db, policy, option_gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
+    )
+    return EstimateOption(
+        estimate_id=estimate_id,
+        project_sport_id=option_payload.project_sport_id,
+        package=option_payload.package,
+        cost_for_option=option_payload.cost_for_option,
+        price_low=price_low,
+        price_high=price_high,
+    )
+
+
 @estimates_router.post(
     "/projects/{project_id}/estimates", response_model=EstimateOut, status_code=201
 )
@@ -1476,6 +1549,7 @@ def create_estimate(
         raise HTTPException(
             status_code=400, detail="This client is blacklisted (Part O) -- new Estimates are blocked"
         )
+    _reject_duplicate_options(db, [], payload.options)
     policy = _get_margin_policy(db, client.type)
     gst_rate_percent = get_gst_rate_percent(db)
     price_range_percent = _get_setting_float(db, "estimate_price_range_percent", PRICE_RANGE_PERCENT_DEFAULT)
@@ -1496,35 +1570,9 @@ def create_estimate(
 
     options = []
     for option_payload in payload.options:
-        project_sport = (
-            db.query(ProjectSport)
-            .filter(ProjectSport.id == option_payload.project_sport_id, ProjectSport.project_id == project_id)
-            .first()
-        )
-        if not project_sport:
-            raise HTTPException(
-                status_code=404, detail=f"Sport selection {option_payload.project_sport_id} not on this project"
-            )
-
-        # K.2 / M.1: each option is priced at ITS OWN target margin -- a
-        # sport-type floor override (Director-set) replaces the client
-        # floor only for that sport, so options for different sports in
-        # the same Estimate can carry different targets. GST is likewise
-        # blended from this sport's own cost-sheet lines (Note R1), not
-        # just the flat global rate.
-        option_gst_rate_percent = effective_gst_rate_percent(
-            db, cost_sheet.id, project_sport.id, gst_rate_percent
-        )
-        price_low, price_high = _price_estimate_option(
-            db, policy, option_gst_rate_percent, price_range_percent, project_sport, option_payload.cost_for_option
-        )
-        option = EstimateOption(
-            estimate_id=estimate.id,
-            project_sport_id=option_payload.project_sport_id,
-            package=option_payload.package,
-            cost_for_option=option_payload.cost_for_option,
-            price_low=price_low,
-            price_high=price_high,
+        option = _build_estimate_option(
+            db, project_id, cost_sheet, client, estimate.id, option_payload,
+            policy=policy, gst_rate_percent=gst_rate_percent, price_range_percent=price_range_percent,
         )
         db.add(option)
         options.append(option)
@@ -1532,6 +1580,83 @@ def create_estimate(
     db.commit()
     for o in options:
         db.refresh(o)
+    return _estimate_to_out(db, estimate, options, current_user.role.value)
+
+
+@estimates_router.post("/estimates/{estimate_id}/options", response_model=EstimateOut, status_code=201)
+def add_estimate_option(
+    estimate_id: uuid.UUID,
+    payload: EstimateOptionCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """Amendment 57 (Section 60): add a sport option to an Estimate that is still Draft, so one
+    Estimate -- and so one Quotation -- can cover several sports. PM/Director only, like creating an
+    Estimate (the option carries a cost, K.3). A Sent Estimate stays read-only: editing it is a new
+    revision (M.2 rule 4)."""
+    estimate = db.query(Estimate).filter(Estimate.id == estimate_id).first()
+    if not estimate:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    if estimate.status != EstimateStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sport options can only be added to a Draft Estimate, not one in {estimate.status.value} "
+            "status -- revise it or create a new Estimate",
+        )
+    project = db.query(Project).filter(Project.id == estimate.project_id).first()
+    client = db.query(Client).filter(Client.id == project.client_id).first()
+    if client.blacklist_flag:
+        raise HTTPException(
+            status_code=400, detail="This client is blacklisted (Part O) -- new Estimates are blocked"
+        )
+    cost_sheet = db.query(CostSheet).filter(CostSheet.id == estimate.cost_sheet_id).first()
+    existing = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
+    _reject_duplicate_options(db, [(o.project_sport_id, o.package) for o in existing], [payload])
+
+    option = _build_estimate_option(db, project.id, cost_sheet, client, estimate.id, payload)
+    db.add(option)
+    db.commit()
+    options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
+    return _estimate_to_out(db, estimate, options, current_user.role.value)
+
+
+@estimates_router.delete("/estimates/{estimate_id}/options/{option_id}", response_model=EstimateOut)
+def remove_estimate_option(
+    estimate_id: uuid.UUID,
+    option_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*COST_ROLES)),
+):
+    """Amendment 57 (Section 60): take an option off a Draft Estimate -- only one the client has not
+    decided on (nothing built on it), and never the last one."""
+    estimate = db.query(Estimate).filter(Estimate.id == estimate_id).first()
+    if not estimate:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    if estimate.status != EstimateStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Options can only be removed from a Draft Estimate, not one in {estimate.status.value} status",
+        )
+    option = (
+        db.query(EstimateOption)
+        .filter(EstimateOption.id == option_id, EstimateOption.estimate_id == estimate.id)
+        .first()
+    )
+    if not option:
+        raise HTTPException(status_code=404, detail="Estimate option not found")
+    if option.client_status != EstimateOptionClientStatus.PENDING:
+        raise HTTPException(
+            status_code=400, detail="This option already has a client decision recorded and cannot be removed"
+        )
+    if db.query(QuotationLine).filter(QuotationLine.estimate_option_id == option.id).first() is not None:
+        raise HTTPException(status_code=400, detail="A Quotation already includes this option")
+    remaining = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).count()
+    if remaining <= 1:
+        raise HTTPException(status_code=400, detail="An Estimate must keep at least one option")
+
+    db.delete(option)
+    db.commit()
+    options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate.id).all()
     return _estimate_to_out(db, estimate, options, current_user.role.value)
 
 
@@ -1914,6 +2039,24 @@ def _quotation_to_out(db: Session, quotation: Quotation, role: str) -> Quotation
     return out
 
 
+def _require_one_package_per_sport(db: Session, options: list, option_ids: list) -> None:
+    """Amendment 57 (Section 60): a Quotation carries at most one package per sport. Alternatives
+    (Budget/Standard/Premium) live on the Estimate for the client to compare; including two of one
+    sport would sum both costs and print the sport twice."""
+    if len(set(option_ids)) != len(option_ids):
+        raise HTTPException(status_code=400, detail="The same Estimate option is included more than once")
+    by_sport: dict = {}
+    for option in options:
+        by_sport.setdefault(option.project_sport_id, []).append(option)
+    for project_sport_id, group in by_sport.items():
+        if len(group) > 1:
+            packages = " and ".join(o.package.value.capitalize() for o in group)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Choose one package for {_sport_label(db, project_sport_id)}: {packages} are both included",
+            )
+
+
 @quotations_router.post(
     "/projects/{project_id}/quotations", response_model=QuotationOut, status_code=201
 )
@@ -1954,6 +2097,7 @@ def create_quotation(
                 detail=f"Option {option_id} is not Client approved or Client demand received",
             )
         included_options.append(option)
+    _require_one_package_per_sport(db, included_options, payload.included_option_ids)
 
     cost_sheet = db.query(CostSheet).filter(CostSheet.id == estimate.cost_sheet_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
