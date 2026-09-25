@@ -129,7 +129,7 @@ pasted, each step checked from outside; then a docs-only close-out (register, de
 10. **One PR for the repository files, then the runbook, then a docs-only close-out.** Proposed: **yes.**
 
 ### Approval
-☐ Approved — "approve as proposed, all decisions" (with the domain name in decision 1)
+☑ Approved — "approve as proposed, all decisions" (25 September 2026). **The domain name (decision 1), DNS access, opening port 443 and the callback check are still to be supplied**; the repository work uses a `__DOMAIN__` placeholder, and the server runbook does not start until they are.
 ☐ Approved with changes (noted above)
 ☐ Not approved
 

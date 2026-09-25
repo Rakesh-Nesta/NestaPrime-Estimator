@@ -2415,7 +2415,7 @@ Director's phone cannot open the site. Grounded against the repository and the l
   configured (unset on the server on 16 September) -- a callback aimed at the IP over HTTP would be
   redirected and break.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-59-specs.md`, awaiting approval).
+(spec: `docs/annexures/Section-59-specs.md`, approved 25 September 2026; the domain name is still to be supplied).
 
 ## Register Notes (non-software, business-process)
 
