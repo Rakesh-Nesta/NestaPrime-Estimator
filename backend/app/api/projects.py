@@ -280,15 +280,18 @@ class ProjectSummaryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# Amendment 53 (Section 57): the read gate for the project list, named so the global
+# quick search reuses exactly it instead of copying the tuple.
+LIST_ROLES = ("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
+
+
 @router.get("", response_model=list[ProjectSummaryOut])
 def list_projects(
     search: str | None = None,
     status: str | None = None,  # "open" | "won" | "lost"
     client_id: uuid.UUID | None = None,  # Section 19: per-client project list
     db: Session = Depends(get_db),
-    current_user=Depends(
-        require_roles("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
-    ),
+    current_user=Depends(require_roles(*LIST_ROLES)),
 ):
     won_project_ids = (
         db.query(Quotation.project_id).filter(Quotation.status == QuotationStatus.WON).distinct()

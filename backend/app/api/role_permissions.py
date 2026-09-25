@@ -18,7 +18,11 @@ ROLE_ORDER = [role.value for role in UserRole]
 # Optional nicer wording for a route whose function name reads awkwardly, keyed by
 # the route function's name. Empty by default: the humanised function name is
 # used ("create_project" -> "Create project").
-LABEL_OVERRIDES: dict[str, str] = {}
+LABEL_OVERRIDES: dict[str, str] = {
+    # Amendment 53: the route's gate admits all six roles, but each role only
+    # receives the kinds of result it can already read -- say so.
+    "global_search": "Quick search (results limited to what the role can read)",
+}
 
 
 class RouteItemOut(BaseModel):

@@ -178,10 +178,15 @@ def get_client_type_defaults(
     )
 
 
+# Amendment 53 (Section 57): the read gate for client records, named so the global
+# quick search reuses exactly it instead of copying the tuple.
+READ_ROLES = ("sales", "pm", "director", "procurement")
+
+
 @router.get("", response_model=list[ClientOut])
 def list_clients(
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("sales", "pm", "director", "procurement")),
+    current_user=Depends(require_roles(*READ_ROLES)),
 ):
     return db.query(Client).order_by(Client.name).all()
 
@@ -190,7 +195,7 @@ def list_clients(
 def get_client(
     client_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("sales", "pm", "director", "procurement")),
+    current_user=Depends(require_roles(*READ_ROLES)),
 ):
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
