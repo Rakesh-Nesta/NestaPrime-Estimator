@@ -6,6 +6,7 @@ import {
   FolderIcon,
   FunnelIcon,
   GridIcon,
+  SearchIcon,
   UsersIcon,
 } from "./Icons";
 import { canOpen } from "./navAccess";
@@ -95,6 +96,7 @@ export default function Sidebar({
   handleLogout,
   navMenuOpen,
   setNavMenuOpen,
+  onOpenSearch,
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -105,6 +107,13 @@ export default function Sidebar({
   function go(target) {
     goToTopLevel(target);
     setNavMenuOpen(false);
+  }
+
+  // Amendment 53: the global quick search. Closes the phone menu first so the
+  // palette is not stacked on top of it.
+  function openSearch() {
+    setNavMenuOpen(false);
+    onOpenSearch();
   }
 
   // Amendment 49 (Section 53): this opens the Quotations list for every role
@@ -170,6 +179,18 @@ export default function Sidebar({
             <span className="block text-[10px] text-text-secondary truncate">Sports infrastructure &middot; India</span>
           </span>
         </div>
+      </div>
+
+      <div className="px-4 pb-1">
+        <button
+          onClick={openSearch}
+          className="w-full flex items-center gap-2.5 rounded border border-border-dark bg-surface-raised px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:border-gold/40 transition-colors"
+          aria-label="Search clients, leads, projects and quotations"
+        >
+          <SearchIcon className="w-4 h-4 shrink-0" />
+          <span className="flex-1 text-left">Search</span>
+          <kbd className="hidden sm:inline text-[10px] rounded border border-border-dark px-1.5 py-0.5 text-text-secondary/70">/</kbd>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 space-y-1 pt-1">
@@ -248,6 +269,9 @@ export default function Sidebar({
             N
           </span>
           <span className="font-heading font-bold text-text-primary text-sm">NestaPrime</span>
+        </button>
+        <button onClick={openSearch} className="p-2 ml-auto mr-1 text-text-secondary" aria-label="Search">
+          <SearchIcon className="w-5 h-5" />
         </button>
         <button
           onClick={() => setNavMenuOpen(!navMenuOpen)}

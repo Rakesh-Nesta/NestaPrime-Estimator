@@ -1829,6 +1829,13 @@ export async function getRolePermissions(token) {
   return handle(res);
 }
 
+// Amendment 53 (Section 57): global quick search -- clients, leads, projects and
+// quotations in groups (each only for roles that can already read that kind).
+export async function globalSearch(token, q, { signal } = {}) {
+  const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`, { headers: authHeaders(token), signal });
+  return handle(res);
+}
+
 export async function createUser(token, { name, email, role, password }) {
   const res = await fetch(`${API_BASE}/users`, {
     method: "POST",
