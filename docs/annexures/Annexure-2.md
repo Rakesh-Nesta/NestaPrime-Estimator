@@ -1953,6 +1953,80 @@ code and real-Chrome sessions as each of the six roles:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-55-specs.md`, approved 25 September 2026).
 
+**Implemented (25 September 2026), in the spec's two ordered parts plus one follow-up.**
+*Part A (backend, PR #197):* `require_roles()` now records the roles it enforces
+(`dependency.allowed_roles`, behaviour unchanged) and a new Director-only `GET /role-permissions`
+(`app/api/role_permissions.py`) walks the live route table and returns every role-gated route --
+method, path and a humanised label -- grouped by area (first tag) and by identical role set, plus the
+routes that need only a sign-in or nothing at all (`/auth/me`, `/auth/change-password`,
+`/company/logo`, `/company/logo/meta`, login, health, the WhatsApp webhook). 244 gated routes in 65
+areas today. *Part B (frontend, PR #198):* "Team & Access" is now a real Director-only screen with
+**People** (the existing user management, moved unchanged) and **Roles & permissions** (renders the
+endpoint; `rolePermissionsData.js` deleted; the three safety-critical rules stay as prose). One table,
+`navAccess.js`, now decides who is shown each screen and is used by both the sidebar/More menu and the
+App-level gates, so they cannot disagree; a More group with nothing left to show is hidden. Master
+Settings has one entry point (Admin > Master Settings) for `pm` and `director`, and for PM it is
+read-only: no add/bulk/edit/logo/import/company-details/template/field-setting controls, and no request
+for the Director-only quotation-preview list. Rate Sheet no longer requests `/vendors` for roles the
+API refuses (`site_engineer`). *Follow-up (PR #199, text only):* the in-app Help handbook still sent
+Directors to "Master Settings > User Management / Role & Permissions"; reworded to Team & Access.
+**That was missed in Part B** -- the spec did not list the handbook -- and found only when a leftover
+string turned up while verifying the deployed bundle.
+
+**Verified locally.** 8 new backend tests (`tests/test_role_permissions.py`): Director-only (401 anonymous,
+403 for the five other roles); the response's routes equal OpenAPI's independent route list exactly, each
+once, none both gated and ungated; 13 hard-coded gate spot-checks (e.g. `GET /payments` is
+`pm`/`director`/`ca_tax`, `POST /settings` and `POST /users` are `director`, `GET /quotations` is
+`sales`/`pm`/`director`); ungated classification; labels; and a gated route added inside a test appears
+with no other change and is cleaned up. CI ran the full backend suite green on #196, #197, #198 and #199
+(each with a `push` and a `pull_request` run). A first local full-suite attempt overlapped
+a second one on the shared test database and errored at setup (the affected file passed when re-run
+alone); the second, run alone on the Part A code, finished later with **1346 passed, 0 failed**
+(85 minutes, slowed by everything else running). Real Chrome against the
+local API, as each of the six roles opening **every** sidebar and More item (the acceptance criterion):
+**0 refused (4xx) calls in every session and no permission-error text** (the earlier audit had 1-12 per
+item for `procurement`, `site_engineer` and `ca_tax`); Team & Access (both tabs) and PM's Master Settings
+need no sideways scroll at 375, 414, 768 and 1280px; PM's Master Settings showed all 29 settings with 0
+Edit buttons and none of the write controls, while the Director's showed 31 Edit buttons and every write
+control and no longer has the two team tabs.
+
+**Deployed to production in three steps, 25 September 2026.** (1) **Backend, `b77a46c` (Part A):** the
+first attempt shipped nothing -- `git pull` had not been run, the server was still at `54ff6a0` -- found
+because production's OpenAPI still had no `/role-permissions` (404); redone with the pull, it lists
+`/role-permissions` (205 paths, was 204) with its response schemas, and an anonymous call answers 401.
+(2) **Frontend, `45172de` (Part B):** the served bundle changed from `index-BPfOBPdb.js` to
+`index-D-BkS1ab.js`; downloaded from production it contains the Team & Access screen, the
+`/role-permissions` request, the PM read-only line and "Open to every role", and no longer contains the
+hand-kept permissions text or the "Dashboard summary only" CA/Tax note. (3) **Frontend, `6bba458`
+(handbook wording):** two redeploys before the merge fetched nothing new ("Already up to date") and
+changed nothing; after the merge the bundle changed to `index-BfhevSxH.js`, which contains "Team &
+Access > People" and "Team & Access > Roles & permissions" and none of the old "Master Settings > User
+Management" wording.
+
+**Open items -- not verified or not done:**
+- *No logged-in click-through on production.* The Director's live Roles & permissions data and PM's
+  read-only Master Settings were checked only against the local database; production was checked from
+  what it serves (bundle contents, OpenAPI, anonymous 401s).
+- *The generator reads a FastAPI-internal API.* Included routers are stored as `_IncludedRouter` and
+  read through `effective_route_contexts()`; a FastAPI upgrade that changes it would break the endpoint.
+  The tests compare it with OpenAPI and pin known gates, so an upgrade fails in CI, not silently on the
+  Director's screen.
+- *Labels are the route function's name, humanised* ("Create project"); a few read awkwardly and
+  `LABEL_OVERRIDES` in `role_permissions.py` is empty until someone curates it.
+- *The navigation table is hand-written* (`navAccess.js`, each row naming its endpoints); it follows the
+  API, and the Director's new screen is the way to re-check it, but nothing tests it automatically.
+- *Sports & Scope for PM and Reports for `sales`* were confirmed only by the zero-refused-calls audit
+  on the local database; a role-specific empty state was not separately inspected.
+- *The Help handbook was wrong until #199* (found late; see above). Other Help text was not re-audited
+  against the new navigation beyond the strings that named the moved screens.
+- *Still open from Amendment 48's audit:* the More-group placement decisions (where Vendor, Tools,
+  Reports, Admin and Education live -- deliberately out of scope here), global quick search, Section C
+  quotation content, and HTTPS on a proper domain. Director review of the new screen, and of the
+  Quotations and Payments screens, is pending; nothing has been tested on a real phone (the site is
+  still plain HTTP on a bare IP).
+- *Test data:* the extra test users (`audit-site_engineer@`, `audit-ca_tax@`) exist in the local
+  development database only; nothing was created in production.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
