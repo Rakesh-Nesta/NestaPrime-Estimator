@@ -2381,6 +2381,42 @@ reports", Team & Access and the PM read-only line; `/api/health` ok.
   three pieces are done or resolved (terms and bank details already existed; the T&C review is the
   Director's).
 
+### Amendment No. 55 — HTTPS on a Real Domain
+**Registered 25 September 2026**, on the Director's instruction to register and spec HTTPS on a real
+domain -- the last open item from Amendment 48's audit ("HTTPS on a proper domain") and the reason the
+Director's phone cannot open the site. Grounded against the repository and the live server:
+- **Production is plain HTTP on a bare IP.** `deploy/nginx/nestaprime.conf` listens on port 80 only with
+  `server_name 65.1.234.78`; the server answers `HTTP/1.1 200` from `nginx/1.24.0` over HTTP. The login
+  form sends the email and password, and every later request an access token, in clear text; so do the
+  quotation, rate and client-phone data the app exists to hold. Nothing at the edge sets
+  `Strict-Transport-Security` or any other security header (the backend sets only
+  `X-Content-Type-Options` and `Cross-Origin-Resource-Policy`, `main.py`).
+- **There is no HTTPS to fall back to.** `https://65.1.234.78` times out from outside -- a closed port
+  (Lightsail's firewall) or no listener -- not a certificate error. Certificates for a bare IP are not the
+  ordinary route (they are short-lived and unusual); a domain name is the straightforward one.
+- **The phone symptom is unexplained but consistent.** The Director reports the site does not open on
+  their phone; the cause was never established (a mobile browser's HTTPS-first behaviour, or a network
+  filtering bare-IP HTTP, are both plausible). HTTPS on a domain removes both.
+- **Where the address is written down:** `VITE_API_URL` is baked into the frontend build
+  (`http://65.1.234.78/api`, `deploy/README.md`, first install and redeploy), `CORS_ORIGINS` in the
+  server's `.env` is `http://65.1.234.78`, and `backend/.env.example` names the IP in a comment. No source
+  file in `frontend/src` or `backend/app` contains the address.
+- **A subtle trap behind nginx.** nginx already sends `X-Forwarded-Proto $scheme`, but gunicorn is started
+  without `--forwarded-allow-ips`, so it trusts forwarded headers only from `127.0.0.1` while the backend
+  container sees nginx through the Docker bridge. Any redirect FastAPI builds (a trailing-slash redirect)
+  would then name `http://` and be blocked as mixed content once the page is HTTPS.
+- **What does not need to change.** Tokens live in memory (`App.jsx` state), not cookies or local storage,
+  so there are no cookie flags and no sessions to migrate; CORS is env-driven and already allows credentials
+  for the configured origins; the API prefix `/api` is a build argument.
+- **Never assessed:** the ZAP scan of 11 September ran against `http://localhost:8000` (dev), so transport
+  security was never measured.
+- **Unknown, and the Director's to supply:** the domain (the Director's own email address suggests the
+  company owns one), who can add its DNS record, and where the WhatsApp/Telegram callbacks point, if
+  configured (unset on the server on 16 September) -- a callback aimed at the IP over HTTP would be
+  redirected and break.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-59-specs.md`, approved 25 September 2026; the domain name is still to be supplied).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
