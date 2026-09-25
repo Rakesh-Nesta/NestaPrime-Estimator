@@ -30,7 +30,7 @@ const SAFETY_CRITICAL_RULES = [
   {
     name: "Director-count guardrail",
     detail:
-      "A Director can't deactivate their own account, and can't deactivate or demote the last active Director — User Management is itself Director-only, so hitting zero active Directors would make the app unrecoverable without a raw database script.",
+      "A Director can't deactivate their own account, and can't deactivate or demote the last active Director — Team & Access is itself Director-only, so hitting zero active Directors would make the app unrecoverable without a raw database script.",
   },
 ];
 
