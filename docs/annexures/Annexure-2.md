@@ -2288,7 +2288,7 @@ is from 22 September and predates Section 14):
 - **Gaps are silent.** A blank company field is skipped, so a quotation can go out with no payment
   instructions and nobody is told.
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-58-specs.md`, awaiting approval).
+(spec: `docs/annexures/Section-58-specs.md`, approved 25 September 2026).
 
 ## Register Notes (non-software, business-process)
 

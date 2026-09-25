@@ -139,7 +139,7 @@ Quotation PDF does not.
 11. **Two ordered PRs** (backend, then frontend). Proposed: **yes.**
 
 ### Approval
-☐ Approved — "approve as proposed, all decisions"
+☑ Approved — "approve as proposed, all decisions" (25 September 2026)
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
