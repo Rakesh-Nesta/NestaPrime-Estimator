@@ -88,14 +88,16 @@ function byFollowUp(a, b) {
   return a.next_follow_up_date < b.next_follow_up_date ? -1 : 1;
 }
 
-export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onBack }) {
+// Amendment 53: `initialSearch` pre-fills the search box when a client or lead is opened
+// from the global quick search (there is no per-record view; the record is the first row).
+export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onBack, initialSearch = "" }) {
   const [clients, setClients] = useState([]);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [showClientForm, setShowClientForm] = useState(false);
   const [showEnquiryForm, setShowEnquiryForm] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState(null);

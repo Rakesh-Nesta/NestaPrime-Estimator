@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { changePassword, getCurrentUser, getProject, login } from "./api";
 import AllEstimates from "./AllEstimates";
 import AllProjects from "./AllProjects";
@@ -18,6 +18,7 @@ import Payments from "./Payments";
 import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
 import ProjectSetup from "./ProjectSetup";
+import QuickSearch from "./QuickSearch";
 import RateSheet from "./RateSheet";
 import Reports from "./Reports";
 import ScopeChecklist from "./ScopeChecklist";
@@ -51,6 +52,27 @@ export default function App() {
   // Amendment 44 Phase C: set by "Start Project" on a Won Opportunity, read
   // by ProjectSetup, cleared as soon as any other path starts a project.
   const [startFrom, setStartFrom] = useState(null);
+  // Amendment 53: the global quick search palette, and the text a client/lead result
+  // pre-fills into Leads & Clients (`nonce` remounts it even when already open).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [clientsSearch, setClientsSearch] = useState({ text: "", nonce: 0 });
+
+  useEffect(() => {
+    if (!user) return undefined;
+    function onKeyDown(e) {
+      const t = e.target;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [user]);
 
   const TOP_LEVEL_SCREENS = [
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
@@ -68,8 +90,23 @@ export default function App() {
     if (!TOP_LEVEL_SCREENS.includes(screen)) {
       setPreNavScreen(screen);
     }
+    // A search-prefilled Leads & Clients filter belongs to that one visit.
+    if (target !== "clients_admin") setClientsSearch((c) => (c.text ? { text: "", nonce: c.nonce + 1 } : c));
     setScreen(target);
     setNavMenuOpen(false);
+  }
+
+  // Amendment 53: open a quick-search result. A project or quotation opens that
+  // project; a client or lead opens Leads & Clients with its exact name in the
+  // search box (there is no per-record view or deep link).
+  function handleOpenSearchResult(item) {
+    setSearchOpen(false);
+    if (item.project_id) {
+      handleOpenProject(item.project_id);
+    } else {
+      setClientsSearch((c) => ({ text: item.primary, nonce: c.nonce + 1 }));
+      goToTopLevel("clients_admin");
+    }
   }
 
   function handleDrillDown(target, preset = {}) {
@@ -90,6 +127,7 @@ export default function App() {
   }
 
   async function handleOpenProject(projectId) {
+    setClientsSearch((c) => (c.text ? { text: "", nonce: c.nonce + 1 } : c));
     try {
       const project = await getProject(accessToken, projectId);
       setActiveProject(project);
@@ -161,7 +199,11 @@ export default function App() {
           handleLogout={handleLogout}
           navMenuOpen={navMenuOpen}
           setNavMenuOpen={setNavMenuOpen}
+          onOpenSearch={() => setSearchOpen(true)}
         />
+        {searchOpen && (
+          <QuickSearch token={accessToken} onClose={() => setSearchOpen(false)} onOpenResult={handleOpenSearchResult} />
+        )}
         <main className="flex-1 min-w-0">
         <div className="hidden sm:flex items-center justify-between gap-4 px-6 pt-4 print:hidden">
           <p className="text-xs text-text-secondary">
@@ -263,6 +305,8 @@ export default function App() {
         )}
         {screen === "clients_admin" && (
           <ClientsAdmin
+            key={clientsSearch.nonce}
+            initialSearch={clientsSearch.text}
             token={accessToken}
             role={user.role}
             onOpenProject={handleOpenProject}

@@ -233,6 +233,18 @@ export const FULL_HANDBOOK = [
       "Every toggle here saves instantly on click, with no confirmation step. Overdue and Blacklisted are Director-only (greyed out for other roles); WhatsApp/Email consent can be toggled by Sales, PM, or Director. A client with no projects yet shows \"No projects yet\" when expanded, not an empty list with no explanation.",
   },
   {
+    screen: "Quick search",
+    what: "One search box for finding a record fast, from anywhere in the app: press / or Ctrl+K (Cmd+K on a Mac), tap Search at the top of the sidebar, or tap the magnifier at the top of the phone screen. It finds clients, leads, projects and quotations, and shows only the kinds your role can already open.",
+    fields: [
+      "What it searches — clients by name, contact name, phone, email or city; leads by name, phone or email; projects by project number, client name or city; quotations by document number, project number or client name",
+      "Phone numbers — type the digits with any spacing (98765 43210 finds +91-98765-43210)",
+      "Results — grouped by kind, up to six per group with the true total shown; use the arrow keys and Enter, or tap a row",
+    ],
+    whenMissing: "Type at least two characters. If nothing matches it says so; if the search itself fails it shows an error and a Try again button, never an empty list.",
+    watch:
+      "A project or quotation opens that project. A client or lead opens Leads & Clients with the name already in its search box, so the record is the first row. Results never show prices, costs or margins. Procurement sees clients, leads and projects (no quotations); Site Engineer and CA/Tax see projects only.",
+  },
+  {
     screen: "Master Settings",
     what: "Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, quotation terms and message templates. The Director edits them; the PM can view them but not change them. (User management and the role view now live under Team & Access.)",
     fields: [
