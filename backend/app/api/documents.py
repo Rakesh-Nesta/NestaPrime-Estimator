@@ -52,7 +52,7 @@ from app.models.regional_multiplier import RegionalMultiplier
 from app.models.setting import DocumentType, Override
 from app.models.skip_request import SkipRequest, SkipRequestStatus
 from app.models.sport import ProjectSport
-from app.services import ai_content
+from app.services import ai_content, quotation_content
 
 # M.3: quotations at or above this value (or any Government/Tender deal)
 # require Formal evidence before Won, not just Informal.
@@ -1879,6 +1879,9 @@ class QuotationOut(BaseModel):
     created_at: datetime
     cost_basis_rebase_required: bool = False  # derived, M.2 rule 4
     sla_breached: bool = False  # derived, M.3 -- true only while status=draft awaiting release
+    # Amendment 54: plain sentences naming what the PDF will leave out (no amounts);
+    # empty when nothing is missing. Never blocks release or sending.
+    pdf_gaps: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1907,6 +1910,7 @@ def _quotation_to_out(db: Session, quotation: Quotation, role: str) -> Quotation
     out.cost_basis_rebase_required = estimate is not None and _cost_sheet_superseded(db, estimate.cost_sheet_id)
     if quotation.status == QuotationStatus.DRAFT:
         out.sla_breached = _sla_breached(db, quotation.created_at)
+    out.pdf_gaps = quotation_content.pdf_gaps(db, quotation)
     return out
 
 
@@ -2435,21 +2439,13 @@ def draft_quotation_cover_note(
     quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
-    project = db.query(Project).filter(Project.id == quotation.project_id).first()
-    client = db.query(Client).filter(Client.id == project.client_id).first()
-    sports = ", ".join(_sports_for_quotation(db, quotation.id)) or "the covered sport(s)"
-    prompt = (
-        "Write a short, warm, professional 2-3 sentence introduction paragraph for a sports "
-        "infrastructure quotation. No greeting, no sign-off, no placeholders -- just the "
-        "paragraph itself, plain text.\n\n"
-        f"Client: {client.name}\n"
-        f"City: {project.city}\n"
-        f"Sport(s): {sports}\n"
-        f"Package: {project.package.value}\n"
-        f"Quotation total (incl. GST): Rs {float(quotation.quotation_total):,.0f}"
-    )
+    # Amendment 54: two short paragraphs written only from facts that are actually
+    # set (client, addressee, site, each sport with its package content and timeline,
+    # validity, the total) -- see services/quotation_content.build_cover_note_prompt.
+    facts = quotation_content.cover_note_facts(db, quotation, current_user)
+    prompt = quotation_content.build_cover_note_prompt(facts)
     try:
-        draft = ai_content.generate_text(prompt)
+        draft = ai_content.generate_text(prompt, max_tokens=600)
     except ai_content.AiContentError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return QuotationCoverNoteDraftOut(draft=draft)
