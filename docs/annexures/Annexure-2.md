@@ -2761,6 +2761,31 @@ login page at 1280px and 375px: no CSP violations, no failed requests, the Fraun
 - One old note corrected: the first answer to the Director said no security scan existed; `docs/security/` held an
   unauthenticated one from 11 September.
 
+### Amendment No. 59 — Sign-in and User Creation with a Mobile Number or an Email
+**Registered 26 September 2026**, on the Director's instruction, in their words: "login benchmark admin-manager/PM-
+Users create with mobile no or email both". The instruction is terse; it is read as (1) an account can be created
+with a mobile number, an email or both, (2) a person signs in with whichever they have, and (3) the "admin" and
+"manager" -- the Director and the PM, since the app has six roles and neither of those names -- can create users.
+"Benchmark" is read as "as the reference product does it". The spec asks the Director to confirm or correct that
+reading. Grounded against current code:
+- **An account is a required, unique email.** `users` holds name, `email` (not null, unique), password hash, role and
+  the lockout fields; there is no mobile column, and an account with no email cannot exist.
+- **Sign-in is email-only, and the token names the email.** `POST /auth/login` matches `User.email == username`; the
+  token's subject is the email, and every request looks the user up by it (`core/auth.py`). Accounts without an
+  email therefore need the token to name the person by id -- which ends existing sessions once, as Amendment 58 did.
+- **Only the Director creates users.** `users.py` `WRITE_ROLES = ("director",)` covers listing, creating, changing a
+  role, deactivating and resetting a password; the sign-in form (`App.jsx`) and the create form (`UserManagement.jsx`)
+  are email-only.
+- **Phone numbers exist elsewhere but are not normalised.** Clients and leads keep phones as typed; quick search
+  compares them by digits. There is no shared routine that writes one number one way, which sign-in by mobile needs.
+- **Places that assume every user has an email**, to be made safe: the "internal email domains" default derived from
+  users' addresses (`settings.py`, `"@" in email` would fail on none), the list of Sales recipients notified when a
+  structural-design upload forces a rebase (`attachments.py`), `GET /auth/me` and the People list.
+- **Not in the code, so not assumed:** any SMS or WhatsApp sending for sign-in, any "forgot password", any role
+  called admin or manager.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-62-specs.md`, awaiting approval).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
