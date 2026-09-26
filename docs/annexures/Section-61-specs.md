@@ -141,7 +141,7 @@ the close-out.
 10. **Ordered PRs** (backend and CI, then nginx, then scan results). Proposed: **yes.**
 
 ### Approval
-☐ Approved as proposed
+☑ Approved — "approve as proposed, all decisions" (26 September 2026)
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
