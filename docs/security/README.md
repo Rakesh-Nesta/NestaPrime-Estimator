@@ -116,6 +116,23 @@ a route.
 [dependency-audit-exceptions.md](dependency-audit-exceptions.md)), a test that fails if any route is added without a
 login, and the web-server changes described in `deploy/README.md`.
 
-**Server checklist (item 13) -- [PENDING].** SSH keys only, automatic security updates, the pending kernel restart,
-the mode of `.env`, and backup freshness (the last restore drill logged is 15 September 2026, the dump half only).
-Results go here when the Director has run the commands.
+**Server checklist (item 13), run by the Director on 26 September 2026 -- findings; fixes recommended, not yet applied.**
+- **SSH: good.** `passwordauthentication no`, `pubkeyauthentication yes`, `kbdinteractiveauthentication no`,
+  `maxauthtries 6`. `permitrootlogin without-password` means root can sign in with a key only; setting it to `no` is
+  optional tidiness. Port 22 is open to the internet, but only keys are accepted.
+- **Automatic updates: on.** `Update-Package-Lists "1"`, `Unattended-Upgrade "1"`, service active (whether it may
+  reboot by itself was not checked).
+- **A reboot is pending**: `/var/run/reboot-required` lists `linux-image-7.0.0-1012-aws`, `linux-image-7.0.0-1013-aws`,
+  `linux-base` and `libc6`. The server is running an older kernel and libc than are installed. A reboot restarts every
+  container, so it belongs at a quiet time, after checking the containers come back by themselves.
+- **`.env` is world-readable.** Mode `664` (owner and group can write, everyone can read) on `.env` and
+  `.env.pre-https`. They hold the token secret, the database password and the service keys. On a one-user server the
+  practical risk is small, but no other account has any reason to read them: `chmod 600` on both.
+- **No nightly backup is scheduled -- the most important finding.** `crontab -l` prints "no crontab for ubuntu" and
+  `~/nestaprime-backups/` holds a single dump, `nestaprime_estimator_20260915T062410Z.sql.gz` (24,757 bytes, the restore
+  drill's). The cron line in `deploy/README.md` ("Backups & restore drill") was never installed, so there has been no
+  database dump since 15 September. Lightsail's own snapshot schedule was not visible from here (console only) and
+  may be covering it; that is unconfirmed. Install the cron line, then confirm a fresh dump appears.
+- **Listening ports:** 22, 80 and 443 on all interfaces; the backend on `127.0.0.1:8000` only; PostgreSQL not
+  published on the host; local-only `127.0.0.1:38725` (not identified -- most likely a Docker component) and the local
+  resolver on port 53; IPv6 only on 22.

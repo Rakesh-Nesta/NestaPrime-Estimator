@@ -2738,9 +2738,10 @@ login page at 1280px and 375px: no CSP violations, no failed requests, the Fraun
 "NestaPrime CRM" title and heading, and "Incorrect email or password" on a wrong login.
 
 **Open items.**
-- **[PENDING] Item 13, the server checklist** (SSH key-only, automatic updates, pending kernel restart, `.env` mode,
-  backups): commands sent to the Director; results to be recorded here. SSH (22) is open to the internet, so the
-  sshd result matters most.
+- **Item 13, the server checklist -- run; three things to act on** (full results in `docs/security/README.md`):
+  **no nightly database backup is scheduled** (no crontab; one dump, from 15 September), **`.env` is mode 664**
+  (world-readable) and **a kernel/libc reboot is pending**. SSH is key-only and automatic updates are on. Each fix
+  is a one-line command sent to the Director; not yet confirmed applied.
 - **Not verified in production:** any logged-in behaviour (the fresh token after a password change, the lockout
   audit entry, the attachment name and type checks, the 422 on an over-long value) -- there is no production login
   here; the Director's click-through (a few screens, one PDF, the Documents screen) is the live check of the

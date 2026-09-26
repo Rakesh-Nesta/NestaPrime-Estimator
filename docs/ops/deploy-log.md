@@ -43,10 +43,11 @@ page at 1280px and 375px with no CSP violations, no failed requests, Fraunces an
 **Not verified in production:** any logged-in behaviour (there is no production login here) -- the fresh token after a
 password change, the lockout audit entry, attachment name and type checks, the 422 on an over-long value; the
 Director's click-through of screens and a PDF under the new Content-Security-Policy; throttling from a second address;
-the server checklist (item 13, **pending**).
+the server checklist fixes (item 13 was run: see the register and `docs/security/README.md` -- no nightly backup
+scheduled, `.env` mode 664, reboot pending; not yet applied).
 
 **Left on the server:** `nestaprime.pre-hardening` (nginx rollback), `nestaprime.pre-https` and `.env.pre-https` from
-Amendment 55, a pending kernel restart.
+Amendment 55, a pending kernel/libc reboot (`linux-image-7.0.0-1012-aws`, `-1013-aws`, `linux-base`, `libc6`).
 
 ---
 
