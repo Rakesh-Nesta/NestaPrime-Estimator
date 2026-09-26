@@ -1,4 +1,4 @@
-fastapi>=0.115
+fastapi>=0.141.1
 uvicorn[standard]>=0.34
 gunicorn>=23.0
 uvicorn-worker>=0.3
