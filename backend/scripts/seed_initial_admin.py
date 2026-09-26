@@ -1,57 +1,44 @@
 """One-time bootstrap (Amendment 59, Section 62): creates the first Admin account.
 
 An Admin runs the system -- people, access, company identity -- so the Director does not have to. Only an Admin
-creates another Admin, so the very first one has to come from outside the app. Run this once, on the server:
+creates another Admin, so the very first one has to come from outside the app. Run this once, on the server, with
+the REAL email address of the person who will be the Admin:
 
     docker compose -f docker-compose.prod.yml exec -T \\
-      -e PYTHONPATH=/app -e INITIAL_ADMIN_EMAIL=admin@example.com -e INITIAL_ADMIN_PASSWORD='a long temporary password' \\
+      -e PYTHONPATH=/app -e INITIAL_ADMIN_EMAIL=the-real-address@theircompany.in \\
       backend python scripts/seed_initial_admin.py
 
-It refuses to run if an active Admin already exists (from then on an Admin creates Admins), refuses a password
-under 10 characters or equal to the email, reads the details from the environment rather than hardcoding them, and
-sets must_change_password so the real person picks their own password at first sign-in -- the same guarantee every
-account created through the app gets."""
+The temporary password is generated and printed once, on your terminal only -- give it to the person privately; they
+must change it at first sign-in. (INITIAL_ADMIN_PASSWORD can be set to choose one instead; it must be at least 10
+characters.) It refuses anything that does not look like a real email address, refuses obvious placeholder domains,
+and refuses if an active Admin already exists.
+
+The rules live in app/services/admin_bootstrap.py, where they are tested."""
 
 import os
 import sys
 
-from app.core.security import MIN_PASSWORD_LENGTH, hash_password, password_problem
 from app.db.session import SessionLocal
-from app.models.user import User, UserRole
+from app.services.admin_bootstrap import BootstrapError, create_first_admin
 
 email = os.environ.get("INITIAL_ADMIN_EMAIL")
-password = os.environ.get("INITIAL_ADMIN_PASSWORD")
-name = os.environ.get("INITIAL_ADMIN_NAME", "Admin")
-
-if not email or not password:
-    print("Set INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD before running this.", file=sys.stderr)
-    sys.exit(1)
-if len(password) < MIN_PASSWORD_LENGTH:
-    print(f"The password needs at least {MIN_PASSWORD_LENGTH} characters.", file=sys.stderr)
-    sys.exit(1)
-problem = password_problem(password, email)
-if problem:
-    print(problem, file=sys.stderr)
+if not email:
+    print("Set INITIAL_ADMIN_EMAIL to the real email address of the person who will be the Admin.", file=sys.stderr)
     sys.exit(1)
 
 db = SessionLocal()
 try:
-    if db.query(User).filter(User.role == UserRole.ADMIN, User.is_active.is_(True)).first():
-        print("An active Admin already exists -- not creating another. An Admin creates Admins from the app.")
-    elif db.query(User).filter(User.email == email).first():
-        print(f"{email} already exists as a different account -- not creating a duplicate.", file=sys.stderr)
-        sys.exit(1)
-    else:
-        db.add(
-            User(
-                name=name,
-                email=email,
-                hashed_password=hash_password(password),
-                role=UserRole.ADMIN,
-                must_change_password=True,
-            )
-        )
-        db.commit()
-        print(f"Created the first Admin, {email} -- must change password on first login.")
+    user, generated = create_first_admin(
+        db,
+        email,
+        password=os.environ.get("INITIAL_ADMIN_PASSWORD"),
+        name=os.environ.get("INITIAL_ADMIN_NAME", "Admin"),
+    )
+    print(f"Created the first Admin, {user.email} -- must change password on first login.")
+    if generated:
+        print(f"Temporary password (shown once, give it to them privately): {generated}")
+except BootstrapError as error:
+    print(str(error), file=sys.stderr)
+    sys.exit(1)
 finally:
     db.close()
