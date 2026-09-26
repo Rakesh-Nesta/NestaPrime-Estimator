@@ -2619,6 +2619,50 @@ Director should build a two-sport Estimate and a Quotation on a project and down
 carry a sport that is not on the project's Sport Selection. #219 and #220 each fell behind main once a
 predecessor merged and needed one more CI run -- an ordering cost of stacked PRs, not a fault.
 
+### Amendment No. 58 — Application Security Hardening
+**Registered 26 September 2026**, on the Director's question "what about app security". Grounded against the
+code, the live server and the one scan on record, not from memory:
+- **In place and confirmed.** HTTPS with HSTS (180 days), `X-Content-Type-Options`, `X-Frame-Options: DENY` and
+  a strict referrer policy on every response; CORS limited to the one HTTPS origin; PostgreSQL (5432) and the
+  backend (8000) not reachable from outside (probed), the backend container published on 127.0.0.1 only;
+  protected routes answer 401 without a login (checked on each route added this month, and by the 11
+  September scan); the role is read from
+  the database on every request, never trusted from the token, and a deactivated user is refused at once;
+  Argon2 password hashes; a lockout after 5 wrong passwords for 15 minutes that deliberately gives the same
+  message for every failure and never counts unknown emails; the sign-in token is kept in memory, not in
+  browser storage; `npm audit --omit=dev` reports 0 vulnerabilities; the shipped secret has no default.
+- **The scan on record is old and shallow.** `docs/security/README.md` (11 September): OWASP ZAP API scan,
+  **unauthenticated**, API only, 0 findings after two Low header fixes; gitleaks on git history clean. Its own
+  text says every protected route returned 401 and was not exercised, and lists an authenticated rescan as an
+  open follow-up. It predates most of the endpoints in the app today. (I first told the Director no scan
+  existed; that was wrong -- this file was found while writing the spec.)
+- **Gaps found.**
+  1. **No Content-Security-Policy** on the app or the API (the main browser-side defence against injected
+     script), and no `Permissions-Policy`; every response also names the nginx version.
+  2. **No throttling on the server.** Six wrong logins in a row for an unknown email were all answered 401;
+     the only brute-force protection is the per-account lockout, so guessing across many accounts, or plain
+     traffic, is not slowed.
+  3. **`/api/docs` and `/api/redoc` are public** (200 without a login), as is `/api/openapi.json`.
+  4. **A session outlives a password change.** The token lasts 8 hours and carries only the email, role and
+     expiry; changing or resetting a password does not end existing sessions (deactivation does).
+  5. **No audit record of a lockout** or of a self-service password change.
+  6. **Passwords need only 8 characters** to be set or changed (`Field(min_length=8)`, users.py and auth.py).
+  7. **Attachments accept any file type** (100 MB, any of five roles) and store the client's file name as-is
+     (`{uuid}_{original_filename}`); downloads are forced downloads, which limits the harm, but no file-type
+     check was found, and a name containing a slash is not cleaned.
+  8. **The request size limit is 100 MB for every route**, where two routes need 5 MB and nothing but
+     attachments needs more than a few MB.
+  9. **No dependency scanning** in CI (`backend-ci.yml` runs the tests and two docker builds), no Dependabot,
+     and `requirements.txt` uses open `>=` ranges.
+  10. **The backend container runs as root**, and **SSH (22) is open to the internet** (probed); the sshd
+      settings, automatic updates and file modes on the server were not readable from here and are to be
+      checked by the Director's commands.
+- **A correction to the first answer given to the Director.** The company-logo upload was listed as a script
+  risk; on reading it further it is Director-only, served as a download, and shown as an image, so it is a low
+  concern and is not in the spec. It also said the ZAP scan did not exist (above).
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-61-specs.md`, awaiting approval).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
