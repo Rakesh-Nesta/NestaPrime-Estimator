@@ -2661,7 +2661,98 @@ code, the live server and the one scan on record, not from memory:
   risk; on reading it further it is Director-only, served as a download, and shown as an image, so it is a low
   concern and is not in the spec. It also said the ZAP scan did not exist (above).
 Needs a Director-approved spec before implementation, per this register's own Change Process
-(spec: `docs/annexures/Section-61-specs.md`, awaiting approval).
+(spec: `docs/annexures/Section-61-specs.md`, approved 26 September 2026).
+
+**Implemented (four PRs: #222 the approved spec, #223 backend and CI, #224 web server, #237 one more fix).**
+Nothing here changes a workflow, role or screen; the visible effects are one sign-in after the deploy and the
+10-character minimum.
+- *Web server (#224, one configuration file, no rebuild).* A Content-Security-Policy (scripts, connections and
+  frames only from this site; styles and fonts from this site and Google Fonts; images from this site, `data:`
+  and `blob:`; no plugins), a Permissions-Policy turning camera, microphone, location and payment off, and no nginx
+  version in responses. Throttling per address, answering 429: sign-in 10 a minute (burst 10), the rest of the API
+  20 a second. `/api/docs` and `/api/redoc` answer 404; `/api/openapi.json` stays readable (decision 2). A 2 MB
+  request limit everywhere, with 100 MB kept for attachments, 6 MB for the logo and 10 MB for the two imports. And
+  `X-Forwarded-For` is now set to the real client address instead of appending to whatever the client sent -- a
+  gap the spec did not list: a client could choose the address the backend records for an upload.
+- *Backend (#223).* A token carries a fingerprint of the password hash, so a password change or a Director's reset
+  ends that person's other sessions; `POST /auth/change-password` returns a fresh token and the forced-change
+  screen uses it, so nobody is bounced mid-flow. A lockout and a self-service password change are written to the
+  audit log (wrong passwords and unknown emails are not). Passwords need 10 characters wherever set, and may not
+  equal the email or the current password. Attachment names are reduced to a plain name and `.html .htm .xhtml
+  .svg .js .mjs .exe .msi .bat .cmd .com .scr .ps1 .sh .jar .php .py .vbs .dll .lnk` are refused. A test walks all
+  252 non-public routes without a login and fails unless each answers 401.
+- *CI (#223).* A `dependency-audit` job (`pip-audit`, `npm audit --omit=dev --audit-level=high`) and weekly
+  Dependabot. `pip-audit` reports one advisory, PYSEC-2026-1325 (`ecdsa`, via `python-jose`; ECDSA signing timing,
+  no upstream fix); this app signs with HS256 only, so it is ignored by ID and written up in
+  `docs/security/dependency-audit-exceptions.md`. `npm audit` is clean.
+- *Found by the authenticated scan and fixed (#237).* Master-data write routes (`/settings`, `/vehicle-classes`,
+  `/netting-grades`, `/sports`, `/scope-items`, `/hubs`, two bulk routes) ended in a raw 500 -- about 270 times in one
+  scan -- when a text value was longer than its column or contained a NUL character. Not exploitable and nothing
+  was half-saved, but one app-wide handler now answers 422 for every route.
+- *Deviations from the spec, to confirm.* The API burst is 100, not the proposed 40 (the office shares one address
+  and a page load fires 10-20 calls). The WhatsApp webhook needs no exception in the all-routes test because it
+  already answers 401 without its secret, so the test is stricter than the spec's public list. The audit job is
+  not a required check (a repository setting I cannot change): it warns on a PR but does not block a merge until
+  it is marked required.
+
+**Scans and checks (26 September 2026).** Details, the reports and their limits are in `docs/security/README.md`.
+Authenticated OWASP ZAP API scans of a throwaway copy of the database as Director and as Sales: Director before the
+fix 0 failures, 116 passes, 4 warnings; Director after the fix 0 failures, 117 passes, 3 warnings (the 500s and the
+"format string" warning gone; the rest are the deliberate 503 from the AI-assistant route when no AI key is set, file
+downloads whose content type ZAP did not expect, and a number in the dashboard that looks like a timestamp); Sales
+0 failures, 118 passes, 2 warnings. **Most of the scan's requests were refused for bad input (96% 4xx): it fuzzes
+from the API description, not from real records, so it cannot tell whether one person can read another's project;
+that kind of check needs a person or a penetration test.** A role-by-route check
+(`backend/scripts/role_route_check.py`, local copies only) called all 247 gated routes as all six roles: the table and
+the server agree everywhere, and the script reports 97 mismatches when a role is deliberately mislabelled, so it does
+discriminate. It cannot see checks made inside a route (a Sales user refused on a cost sheet, say), only the gate.
+
+**Tested.** 27 tests in `test_security_hardening.py`, 4 in `test_deploy_config_hardening.py` (the nginx text),
+4 in `test_database_value_errors.py`; each guard was removed in turn and a test failed (the fingerprint check 3, the
+lockout audit 1, the attachment block 7, the password rules 1, each nginx directive 1, the database-error handler
+3). The all-routes guard was shown to fail on a throwaway unauthenticated route. Real Chrome against the local copy:
+18 of 18 on the password flows (forced change lands in the app on the fresh token with no refused call; reuse is
+refused in plain words; the old password and old session stop working; a Director reset ends the session; a wrong
+password still gives "Incorrect email or password"). The real configuration file in nginx 1.24 (the server's version)
+in Docker with the built frontend: `nginx -t` ok, headers as intended, docs 404, 40 sign-ins in a burst gave 11 x
+401 then 429 with the rest of the API unaffected, and each body limit behaved (413 above it, through to the backend
+below it). Real Chrome behind that nginx, all six roles at 1280px and 375px, every sidebar screen and a project's
+Documents: **66 of 66, zero Content-Security-Policy violations**, fonts loaded, no JS errors, no refused API calls on
+any sidebar screen, and none on Documents for Director, PM and Sales (Procurement, Site Engineer and CA/Tax opening a
+project's Documents make 4, 5 and 1 role-refused calls -- existing behaviour, unrelated to this amendment).
+
+**Deployed 26 September 2026.** *Backend and frontend (#223 and #237):* the first attempt, reported as done, changed
+nothing -- the served bundle, the API schema and the file's modified time were all identical to the day before
+(cause not established; the pull output was not sent). The repeat pulled `8c83f4e..fb98766` (22 files), rebuilt the
+backend (no migration) and the frontend with the HTTPS address, and copied it as its own step. From outside: bundle
+`index-Dp7GZV3i.js` -> `index-vFui1Bqr.js`, containing "at least 10 characters", "10+ characters" and the fresh-token
+handling and still the Amendment 57 and earlier text; `/api/openapi.json` shows `ChangePasswordOut` with an access
+token, a minimum length of 10 on the change, create and reset schemas, and the Amendment 57 fields; anonymous calls
+answer 401 (including the two option routes); a wrong sign-in gives the same plain message; a token signed with the
+wrong secret answers 401. *Web server (#224):* the previous file was kept as `nestaprime.pre-hardening`, the new one
+installed through `sed`, `nginx -t` passed, reloaded. From outside: `Content-Security-Policy` and `Permissions-Policy`
+on the app and the API; `Server: nginx` with no version; `/api/docs`, `/api/redoc` and `/api/docs/oauth2-redirect`
+404, `/api/openapi.json` 200; 40 wrong sign-ins in a burst gave 11 x 401 then 429 (one later 401 as the allowance
+refilled) while 30 health calls in a row were all 200; the bundle and favicon still served; real Chrome on the live
+login page at 1280px and 375px: no CSP violations, no failed requests, the Fraunces and Inter fonts loaded, the
+"NestaPrime CRM" title and heading, and "Incorrect email or password" on a wrong login.
+
+**Open items.**
+- **Item 13, the server checklist -- run; three things to act on** (full results in `docs/security/README.md`):
+  **no nightly database backup is scheduled** (no crontab; one dump, from 15 September), **`.env` is mode 664**
+  (world-readable) and **a kernel/libc reboot is pending**. SSH is key-only and automatic updates are on. Each fix
+  is a one-line command sent to the Director; not yet confirmed applied.
+- **Not verified in production:** any logged-in behaviour (the fresh token after a password change, the lockout
+  audit entry, the attachment name and type checks, the 422 on an over-long value) -- there is no production login
+  here; the Director's click-through (a few screens, one PDF, the Documents screen) is the live check of the
+  Content-Security-Policy; and throttling from a second address (one machine cannot test it).
+- **Dependabot opened 12 pull requests (#225-#236) as soon as its configuration merged**, including large jumps
+  (Node 22 to 26, reportlab 4 to 5, a large FastAPI bump). None is merged; the role-permissions screen relies on a
+  FastAPI internal, so a FastAPI upgrade needs its own check. The Director decides how to handle them.
+- **Separate amendments, as decided:** two-factor sign-in, running the backend container as a non-root user, and
+  pinning exact package versions. A third-party penetration test remains outstanding.
+- One old note corrected: the first answer to the Director said no security scan existed; `docs/security/` held an
+  unauthenticated one from 11 September.
 
 ## Register Notes (non-software, business-process)
 

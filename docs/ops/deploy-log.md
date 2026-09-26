@@ -11,6 +11,46 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-26 -- PRs #222-#224 and #237: Amendment 58 (application security hardening)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `8c83f4e` -> `fb98766` (repository PRs #222 spec, #223 backend and CI, #224 nginx, #237 database-error handler)
+Backend rebuild, frontend build **and** an nginx configuration change. **No migration.** Everyone signs in again once
+(tokens issued before carry no password fingerprint).
+
+**Backend and frontend.** The first attempt was reported done but changed nothing: from outside the bundle was still
+`index-Dp7GZV3i.js` (modified 25 Sep 18:21 GMT), the API still allowed 8-character passwords and had no
+`ChangePasswordOut`. The cause was not established (no pull output was sent). The repeat: `git pull` fast-forwarded
+`8c83f4e..fb98766` (22 files, 1056 insertions, 42 deletions); backend rebuilt (`up -d --build backend`, the code layer
+rebuilt, dependency layers cached, db healthy, backend started); frontend rebuilt with
+`VITE_API_URL=https://app.nestaprime.in/api` (826.92kB) and copied as its own step. Verified from outside: bundle
+`index-vFui1Bqr.js` (modified 26 Sep 05:48 GMT) containing "at least 10 characters", "10+ characters", the
+fresh-token handling, "Add another sport", "Options total", quick search and Team & Access; `/api/openapi.json` lists
+`ChangePasswordOut` with `access_token`, `minLength` 10 on the change, create and reset schemas, the Amendment 57
+option routes and `included_option_ids`; anonymous `GET /auth/me`, `/users`, `/role-permissions`, `/attachments`,
+`/projects`, `POST /auth/change-password` and `POST /estimates/{id}/options` all 401; a wrong sign-in gives
+"Incorrect email or password"; a token signed with a wrong secret answers 401; `/api/health` ok.
+
+**nginx.** `sudo cp` of the live file to `nestaprime.pre-hardening`; the new file installed with
+`sed "s/__DOMAIN__/app.nestaprime.in/g" deploy/nginx/nestaprime.conf | sudo tee ...`; `sudo nginx -t` "syntax is ok /
+test is successful"; `sudo systemctl reload nginx`. Verified from outside: `Content-Security-Policy` and
+`Permissions-Policy` on `/` and `/api/health`; `Server: nginx` (no version); `/api/docs`, `/api/redoc`,
+`/api/docs/oauth2-redirect` 404, `/api/openapi.json` 200; 30 health calls all 200; 40 wrong sign-ins in a burst gave
+11 x 401 then 429 (one 401 later as the allowance refilled); bundle and favicon 200; real Chrome on the live login
+page at 1280px and 375px with no CSP violations, no failed requests, Fraunces and Inter loaded, title and heading
+"NestaPrime CRM", and the wrong-login message.
+
+**Not verified in production:** any logged-in behaviour (there is no production login here) -- the fresh token after a
+password change, the lockout audit entry, attachment name and type checks, the 422 on an over-long value; the
+Director's click-through of screens and a PDF under the new Content-Security-Policy; throttling from a second address;
+the server checklist fixes (item 13 was run: see the register and `docs/security/README.md` -- no nightly backup
+scheduled, `.env` mode 664, reboot pending; not yet applied).
+
+**Left on the server:** `nestaprime.pre-hardening` (nginx rollback), `nestaprime.pre-https` and `.env.pre-https` from
+Amendment 55, a pending kernel/libc reboot (`linux-image-7.0.0-1012-aws`, `-1013-aws`, `linux-base`, `libc6`).
+
+---
+
 ## 2026-09-25 -- PRs #218-#220: Amendment 57 (multi-sport Quotation)
 
 **Run by:** R. Patni (with AI development assistance)
