@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DataError
 
 from app.config import settings as app_settings
 
@@ -68,6 +70,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(DataError)
+async def value_the_database_cannot_store(request, exc):
+    """Amendment 58 (Section 61), found by an authenticated ZAP scan: a text value longer than its
+    column, or one containing a NUL character, made the database refuse the write and the request
+    ended in a raw 500 (about 270 times across /settings, /vehicle-classes, /netting-grades, /sports,
+    /scope-items, /hubs and two bulk routes). That is bad input, not a server fault: answer 422 in one
+    place for every route rather than patch each schema. The database rolled the write back, so nothing
+    half-saved; the message says nothing about the schema."""
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "A value is too long, or contains a character that can't be stored"},
+    )
 
 
 @app.middleware("http")
