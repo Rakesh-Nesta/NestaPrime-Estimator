@@ -307,6 +307,28 @@ HSTS header forget it after five minutes.
 `deploy/nginx/nestaprime.conf` (the repository test pins the form), reinstall through the `sed` line in
 step 5, `nginx -t`, reload.
 
+**Web-server hardening (Amendment 58, Section 61).** `deploy/nginx/nestaprime.conf` also sends a
+Content-Security-Policy and a Permissions-Policy, hides the nginx version, throttles the API (sign-in 10 a
+minute, everything else 20 a second, per address, answering 429), closes `/api/docs` and `/api/redoc`, sets a
+2 MB request limit with larger limits only on the upload routes, and stops a client choosing the address the
+backend records. It is one configuration file: no rebuild, no migration. Install it the same way as any change
+to the file, keeping the previous one:
+
+```bash
+cd /home/ubuntu/NestaPrime-Estimator && git pull
+sudo cp /etc/nginx/sites-available/nestaprime /etc/nginx/sites-available/nestaprime.pre-hardening
+sed "s/__DOMAIN__/your.domain.example/g" deploy/nginx/nestaprime.conf | sudo tee /etc/nginx/sites-available/nestaprime > /dev/null
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Check from outside afterwards: the app and `/api/health` answer with `Content-Security-Policy` and
+`Permissions-Policy` and a bare `Server: nginx`; `/api/docs` and `/api/redoc` answer 404 while
+`/api/openapi.json` still answers 200; and a burst of wrong sign-ins from one address ends in 429. To go back,
+copy `nestaprime.pre-hardening` over `nestaprime`, `nginx -t`, reload. If a screen breaks after the change,
+open the browser console: a line beginning "Refused to ..." names the Content-Security-Policy directive that
+blocked it, and that directive is the one to adjust. The office shares one public address, so if a real
+morning rush ever meets a 429, raise the two `rate=` values (or the `burst=` on the API line) in that file.
+
 **If the certificate cannot renew** (an expiry warning in the browser is the symptom): `sudo certbot
 renew` shows why -- almost always port 80 blocked, the DNS record gone, or the `/var/www/certbot`
 webroot missing. The HTTP server block must keep serving `/.well-known/acme-challenge/`.
