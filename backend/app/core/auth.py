@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, password_fingerprint
 from app.db.session import get_db
 from app.models.user import User
 
@@ -23,6 +23,10 @@ def get_current_user(
 
     user = db.query(User).filter(User.email == payload["sub"]).first()
     if user is None or not user.is_active:
+        raise credentials_error
+    # Amendment 58 (Section 61) item 5: a token issued before the current password was set (or with
+    # no fingerprint at all) is no longer a valid session.
+    if payload.get("pwv") != password_fingerprint(user.hashed_password):
         raise credentials_error
     return user
 

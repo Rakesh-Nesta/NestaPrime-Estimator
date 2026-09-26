@@ -171,10 +171,11 @@ def test_new_user_is_blocked_from_other_endpoints_until_password_changed(client,
     assert change_res.status_code == 200, change_res.text
     assert change_res.json()["must_change_password"] is False
 
-    # Old token still carries the same user row -- must_change_password is
-    # read fresh from the DB on every request, so the same token that was
-    # blocked a moment ago now works.
-    now_allowed = client.get("/sports", headers=new_headers)
+    # Amendment 58: the password change ends the old session, and hands back a fresh token that
+    # works straight away (must_change_password is read fresh from the DB on every request).
+    assert client.get("/sports", headers=new_headers).status_code == 401
+    fresh_headers = {"Authorization": f"Bearer {change_res.json()['access_token']}"}
+    now_allowed = client.get("/sports", headers=fresh_headers)
     assert now_allowed.status_code == 200
 
     # Confirm login with the new password too.
@@ -213,11 +214,12 @@ def test_reset_password_sets_must_change_password_true_again(client, director_us
 
     # Clear the flag once, like a normal onboarding.
     first_login = _login(client, "reset-user@test.local", "TempPass!1")
-    client.post(
+    changed = client.post(
         "/auth/change-password",
         json={"current_password": "TempPass!1", "new_password": "SelfChosen!1"},
         headers=first_login,
     )
+    first_login = {"Authorization": f"Bearer {changed.json()['access_token']}"}  # Amendment 58: the old token ends
     assert client.get("/sports", headers=first_login).status_code == 200
 
     # Director resets it -- must_change_password flips back to True.
@@ -293,11 +295,12 @@ def test_cannot_demote_the_last_active_director_even_when_not_self(client, direc
     # -- clear that first so the request below reaches the guardrail logic
     # rather than being blocked earlier by the password gate.
     second_headers = _login(client, second["email"])
-    client.post(
+    changed = client.post(
         "/auth/change-password",
         json={"current_password": "TestPass!1", "new_password": "SecondOwn!1"},
         headers=second_headers,
     )
+    second_headers = {"Authorization": f"Bearer {changed.json()['access_token']}"}  # Amendment 58: the old token ends
 
     # Demote the fixture director down to pm first (leaves `second` as the
     # only Director) -- allowed, since `second` is still active.

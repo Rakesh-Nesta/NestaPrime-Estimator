@@ -54,3 +54,27 @@ jobs:
 
       - name: Build frontend image
         run: docker build -f frontend/Dockerfile --target export --build-arg VITE_API_URL=http://example.invalid/api frontend
+
+  dependency-audit:
+    # Amendment 58 (Section 61) item 10: known-vulnerable packages. A fresh advisory can turn this red
+    # on a PR that touched nothing -- that is the point; fix the dependency, or (only when there is no
+    # fix and the flaw is not reachable here) record the reason in docs/security/ and ignore that one ID.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python packages (pip-audit)
+        working-directory: backend
+        # PYSEC-2026-1325: ecdsa (a python-jose dependency) has no fix and its flaw is ECDSA *signing*
+        # timing; this app signs tokens with HS256 only. See docs/security/dependency-audit-exceptions.md.
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
+
+      - name: npm packages (production dependencies)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high

@@ -1,4 +1,5 @@
 import hashlib
+import re
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -54,6 +55,31 @@ SITE_SURVEY_ROLES = ("site_engineer", "pm", "director")
 # gate still gets rejected by that inner check on e.g. a cost_sheet.
 ALL_ATTACHMENT_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # M.3: "max 100 MB each"
+
+# Amendment 58 (Section 61) item 8. Types that can run, or that a browser renders as a page, are not
+# attachments a site team has any reason to send. Everything else (drawings, photos, PDFs, spreadsheets,
+# video) is accepted -- a deny-list, so no genuine site file is ever blocked by surprise.
+BLOCKED_ATTACHMENT_EXTENSIONS = frozenset(
+    {".html", ".htm", ".xhtml", ".svg", ".js", ".mjs", ".exe", ".msi", ".bat", ".cmd", ".com",
+     ".scr", ".ps1", ".sh", ".jar", ".php", ".py", ".vbs", ".dll", ".lnk"}
+)
+MAX_STORED_FILENAME_LENGTH = 150
+
+
+def _safe_filename(raw_name: str | None) -> str:
+    """The name kept for an upload: no folders (either slash style), no control or shell-special
+    characters, never empty, length capped with the extension kept."""
+    name = (raw_name or "").replace("\\", "/").split("/")[-1]
+    name = re.sub(r'[\x00-\x1f\x7f<>:"|?*]', "", name).strip(" .")
+    if not name:
+        return "upload"
+    if len(name) > MAX_STORED_FILENAME_LENGTH:
+        stem, dot, extension = name.rpartition(".")
+        if dot and 0 < len(extension) <= 10:
+            name = stem[: MAX_STORED_FILENAME_LENGTH - len(extension) - 1] + "." + extension
+        else:
+            name = name[:MAX_STORED_FILENAME_LENGTH]
+    return name
 
 _DOC_TABLE = {
     DocumentType.COST_SHEET: CostSheet,
@@ -299,8 +325,16 @@ async def _store_upload(
 
     _validate_signatory_if_given(db, doc_type, doc_id, tag, signatory_name, signatory_designation)
 
+    original_filename = _safe_filename(file.filename)
+    extension = Path(original_filename).suffix.lower()
+    if extension in BLOCKED_ATTACHMENT_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Files of type {extension} can't be attached because they can run or open as a web page -- "
+            "send a PDF or an image instead",
+        )
+
     sha256 = hashlib.sha256(content).hexdigest()
-    original_filename = file.filename or "upload"
     dest = _storage_dir(doc_type, doc_id) / f"{uuid.uuid4()}_{original_filename}"
     dest.write_bytes(content)
 

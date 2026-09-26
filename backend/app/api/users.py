@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
-from app.core.security import hash_password
+from app.core.security import MIN_PASSWORD_LENGTH, hash_password, password_problem
 from app.db.session import get_db
 from app.models.user import User, UserRole
 
@@ -54,7 +54,7 @@ class UserCreate(BaseModel):
     name: str = Field(min_length=1)
     email: str = Field(min_length=3)
     role: UserRole
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 @users_router.post("", response_model=UserOut, status_code=201)
@@ -66,6 +66,9 @@ def create_user(
 ):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=409, detail="A user with this email already exists")
+    problem = password_problem(payload.password, payload.email)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
 
     user = User(
         name=payload.name,
@@ -168,7 +171,7 @@ def update_user(
 
 
 class PasswordReset(BaseModel):
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 @users_router.post("/{user_id}/reset-password", response_model=UserOut)
@@ -188,6 +191,9 @@ def reset_password(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    problem = password_problem(payload.new_password, user.email, user.hashed_password)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
 
     user.hashed_password = hash_password(payload.new_password)
     user.must_change_password = True
