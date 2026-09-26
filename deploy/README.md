@@ -126,19 +126,24 @@ you type here only needs to get you logged in once.
 
 **The first Admin (Amendment 59, Section 62).** An Admin runs the system -- people, access, company identity,
 templates -- so the Director does not have to. Only an Admin creates another Admin, so the first one comes from
-outside the app, once. **Do not run this until the Admin screens are deployed** (Amendment 59, Part B): an Admin can
-sign in before then, but the old sidebar has nothing for that role.
+outside the app, once, with the **real email address of the person**:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T \
   -e PYTHONPATH=/app \
-  -e INITIAL_ADMIN_EMAIL="admin@yourcompany.com" \
-  -e INITIAL_ADMIN_PASSWORD="a long temporary password" \
+  -e INITIAL_ADMIN_EMAIL="the-real-address@theircompany.in" \
   backend python scripts/seed_initial_admin.py
 ```
 
-It refuses if an active Admin already exists, if the password is under 10 characters or equals the email, and sets
-"must change password" like every other account. From then on the Admin creates Admins (and everyone else) in the app.
+Replace the address first. The temporary password is **generated and printed once, on your terminal only** -- give it
+to the person privately; they must change it at first sign-in. There is no password to type or paste. The script
+refuses anything that does not look like an email address, refuses placeholder addresses (`example.com`,
+`yourcompany.com`, ...), refuses if an active Admin already exists, and never creates a duplicate.
+
+*What went wrong the first time (26 September 2026):* the earlier version of this step, with its placeholder words left
+in, created an Admin called `THEIR-EMAIL` with a password that had been written in a chat. It was deleted within minutes
+(`DELETE FROM users WHERE email = 'THEIR-EMAIL' AND role = 'ADMIN'`, once, after looking) and the script was changed so
+it cannot happen again.
 
 ## 5. Build the frontend and hand it to nginx
 
