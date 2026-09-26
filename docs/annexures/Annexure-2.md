@@ -2565,6 +2565,60 @@ against current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-60-specs.md`, approved 25 September 2026).
 
+**Implemented (three PRs: #218 the approved spec, #219 the API, #220 the screen).**
+- *API (#219, no migration).* `POST /estimates/{id}/options` adds a sport option to a Draft Estimate and
+  `DELETE /estimates/{id}/options/{option_id}` removes one (PM/Director only; Draft only; never the last option,
+  never one the client has decided on or a Quotation uses). The same sport and package twice is refused with a
+  plain message ("Badminton (Standard) is already an option on this Estimate"); the same sport with another
+  package is allowed -- those are the alternatives the client compares. A Quotation now includes **at most one
+  package per sport** and refuses a repeated option ("Choose one package for Badminton: Standard and Premium are
+  both included"), which closes the 19,50,000 double-count reproduced above. Options are priced by one shared
+  helper, so an added option is priced exactly like one created with the Estimate.
+- *Screen (#220, Documents).* Create Estimate takes one row per sport ("+ Add another sport", Remove, a running
+  "Options total", and a non-blocking note when the options differ from the active Cost Sheet -- skipped when a
+  sport carries two packages, because those are alternatives, not a sum). A Draft Estimate gets "+ Add sport
+  option" and Remove. Create Quotation lists the sports it will include and, when the client approved more than
+  one package of a sport, asks which one; Create Quotation stays disabled until each sport has exactly one.
+  Handbook updated (Documents screen, Estimate and Quotation steps).
+- *Two things found while building, added to #219 rather than left for later.* Revising a Quotation put in every
+  approved option of the Estimate, which the new one-package rule would have refused for a two-package sport; revise
+  now enforces the same rule and the screen revises the Quotation's own options, exposed through a new
+  `included_option_ids` field (option ids only, no amounts). And the option and header controls on an Estimate
+  overflowed at 768px (and, with the new button, at 375px); they now wrap.
+- *A decision to confirm.* The Create Estimate form is now shown only to PM/Director. It used to show to Sales,
+  who received a 403 on submit; Sales now sees one line saying only a PM or Director creates an Estimate.
+- *Unchanged on purpose (spec decision 6).* The Quotation PDF still prints each sport's apportioned share in its
+  Particulars table. Fast-track stays single-sport; adding or dropping sports on a Sent Quotation, and per-sport
+  discount or margin, remain out of scope.
+
+**Verified.** Ten new tests in `test_multi_sport_quotation.py` (priced like a created option; Draft-only,
+same-project and role gates -- 403 for Sales, Site Engineer and Procurement, 401 anonymous; duplicate rules;
+remove rules; a two-sport Quotation of 13,50,000 with a cost-weighted floor; two approved packages refused and one
+accepted at 16,00,000; repeated option refused; single-sport unchanged; revise keeps one package per sport).
+Removing the one-package guard fails two of them, removing the Draft check fails one, and removing the guard from
+revise fails the revise test. CI green on all three PRs. The wider estimate-related suite was not run locally
+(it was too slow and was stopped); CI ran the full suite. Real Chrome against the local copy, Director and Sales:
+46 of 46 checks with **no 4xx/5xx from the API and no JS errors** -- a two-row create makes one Estimate with two
+options; a third sport added, removed and added again; duplicates refused; Sales sees no create form, add or remove;
+with badminton Standard and Premium, table tennis and squash all approved, Create Quotation stays disabled until a
+badminton package is chosen and the result has three options and a cost of 17,50,000 without the Premium; the
+**PDF prints Badminton, Table Tennis and Squash once each with no Premium row**; revise keeps the same three
+options; no horizontal scroll at 375, 414, 768 or 1280.
+
+**Deployed 25 September 2026 (after the #220 merge at 18:00 UTC):** the pull fast-forwarded `f4f0554..8c83f4e`
+(`documents.py`, `Documents.jsx`, `api.js`, `handbookData.js` and the new test file), the backend was rebuilt with no
+migration, and the frontend rebuilt with the HTTPS API address and copied as its own step. From outside: the served
+bundle is `index-Dp7GZV3i.js` and contains "Add another sport", "Options total", "Add sport option", "choose one",
+"This quotation will include" and the PM/Director note, and still contains quick search and Team & Access; the
+title is still "NestaPrime CRM" (the name is split across JSX spans in the bundle, so a plain search for it finds
+nothing -- not a regression); `/api/openapi.json` lists both new option routes and `included_option_ids`; anonymous
+`POST` and `DELETE` on the new routes answer 401, not 404.
+
+**Open items:** the new form has not been clicked through in production (I have no production login) -- the
+Director should build a two-sport Estimate and a Quotation on a project and download the PDF; one Estimate cannot
+carry a sport that is not on the project's Sport Selection. #219 and #220 each fell behind main once a
+predecessor merged and needed one more CI run -- an ordering cost of stacked PRs, not a fault.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals

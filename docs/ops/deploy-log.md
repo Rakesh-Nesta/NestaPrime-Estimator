@@ -11,6 +11,31 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-25 -- PRs #218-#220: Amendment 57 (multi-sport Quotation)
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `f4f0554` -> `8c83f4e` (repository PRs #218 spec, #219 API, #220 Documents screen)
+Backend rebuild **and** frontend build. **No migration.**
+
+**Steps.** `git pull` fast-forwarded `f4f0554..8c83f4e`: `documents.py`, `test_multi_sport_quotation.py`,
+`Documents.jsx`, `api.js`, `handbookData.js`, `Annexure-2.md`, `Section-60-specs.md` (919 insertions, 97 deletions).
+Backend rebuilt (`up -d --build backend`; the code layer rebuilt, dependency layers cached; db healthy, backend
+started). Frontend rebuilt with `VITE_API_URL=https://app.nestaprime.in/api` (826.61kB) and copied with
+`sudo cp -r /tmp/nestaprime-frontend/dist/. /var/www/nestaprime/dist/ && sudo chmod -R 755 /var/www/nestaprime` as its
+own step. The pull output arrived after the build output and was read then; the served bundle proved the deploy.
+
+**Verified from outside afterwards:** served bundle `index-Dp7GZV3i.js`; downloaded and it contains "Add another
+sport", "Options total", "Add sport option", "choose one", "This quotation will include" and "Only a PM or Director
+creates an Estimate", and still contains quick search and Team & Access; the page title is "NestaPrime CRM";
+`/api/openapi.json` lists `/estimates/{estimate_id}/options` and `/estimates/{estimate_id}/options/{option_id}` and
+the `included_option_ids` field; anonymous `POST` and `DELETE` on the new routes answer 401.
+
+**Not verified in production:** the new form used while logged in (Director, PM, Sales), a real two-sport Quotation
+PDF. The same flows passed 46 of 46 checks in real Chrome and a real PDF against the local copy (see Amendment 57 in
+the register).
+
+---
+
 ## 2026-09-25 -- PRs #213-#215: Amendment 55 (HTTPS on `app.nestaprime.in`) and Amendment 56 (name "NestaPrime CRM")
 
 **Run by:** R. Patni (with AI development assistance)
