@@ -2,9 +2,10 @@ import { useState } from "react";
 import RolePermissionsViewer from "./RolePermissionsViewer";
 import UserManagementTab from "./UserManagement";
 
-// Amendment 51 (Section 55): the real "Team & Access" screen. Director-only --
-// the only role the API lets call /users and /role-permissions. It used to be a
-// nav label that opened Master Settings.
+// Amendment 51 (Section 55): the real "Team & Access" screen. It used to be a
+// nav label that opened Master Settings. Amendment 59: Admin and Director see
+// both tabs; a PM sees the People tab only (the API lets a PM list and add
+// people, and nothing else here).
 const TABS = [
   { key: "people", label: "People" },
   { key: "roles", label: "Roles & permissions" },
@@ -12,6 +13,7 @@ const TABS = [
 
 export default function TeamAccess({ token, currentUser, onBack }) {
   const [tab, setTab] = useState("people");
+  const isPm = currentUser?.role === "pm";
 
   return (
     <div className="max-w-2xl mx-auto mt-8 mb-10 space-y-6">
@@ -25,9 +27,11 @@ export default function TeamAccess({ token, currentUser, onBack }) {
           )}
         </div>
         <p className="text-xs text-text-secondary mt-1">
-          Who can sign in, and what each role is allowed to do. Director-only.
+          {isPm
+            ? "Add the people who work with you."
+            : "Who can sign in, and what each role is allowed to do. Admin and Director."}
         </p>
-        <div className="flex gap-1 mt-4 border-b border-border-dark overflow-x-auto">
+        <div className={`flex gap-1 mt-4 border-b border-border-dark overflow-x-auto ${isPm ? "hidden" : ""}`}>
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -44,7 +48,7 @@ export default function TeamAccess({ token, currentUser, onBack }) {
 
       {tab === "people" && <UserManagementTab token={token} currentUser={currentUser} />}
 
-      {tab === "roles" && (
+      {tab === "roles" && !isPm && (
         <div className="bg-surface shadow rounded-lg p-6">
           <RolePermissionsViewer token={token} />
         </div>

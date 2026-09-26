@@ -56,7 +56,7 @@ export default function AuditLogView({ token, onBack }) {
         <p className="text-xs text-text-secondary mt-1">
           M.5: "change_log[] on every document: who, when, field, old → new, reason (for approvals, skips,
           waivers, discounts). Exportable for Director review." Also covers Settings changes (Q.2 rule 7).
-          Director-only.
+          Director and Admin; an Admin sees who changed what and when, with cost and margin values hidden.
         </p>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
         <div className="flex items-center gap-2 mt-3">

@@ -149,6 +149,12 @@ export async function updateProjectNotes(token, projectId, payload) {
   return handle(res);
 }
 
+// Amendment 59 (Section 62): the Admin's people-and-activity Overview (Admin and Director).
+export async function getAdminOverview(token) {
+  const res = await fetch(`${API_BASE}/admin/overview`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 export async function getDashboard(token) {
   const res = await fetch(`${API_BASE}/dashboard`, { headers: authHeaders(token) });
   return handle(res);

@@ -45,7 +45,7 @@ const MORE_SECTIONS = [
       { key: "sports_scope_admin", label: "Sports & Scope" },
       { key: "settings", label: "Master Settings" },
       { key: "cross_sell_admin", label: "Cross-Sell Add-ons", show: (role) => role === "director" },
-      { key: "audit_log", label: "Audit Log", show: (role) => role === "director" },
+      { key: "audit_log", label: "Audit Log" },
     ],
   },
 ];
@@ -55,6 +55,11 @@ const FOOTER_LINKS = [
   { key: "help", label: "Help" },
   { key: "education", label: "Education" },
 ];
+
+// Amendment 59: an Admin has no business records -- no search, no Projects, no Education chat.
+function footerLinksFor(role) {
+  return FOOTER_LINKS.filter((link) => !(role === "admin" && link.key === "education"));
+}
 
 function visibleItems(section, role) {
   return section.items.filter((it) => canOpen(it.key, role) && (!it.show || it.show(role)));
@@ -99,9 +104,11 @@ export default function Sidebar({
   onOpenSearch,
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const isAdmin = user.role === "admin";
 
   // Amendment 51: Team & Access is user management and the role/permission
-  // view -- both Director-only at the API -- and no longer Master Settings.
+  // view, no longer Master Settings. Amendment 59: Admin and Director use both;
+  // a PM sees the People tab only (the screen decides).
   const showTeamAccess = canOpen("team_access", user.role);
 
   function go(target) {
@@ -143,7 +150,9 @@ export default function Sidebar({
     ...(canSeeQuotations
       ? [{ key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon }]
       : []),
-    { key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon },
+    ...(isAdmin
+      ? []
+      : [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }]),
     // Amendment 50 (Section 54): a real header now, shown only to the roles
     // that can open it (PM/Director write, CA/Tax reads) -- as Amendment 46
     // did for Leads & Clients, so nobody gets an item that can only refuse them.
@@ -181,6 +190,7 @@ export default function Sidebar({
         </div>
       </div>
 
+      {!isAdmin && (
       <div className="px-4 pb-1">
         <button
           onClick={openSearch}
@@ -192,6 +202,7 @@ export default function Sidebar({
           <kbd className="hidden sm:inline text-[10px] rounded border border-border-dark px-1.5 py-0.5 text-text-secondary/70">/</kbd>
         </button>
       </div>
+      )}
 
       <nav className="flex-1 overflow-y-auto px-2 space-y-1 pt-1">
         {primaryItems.map((item) => (
@@ -230,7 +241,7 @@ export default function Sidebar({
       </nav>
 
       <div className="border-t border-border-dark px-2 pt-2 space-y-0.5">
-        {FOOTER_LINKS.map((link) => (
+        {footerLinksFor(user.role).map((link) => (
           <NavLink key={link.key} label={link.label} active={screen === link.key} onClick={() => go(link.key)} />
         ))}
       </div>
@@ -270,9 +281,11 @@ export default function Sidebar({
           </span>
           <span className="font-heading font-bold text-text-primary text-sm">NestaPrime</span>
         </button>
-        <button onClick={openSearch} className="p-2 ml-auto mr-1 text-text-secondary" aria-label="Search">
-          <SearchIcon className="w-5 h-5" />
-        </button>
+        {!isAdmin && (
+          <button onClick={openSearch} className="p-2 ml-auto mr-1 text-text-secondary" aria-label="Search">
+            <SearchIcon className="w-5 h-5" />
+          </button>
+        )}
         <button
           onClick={() => setNavMenuOpen(!navMenuOpen)}
           className="p-2 -mr-2 text-text-secondary"
