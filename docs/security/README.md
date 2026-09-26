@@ -136,3 +136,17 @@ login, and the web-server changes described in `deploy/README.md`.
 - **Listening ports:** 22, 80 and 443 on all interfaces; the backend on `127.0.0.1:8000` only; PostgreSQL not
   published on the host; local-only `127.0.0.1:38725` (not identified -- most likely a Docker component) and the local
   resolver on port 53; IPv6 only on 22.
+
+**Follow-up, 26 September 2026 (the Director's output).**
+- *Backups: fixed.* The cron line is installed (`crontab -l` shows `0 2 * * * .../deploy/backup_db.sh >> .../backup.log`)
+  and a manual run wrote a fresh dump (`nestaprime_estimator_20260926T055832Z.sql.gz`, 38 KB). The first scheduled dump
+  is still to be seen on 27 September. The dumps are on the same disk, so they cover a bad deploy or deleted data, not
+  loss of the instance; that is the Lightsail snapshot's job and its schedule has not been checked.
+- *`.env` mode: fixed.* `600` on `.env` and `.env.pre-https`, confirmed with `stat`.
+- *Reboot: done, but the flag remains -- open.* The server rebooted and came back correctly (checked from outside), yet
+  `uname -r` reports `6.17.0-1019-aws` and `/var/run/reboot-required` still exists, whereas the flag originally listed
+  `linux-image-7.0.0-1012-aws` and `-1013-aws`. Not established whether later updates re-created the flag or an older
+  kernel booted. To settle it: `uptime -s; ls -l --time-style=long-iso /var/run/reboot-required; cat
+  /var/run/reboot-required.pkgs; dpkg -l 'linux-image-*' | awk '/^ii/{print $2, $3}'`. If the flag is newer than the boot
+  time, another reboot at a quiet moment clears it; if a newer kernel is installed than the one running, the boot
+  loader's default needs a look. No exposure is known either way: every check from outside passes.

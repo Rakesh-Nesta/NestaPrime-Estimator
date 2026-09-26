@@ -2738,10 +2738,17 @@ login page at 1280px and 375px: no CSP violations, no failed requests, the Fraun
 "NestaPrime CRM" title and heading, and "Incorrect email or password" on a wrong login.
 
 **Open items.**
-- **Item 13, the server checklist -- run; three things to act on** (full results in `docs/security/README.md`):
-  **no nightly database backup is scheduled** (no crontab; one dump, from 15 September), **`.env` is mode 664**
-  (world-readable) and **a kernel/libc reboot is pending**. SSH is key-only and automatic updates are on. Each fix
-  is a one-line command sent to the Director; not yet confirmed applied.
+- **Item 13, the server checklist -- run, two of three findings fixed, one still open** (full results in
+  `docs/security/README.md`). Found: **no nightly database backup was scheduled** (no crontab; one dump, from 15
+  September), **`.env` was mode 664** (world-readable) and **a kernel/libc reboot was pending**; SSH is key-only and
+  automatic updates are on. **Fixed and confirmed by the Director's output, 26 September 2026:** the backup cron is
+  installed (`0 2 * * *`) and a first dump was taken (`nestaprime_estimator_20260926T055832Z.sql.gz`, 38 KB); `.env`
+  and `.env.pre-https` are mode 600. The server was rebooted and, from outside, the site, the API, the nginx
+  configuration, the certificate and the closed ports were all as before. **Still open: the reboot-required flag.**
+  After the reboot `/var/run/reboot-required` still exists and the running kernel is `6.17.0-1019-aws`, not the
+  `7.0.0-1012/1013-aws` kernels the flag first listed; whether newer updates re-created the flag after the reboot, or
+  the machine booted an older kernel than the newest installed, is not established (the diagnostic output was not
+  sent). It is patching housekeeping, not an exposure -- everything checked from outside passes.
 - **Not verified in production:** any logged-in behaviour (the fresh token after a password change, the lockout
   audit entry, the attachment name and type checks, the 422 on an over-long value) -- there is no production login
   here; the Director's click-through (a few screens, one PDF, the Documents screen) is the live check of the
