@@ -1,129 +1,137 @@
 # Section 62 — Amendment No. 59 Spec
 
-## Amendment No. 59 — Sign-in and User Creation with a Mobile Number or an Email
+## Amendment No. 59 — The Admin Role, and Who Can Do What
 
 ### Registered scope
-The Director's instruction (26 September 2026), in full: **"login benchmark admin-manager/PM- Users create with
-mobile no or email both"**. It is terse, so this spec states how it was read, and the Director confirms or
-corrects that reading when approving:
+The Director's instruction (26 September 2026): **"admin - director or PM - User admin has all right; director / PM
+has user rights and approval rights; user has creation rights -- because director has no technical ability or no
+time for admin work, so admin and director are two separate things."** In short: the administration of the system
+(people, access, technical settings) moves to a new **Admin**; the **Director and PM** keep the business decisions
+and approvals; the **other users** keep their day-to-day creation rights. Evidence is in
+`docs/annexures/Annexure-2.md`, Amendment No. 59.
 
-1. **A person's account can be created with a mobile number, an email, or both** -- at least one.
-2. **They sign in with whichever they have** -- one box that accepts either.
-3. **"admin-manager/PM" can create users.** The app has six roles and no "admin" or "manager": the proposal is
-   **Director = admin** and **PM = manager**, with no new role. Today only the Director can create users.
-4. **"Benchmark"** is read as "the way the reference product behaves" (the app has followed a CRM reference
-   elsewhere), not a performance test. **If a specific screen or product was meant, name it and the spec is
-   adjusted before anything is built.**
-
-Evidence is in `docs/annexures/Annexure-2.md`, Amendment No. 59. In short: an account today is a name, a required
-unique **email**, a password and a role; sign-in takes the email only; the sign-in token carries the email; only the
-Director may create users. There is nowhere to hold a mobile number, and an account with no email cannot exist.
+Today the Director is the only role that does the admin jobs: **users** (list, create, change role, deactivate,
+reset a password), the **audit log**, the **Role & Permissions** screen, company details, message templates and every
+master-data and settings screen. That is 43 of the 247 gated routes. The Director does not want that work.
 
 ### Governing principles
-- **A mobile number is a second way to identify a person, not a second way to prove who they are.** Sign-in stays
-  password-based. One-time codes by SMS or WhatsApp need a messaging provider and are a separate amendment (with
-  two-factor sign-in).
-- **Nothing gets easier to guess.** Every failure to sign in still gives the same message; a locked account stays
-  locked whichever identifier is typed; the per-address throttle from Amendment 58 is unchanged.
-- **A PM may not grant power they do not hold.** A PM can create accounts only for the roles below them; they can
-  never create a Director or another PM.
-- **Existing accounts and existing sessions keep working**, apart from one sign-in after the deploy (item 4).
-- **Nothing shows a cost or margin to a role that could not already see it (K.3).**
+- **Administration is not approval.** Admin can run the system; Admin does not approve, release, waive or price. An
+  account that can both administer and approve would let one person check their own work, so it is not built that way.
+- **Business decisions that set a price stay with the Director.** Margin floors, contingencies, GST, the rate sheet and
+  catalogue rates, validity periods and the quotation terms decide what a client is quoted; they are the Director's.
+- **Cost and margin stay hidden from anyone who could not already see them (K.3).** Admin sees no cost, margin or
+  quotation content.
+- **One person cannot grant power they do not hold.** Each role may create only the roles named below.
+- **Everything an Admin does is on the record**, and the Director can see it.
+- **Nothing that works today stops working for the roles that use it today.**
 
 ### Proposed spec
 
 **Part A -- Backend (one migration)**
-1. **Data.** `users.mobile` (text, nullable, unique) is added and `users.email` becomes nullable, with a database
-   check that **at least one of the two is present**. Existing rows are untouched (all have an email).
-2. **One way to write a mobile number.** Whatever is typed -- `98765 43210`, `098765-43210`, `+91 98765 43210`,
-   `91 9876543210` -- is stored as `+919876543210`. An Indian mobile is 10 digits starting 6-9, with an optional `0`,
-   `91` or `+91` in front; a number from another country must start with `+` and its country code (8-15 digits in
-   all). Anything else is refused with a plain message. The same routine is used to create, to edit and to sign in,
-   so a number can never be stored one way and typed another.
-3. **Sign-in accepts either.** The existing `username` field takes an email (it contains `@`) or a mobile number
-   (it does not). Email matching is unchanged. An unrecognised or badly formed value gives the same "Incorrect email
-   or password" as any other failure, and counts toward the same lockout for a real account.
-4. **The sign-in token identifies the person by id, not by email**, since some accounts will have no email. Tokens
-   issued before the deploy name an email, no longer match, and end: **everyone signs in once after the deploy**
-   (as after Amendment 58). Nothing else about the token changes.
-5. **Create user** takes `email` and `mobile`, both optional, at least one required; each must be unique
-   (409 "A user with this mobile number already exists" / "...email..."). The password rule "may not equal the
-   email" also covers the mobile number typed as a password. A created account still gets the Director-or-PM-chosen
-   temporary password and `must_change_password`.
-6. **Who may create.** The **Director** may create any role. A **PM** may create **sales, procurement, site_engineer
-   and ca_tax** accounts only -- a request for `director` or `pm` is refused 403 with a plain reason. Sales,
-   Procurement, Site Engineer and CA/Tax cannot create users (unchanged). The PM may also list users (the screen
-   needs it to avoid duplicates); resetting a password, deactivating, changing a role and editing an identifier stay
-   **Director-only** (decision 4).
-7. **Edit an identifier.** `PATCH /users/{id}` (Director) may add, change or clear `mobile` and `email`; an account
-   may never be left with neither, and uniqueness holds. Both are recorded in the audit log (old and new value; never
-   a password).
-8. **Everything that assumed an email is made safe for its absence:** the "internal email domains" default derived
-   from users' addresses skips users with none, the notification recipients for Sales skip users with none, and
-   `GET /auth/me` returns `mobile` beside `email`.
-9. **Tests**, including: each way of writing one mobile number stores identically; sign in by email and by mobile
-   (both formats of the same number); a wrong password by mobile counts toward the same lockout as by email; a mobile
-   number cannot be created twice; an account with neither is refused; a PM can create Sales but not Director or PM
-   (403) and Sales cannot create anyone; an account with only a mobile number signs in, calls `/auth/me`, changes its
-   password and keeps working on the fresh token; a token naming an email is refused; the all-routes test and the
-   role table still pass. Each guard is removed once to see a test fail.
+1. **A seventh role, `admin`,** added to the role list (a database migration that adds the value). No existing account
+   changes role. At least one Admin must always exist (guardrail 9), so the first Admin is created by the Director
+   through a one-time step (item 10).
+2. **Who may do what with users:**
 
-**Part B -- Screens (after Part A is live)**
-10. **Sign-in page:** the box reads "Email or mobile number" (a text field with the username hint for password
-    managers, not an email-only field).
-11. **Team & Access -> People:** the create form has **Email** and **Mobile number** ("at least one -- either can be
-    used to sign in") and the role list offers a PM only the four roles it may create; the list shows both. **A PM
-    sees the People tab and nothing else on that screen** (no role table, no reset or deactivate buttons), through
-    the same single role table the sidebar uses. Director's screen is unchanged apart from the new field.
-12. **Handbook:** the sign-in, Team & Access and "how do I add someone" entries -- checked by name and by wording.
-13. **Phone layout** at 375, 414 and 768px, and a real-Chrome pass per role (zero refused calls; the PM's reduced
-    screen; a mobile-only account signing in and being forced to change its password).
+   | Action | Admin | Director | PM | Others |
+   | --- | --- | --- | --- | --- |
+   | List users | yes | yes | yes | no |
+   | Create a user | any role | any role **except** Admin | Sales, Procurement, Site Engineer, CA/Tax only | no |
+   | Reset a password, deactivate / reactivate, change a role | any user | any **non-Admin** user | no | no |
+
+   A PM can never create a Director, a PM or an Admin; a Director can never create or touch an Admin; requests outside
+   these limits are refused 403 with a plain reason.
+3. **Admin's other rights (the technical side):** view the **Audit Log** and export it; view the **Role &
+   Permissions** screen; edit **company identity** (legal name, GSTIN, PAN, registered-office city, signatory name
+   and designation), the **logo**, **message templates** and **field settings** (which fields are required).
+4. **Director keeps, and Admin does not get:** every setting that prices or words a quotation -- the 27 other master
+   settings (margin gap points, contingencies, GST rate, estimate and quotation validity, schedules, site
+   establishment, rate-blind mode, approval SLA, the quotation terms and warranty table); ▲ **the four bank-account
+   settings** (account name, number, IFSC, bank name -- a changed account on client-facing quotations is a classic
+   fraud route, so a change stays with the Director); and every catalogue that carries a rate or multiplier (sports,
+   hubs and regional multipliers, netting grades, vehicle classes, scope items, accessory and cross-sell catalogues,
+   lighting standards, flooring guides, package contents, construction sequences, sport margin policies).
+   Approvals, releases, waivers, Mark Won/Lost, the calibration override and the report release stay with the Director
+   and PM exactly as now.
+5. **Settings are gated by key, not just by route:** `POST /settings` admits an Admin only for the six company-identity
+   keys; the other 31 keys, bulk update and the spreadsheet import stay Director-only. Refused with a plain reason.
+6. ▲ **The Audit Log for an Admin hides values that are cost or margin** (old and new value for pricing-policy
+   settings, margin policies, cost-sheet lines, rate items and catalogue rates): the Admin sees who changed what and
+   when, not the numbers -- the same K.3 principle as everywhere else. The Director sees everything, as now.
+7. **What Admin does not see or do:** clients, leads, projects, cost sheets, estimates, quotations, work orders,
+   payments, reports, vendors, rates, pricing calculator -- none of the business screens and none of their routes
+   (they answer 403). The all-routes test and the role table are extended to the seventh role.
+8. **Every Admin action is audited** (existing audit log, no migration), and **the Director's dashboard "Recent
+   activity" shows Admin actions** so nothing an Admin does is hidden from them.
+9. **Guardrails, server-side:** there is always at least one active Admin and at least one active Director; neither
+   the last Admin nor the last Director can be deactivated or demoted; nobody can deactivate or demote themselves.
+10. **The first Admin** is created by the Director once (Team & Access, or the seed script for a fresh install) and
+    from then on Admins create Admins. Nothing is created automatically.
+11. **Tests**, including: every gated route is checked as all seven roles against the role table (the
+    `role_route_check.py` script and the all-routes test pass); a PM's create-user limits (403 for Director, PM,
+    Admin); a Director cannot create or touch an Admin; the last-Admin and last-Director guardrails; Admin refused on
+    every business route; the settings key gate (company name yes, GST rate no, bank account no); audit-log masking
+    for Admin and none for Director; each guard removed once to see a test fail.
+
+**Part B -- Screens**
+12. **Sidebar and navigation** (the single role table `navAccess.js`): Admin sees only Team & Access (People and Role &
+    Permissions), Audit Log, Master Settings (company details, message templates, field settings), and a small
+    Overview of system facts (people, recent activity). Director and PM keep their sidebars; **a PM additionally sees
+    the People tab with the create form and the list, and nothing else on Team & Access.**
+13. **Team & Access -> People:** the role picker offers each person only the roles they may create; the buttons a role
+    may not use are not shown (the server refuses them anyway).
+14. **Master Settings:** an Admin sees the company-identity fields, logo, templates and field settings editable and the
+    rest read-only or absent; a Director sees no change.
+15. **Handbook:** Team & Access, Master Settings, Audit Log and a new "Who does what" entry -- checked by name and by
+    wording -- plus the Role & Permissions screen showing seven roles.
+16. **Phone layout** at 375, 414 and 768px and a real-Chrome pass per role (all seven): every reachable screen opens
+    with zero refused calls; screens a role cannot reach are not offered.
 
 **Sequencing (one Amendment number, two ordered PRs):** PR 1 = Part A (backend, migration, tests); PR 2 = Part B
-(frontend). Part A is safe under the old frontend (it still sends an email and the create form still works). Each
-is deployed and verified from outside before the close-out. The migration runs by itself when the backend starts.
+(frontend). Part A is safe under the old frontend (no existing role or account changes). Each is deployed and
+verified from outside before the close-out.
 
 ### Explicitly out of scope
-- **One-time passcodes or two-factor sign-in** by SMS, WhatsApp or an authenticator app (separate amendment).
-- **Sending the temporary password or the sign-in details** to the new person by WhatsApp or email -- the creator
-  still tells them (a natural next step: the app already has a WhatsApp gateway).
-- **Verifying that a mobile number is real or belongs to the person.**
-- **A new "admin" or "manager" role**, self-registration, "forgot password", editing a person's name, importing
-  many users at once.
-- Any pricing rule, K.3 gate, or role other than the user-creation change above.
+- Mobile-number sign-in and mobile-or-email user creation (Amendment 61).
+- Limiting Sales to their own records and the personal dashboard (Amendment 60).
+- Two-factor sign-in, a "manager" role separate from PM, per-user custom permissions, approval workflows for Admin
+  actions.
+- Any pricing rule, margin, GST or K.3 gate.
 
 ### Acceptance criteria
-- As Director: create a user with only a mobile number, only an email, and both; each signs in with what they
-  have, and the one with both signs in with either. The same number typed four ways is one number.
-- A mobile-only user is forced to change the temporary password, lands in the app on the fresh token with no
-  refused calls, and cannot be created a second time (409).
-- As PM: the People tab shows the create form and the list and nothing else; creating a Sales user works; asking for
-  a Director or PM is refused 403 in the API and is not offered in the screen; Sales, Procurement, Site Engineer and
-  CA/Tax cannot create users (403) and do not see the screen.
-- Five wrong passwords by mobile lock the account (one audit entry); the email then also fails until the lockout
-  ends; an unknown mobile gives the same message and locks nothing.
-- Every existing account still signs in by email; existing tokens end once at the deploy; the all-routes test, the
-  role table check and the existing backend suite pass.
-- At 375px and 414px the sign-in box and the People form need no more width than the phone has.
+- An Admin can create, reset, deactivate and change the role of any non-Admin user and create other Admins, edit the
+  six company-identity fields, the logo, templates and field settings, and read (but not see the numbers in) the audit
+  log; every business route answers them 403 and no business screen is offered.
+- A Director can do the user work for non-Admin users, keeps every pricing setting and approval, cannot create or
+  change an Admin, and sees Admin actions in Recent activity.
+- A PM can create Sales, Procurement, Site Engineer and CA/Tax users and nothing else about users; asking for a
+  Director, PM or Admin is refused 403.
+- `POST /settings` changing `company_legal_name` works for an Admin; changing `gst_rate_percent` or a bank-account
+  setting is refused 403 for an Admin and works for a Director.
+- The last Admin and last Director cannot be deactivated or demoted; nobody can deactivate themselves.
+- The role table shows seven roles and matches the server on every route (0 mismatches); existing accounts and
+  sessions are unaffected; the existing suite passes.
 
 ### Open decisions (proposed defaults)
-1. **Reading of the instruction** as set out above (either identifier; sign in with either; Director and PM create
-   users). Proposed: **yes** -- correct it if not.
-2. **No new roles: Director = admin, PM = manager.** Proposed: **yes.**
-3. **A PM may create only Sales, Procurement, Site Engineer and CA/Tax accounts**, never a Director or another PM.
-   Proposed: **yes.** (Alternative: PMs create nobody, only the Director does -- as today.)
-4. **A PM may create and list users, but reset, deactivate, change role and edit identifiers stay Director-only.**
+1. **A separate Admin role, distinct from Director.** Proposed: **yes.**
+2. **Admin has all administration rights but no business approvals**, and sees no cost or margin. Proposed: **yes.**
+3. **A Director may create any role except Admin; only an Admin creates an Admin.** Proposed: **yes.**
+4. **A PM may create Sales, Procurement, Site Engineer and CA/Tax users only**, and list users; nothing more.
    Proposed: **yes.**
-5. **Mobile numbers: Indian numbers in any common format, and other countries only with an explicit `+` and
-   country code.** Proposed: **yes.**
-6. **Mobile numbers are unverified identifiers; sign-in stays password-only.** Proposed: **yes** (codes are a
-   separate amendment).
-7. **Everyone signs in once after the backend deploy**, because the token now names the person by id. Proposed:
-   **yes**, at a quiet time.
-8. **Two ordered PRs** (backend and migration, then screens). Proposed: **yes.**
+5. **The Director decides pricing policy** (margin floors, contingencies, GST, validity, rates, catalogues, terms);
+   Admin edits only technical settings and company identity. Proposed: **yes.**
+6. ▲ **Bank-account settings stay with the Director.** Proposed: **yes.** (Alternative: Admin may edit them, every
+   change shown to the Director.)
+7. ▲ **Admin sees the audit log with cost and margin values hidden.** Proposed: **yes.**
+8. **At least one active Admin and one active Director at all times.** Proposed: **yes.**
+9. **Two ordered PRs** (backend, then screens). Proposed: **yes.**
 
 ### Approval
-☐ Approved as proposed
+☑ Approved — "approve as proposed, all decisions" (26 September 2026). The proposals approved in the conversation
+were: the separate Admin role; Admin has all administration but no approvals and no cost or margin; the Director
+decides pricing policy; a Director or PM creates users within the limits above; the guardrails; the split into
+separate amendments in this order. The items marked ▲ were added while drafting and are flagged for the Director's
+attention; everything else follows the approved proposals.
 ☐ Approved with changes (noted above)
 ☐ Not approved
 
