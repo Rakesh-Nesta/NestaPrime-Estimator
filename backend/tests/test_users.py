@@ -303,8 +303,10 @@ def test_cannot_demote_the_last_active_director_even_when_not_self(client, direc
     second_headers = {"Authorization": f"Bearer {changed.json()['access_token']}"}  # Amendment 58: the old token ends
 
     # Demote the fixture director down to pm first (leaves `second` as the
-    # only Director) -- allowed, since `second` is still active.
-    demote_res = client.patch(f"/users/{director_user.id}", json={"role": "pm"}, headers=headers)
+    # only Director) -- allowed, since `second` is still active. Done by `second`,
+    # not by the fixture director themselves: nobody changes their own role
+    # (Amendment 59).
+    demote_res = client.patch(f"/users/{director_user.id}", json={"role": "pm"}, headers=second_headers)
     assert demote_res.status_code == 200, demote_res.text
 
     # Now, as `second` (the sole remaining Director), try to demote

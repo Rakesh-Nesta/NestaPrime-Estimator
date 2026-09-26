@@ -15,8 +15,8 @@ message_templates_router = APIRouter(prefix="/message-templates", tags=["message
 # Whoever can send a message (messages.py's own DOCUMENT_ROLES) needs to
 # browse the library to pick from it; M.4's own rights table keeps writes
 # Director-only ("Manage templates, providers, consent settings" row).
-TEMPLATE_READ_ROLES = ("sales", "pm", "director")
-TEMPLATE_WRITE_ROLES = ("director",)
+TEMPLATE_READ_ROLES = ("sales", "pm", "director", "admin")  # Amendment 59: an Admin edits templates
+TEMPLATE_WRITE_ROLES = ("director", "admin")
 
 
 class MessageTemplateOut(BaseModel):

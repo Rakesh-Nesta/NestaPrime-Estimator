@@ -7,6 +7,7 @@ from app.config import settings as app_settings
 
 from app.api import (
     accessories,
+    admin_overview,
     athletics,
     attachments,
     audit_log,
@@ -98,6 +99,7 @@ async def security_headers(request, call_next):
     return response
 
 app.include_router(auth.router)
+app.include_router(admin_overview.admin_overview_router)
 app.include_router(users.users_router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)

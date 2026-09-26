@@ -26,6 +26,13 @@ import urllib.request
 
 NIL_UUID = "00000000-0000-0000-0000-000000000000"
 
+# Routes whose role gate admits a role but which then narrow what that role may touch, so the placeholder id this
+# script sends (a key that is not one an Admin may read, say) can legitimately be answered 403 *inside* the route.
+# The script sees only the gate; each entry is a place where the route also checks the thing being asked for.
+NARROWED_INSIDE = {
+    ("GET", "/settings/{key}/history"),  # an Admin: company-identity settings only (Amendment 59)
+}
+
 
 def call(base: str, method: str, path: str, token: str | None) -> int:
     url = base.rstrip("/") + re.sub(r"\{[^}]+\}", NIL_UUID, path)
@@ -90,7 +97,7 @@ def main() -> int:
                     status = call(args.base, method, path, tokens[role])
                     if role in group["roles"]:
                         checked["admitted"] += 1
-                        if status in (401, 403):
+                        if status in (401, 403) and not (status == 403 and (method, path) in NARROWED_INSIDE):
                             mismatches.append(f"{role} {method} {path}: table admits it, server answered {status}")
                     else:
                         checked["refused"] += 1

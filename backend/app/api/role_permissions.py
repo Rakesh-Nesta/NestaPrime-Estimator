@@ -22,6 +22,13 @@ LABEL_OVERRIDES: dict[str, str] = {
     # Amendment 53: the route's gate admits all six roles, but each role only
     # receives the kinds of result it can already read -- say so.
     "global_search": "Quick search (results limited to what the role can read)",
+    # Amendment 59: the gate admits several roles but the route narrows further -- say so.
+    "create_user": "Create user (a PM: Sales, Procurement, Site Engineer, CA/Tax only; only an Admin creates an Admin)",
+    "create_setting_version": "Edit a setting (an Admin: company identity only)",
+    "list_current_settings": "List settings (an Admin sees company identity only)",
+    "get_setting_history": "Setting history (an Admin: company identity only)",
+    "list_audit_log": "Audit log (an Admin sees who and when, not cost or margin values)",
+    "export_audit_log": "Export audit log (an Admin: cost and margin values hidden)",
 }
 
 
@@ -135,5 +142,5 @@ def build_role_permissions(routes) -> RolePermissionsOut:
 
 
 @router.get("/role-permissions", response_model=RolePermissionsOut)
-def get_role_permissions(request: Request, current_user=Depends(require_roles("director"))):
+def get_role_permissions(request: Request, current_user=Depends(require_roles("director", "admin"))):
     return build_role_permissions(request.app.routes)

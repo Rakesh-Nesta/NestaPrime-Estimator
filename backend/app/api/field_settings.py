@@ -15,8 +15,8 @@ field_settings_router = APIRouter(prefix="/field-settings", tags=["field-setting
 # Director-write split, since this isn't the admin screen itself, just
 # the data it manages. Write stays Director-only, same as every other
 # Master Settings row (Q.2 rule 6).
-READ_ROLES = ("sales", "pm", "director")
-WRITE_ROLES = ("director",)
+READ_ROLES = ("sales", "pm", "director", "admin")  # Amendment 59: an Admin edits which fields are required
+WRITE_ROLES = ("director", "admin")
 
 # The field_keys this app governs -- see Section-6-phase2-specs.md for
 # why the original five (soil type/distance/court count/site access/
