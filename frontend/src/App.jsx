@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { changePassword, getCurrentUser, getProject, login } from "./api";
 import AllEstimates from "./AllEstimates";
 import AllProjects from "./AllProjects";
+import AdminOverview from "./AdminOverview";
 import AllQuotations from "./AllQuotations";
 import AuditLogView from "./AuditLogView";
 import ClientsAdmin from "./ClientsAdmin";
@@ -58,7 +59,8 @@ export default function App() {
   const [clientsSearch, setClientsSearch] = useState({ text: "", nonce: 0 });
 
   useEffect(() => {
-    if (!user) return undefined;
+    // Amendment 59: an Admin has no business records to search, so no search shortcut either.
+    if (!user || user.role === "admin") return undefined;
     function onKeyDown(e) {
       const t = e.target;
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
@@ -245,7 +247,8 @@ export default function App() {
             />
           </>
         )}
-        {screen === "dashboard" && (
+        {screen === "dashboard" && user.role === "admin" && <AdminOverview token={accessToken} />}
+        {screen === "dashboard" && user.role !== "admin" && (
           <Dashboard
             token={accessToken}
             role={user.role}
@@ -291,7 +294,7 @@ export default function App() {
         {screen === "sports_scope_admin" && canOpen("sports_scope_admin", user.role) && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
-        {screen === "audit_log" && user.role === "director" && (
+        {screen === "audit_log" && canOpen("audit_log", user.role) && (
           <AuditLogView token={accessToken} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "quotations_admin" && ["sales", "pm", "director"].includes(user.role) && (

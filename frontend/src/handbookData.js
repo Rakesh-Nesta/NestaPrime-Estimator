@@ -247,7 +247,7 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Master Settings",
-    what: "Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, quotation terms and message templates. The Director edits them; the PM can view them but not change them. (User management and the role view now live under Team & Access.)",
+    what: "Company-wide constants (GST rate, validity periods, contingency %, fee schedules), company logo/profile, quotation terms and message templates. The Director edits them; the PM can view them but not change them; an Admin edits only the company identity, the logo, message templates and which fields are required -- never anything that prices or words a quotation, and never the bank account. (User management and the role view now live under Team & Access.)",
     fields: [
       "Varies by setting — each is a versioned value, editable only by the Director; PM can view but not edit.",
       "Company details (Section 14) — a labeled panel for the company identity/bank fields (legal name, PAN, GSTIN, registered office city, bank details) that print on the Quotation PDF — the same underlying Settings the raw key/value form below always could edit, just with real labels now. It also holds the authorised signatory's name and designation, which sign off the cover letter.",
@@ -273,7 +273,7 @@ export const FULL_HANDBOOK = [
   },
   {
     screen: "Audit Log",
-    what: "Director-only, genuinely enforced (unlike a couple of screens above). A read-only global change log — every waiver, approval, discount, release, and Master Setting edit, with old value → new value and the reason given.",
+    what: "Director and Admin, genuinely enforced (unlike a couple of screens above). A read-only global change log — every waiver, approval, discount, release, and Master Setting edit, with old value → new value and the reason given. An Admin sees who changed what and when, but not the values of anything that is cost, margin or a client's business — those show as hidden.",
     fields: ["Document type filter (Estimate / Estimate option / Quotation / Skip request / Vendor price request / Site survey / Master Setting)"],
     whenMissing: "Filtering is by document type only — there's no date range or user filter; export the CSV and search it yourself for anything more specific.",
     watch: null,
@@ -348,12 +348,12 @@ export const DIRECTOR_ADMIN_GUIDE = {
     {
       title: "Team & Access — People",
       body:
-        "Create users, assign roles, reset passwords, deactivate/reactivate accounts. Two guardrails are server-enforced and can't be worked around from the UI: you can't deactivate your own account, and you can't deactivate or demote the last active Director — both exist because Team & Access is itself Director-only, so hitting zero active Directors would need a raw database script to recover from.",
+        "Create users, assign roles, reset passwords, deactivate/reactivate accounts. Who may do what: an Admin does all of it for anyone; a Director adds people of any role except Admin and manages anyone except an Admin; a PM adds Sales, Procurement, Site Engineer and CA/Tax people and nothing else. Guardrails are server-enforced and can't be worked around from the UI: nobody can deactivate or change the role of their own account, and the last active Director and the last active Admin can't be deactivated or demoted — hitting zero of either would need a raw database script to recover from.",
     },
     {
       title: "Team & Access — Roles & permissions",
       body:
-        "Team & Access → Roles & permissions shows exactly what each role can do, read live from the access checks the server enforces, so it cannot fall out of date. It's read-only by design — some rules (cost/margin visibility, Director-only release gates, the Director-count guardrail above) are deliberately not adjustable from any screen.",
+        "Team & Access → Roles & permissions shows exactly what each role can do, read live from the access checks the server enforces, so it cannot fall out of date. It's read-only by design — some rules (cost/margin visibility, Director-only release gates, the last-Director and last-Admin guardrails above) are deliberately not adjustable from any screen.",
     },
     {
       title: "All Quotations — reviewing every quotation, not just one project's",
@@ -383,7 +383,7 @@ export const DIRECTOR_ADMIN_GUIDE = {
     {
       title: "Audit Log",
       body:
-        "The one screen genuinely enforced as Director-only end to end. Filter by document type and export CSV for anything needing a date range, user, or free-text search the built-in filter doesn't cover.",
+        "Enforced end to end for the Director and the Admin only. Filter by document type and export CSV for anything needing a date range, user, or free-text search the built-in filter doesn't cover.",
     },
   ],
 };
@@ -391,7 +391,7 @@ export const DIRECTOR_ADMIN_GUIDE = {
 export const FAQ = [
   {
     q: "I forgot my password — what do I do?",
-    a: "Ask a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login. A password needs at least 10 characters and can't be your email address or your current password.",
+    a: "Ask an Admin or a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login. A password needs at least 10 characters and can't be your email address or your current password.",
   },
   {
     q: "The Rate Sheet doesn't have the rate I need — what now?",
@@ -407,7 +407,7 @@ export const FAQ = [
   },
   {
     q: "Why can't I deactivate this Director account?",
-    a: "The app blocks deactivating or demoting the last active Director, and blocks deactivating your own account — both by design, since Team & Access is Director-only and losing every active Director would be unrecoverable without a database script.",
+    a: "The app blocks deactivating or demoting the last active Director or the last active Admin, and blocks deactivating or changing the role of your own account — all by design, since losing every active Director or Admin would be unrecoverable without a database script.",
   },
   {
     q: "What does \"below floor\" mean on a pricing calculation?",
@@ -419,11 +419,11 @@ export const FAQ = [
   },
   {
     q: "How do I create a new user?",
-    a: "Team & Access → People (Director only). New accounts are forced to change their assigned password on first login.",
+    a: "Team & Access → People. An Admin adds any role; a Director any role except Admin; a PM adds Sales, Procurement, Site Engineer and CA/Tax people only. New accounts are forced to change their assigned password on first login.",
   },
   {
     q: "Can I reset someone else's password?",
-    a: "Yes, from Team & Access → People (Director only) — it forces that user to set their own new password on next login, same as any newly created account. It also signs that person out of every other session they had open, and the new password needs at least 10 characters.",
+    a: "Yes, an Admin or a Director can, from Team & Access → People (a Director cannot reset an Admin's) — it forces that user to set their own new password on next login, same as any newly created account. It also signs that person out of every other session they had open, and the new password needs at least 10 characters.",
   },
   {
     q: "How do I print a Quotation for a client?",

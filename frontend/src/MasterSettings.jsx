@@ -34,7 +34,10 @@ function downloadBlobAsFile(blob, filename) {
 // so for PM the write controls are simply not shown; the Director's screen is
 // unchanged.
 export default function MasterSettings({ token, onBack, currentUser }) {
-  const readOnly = currentUser?.role !== "director";
+  // Amendment 59 (Section 62): an Admin edits company identity, the logo, message templates and field settings,
+  // and nothing that prices or words a quotation -- so those parts are simply not shown to that role.
+  const isAdmin = currentUser?.role === "admin";
+  const readOnly = currentUser?.role !== "director" && !isAdmin;
 
   const [settings, setSettings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,7 +194,9 @@ export default function MasterSettings({ token, onBack, currentUser }) {
           )}
         </div>
         <p className="text-xs text-text-secondary mt-1">
-          {readOnly
+          {isAdmin
+            ? "As Admin you keep the company identity, the logo, message templates and which fields are required. Pricing, quotation wording and the bank account are the Director's."
+            : readOnly
             ? "You can view the settings; only the Director can change them."
             : "Q.2: editing a setting creates a new version, effective from today by default — it never alters a document that already froze the old value. Director-only; PM is read-only."}
         </p>
@@ -233,8 +238,9 @@ export default function MasterSettings({ token, onBack, currentUser }) {
         </div>
       </div>
 
-      <CompanyDetailsCard token={token} readOnly={readOnly} />
+      <CompanyDetailsCard token={token} readOnly={readOnly} identityOnly={isAdmin} />
 
+      {!isAdmin && (
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-1">Excel export / import</h3>
         <p className="text-xs text-text-secondary mb-3">
@@ -287,12 +293,16 @@ export default function MasterSettings({ token, onBack, currentUser }) {
         )}
       </div>
 
-      <QuotationTemplateCard token={token} readOnly={readOnly} />
+      )}
+
+      {!isAdmin && <QuotationTemplateCard token={token} readOnly={readOnly} />}
 
       <MessageTemplatesCard token={token} readOnly={readOnly} />
 
       <FieldSettingsCard token={token} readOnly={readOnly} />
 
+      {!isAdmin && (
+      <>
       <div className="bg-surface shadow rounded-lg p-6">
         <h3 className="text-sm font-semibold text-text-secondary mb-3">Current settings ({settings.length})</h3>
         <div className="space-y-2">
@@ -450,6 +460,8 @@ export default function MasterSettings({ token, onBack, currentUser }) {
       </form>
       )}
       </>
+      )}
+      </>
     </div>
   );
 }
@@ -555,7 +567,21 @@ const COMPANY_DETAIL_FIELDS = [
   { key: "company_signatory_designation", label: "Authorised signatory designation" },
 ];
 
-function CompanyDetailsCard({ token, readOnly }) {
+const ADMIN_COMPANY_KEYS = [
+  "company_legal_name",
+  "company_pan",
+  "company_gstin",
+  "company_registered_office_city",
+  "company_signatory_name",
+  "company_signatory_designation",
+];
+
+function CompanyDetailsCard({ token, readOnly, identityOnly = false }) {
+  // Amendment 59: an Admin edits company identity only -- the bank-account settings are the Director's, so they
+  // are neither shown nor sent by that role.
+  const fields = identityOnly
+    ? COMPANY_DETAIL_FIELDS.filter((f) => ADMIN_COMPANY_KEYS.includes(f.key))
+    : COMPANY_DETAIL_FIELDS;
   const [values, setValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -565,7 +591,7 @@ function CompanyDetailsCard({ token, readOnly }) {
   function load() {
     return listSettings(token).then((rows) => {
       const next = {};
-      for (const f of COMPANY_DETAIL_FIELDS) {
+      for (const f of fields) {
         const row = rows.find((r) => r.key === f.key);
         next[f.key] = row ? row.value : "";
       }
@@ -587,7 +613,7 @@ function CompanyDetailsCard({ token, readOnly }) {
     setSaving(true);
     try {
       await Promise.all(
-        COMPANY_DETAIL_FIELDS.map((f) =>
+        fields.map((f) =>
           createSettingVersion(token, {
             key: f.key,
             value: values[f.key] || "",
@@ -617,7 +643,7 @@ function CompanyDetailsCard({ token, readOnly }) {
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
       {savedMessage && <p className="text-xs text-green-400 mb-2">{savedMessage}</p>}
       <div className="grid grid-cols-2 gap-3">
-        {COMPANY_DETAIL_FIELDS.map((f) => (
+        {fields.map((f) => (
           <div key={f.key}>
             <label className="block text-xs font-medium text-text-secondary mb-1">{f.label}</label>
             {readOnly ? (

@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.main import app
 from app.models.user import User, UserRole
 
-ALL_ROLES = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"]
+ALL_ROLES = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin"]  # Amendment 59: a seventh role
 
 
 def _login(client, email, password="TestPass!1"):
@@ -78,7 +78,7 @@ def test_only_the_director_can_read_role_permissions(client, director_user, db_s
 # --- shape ------------------------------------------------------------------
 
 
-def test_the_response_lists_the_six_roles_and_counts_its_routes(client, director_user):
+def test_the_response_lists_the_seven_roles_and_counts_its_routes(client, director_user):
     body = _fetch(client, director_user)
     assert body["roles"] == ALL_ROLES
     listed = sum(len(g["items"]) for a in body["areas"] for g in a["groups"])
@@ -117,16 +117,16 @@ def test_known_gates_match_the_code(client, director_user):
         ("GET", "/payments"): ["pm", "director", "ca_tax"],  # Amendment 50: CA/Tax reads
         ("GET", "/work-orders/{work_order_id}/payment-milestones"): ["pm", "director", "ca_tax"],
         ("POST", "/work-orders/{work_order_id}/payment-milestones"): ["pm", "director"],
-        ("POST", "/settings"): ["director"],
-        ("GET", "/settings"): ["pm", "director"],
-        ("POST", "/users"): ["director"],
+        ("POST", "/settings"): ["director", "admin"],  # Amendment 59: an Admin, company identity only
+        ("GET", "/settings"): ["pm", "director", "admin"],
+        ("POST", "/users"): ["pm", "director", "admin"],  # Amendment 59: a PM creates the four operational roles only
         ("GET", "/quotations"): ["sales", "pm", "director"],  # Amendment 49
         ("GET", "/quotations/export"): ["director"],
         ("POST", "/projects"): ["sales", "pm", "director"],
         ("GET", "/opportunities"): ["sales", "pm", "director", "procurement"],
         ("PATCH", "/clients/{client_id}"): ["director"],  # client flags are Director-only
-        ("GET", "/dashboard"): ALL_ROLES,
-        ("GET", "/role-permissions"): ["director"],
+        ("GET", "/dashboard"): [r for r in ALL_ROLES if r != "admin"],  # an Admin has no business dashboard (Amendment 59)
+        ("GET", "/role-permissions"): ["director", "admin"],  # Amendment 59
     }
     for key, roles in expected.items():
         assert key in lookup, f"{key} missing"

@@ -98,7 +98,7 @@ function BrandHeader() {
 }
 
 export default function Help({ role, onBack }) {
-  const isAdmin = role === "director";
+  const isAdmin = role === "director" || role === "admin";
   const [tab, setTab] = useState("quick_start");
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 

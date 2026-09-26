@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
+from app.core.admin_access import ADMIN_SETTING_KEYS
 from app.core.auth import require_roles
 from app.core.export_safety import sanitize_row
 from app.core.settings_parse import parse_setting_number
@@ -21,6 +22,11 @@ overrides_router = APIRouter(prefix="/overrides", tags=["overrides"])
 # Q.2 rule 6: "Master Settings screen is Director-only (PM read-only)."
 READ_ROLES = ("pm", "director")
 WRITE_ROLES = ("director",)
+# Amendment 59 (Section 62): an Admin may list, read the history of and change the company-identity settings
+# (core/admin_access.py) and nothing else; the routes below narrow to that inside. Bulk update, the spreadsheet
+# import and the export stay with the Director and PM as before.
+ADMIN_ALSO = ("director", "admin")
+LIST_ROLES = ("pm", "director", "admin")
 # Overrides are logged by whoever is working the document -- PM/Director,
 # consistent with every other cost-adjacent write in this build (K.3).
 OVERRIDE_ROLES = ("pm", "director")
@@ -108,9 +114,12 @@ class SettingOut(BaseModel):
 @settings_router.get("", response_model=list[SettingOut])
 def list_current_settings(
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*READ_ROLES)),
+    current_user=Depends(require_roles(*LIST_ROLES)),
 ):
-    return _current_settings(db)
+    rows = _current_settings(db)
+    if current_user.role.value == "admin":
+        rows = [row for row in rows if row.key in ADMIN_SETTING_KEYS]
+    return rows
 
 
 @settings_router.get("/{key}/history", response_model=list[SettingOut])
@@ -118,8 +127,10 @@ def get_setting_history(
     key: str,
     scope_value: str | None = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*READ_ROLES)),
+    current_user=Depends(require_roles(*LIST_ROLES)),
 ):
+    if current_user.role.value == "admin" and key not in ADMIN_SETTING_KEYS:
+        raise HTTPException(status_code=403, detail="An Admin can see company-identity settings only")
     rows = (
         db.query(Setting)
         .filter(Setting.key == key, Setting.scope_value == scope_value)
@@ -146,10 +157,19 @@ def create_setting_version(
     payload: SettingCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(*WRITE_ROLES)),
+    current_user=Depends(require_roles(*ADMIN_ALSO)),
 ):
     """Q.2 rule 1: 'editing' a Master Setting is really creating a new
-    version, effective from a given date -- Director only."""
+    version, effective from a given date -- Director only, except that (Amendment 59) an Admin may
+    change the six company-identity settings. Everything that prices or words a quotation, and the bank
+    account, stays with the Director."""
+    if current_user.role.value == "admin" and (
+        payload.key not in ADMIN_SETTING_KEYS or payload.scope != SettingScope.GLOBAL
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="An Admin can change company-identity settings only; this setting is the Director's",
+        )
     old_value = get_current_setting_value(db, payload.key, payload.scope_value)
     setting = Setting(
         key=payload.key,

@@ -12,6 +12,7 @@ const ROLE_LABELS = {
   procurement: "Procurement",
   site_engineer: "Site Engineer",
   ca_tax: "CA / Tax",
+  admin: "Admin",
 };
 
 // Prose about behaviour, not a role list, so it is not derivable from the route
@@ -28,9 +29,9 @@ const SAFETY_CRITICAL_RULES = [
       "An Estimate can't be created until its Cost Sheet is Verified. Sales can request a stage skip but can't approve one alone (rule 3). Editing a Verified/Sent document creates a new revision and blocks re-release until rebased (rule 4). Rejecting a client status requires a reason (rule 9).",
   },
   {
-    name: "Director-count guardrail",
+    name: "Last-Director and last-Admin guardrails",
     detail:
-      "A Director can't deactivate their own account, and can't deactivate or demote the last active Director — Team & Access is itself Director-only, so hitting zero active Directors would make the app unrecoverable without a raw database script.",
+      "Nobody can deactivate or change the role of their own account, and the last active Director and the last active Admin can't be deactivated or demoted — Team & Access needs one of each to exist, so hitting zero would make the app unrecoverable without a raw database script.",
   },
 ];
 

@@ -17,7 +17,7 @@ router = APIRouter(prefix="/company", tags=["company"])
 
 # Q.1: COMPANY's other fields (legal name, PAN, GSTIN, bank details) are
 # Director-only Master Settings -- the logo follows the same rule.
-WRITE_ROLES = ("director",)
+WRITE_ROLES = ("director", "admin")  # Amendment 59: company identity is administration
 
 # R.0: "Logo (SVG/PNG) ... for PDF." Only these two -- an arbitrary image
 # format isn't something reportlab's own Image flowable (PDF rendering,

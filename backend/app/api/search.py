@@ -27,7 +27,9 @@ router = APIRouter(prefix="/search", tags=["search"])
 # corresponding list endpoint enforces (tests/test_search.py checks they still
 # match the live route gates), and no result carries a cost, margin, price or any
 # amount (K.3): a result identifies a record, it does not describe it.
-ALL_ROLES = tuple(role.value for role in UserRole)
+# Amendment 59: explicit, not "every role in the enum" -- an Admin has no business records to search, and a new role
+# must be added here on purpose rather than admitted by default.
+ALL_ROLES = ("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
 MIN_QUERY_LENGTH = 2
 GROUP_LIMIT = 6
 MIN_PHONE_DIGITS = 3

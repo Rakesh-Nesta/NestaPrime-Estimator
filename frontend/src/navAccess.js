@@ -21,10 +21,16 @@ export const SCREEN_ROLES = {
   reports: ["sales", "pm", "director"],
   // /sports, /scope-items, /margin-policies, /hubs ... admin tabs
   sports_scope_admin: ["pm", "director"],
-  // GET /settings (PM reads; only the Director writes)
-  settings: ["pm", "director"],
-  // GET /users, GET /role-permissions
-  team_access: ["director"],
+  // GET /settings (PM reads; only the Director writes). Amendment 59: an Admin reads and changes the company-
+  // identity settings, templates and field settings only -- the screen shows just those for that role.
+  settings: ["pm", "director", "admin"],
+  // GET /users (Admin, Director, PM), GET /role-permissions (Admin, Director). A PM gets the People tab only.
+  team_access: ["admin", "director", "pm"],
+  // GET /audit-log (Admin sees who and when with cost/margin values hidden; the Director sees everything)
+  audit_log: ["director", "admin"],
+  // Amendment 59: a pure calculator, but not an Admin's business -- listed so the open-by-default rule below
+  // does not hand it to the seventh role.
+  calculator: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"],
 };
 
 export function canOpen(screen, role) {
