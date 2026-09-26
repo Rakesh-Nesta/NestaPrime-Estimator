@@ -2,7 +2,7 @@
 # running service. Lets the server build the frontend without installing
 # Node.js itself -- only Docker (already on the box) is needed. See
 # deploy/README.md for the build + extract command.
-FROM node:22-slim AS build
+FROM node:26-slim AS build
 
 WORKDIR /app
 COPY package*.json ./
