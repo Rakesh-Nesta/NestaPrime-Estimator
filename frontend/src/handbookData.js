@@ -391,7 +391,7 @@ export const DIRECTOR_ADMIN_GUIDE = {
 export const FAQ = [
   {
     q: "I forgot my password — what do I do?",
-    a: "Ask a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login.",
+    a: "Ask a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login. A password needs at least 10 characters and can't be your email address or your current password.",
   },
   {
     q: "The Rate Sheet doesn't have the rate I need — what now?",
@@ -423,7 +423,7 @@ export const FAQ = [
   },
   {
     q: "Can I reset someone else's password?",
-    a: "Yes, from Team & Access → People (Director only) — it forces that user to set their own new password on next login, same as any newly created account.",
+    a: "Yes, from Team & Access → People (Director only) — it forces that user to set their own new password on next login, same as any newly created account. It also signs that person out of every other session they had open, and the new password needs at least 10 characters.",
   },
   {
     q: "How do I print a Quotation for a client?",

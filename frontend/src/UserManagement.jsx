@@ -134,7 +134,7 @@ export default function UserManagementTab({ token, currentUser }) {
                     <div className="flex items-center gap-1">
                       <input
                         type="password"
-                        placeholder="New password"
+                        placeholder="New password (10+ characters)"
                         value={resetPassword}
                         onChange={(e) => setResetPassword(e.target.value)}
                         className="text-xs rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 w-32"
@@ -185,11 +185,11 @@ export default function UserManagementTab({ token, currentUser }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-text-secondary">Initial password</label>
+              <label className="block text-xs text-text-secondary">Initial password (at least 10 characters)</label>
               <input
                 type="password"
                 required
-                minLength={8}
+                minLength={10}
                 value={createForm.password}
                 onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                 className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-sm"

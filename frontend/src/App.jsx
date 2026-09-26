@@ -169,8 +169,10 @@ export default function App() {
     return (
       <ForceChangePasswordScreen
         token={accessToken}
-        onChanged={async () => {
-          const me = await getCurrentUser(accessToken);
+        onChanged={async (newToken) => {
+          const activeToken = newToken || accessToken;
+          setAccessToken(activeToken);
+          const me = await getCurrentUser(activeToken);
           setUser(me);
         }}
         onLogout={handleLogout}
@@ -512,8 +514,9 @@ function ForceChangePasswordScreen({ token, onChanged, onLogout }) {
     }
     setSubmitting(true);
     try {
-      await changePassword(token, { currentPassword, newPassword });
-      await onChanged();
+      const changed = await changePassword(token, { currentPassword, newPassword });
+      // Amendment 58: changing the password ends the old session, so the reply carries a fresh token.
+      await onChanged(changed.access_token);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -546,11 +549,11 @@ function ForceChangePasswordScreen({ token, onChanged, onLogout }) {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wider text-text-secondary">New password</label>
+          <label className="block text-xs uppercase tracking-wider text-text-secondary">New password (at least 10 characters)</label>
           <input
             type="password"
             required
-            minLength={8}
+            minLength={10}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
@@ -562,7 +565,7 @@ function ForceChangePasswordScreen({ token, onChanged, onLogout }) {
           <input
             type="password"
             required
-            minLength={8}
+            minLength={10}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
