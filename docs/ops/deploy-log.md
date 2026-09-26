@@ -11,6 +11,29 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-26 -- server housekeeping from Amendment 58's checklist (no code, no PR deploy)
+
+**Run by:** R. Patni (with AI development assistance). Four commands and a reboot, run one at a time on the server.
+
+- **Nightly backup installed.** `chmod +x deploy/backup_db.sh` and the README's cron line added
+  (`0 2 * * * /home/ubuntu/NestaPrime-Estimator/deploy/backup_db.sh >> /home/ubuntu/nestaprime-backups/backup.log 2>&1`);
+  `crontab -l` afterwards shows exactly that line. A manual run wrote
+  `nestaprime_estimator_20260926T055832Z.sql.gz` (40K, "2 backup(s) on disk" next to the 15 September dump). Until this,
+  no crontab existed and there had been no dump since 15 September. **Not yet seen:** the first scheduled 02:00 dump
+  (check `ls -lh ~/nestaprime-backups` on 27 September). The dumps sit on the same disk; off-instance protection is the
+  Lightsail snapshot schedule, which was not checked.
+- **`.env` tightened.** `chmod 600` on `.env` and `.env.pre-https`; `stat` afterwards shows `600` on both.
+- **Rebooted** (both containers have `restart: unless-stopped`). Verified from outside afterwards: `/` 200 serving the
+  same bundle (`index-vFui1Bqr.js`), `/api/health` ok, anonymous `/users` 401, wrong sign-in message unchanged,
+  Amendment 58 and 57 API changes still present, the nginx headers and the closed docs pages intact, certificate valid to
+  24 December 2026, HTTP redirecting to HTTPS, ports 22/80/443 open and 5432/8000 closed.
+- **Open:** `uname -r` after the reboot is `6.17.0-1019-aws` and `/var/run/reboot-required` still exists. Cause not
+  established (newer updates since the reboot, or an older kernel booted). Read-only diagnostic pending:
+  `uptime -s; ls -l --time-style=long-iso /var/run/reboot-required; cat /var/run/reboot-required.pkgs;
+  dpkg -l 'linux-image-*' | awk '/^ii/{print $2, $3}'`.
+
+---
+
 ## 2026-09-26 -- PRs #222-#224 and #237: Amendment 58 (application security hardening)
 
 **Run by:** R. Patni (with AI development assistance)
@@ -43,8 +66,7 @@ page at 1280px and 375px with no CSP violations, no failed requests, Fraunces an
 **Not verified in production:** any logged-in behaviour (there is no production login here) -- the fresh token after a
 password change, the lockout audit entry, attachment name and type checks, the 422 on an over-long value; the
 Director's click-through of screens and a PDF under the new Content-Security-Policy; throttling from a second address;
-the server checklist fixes (item 13 was run: see the register and `docs/security/README.md` -- no nightly backup
-scheduled, `.env` mode 664, reboot pending; not yet applied).
+the server checklist fixes (item 13 was run; the fixes are recorded in the next entry).
 
 **Left on the server:** `nestaprime.pre-hardening` (nginx rollback), `nestaprime.pre-https` and `.env.pre-https` from
 Amendment 55, a pending kernel/libc reboot (`linux-image-7.0.0-1012-aws`, `-1013-aws`, `linux-base`, `libc6`).
