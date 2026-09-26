@@ -217,8 +217,8 @@ def test_ordinary_site_files_still_upload(client, director_user, name):
 
 # --- item 9: every route needs a login unless it is on the written public list -----------------
 
-# Deliberately public: the sign-in itself, the health check, the API schema and its docs pages, and the
-# WhatsApp delivery webhook (it checks its own shared secret instead of a user token).
+# Deliberately public: the sign-in itself, the health check, and the API schema with its docs pages. (The
+# WhatsApp delivery webhook needs no entry: it answers 401 without its shared secret, so it passes as is.)
 PUBLIC_ROUTES = {
     ("POST", "/auth/login"),
     ("GET", "/health"),
@@ -227,7 +227,6 @@ PUBLIC_ROUTES = {
     ("GET", "/docs/oauth2-redirect"),
     ("GET", "/redoc"),
 }
-PUBLIC_PREFIXES = ("/webhooks/",)
 
 
 def _all_routes():
@@ -243,7 +242,7 @@ def test_every_route_requires_a_login_unless_it_is_on_the_public_list(client):
     open_routes = []
     checked = 0
     for method, path in _all_routes():
-        if (method, path) in PUBLIC_ROUTES or path.startswith(PUBLIC_PREFIXES):
+        if (method, path) in PUBLIC_ROUTES:
             continue
         url = path
         for part in [p for p in path.split("/") if p.startswith("{")]:
