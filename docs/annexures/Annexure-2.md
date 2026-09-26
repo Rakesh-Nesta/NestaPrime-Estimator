@@ -2761,6 +2761,68 @@ login page at 1280px and 375px: no CSP violations, no failed requests, the Fraun
 - One old note corrected: the first answer to the Director said no security scan existed; `docs/security/` held an
   unauthenticated one from 11 September.
 
+### Amendment No. 59 — The Admin Role, and Who Can Do What
+**Registered 26 September 2026**, on the Director's instruction: separate an **Admin** from the **Director**, because
+"the Director has no technical ability or no time for admin work". The Admin has all administration rights; the
+Director and PM keep the business decisions and approvals; the other users keep their creation rights; the PM may
+also create users. (This grew out of a first reading of "Users create with mobile no or email" -- now Amendment 61 --
+when the Director added that the admin work should not sit with the Director.) Grounded against current code:
+- **The Director does all the admin jobs today.** The role table shows **43 of the 247 gated routes are Director-only**:
+  users (list, create, change role, deactivate, reset password), the audit log, the Role & Permissions screen, the
+  company logo, message templates, field settings, all 37 master settings, and every master-data catalogue (sports,
+  hubs, netting grades, vehicle classes, scope items, accessory and cross-sell catalogues, lighting standards,
+  flooring guides, package contents, construction sequences, sport margin policies), plus the calibration override,
+  the quotation export, the PDF preview and the report release.
+- **There are six roles and no admin or manager** (`UserRole`: sales, pm, director, procurement, site_engineer,
+  ca_tax). User management is `WRITE_ROLES = ("director",)`; the PM cannot create users.
+- **The 37 master settings mix two kinds of thing.** Six are company identity (legal name, GSTIN, PAN, city, signatory
+  name and designation); four are bank-account details printed on quotations; 27 set prices and wording (contingencies,
+  gap points, GST rate, validity periods, schedules, site establishment, rate-blind mode, the quotation terms and
+  warranty table). An "Admin edits settings" rule has to be by key, not by screen.
+- **The audit log carries business values** (old and new value of margin policies, cost lines, rates), so a role that
+  is not allowed to see cost or margin cannot be shown it unmasked.
+- The role table and the Role & Permissions screen are generated from the live routes (Amendment 51), so a seventh
+  role appears in them by construction; every gate, the sidebar's single role table and the tests still need review.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-62-specs.md`, approved 26 September 2026).
+
+### Amendment No. 60 — Own-Records Visibility and the Personal Dashboard
+**Registered 26 September 2026**, on the Director's instruction that a user should see only their own entries, and
+on the dashboard only their own performance, not the company's performance or revenue. Grounded against current code:
+- **No role is limited to its own records.** The list endpoints for clients, projects, opportunities and quotations
+  filter by project, stage or status, never by who is asking; only cost and margin are hidden from Sales (K.3).
+- **The dashboard is company-wide for everyone.** `GET /dashboard` counts open projects, pending estimates and
+  quotations, follow-ups and the opportunity pipeline across the whole company, returns **`won_this_month_total` for
+  every role, Sales included**, and lists the company's recent projects. Only the payments overview and the audit
+  activity feed are role-limited.
+- **Clients and projects record no owner.** Neither model has a creator or owner column; opportunities and documents
+  (cost sheets, estimates, quotations) and a few others record `created_by_id`. "Only his own" therefore needs an owner
+  on clients and projects, a plan for existing rows, and one rule applied to every list and every open-by-id call.
+- **The 11 September and 26 September scans cannot see this class of flaw.** They build requests from the API
+  description with ids that do not exist; whether one person can read another's record needs a purpose-written check.
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-63-specs.md`, approved 26 September 2026).
+
+### Amendment No. 61 — Sign-in and User Creation with a Mobile Number or an Email
+**Registered 26 September 2026**, on the Director's instruction, in their words: "login benchmark admin-manager/PM-
+Users create with mobile no or email both". Read as: an account can be created with a mobile number, an email or both;
+a person signs in with whichever they have; "benchmark" means "as the reference product does it" (the spec asks the
+Director to correct that if a specific product was meant). Who may create users is settled by Amendment 59. Grounded
+against current code:
+- **An account is a required, unique email.** `users` holds name, `email` (not null, unique), password hash, role and
+  the lockout fields; there is no mobile column, and an account with no email cannot exist.
+- **Sign-in is email-only, and the token names the email.** `POST /auth/login` matches `User.email == username`; the
+  token's subject is the email and every request looks the user up by it (`core/auth.py`). Accounts without an email
+  need the token to name the person by id -- which ends existing sessions once, as Amendment 58 did.
+- **Phone numbers exist elsewhere but are not normalised.** Clients and leads keep phones as typed; quick search
+  compares them by digits. There is no shared routine that writes one number one way, which sign-in by mobile needs.
+- **Places that assume every user has an email**, to be made safe: the "internal email domains" default derived from
+  users' addresses (`settings.py`), the Sales recipients notified when a structural-design upload forces a rebase
+  (`attachments.py`), `GET /auth/me` and the People list.
+- **Not in the code, so not assumed:** any SMS or WhatsApp sending for sign-in, or a "forgot password".
+Needs a Director-approved spec before implementation, per this register's own Change Process
+(spec: `docs/annexures/Section-64-specs.md`, approved 26 September 2026).
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
