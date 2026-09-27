@@ -12,12 +12,10 @@ import {
   updateClientNotes,
   updateOpportunityDetails,
 } from "./api";
-import EditDetailsForm from "./EditDetailsForm";
-import { UsersIcon } from "./Icons";
-import OwnerControl, { CAN_ASSIGN_OWNERS, useOwners } from "./OwnerControl";
+import { BellIcon, FunnelIcon, GridIcon, SearchIcon, UsersIcon } from "./Icons";
+import OwnerControl, { CAN_ASSIGN_OWNERS, ownerLabel, useOwners } from "./OwnerControl";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
-const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", city: "", notes: "" };
 const canCreateClient = (role) => ["sales", "pm", "director"].includes(role);
 
 // Amendment 44 (Section E step 5, Design input 2026-09-23): a quick-capture
@@ -32,13 +30,6 @@ function defaultEnquiryFollowUpDate() {
   d.setDate(d.getDate() + 2);
   return d.toISOString().slice(0, 10);
 }
-const emptyEnquiryForm = {
-  lead_name: "",
-  lead_phone: "",
-  lead_email: "",
-  next_follow_up_date: defaultEnquiryFollowUpDate(),
-  notes: "",
-};
 
 // Section 19 (Amendment 4 continuation): reuses AllProjects.jsx's own status
 // pill colors, kept as a small local duplicate rather than a shared import,
@@ -72,6 +63,8 @@ const RELATIONSHIP_BADGE_STYLE = {
   client: "bg-surface-raised text-text-secondary",
 };
 
+const UNASSIGNED = "__unassigned__";
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -89,8 +82,52 @@ function byFollowUp(a, b) {
   return a.next_follow_up_date < b.next_follow_up_date ? -1 : 1;
 }
 
+function ConsentPill({ ok, label, title }) {
+  return (
+    <span
+      title={title}
+      className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+        ok ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-surface-raised text-text-secondary border-border-dark"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+// A compact on/off switch, the one new visual primitive this redesign needed -- everything else reuses
+// existing pill/button/input styles already in the app.
+function Toggle({ checked, onChange, disabled, label, hint }) {
+  return (
+    <label className={`flex items-center justify-between gap-3 py-1.5 ${disabled ? "opacity-50" : ""}`} title={hint}>
+      <span className="text-sm text-text-primary">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+          checked ? "bg-gold" : "bg-surface-raised border border-border-dark"
+        }`}
+      >
+        <span
+          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+            checked ? "translate-x-4" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </label>
+  );
+}
+
 // Amendment 53: `initialSearch` pre-fills the search box when a client or lead is opened
 // from the global quick search (there is no per-record view; the record is the first row).
+//
+// Redesign (2026-09-27, Director's request): same screen, same data and the same server calls --
+// presented as a list with a slide-in details panel instead of stacked cards with inline forms. The
+// sidebar and header are untouched; only this screen's own content changed.
 export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onBack, initialSearch = "" }) {
   const [clients, setClients] = useState([]);
   const [leads, setLeads] = useState([]);
@@ -99,18 +136,8 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
   const [error, setError] = useState("");
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState(initialSearch);
-  const [showClientForm, setShowClientForm] = useState(false);
-  const [showEnquiryForm, setShowEnquiryForm] = useState(false);
-  const [editingLeadId, setEditingLeadId] = useState(null);
-  const [chatIdDrafts, setChatIdDrafts] = useState({});
-  const [followUpDrafts, setFollowUpDrafts] = useState({});
-  const [notesDrafts, setNotesDrafts] = useState({});
-  const [editingClientId, setEditingClientId] = useState(null);
-  const [form, setForm] = useState(emptyClientForm);
-  const [submitting, setSubmitting] = useState(false);
-  const [enquiryForm, setEnquiryForm] = useState(emptyEnquiryForm);
-  const [submittingEnquiry, setSubmittingEnquiry] = useState(false);
-  const [enquirySaved, setEnquirySaved] = useState(false);
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [panel, setPanel] = useState(null); // null | {mode:"new-client"|"new-lead"} | {mode:"edit-client"|"edit-lead", id}
   const canEditFlags = role === "director";
   const owners = useOwners(token, role);
   const canAssign = CAN_ASSIGN_OWNERS.includes(role);
@@ -155,156 +182,78 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  function setField(field, value) {
-    setForm((f) => ({ ...f, [field]: value }));
+  function closePanel() {
+    setPanel(null);
   }
 
-  async function handleCreateClient(e) {
-    e.preventDefault();
-    setError("");
-    setSubmitting(true);
-    try {
-      await createClient(token, {
-        name: form.name,
-        type: form.type,
-        contact_name: form.contact_name || null,
-        phone: form.phone || null,
-        email: form.email || null,
-        city: form.city || null,
-        notes: form.notes || null,
-      });
-      setForm(emptyClientForm);
-      setShowClientForm(false);
-      if (tab === "leads") setTab("clients");
-      await load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
+  async function handleCreateClient(values) {
+    await createClient(token, {
+      name: values.name,
+      type: values.type,
+      contact_name: values.contact_name || null,
+      phone: values.phone || null,
+      email: values.email || null,
+      city: values.city || null,
+      notes: values.notes || null,
+    });
+    if (tab === "leads") setTab("clients");
+    closePanel();
+    await load();
   }
 
-  function setEnquiryField(field, value) {
-    setEnquiryForm((f) => ({ ...f, [field]: value }));
+  async function handleCreateEnquiry(values) {
+    await createOpportunity(token, {
+      lead_name: values.lead_name,
+      lead_phone: values.lead_phone || null,
+      lead_email: values.lead_email || null,
+      next_follow_up_date: values.next_follow_up_date,
+      notes: values.notes || null,
+    });
+    if (tab === "clients") setTab("leads");
+    closePanel();
+    await load();
   }
 
-  async function handleCreateEnquiry(e) {
-    e.preventDefault();
-    setError("");
-    setEnquirySaved(false);
-    setSubmittingEnquiry(true);
-    try {
-      await createOpportunity(token, {
-        lead_name: enquiryForm.lead_name,
-        lead_phone: enquiryForm.lead_phone || null,
-        lead_email: enquiryForm.lead_email || null,
-        next_follow_up_date: enquiryForm.next_follow_up_date,
-        notes: enquiryForm.notes || null,
-      });
-      setEnquiryForm({
-        lead_name: "",
-        lead_phone: "",
-        lead_email: "",
-        next_follow_up_date: defaultEnquiryFollowUpDate(),
-        notes: "",
-      });
-      setEnquirySaved(true);
-      setShowEnquiryForm(false);
-      if (tab === "clients") setTab("leads");
-      await load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmittingEnquiry(false);
-    }
-  }
-
-  async function toggleFlag(clientId, field, value) {
-    setError("");
-    try {
-      await updateClientFlags(token, clientId, { [field]: value });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function toggleConsent(clientId, field, value) {
-    setError("");
-    try {
-      await updateClientConsent(token, clientId, {
-        [field]: value,
-        ...(value && field !== "telegram_opt_in" ? { consent_date: new Date().toISOString().slice(0, 10) } : {}),
-      });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function saveTelegramChatId(clientId) {
-    setError("");
-    try {
-      await updateClientConsent(token, clientId, { telegram_chat_id: chatIdDrafts[clientId] || null });
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  // Amendment 42 (Section 48): a simple, optional reminder -- not
-  // mandatory, not audit-logged, same style as the Telegram chat-id draft
-  // pattern above (local draft state, explicit Save).
-  async function saveFollowUp(clientId) {
-    setError("");
-    const draft = followUpDrafts[clientId] || {};
-    try {
-      await updateClientFollowUp(token, clientId, {
-        next_follow_up_date: draft.date !== undefined ? draft.date || null : undefined,
-        follow_up_note: draft.note !== undefined ? draft.note || null : undefined,
-      });
-      setFollowUpDrafts((d) => ({ ...d, [clientId]: undefined }));
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  // Amendment 45 (Section 51): a general free-text catch-all, distinct
-  // from the follow-up note above -- same draft/Save pattern.
-  async function saveNotes(clientId) {
-    setError("");
-    try {
-      await updateClientNotes(token, clientId, { notes: notesDrafts[clientId] || null });
-      setNotesDrafts((d) => ({ ...d, [clientId]: undefined }));
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  // Amendment 47 (Section 52): fixing a typo in a client's name / contact
-  // details. Type is deliberately not editable here (it drives the default
-  // package and payment terms).
-  async function saveDetails(clientId, values) {
-    await updateClientDetails(token, clientId, {
+  // Amendment 47 (Section 52): fixing a typo in a client's name / contact details, plus (this redesign)
+  // everything else the panel can change, gathered into the one "Save changes" action. Type is
+  // deliberately not editable here (it drives the default package and payment terms) -- unchanged from
+  // before, just shown disabled instead of omitted.
+  async function saveClient(client, values) {
+    await updateClientDetails(token, client.id, {
       name: values.name,
       contact_name: values.contact_name || null,
       phone: values.phone || null,
       email: values.email || null,
       city: values.city || null,
     });
-    setEditingClientId(null);
+    await updateClientFollowUp(token, client.id, {
+      next_follow_up_date: values.followUpDate || null,
+      follow_up_note: values.followUpNote || null,
+    });
+    await updateClientNotes(token, client.id, { notes: values.notes || null });
+    await updateClientConsent(token, client.id, {
+      whatsapp_opt_in: values.whatsapp_opt_in,
+      email_opt_in: values.email_opt_in,
+      telegram_opt_in: values.telegram_opt_in,
+      telegram_chat_id: values.telegram_chat_id || null,
+    });
+    if (canEditFlags) {
+      await updateClientFlags(token, client.id, {
+        overdue_flag: values.overdue_flag,
+        blacklist_flag: values.blacklist_flag,
+      });
+    }
+    closePanel();
     await load();
   }
 
-  async function saveLeadDetails(leadId, values) {
-    await updateOpportunityDetails(token, leadId, {
+  async function saveLead(lead, values) {
+    await updateOpportunityDetails(token, lead.id, {
       lead_name: values.name,
       lead_phone: values.phone || null,
       lead_email: values.email || null,
     });
-    setEditingLeadId(null);
+    closePanel();
     await load();
   }
 
@@ -313,534 +262,573 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
   }
 
   const needle = search.trim().toLowerCase();
+  const ownerOk = (ownerId) => {
+    if (!ownerFilter) return true;
+    if (ownerFilter === UNASSIGNED) return !ownerId;
+    return ownerId === ownerFilter;
+  };
   const visibleLeads = leads
-    .filter((o) => matchesSearch(needle, o.lead_name, o.lead_phone, o.lead_email))
+    .filter((o) => matchesSearch(needle, o.lead_name, o.lead_phone, o.lead_email) && ownerOk(o.owner_id))
     .sort(byFollowUp);
   const visibleClients = clients
-    .filter((c) => matchesSearch(needle, c.name, c.phone, c.email))
+    .filter((c) => matchesSearch(needle, c.name, c.phone, c.email) && ownerOk(c.owner_id))
     .sort((a, b) => a.name.localeCompare(b.name));
   const rows = [
     ...(tab !== "clients" ? visibleLeads.map((o) => ({ kind: "lead", key: `lead-${o.id}`, o })) : []),
     ...(tab !== "leads" ? visibleClients.map((c) => ({ kind: "client", key: `client-${c.id}`, c })) : []),
   ];
   const tabCount = { all: visibleLeads.length + visibleClients.length, leads: visibleLeads.length, clients: visibleClients.length };
+  const unassignedCount = leads.filter((o) => !o.owner_id).length + clients.filter((c) => !c.owner_id).length;
+  const selectedId = panel && (panel.mode === "edit-client" || panel.mode === "edit-lead") ? panel.id : null;
+
+  const summaryTiles = [
+    { label: "Total contacts", value: leads.length + clients.length, icon: UsersIcon },
+    { label: "Leads", value: leads.length, icon: FunnelIcon },
+    { label: "Clients", value: clients.length, icon: GridIcon },
+    ...(canAssign ? [{ label: "Unassigned", value: unassignedCount, icon: BellIcon, warn: unassignedCount > 0 }] : []),
+  ];
 
   return (
-    <div className="max-w-[1000px] mx-auto mt-6 mb-10 space-y-4 px-4 sm:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="max-w-[1400px] mx-auto mt-6 mb-10 px-4 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
+          <p className="text-xs uppercase tracking-wide text-text-secondary">Workspace / Customer relationships</p>
           <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1 flex items-center gap-2">
             <UsersIcon className="w-6 h-6 text-gold" /> Leads &amp; Clients
           </h2>
           <p className="text-sm text-text-secondary mt-1">
-            Everyone you sell to -- new enquiries and existing clients -- with consent preferences and follow-up
-            reminders. Stage changes for a lead happen on the Opportunities screen.
+            Manage enquiries, clients and follow-ups.
             {canEditFlags &&
               " Overdue blocks releasing new Quotations and Blacklisted blocks new Estimates -- only a Director can set either."}
           </p>
         </div>
-        {onBack && (
-          <button onClick={onBack} className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover shrink-0">
-            ← Back
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {canCreateClient(role) && (
+            <>
+              <button
+                onClick={() => setPanel((p) => (p?.mode === "new-lead" ? null : { mode: "new-lead" }))}
+                className="border border-gold text-gold text-sm rounded px-4 py-2 font-semibold hover:bg-gold/10"
+              >
+                + Add enquiry
+              </button>
+              <button
+                onClick={() => setPanel((p) => (p?.mode === "new-client" ? null : { mode: "new-client" }))}
+                className="bg-gold text-base text-sm rounded px-4 py-2 font-semibold hover:bg-gold-hover"
+              >
+                + Add client
+              </button>
+            </>
+          )}
+          {onBack && (
+            <button onClick={onBack} className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover shrink-0">
+              ← Back
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-5 border-b border-border-dark overflow-x-auto">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`text-sm pb-2.5 border-b-2 whitespace-nowrap transition-colors duration-200 ${
-              tab === t.key
-                ? "text-gold border-gold font-medium"
-                : "text-text-secondary border-transparent hover:text-text-primary"
-            }`}
-          >
-            {t.label} <span className="text-xs text-text-secondary">({tabCount[t.key]})</span>
-          </button>
+      <div className={`grid grid-cols-2 ${summaryTiles.length > 3 ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-5`}>
+        {summaryTiles.map((tile) => (
+          <div key={tile.label} className="bg-surface border border-border-dark rounded-lg p-4">
+            <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
+              <tile.icon className="w-3.5 h-3.5" />
+              {tile.label}
+            </p>
+            <p className={`text-2xl font-heading font-bold mt-1 ${tile.warn ? "text-amber-400" : "text-text-primary"}`}>
+              {tile.value}
+            </p>
+          </div>
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          id="leads-clients-search"
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, phone or email"
-          aria-label="Search leads and clients"
-          className="flex-1 min-w-[12rem] rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
-        />
-        {canCreateClient(role) && (
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => setShowEnquiryForm((v) => !v)}
-              className="bg-gold text-base text-sm rounded px-4 py-2 font-semibold hover:bg-gold-hover"
-            >
-              {showEnquiryForm ? "Close enquiry form" : "+ Add Enquiry"}
-            </button>
-            <button
-              onClick={() => setShowClientForm((v) => !v)}
-              className="border border-gold text-gold text-sm rounded px-4 py-2 font-semibold hover:bg-gold/10"
-            >
-              {showClientForm ? "Close client form" : "+ Add a client"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {enquirySaved && !showEnquiryForm && (
-        <p className="text-xs text-gold">Enquiry saved -- it is in the Leads list below.</p>
-      )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
-
-      {canCreateClient(role) && showClientForm && (
-        <form onSubmit={handleCreateClient} className="bg-surface border border-border-dark rounded-lg p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-text-secondary">Add a client</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Name</label>
-              <input
-                type="text"
-                required
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
+      <div className="flex flex-col lg:flex-row gap-5">
+        <div className={`min-w-0 space-y-3 ${panel ? "lg:flex-1" : "flex-1"}`}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-dark">
+            <div className="flex items-center gap-5 overflow-x-auto">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`text-sm pb-2.5 border-b-2 whitespace-nowrap transition-colors duration-200 ${
+                    tab === t.key
+                      ? "text-gold border-gold font-medium"
+                      : "text-text-secondary border-transparent hover:text-text-primary"
+                  }`}
+                >
+                  {t.label} <span className="text-xs text-text-secondary">({tabCount[t.key]})</span>
+                </button>
+              ))}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Type</label>
-              <select
-                value={form.type}
-                onChange={(e) => setField("type", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              >
-                {CLIENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Contact name</label>
-              <input
-                type="text"
-                value={form.contact_name}
-                onChange={(e) => setField("contact_name", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Phone</label>
-              <input
-                type="text"
-                value={form.phone}
-                onChange={(e) => setField("phone", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setField("email", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="new-client-city" className="block text-sm font-medium text-text-secondary">
-                City (optional)
+            {canAssign && (
+              <label className="flex items-center gap-2 text-xs text-text-secondary pb-2 shrink-0">
+                Owner
+                <select
+                  value={ownerFilter}
+                  onChange={(e) => setOwnerFilter(e.target.value)}
+                  className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-xs"
+                >
+                  <option value="">All owners</option>
+                  <option value={UNASSIGNED}>Unassigned</option>
+                  {owners.options.map((o) => (
+                    <option key={o.user_id} value={o.user_id}>
+                      {ownerLabel(o)}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <input
-                id="new-client-city"
-                type="text"
-                maxLength={100}
-                value={form.city}
-                onChange={(e) => setField("city", e.target.value)}
-                placeholder="Pre-fills the city of this client's new projects"
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-text-secondary">Notes / remarks</label>
-              <textarea
-                value={form.notes}
-                onChange={(e) => setField("notes", e.target.value)}
-                rows={3}
-                placeholder="Anything else worth noting -- not tied to any field above."
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
+            )}
           </div>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover hover:-translate-y-0.5 transition-all duration-250 ease-out disabled:opacity-50"
-          >
-            {submitting ? "Saving…" : "Save client"}
-          </button>
-        </form>
-      )}
 
-      {canCreateClient(role) && showEnquiryForm && (
-        <form onSubmit={handleCreateEnquiry} className="bg-surface border border-border-dark rounded-lg p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-text-secondary">Add Enquiry</h3>
-          <p className="text-xs text-text-secondary">
-            A raw lead -- just a name and contact, not a full client record yet. Every enquiry needs a follow-up
-            date; there is no way to leave one blank.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Name</label>
-              <input
-                type="text"
-                required
-                value={enquiryForm.lead_name}
-                onChange={(e) => setEnquiryField("lead_name", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Follow-up date</label>
-              <input
-                type="date"
-                required
-                value={enquiryForm.next_follow_up_date}
-                onChange={(e) => setEnquiryField("next_follow_up_date", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Phone</label>
-              <input
-                type="text"
-                value={enquiryForm.lead_phone}
-                onChange={(e) => setEnquiryField("lead_phone", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-secondary">Email</label>
-              <input
-                type="email"
-                value={enquiryForm.lead_email}
-                onChange={(e) => setEnquiryField("lead_email", e.target.value)}
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-text-secondary">Notes / remarks</label>
-              <textarea
-                value={enquiryForm.notes}
-                onChange={(e) => setEnquiryField("notes", e.target.value)}
-                rows={3}
-                placeholder="Anything else worth noting -- not tied to any field above."
-                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-2 text-sm"
-              />
-            </div>
+          <div className="relative">
+            <SearchIcon className="w-4 h-4 text-text-secondary absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              id="leads-clients-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, phone or email"
+              aria-label="Search leads and clients"
+              className="w-full rounded border border-border-dark bg-surface-raised text-text-primary pl-9 pr-3 py-2 text-sm"
+            />
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={submittingEnquiry}
-              className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover hover:-translate-y-0.5 transition-all duration-250 ease-out disabled:opacity-50"
-            >
-              {submittingEnquiry ? "Saving…" : "Save enquiry"}
-            </button>
-          </div>
-        </form>
-      )}
 
-      <div className="space-y-3">
-        {rows.map((row) => {
-          if (row.kind === "lead") {
-            const o = row.o;
-            const overdue = o.next_follow_up_date && o.next_follow_up_date < todayStr();
-            return (
-              <div key={row.key} className="bg-surface border border-border-dark rounded-lg px-4 py-3 text-sm space-y-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <span className="min-w-0 break-words">
-                    <span className="font-medium">{o.lead_name}</span>{" "}
-                    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE.lead}`}>
-                      Lead
-                    </span>
-                  </span>
-                  <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STAGE_PILL_STYLE[o.stage]}`}>
-                    {o.stage}
-                  </span>
-                </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
-                {editingLeadId !== o.id && (
-                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-text-secondary">
-                    <span className="min-w-0 break-words">
+          <div className="space-y-2">
+            {rows.map((row) => {
+              if (row.kind === "lead") {
+                const o = row.o;
+                const overdue = o.next_follow_up_date && o.next_follow_up_date < todayStr();
+                const isSelected = selectedId === o.id;
+                return (
+                  <div
+                    key={row.key}
+                    className={`bg-surface rounded-lg px-4 py-3 text-sm space-y-2 border ${
+                      isSelected ? "border-gold" : "border-border-dark"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <span className="min-w-0 break-words">
+                        <span className="font-medium">{o.lead_name}</span>{" "}
+                        <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE.lead}`}>
+                          Lead
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STAGE_PILL_STYLE[o.stage]}`}>
+                          {o.stage}
+                        </span>
+                        {canCreateClient(role) && (
+                          <button
+                            onClick={() => setPanel({ mode: "edit-lead", id: o.id })}
+                            className="text-xs border border-border-dark rounded px-2.5 py-1 text-gold hover:bg-gold/10"
+                          >
+                            Edit details
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-secondary break-words">
                       {[o.lead_phone, o.lead_email].filter(Boolean).join(" · ") || "No contact details yet"}
-                    </span>
-                    <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                      {canCreateClient(role) && (
-                        <button onClick={() => setEditingLeadId(o.id)} className="text-gold hover:underline">
-                          Edit details
-                        </button>
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                      {canAssign && (
+                        <OwnerControl
+                          token={token}
+                          kind="opportunity"
+                          recordId={o.id}
+                          ownerId={o.owner_id}
+                          owners={owners}
+                          onChanged={(next) => setLeads((ls) => ls.map((l) => (l.id === o.id ? { ...l, owner_id: next } : l)))}
+                        />
+                      )}
+                      {o.next_follow_up_date && (
+                        <span className={`text-xs ${overdue ? "text-red-400" : "text-text-secondary"}`}>
+                          Follow-up {o.next_follow_up_date}
+                          {overdue && " (overdue)"}
+                        </span>
                       )}
                       {onOpenOpportunities && (
-                        <button onClick={onOpenOpportunities} className="text-gold hover:underline">
+                        <button onClick={onOpenOpportunities} className="text-xs text-gold hover:underline">
                           Open in Opportunities →
+                        </button>
+                      )}
+                    </div>
+                    {o.stage === "won" && (
+                      <p className="text-xs text-text-secondary">
+                        Won -- open it in Opportunities and link a client to start a Project.
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+              const c = row.c;
+              const isSelected = selectedId === c.id;
+              return (
+                <div
+                  key={row.key}
+                  className={`bg-surface rounded-lg px-4 py-3 text-sm space-y-2 border ${
+                    isSelected ? "border-gold" : "border-border-dark"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0 break-words">
+                      <span className="font-medium">{c.name}</span>{" "}
+                      <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE.client}`}>
+                        Client
+                      </span>{" "}
+                      <span className="text-xs text-text-secondary capitalize">{c.type.replace("_", " ")}</span>
+                    </span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleProjects(c.id)}
+                        className="text-xs border border-border-dark rounded px-2.5 py-1 text-text-secondary hover:text-text-primary hover:bg-surface-raised"
+                      >
+                        {expandedClientId === c.id ? "Hide projects" : "View projects"}
+                      </button>
+                      {canCreateClient(role) && (
+                        <button
+                          onClick={() => setPanel({ mode: "edit-client", id: c.id })}
+                          className="text-xs border border-border-dark rounded px-2.5 py-1 text-gold hover:bg-gold/10"
+                        >
+                          Edit details
                         </button>
                       )}
                     </span>
                   </div>
-                )}
 
-                {editingLeadId === o.id && (
-                  <EditDetailsForm
-                    idPrefix={`lead-${o.id}`}
-                    initial={{ name: o.lead_name, phone: o.lead_phone, email: o.lead_email }}
-                    onSave={(values) => saveLeadDetails(o.id, values)}
-                    onCancel={() => setEditingLeadId(null)}
-                  />
-                )}
-
-                {canAssign && (
-                  <OwnerControl
-                    token={token}
-                    kind="opportunity"
-                    recordId={o.id}
-                    ownerId={o.owner_id}
-                    owners={owners}
-                    onChanged={(next) => setLeads((ls) => ls.map((l) => (l.id === o.id ? { ...l, owner_id: next } : l)))}
-                  />
-                )}
-
-                {o.next_follow_up_date && (
-                  <p className={`text-xs ${overdue ? "text-red-400" : "text-text-secondary"}`}>
-                    <span className="font-medium">Follow-up</span> {o.next_follow_up_date}
-                    {overdue && " (overdue)"}
-                    {o.follow_up_note && ` · ${o.follow_up_note}`}
+                  <p className="text-xs text-text-secondary break-words">
+                    {[c.contact_name, c.phone, c.email].filter(Boolean).join(" · ") || "No contact details yet"}
                   </p>
-                )}
-                {o.notes && (
-                  <p className="text-xs text-text-secondary whitespace-pre-wrap break-words">
-                    <span className="font-medium">Notes</span> {o.notes}
-                  </p>
-                )}
-                {o.stage === "won" && (
-                  <p className="text-xs text-text-secondary">
-                    Won -- open it in Opportunities and link a client to start a Project.
-                  </p>
-                )}
-              </div>
-            );
-          }
-          const c = row.c;
-          return (
-          <div key={row.key} className="bg-surface border border-border-dark rounded-lg px-4 py-3 text-sm space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="min-w-0 break-words">
-              <span className="font-medium">{c.name}</span>{" "}
-              <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE.client}`}>
-                Client
-              </span>{" "}
-              <span className="text-xs text-text-secondary">({c.type})</span>
-            </span>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-              {canEditFlags && (
-                <>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={c.overdue_flag}
-                      onChange={(e) => toggleFlag(c.id, "overdue_flag", e.target.checked)}
-                    />
-                    Overdue
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={c.blacklist_flag}
-                      onChange={(e) => toggleFlag(c.id, "blacklist_flag", e.target.checked)}
-                    />
-                    Blacklisted
-                  </label>
-                </>
-              )}
-              <span className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${canEditFlags ? "sm:border-l border-border-dark sm:pl-4" : ""}`}>
-                <label className="flex items-center gap-1" title="Only message this client on WhatsApp if they have agreed to it.">
-                  <input
-                    type="checkbox"
-                    checked={c.whatsapp_opt_in}
-                    onChange={(e) => toggleConsent(c.id, "whatsapp_opt_in", e.target.checked)}
-                  />
-                  WhatsApp opt-in
-                </label>
-                <label className="flex items-center gap-1" title="Leave ticked unless the client has asked not to receive email.">
-                  <input
-                    type="checkbox"
-                    checked={c.email_opt_in}
-                    onChange={(e) => toggleConsent(c.id, "email_opt_in", e.target.checked)}
-                  />
-                  Email opt-in
-                </label>
-                <label
-                  className="flex items-center gap-1"
-                  title="A Telegram bot can only message a chat that has messaged it first."
-                >
-                  <input
-                    type="checkbox"
-                    checked={c.telegram_opt_in}
-                    onChange={(e) => toggleConsent(c.id, "telegram_opt_in", e.target.checked)}
-                  />
-                  Telegram opt-in
-                </label>
-                <span className="flex items-center gap-1">
-                  <input
-                    value={chatIdDrafts[c.id] ?? c.telegram_chat_id ?? ""}
-                    onChange={(e) => setChatIdDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
-                    placeholder="Telegram chat id"
-                    className="w-28 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
-                  />
-                  <button onClick={() => saveTelegramChatId(c.id)} className="text-gold hover:underline">
-                    Save
-                  </button>
-                </span>
-              </span>
-            </div>
-          </div>
 
-          {(c.contact_name || c.phone || c.email || canCreateClient(role)) && editingClientId !== c.id && (
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-text-secondary">
-              <span className="min-w-0 break-words">
-                {[c.contact_name, c.phone, c.email].filter(Boolean).join(" · ") || "No contact details yet"}
-              </span>
-              {canCreateClient(role) && (
-                <button onClick={() => setEditingClientId(c.id)} className="text-gold hover:underline shrink-0">
-                  Edit details
-                </button>
-              )}
-            </div>
-          )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ConsentPill ok={c.whatsapp_opt_in} label="WhatsApp" title="Only message this client on WhatsApp if they have agreed to it." />
+                    <ConsentPill ok={c.email_opt_in} label="Email" title="Leave ticked unless the client has asked not to receive email." />
+                    <ConsentPill ok={c.telegram_opt_in} label="Telegram" title="A Telegram bot can only message a chat that has messaged it first." />
+                    {canEditFlags && c.overdue_flag && <ConsentPill ok={false} label="Overdue" />}
+                    {canEditFlags && c.blacklist_flag && <ConsentPill ok={false} label="Blacklisted" />}
+                  </div>
 
-          {editingClientId === c.id && (
-            <EditDetailsForm
-              idPrefix={`client-${c.id}`}
-              withContactName
-              withCity
-              initial={{ name: c.name, contact_name: c.contact_name, phone: c.phone, email: c.email, city: c.city }}
-              onSave={(values) => saveDetails(c.id, values)}
-              onCancel={() => setEditingClientId(null)}
-            />
-          )}
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    {canAssign && (
+                      <OwnerControl
+                        token={token}
+                        kind="client"
+                        recordId={c.id}
+                        ownerId={c.owner_id}
+                        owners={owners}
+                        onChanged={(next) => setClients((cs) => cs.map((x) => (x.id === c.id ? { ...x, owner_id: next } : x)))}
+                      />
+                    )}
+                    <span className={`text-xs ${c.next_follow_up_date && c.next_follow_up_date < todayStr() ? "text-red-400" : "text-text-secondary"}`}>
+                      Follow-up {c.next_follow_up_date || "—"}
+                    </span>
+                    <span className="text-xs text-text-secondary truncate max-w-[16rem]">
+                      {c.notes ? c.notes : "No notes yet"}
+                    </span>
+                  </div>
 
-          {canAssign && (
-            <OwnerControl
-              token={token}
-              kind="client"
-              recordId={c.id}
-              ownerId={c.owner_id}
-              owners={owners}
-              onChanged={(next) => setClients((cs) => cs.map((x) => (x.id === c.id ? { ...x, owner_id: next } : x)))}
-            />
-          )}
-
-          {canCreateClient(role) && (
-            <div
-              className={`flex flex-wrap items-center gap-2 text-xs ${
-                c.next_follow_up_date && c.next_follow_up_date < new Date().toISOString().slice(0, 10)
-                  ? "text-red-400"
-                  : "text-text-secondary"
-              }`}
-            >
-              <span className="font-medium">Follow-up</span>
-              <input
-                type="date"
-                value={followUpDrafts[c.id]?.date ?? c.next_follow_up_date ?? ""}
-                onChange={(e) =>
-                  setFollowUpDrafts((d) => ({ ...d, [c.id]: { ...d[c.id], date: e.target.value } }))
-                }
-                className="rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
-              />
-              <input
-                value={followUpDrafts[c.id]?.note ?? c.follow_up_note ?? ""}
-                onChange={(e) =>
-                  setFollowUpDrafts((d) => ({ ...d, [c.id]: { ...d[c.id], note: e.target.value } }))
-                }
-                placeholder="Note (optional)"
-                className="flex-1 min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
-              />
-              <button onClick={() => saveFollowUp(c.id)} className="text-gold hover:underline shrink-0">
-                Save
-              </button>
-            </div>
-          )}
-
-          {canCreateClient(role) && (
-            <div className="flex flex-wrap items-start gap-2 text-xs text-text-secondary">
-              <span className="font-medium pt-1 shrink-0">Notes</span>
-              <textarea
-                value={notesDrafts[c.id] ?? c.notes ?? ""}
-                onChange={(e) => setNotesDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
-                rows={1}
-                placeholder="Notes / remarks (optional)"
-                className="flex-1 min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
-              />
-              <button onClick={() => saveNotes(c.id)} className="text-gold hover:underline shrink-0">
-                Save
-              </button>
-            </div>
-          )}
-
-          <div>
-            <button onClick={() => toggleProjects(c.id)} className="text-xs text-gold hover:underline">
-              {expandedClientId === c.id ? "▾ Hide projects" : "▸ Projects"}
-            </button>
-            {expandedClientId === c.id && (
-              <div className="mt-2 border-t border-border-dark pt-2 space-y-1">
-                {loadingProjects && !projectsByClient[c.id] ? (
-                  <p className="text-xs text-text-secondary">Loading projects…</p>
-                ) : (projectsByClient[c.id] || []).length === 0 ? (
-                  <p className="text-xs text-text-secondary">No projects yet.</p>
-                ) : (
-                  projectsByClient[c.id].map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => onOpenProject(p.id)}
-                      className="w-full text-left flex items-center justify-between text-xs rounded px-2 py-1 hover:bg-surface-raised transition-all duration-250 ease-out"
-                    >
-                      <span>
-                        <span className="font-mono text-text-primary">{p.project_no}</span>{" "}
-                        <span className="text-text-secondary">· {p.city}</span>
-                      </span>
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${STATUS_PILL_STYLE[p.status] || ""}`}
-                        >
-                          {p.status}
-                        </span>
-                        <span className="text-gold">Open →</span>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
+                  {expandedClientId === c.id && (
+                    <div className="mt-2 border-t border-border-dark pt-2 space-y-1">
+                      {loadingProjects && !projectsByClient[c.id] ? (
+                        <p className="text-xs text-text-secondary">Loading projects…</p>
+                      ) : (projectsByClient[c.id] || []).length === 0 ? (
+                        <p className="text-xs text-text-secondary">No projects yet.</p>
+                      ) : (
+                        projectsByClient[c.id].map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => onOpenProject(p.id)}
+                            className="w-full text-left flex items-center justify-between text-xs rounded px-2 py-1 hover:bg-surface-raised transition-all duration-250 ease-out"
+                          >
+                            <span>
+                              <span className="font-mono text-text-primary">{p.project_no}</span>{" "}
+                              <span className="text-text-secondary">· {p.city}</span>
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${STATUS_PILL_STYLE[p.status] || ""}`}>
+                                {p.status}
+                              </span>
+                              <span className="text-gold">Open →</span>
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {rows.length === 0 && !loadFailed && (
+              <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
+                {needle || ownerFilter
+                  ? "Nothing matches these filters."
+                  : tab === "leads"
+                    ? "No open leads yet -- use \"+ Add enquiry\" to capture one."
+                    : tab === "clients"
+                      ? "No clients yet."
+                      : "No leads or clients yet."}
+              </p>
             )}
           </div>
         </div>
-          );
-        })}
-        {rows.length === 0 && !loadFailed && (
-          <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
-            {needle
-              ? "Nothing matches that search."
-              : tab === "leads"
-                ? "No open leads yet -- use \"Add Enquiry\" to capture one."
-                : tab === "clients"
-                  ? "No clients yet."
-                  : "No leads or clients yet."}
-          </p>
+
+        {panel && (
+          <DetailsPanel
+            panel={panel}
+            client={panel.mode === "edit-client" ? clients.find((c) => c.id === panel.id) : null}
+            lead={panel.mode === "edit-lead" ? leads.find((o) => o.id === panel.id) : null}
+            canEditFlags={canEditFlags}
+            canAssign={canAssign}
+            owners={owners}
+            token={token}
+            onClose={closePanel}
+            onCreateClient={handleCreateClient}
+            onCreateEnquiry={handleCreateEnquiry}
+            onSaveClient={saveClient}
+            onSaveLead={saveLead}
+            onOwnerChanged={(kind, id, next) => {
+              if (kind === "client") setClients((cs) => cs.map((x) => (x.id === id ? { ...x, owner_id: next } : x)));
+              else setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, owner_id: next } : l)));
+            }}
+            onOpenOpportunities={onOpenOpportunities}
+          />
         )}
       </div>
     </div>
+  );
+}
+
+// The one thing every mode of this panel shares: a header (title + record-type badge + close), a body of
+// fields, an error line and a "Save changes" button. What's inside the body is the only thing that varies.
+function DetailsPanel({
+  panel, client, lead, canEditFlags, canAssign, owners, token,
+  onClose, onCreateClient, onCreateEnquiry, onSaveClient, onSaveLead, onOwnerChanged, onOpenOpportunities,
+}) {
+  const isNewClient = panel.mode === "new-client";
+  const isNewLead = panel.mode === "new-lead";
+  const isClient = isNewClient || panel.mode === "edit-client";
+  const record = client || lead;
+
+  const [values, setValues] = useState(() => ({
+    name: client?.name ?? lead?.lead_name ?? "",
+    type: client?.type ?? "school",
+    contact_name: client?.contact_name ?? "",
+    phone: client?.phone ?? lead?.lead_phone ?? "",
+    email: client?.email ?? lead?.lead_email ?? "",
+    city: client?.city ?? "",
+    notes: client?.notes ?? "",
+    followUpDate: client?.next_follow_up_date ?? (isNewLead ? defaultEnquiryFollowUpDate() : ""),
+    followUpNote: client?.follow_up_note ?? "",
+    whatsapp_opt_in: client?.whatsapp_opt_in ?? true,
+    email_opt_in: client?.email_opt_in ?? true,
+    telegram_opt_in: client?.telegram_opt_in ?? false,
+    telegram_chat_id: client?.telegram_chat_id ?? "",
+    overdue_flag: client?.overdue_flag ?? false,
+    blacklist_flag: client?.blacklist_flag ?? false,
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function setField(field, value) {
+    setValues((v) => ({ ...v, [field]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!values.name.trim()) {
+      setError("A name is required.");
+      return;
+    }
+    if (isNewLead && !values.followUpDate) {
+      setError("Every enquiry needs a follow-up date.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      if (isNewClient) await onCreateClient(values);
+      else if (isNewLead) await onCreateEnquiry({ lead_name: values.name, lead_phone: values.phone, lead_email: values.email, next_follow_up_date: values.followUpDate, notes: values.notes });
+      else if (isClient) await onSaveClient(client, values);
+      else await onSaveLead(lead, values);
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
+
+  const inputClass = "mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2.5 py-2 text-sm";
+  const labelClass = "block text-xs font-medium text-text-secondary";
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="w-full lg:w-[22rem] shrink-0 bg-surface border border-border-dark rounded-lg p-5 space-y-4 h-fit lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] overflow-y-auto"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-text-primary">
+          {isNewClient ? "Add client" : isNewLead ? "Add enquiry" : isClient ? "Client details" : "Lead details"}
+        </h3>
+        <span className="flex items-center gap-2">
+          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${RELATIONSHIP_BADGE_STYLE[isClient ? "client" : "lead"]}`}>
+            {isClient ? "Client" : "Lead"}
+          </span>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-text-secondary hover:text-text-primary text-lg leading-none">
+            ✕
+          </button>
+        </span>
+      </div>
+
+      <div>
+        <label className={labelClass}>Name</label>
+        <input required value={values.name} onChange={(e) => setField("name", e.target.value)} className={inputClass} />
+      </div>
+
+      {isClient && (
+        <div>
+          <label className={labelClass}>Type</label>
+          <select
+            value={values.type}
+            disabled={!isNewClient}
+            title={!isNewClient ? "Type can't be changed once a client exists -- it drives the default package and payment terms." : undefined}
+            onChange={(e) => setField("type", e.target.value)}
+            className={`${inputClass} ${!isNewClient ? "opacity-60 cursor-not-allowed" : ""}`}
+          >
+            {CLIENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t.replace("_", " ")}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {canAssign && !isNewClient && !isNewLead && (
+        <div>
+          <label className={labelClass}>Owner</label>
+          <div className="mt-1">
+            <OwnerControl
+              token={token}
+              kind={isClient ? "client" : "opportunity"}
+              recordId={record.id}
+              ownerId={record.owner_id}
+              owners={owners}
+              onChanged={(next) => onOwnerChanged(isClient ? "client" : "opportunity", record.id, next)}
+            />
+          </div>
+        </div>
+      )}
+
+      {isClient && (
+        <div>
+          <label className={labelClass}>Contact name</label>
+          <input value={values.contact_name} onChange={(e) => setField("contact_name", e.target.value)} className={inputClass} />
+        </div>
+      )}
+      <div>
+        <label className={labelClass}>Phone</label>
+        <input inputMode="tel" value={values.phone} onChange={(e) => setField("phone", e.target.value)} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Email</label>
+        <input type="email" value={values.email} onChange={(e) => setField("email", e.target.value)} className={inputClass} />
+      </div>
+      {isClient && (
+        <div>
+          <label className={labelClass}>City (optional)</label>
+          <input maxLength={100} value={values.city} onChange={(e) => setField("city", e.target.value)} className={inputClass} />
+        </div>
+      )}
+
+      {(isNewLead || (isClient && !isNewClient)) && (
+        <div>
+          <label className={labelClass}>Follow-up date{isNewLead && " (required)"}</label>
+          <input
+            type="date"
+            required={isNewLead}
+            value={values.followUpDate}
+            onChange={(e) => setField("followUpDate", e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      )}
+      {isClient && !isNewClient && (
+        <div>
+          <label className={labelClass}>Follow-up note (optional)</label>
+          <input value={values.followUpNote} onChange={(e) => setField("followUpNote", e.target.value)} className={inputClass} />
+        </div>
+      )}
+
+      {!isNewLead && !(panel.mode === "edit-lead") && (
+        <div>
+          <label className={labelClass}>Notes / remarks</label>
+          <textarea
+            value={values.notes}
+            onChange={(e) => setField("notes", e.target.value)}
+            rows={3}
+            placeholder="Anything else worth noting -- not tied to any field above."
+            className={inputClass}
+          />
+        </div>
+      )}
+      {panel.mode === "edit-lead" && (
+        <>
+          {lead.notes && (
+            <p className="text-xs text-text-secondary whitespace-pre-wrap break-words">
+              <span className="font-medium">Notes</span> {lead.notes}
+            </p>
+          )}
+          <p className="text-xs text-text-secondary">
+            Notes, follow-up date and stage changes for a lead happen on the Opportunities screen.
+          </p>
+          {onOpenOpportunities && (
+            <button type="button" onClick={onOpenOpportunities} className="text-xs text-gold hover:underline">
+              Open in Opportunities →
+            </button>
+          )}
+        </>
+      )}
+      {isNewLead && (
+        <p className="text-xs text-text-secondary">
+          A raw lead -- just a name and contact, not a full client record yet.
+        </p>
+      )}
+
+      {isClient && !isNewClient && (
+        <div className="border-t border-border-dark pt-3 space-y-1">
+          <p className="text-sm font-medium text-text-primary mb-1">Communication preferences</p>
+          <p className="text-xs text-text-secondary mb-2">Consent preferences and follow-up reminders.</p>
+          <Toggle checked={values.whatsapp_opt_in} onChange={(v) => setField("whatsapp_opt_in", v)} label="WhatsApp opt-in" hint="Only message this client on WhatsApp if they have agreed to it." />
+          <Toggle checked={values.email_opt_in} onChange={(v) => setField("email_opt_in", v)} label="Email opt-in" hint="Leave on unless the client has asked not to receive email." />
+          <Toggle checked={values.telegram_opt_in} onChange={(v) => setField("telegram_opt_in", v)} label="Telegram opt-in" hint="A Telegram bot can only message a chat that has messaged it first." />
+          <input
+            value={values.telegram_chat_id}
+            onChange={(e) => setField("telegram_chat_id", e.target.value)}
+            placeholder="Enter Telegram chat id (optional)"
+            className={inputClass}
+          />
+        </div>
+      )}
+
+      {isClient && !isNewClient && canEditFlags && (
+        <div className="border-t border-border-dark pt-3 space-y-1">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-sm font-medium text-text-primary">Account controls</p>
+            <span className="text-[10px] uppercase tracking-wider text-text-secondary">Director only</span>
+          </div>
+          <Toggle checked={values.overdue_flag} onChange={(v) => setField("overdue_flag", v)} label="Overdue" hint="Blocks releasing new Quotations for this client." />
+          <Toggle checked={values.blacklist_flag} onChange={(v) => setField("blacklist_flag", v)} label="Blacklisted" hint="Blocks new Estimates for this client." />
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <button
+        type="submit"
+        disabled={saving}
+        className="w-full bg-gold text-base rounded px-4 py-2.5 font-semibold hover:bg-gold-hover disabled:opacity-50"
+      >
+        {saving ? "Saving…" : "Save changes"}
+      </button>
+    </form>
   );
 }
