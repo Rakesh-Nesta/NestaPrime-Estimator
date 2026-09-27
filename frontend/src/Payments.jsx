@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getProject, listClients, listPayments } from "./api";
-import { CalendarIcon } from "./Icons";
+import { AlertIcon, BankIcon, CalendarIcon, DocumentIcon, PieIcon, RupeeIcon } from "./Icons";
 import { formatRs } from "./money";
 import PaymentsDetail from "./PaymentsDetail";
 
@@ -17,7 +17,15 @@ const TABS = [
 
 const WO_STATUS_LABEL = { awarded: "Awarded", in_progress: "In progress", completed: "Completed" };
 
-export default function Payments({ token, role, initialFilter = "", onOpenProject, onBack }) {
+const CARD_STYLE = {
+  "Order value": { icon: DocumentIcon, tone: "bg-gold/10 text-gold" },
+  Received: { icon: RupeeIcon, tone: "bg-green-500/10 text-green-400" },
+  "TDS withheld": { icon: BankIcon, tone: "bg-blue-500/10 text-blue-400" },
+  Outstanding: { icon: PieIcon, tone: "bg-amber-500/10 text-amber-400" },
+  Overdue: { icon: AlertIcon, tone: "bg-red-500/10 text-red-400" },
+};
+
+export default function Payments({ token, role, initialFilter = "", onOpenProject, onOpenProjects, onBack }) {
   const [rows, setRows] = useState([]);
   const [tab, setTab] = useState(initialFilter === "overdue" ? "overdue" : "all");
   const [search, setSearch] = useState("");
@@ -91,8 +99,7 @@ export default function Payments({ token, role, initialFilter = "", onOpenProjec
             <CalendarIcon className="w-6 h-6 text-gold" /> Payments
           </h2>
           <p className="text-sm text-text-secondary mt-1">
-            What each Work Order is worth, what has been received and what is still due. Amounts and due dates are
-            the ones your team entered -- nothing here is estimated.
+            Track Work Order values, receipts and outstanding balances.
             {!canEdit && " You have read-only access."}
           </p>
         </div>
@@ -101,6 +108,32 @@ export default function Payments({ token, role, initialFilter = "", onOpenProjec
             ← Back
           </button>
         )}
+      </div>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {cards.map(([label, value]) => {
+          const style = CARD_STYLE[label];
+          return (
+            <div key={label} className="bg-surface border border-border-dark rounded-lg px-4 py-3 flex items-center gap-3">
+              <span className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${style.tone}`}>
+                <style.icon className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wide text-text-secondary truncate">{label}</p>
+                <p className={`text-base font-heading font-bold ${label === "Overdue" && value > 0 ? "text-red-400" : "text-text-primary"}`}>
+                  {formatRs(value)}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-start gap-2 bg-gold/5 border border-gold/20 rounded-lg px-4 py-3 text-sm text-text-secondary">
+        <span className="text-gold shrink-0">ℹ</span>
+        <span>Amounts and due dates reflect your team&apos;s entries. No estimated values.</span>
       </div>
 
       <div className="flex items-center gap-5 border-b border-border-dark">
@@ -116,19 +149,6 @@ export default function Payments({ token, role, initialFilter = "", onOpenProjec
           >
             {t.label} <span className="text-xs text-text-secondary">({tabCount[t.key]})</span>
           </button>
-        ))}
-      </div>
-
-      {error && <p className="text-sm text-red-400">{error}</p>}
-
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {cards.map(([label, value]) => (
-          <div key={label} className="bg-surface border border-border-dark rounded-lg px-4 py-3">
-            <p className="text-[10px] uppercase tracking-wide text-text-secondary">{label}</p>
-            <p className={`text-base font-heading font-bold mt-1 ${label === "Overdue" && value > 0 ? "text-red-400" : "text-text-primary"}`}>
-              {formatRs(value)}
-            </p>
-          </div>
         ))}
       </div>
 
@@ -209,14 +229,57 @@ export default function Payments({ token, role, initialFilter = "", onOpenProjec
             )}
           </div>
         ))}
-        {visible.length === 0 && !loadFailed && (
+        {visible.length === 0 && !loadFailed && (needle || tab === "overdue") && (
           <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
             {needle
               ? "Nothing matches that search."
-              : tab === "overdue"
-                ? "No Work Order has an unpaid milestone past its due date. (A Work Order with no milestones has no due dates to be overdue against.)"
-                : "No Work Orders yet. A Work Order is created from a Won quotation on the project's Documents screen."}
+              : "No Work Order has an unpaid milestone past its due date. (A Work Order with no milestones has no due dates to be overdue against.)"}
           </p>
+        )}
+        {visible.length === 0 && !loadFailed && !needle && tab === "all" && (
+          <div className="bg-surface border border-border-dark rounded-lg p-10 text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-gold/10 flex items-center justify-center relative">
+              <DocumentIcon className="w-8 h-8 text-gold" />
+              <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gold flex items-center justify-center">
+                <RupeeIcon className="w-3.5 h-3.5 text-base" />
+              </span>
+            </div>
+            <div>
+              <p className="text-text-primary font-heading font-bold text-lg">No Work Orders yet.</p>
+              <p className="text-sm text-text-secondary mt-1">
+                Create a Work Order from a Won quotation on the project&apos;s Documents screen.
+              </p>
+            </div>
+            {onOpenProjects && (
+              <button
+                onClick={onOpenProjects}
+                className="bg-gold text-base text-sm rounded px-5 py-2.5 font-semibold hover:bg-gold-hover"
+              >
+                View projects →
+              </button>
+            )}
+
+            <div className="border-t border-border-dark pt-6 mt-6 grid sm:grid-cols-3 gap-6 text-left">
+              <p className="sm:col-span-3 text-sm font-semibold text-text-primary text-center -mt-2 mb-1">
+                Start tracking payments
+              </p>
+              {[
+                { n: 1, title: "Open your project", body: "Go to the project where you have a Won quotation." },
+                { n: 2, title: "Go to Documents", body: "Open the project's Documents screen." },
+                { n: 3, title: "Create a Work Order", body: "Create a Work Order from a Won quotation." },
+              ].map((step) => (
+                <div key={step.n} className="flex items-start gap-3">
+                  <span className="w-7 h-7 rounded-full border border-gold/50 text-gold text-xs font-semibold flex items-center justify-center shrink-0">
+                    {step.n}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">{step.title}</p>
+                    <p className="text-xs text-text-secondary mt-0.5">{step.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

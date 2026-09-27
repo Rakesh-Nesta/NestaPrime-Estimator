@@ -354,6 +354,7 @@ export default function App() {
             role={user.role}
             initialFilter={drillPreset.filter || ""}
             onOpenProject={handleOpenProject}
+            onOpenProjects={() => goToTopLevel("projects_admin")}
             onBack={() => setScreen(preNavScreen)}
           />
         )}
