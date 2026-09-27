@@ -86,6 +86,13 @@ class Opportunity(Base):
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
+    # Amendment 60 (Section 63): who owns this record. When the Director switches own-records on, a Sales user sees
+    # only what they own (and everything under it); PM and Director see everything and can reassign. NULL means
+    # "unassigned" -- visible to PM and Director only, until someone assigns it.
+    # Starts equal to created_by_id; reassigning changes this, never who created it.
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )

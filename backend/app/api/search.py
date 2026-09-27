@@ -11,6 +11,7 @@ from app.api.documents import _effective_quotation_status
 from app.api.opportunities import READ_ROLES as OPPORTUNITY_READ_ROLES
 from app.api.projects import LIST_ROLES as PROJECT_LIST_ROLES
 from app.api.quotations_admin import LIST_ROLES as QUOTATION_LIST_ROLES
+from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
@@ -110,7 +111,7 @@ def _joined(parts) -> str | None:
     return text or None
 
 
-def _clients(db: Session, query: str, phone_digits: str | None) -> SearchGroupOut:
+def _clients(db: Session, query: str, phone_digits: str | None, owner_id: uuid.UUID | None = None) -> SearchGroupOut:
     pattern = _like_pattern(query)
     conditions = [
         column.ilike(pattern, escape="\\")
@@ -119,6 +120,8 @@ def _clients(db: Session, query: str, phone_digits: str | None) -> SearchGroupOu
     if phone_digits:
         conditions.append(_digits_of(Client.phone).like(f"%{phone_digits}%"))
     q = db.query(Client).filter(_any(conditions))
+    if owner_id is not None:  # Amendment 60: a salesperson's search finds only their own records
+        q = q.filter(Client.owner_id == owner_id)
     total = q.count()
     rows = q.order_by(_rank(Client.name, query), Client.created_at.desc(), Client.id).limit(GROUP_LIMIT).all()
     items = [
@@ -131,7 +134,7 @@ def _clients(db: Session, query: str, phone_digits: str | None) -> SearchGroupOu
     return SearchGroupOut(kind="client", label="Clients", total=total, items=items)
 
 
-def _leads(db: Session, query: str, phone_digits: str | None) -> SearchGroupOut:
+def _leads(db: Session, query: str, phone_digits: str | None, owner_id: uuid.UUID | None = None) -> SearchGroupOut:
     # The same set Leads & Clients lists as leads (not linked to a client, not lost),
     # so a result always lands where the record is shown.
     pattern = _like_pattern(query)
@@ -144,6 +147,8 @@ def _leads(db: Session, query: str, phone_digits: str | None) -> SearchGroupOut:
     q = db.query(Opportunity).filter(
         Opportunity.client_id.is_(None), Opportunity.stage != OpportunityStage.LOST, _any(conditions)
     )
+    if owner_id is not None:
+        q = q.filter(Opportunity.owner_id == owner_id)
     total = q.count()
     rows = (
         q.order_by(_rank(Opportunity.lead_name, query), Opportunity.created_at.desc(), Opportunity.id)
@@ -160,7 +165,7 @@ def _leads(db: Session, query: str, phone_digits: str | None) -> SearchGroupOut:
     return SearchGroupOut(kind="lead", label="Leads", total=total, items=items)
 
 
-def _projects(db: Session, query: str) -> SearchGroupOut:
+def _projects(db: Session, query: str, owner_id: uuid.UUID | None = None) -> SearchGroupOut:
     pattern = _like_pattern(query)
     q = (
         db.query(Project, Client.name)
@@ -175,6 +180,8 @@ def _projects(db: Session, query: str) -> SearchGroupOut:
             )
         )
     )
+    if owner_id is not None:
+        q = q.filter(Project.owner_id == owner_id)
     total = q.count()
     rows = q.order_by(_rank(Project.project_no, query), Project.created_at.desc(), Project.id).limit(GROUP_LIMIT).all()
     items = [
@@ -187,7 +194,7 @@ def _projects(db: Session, query: str) -> SearchGroupOut:
     return SearchGroupOut(kind="project", label="Projects", total=total, items=items)
 
 
-def _quotations(db: Session, query: str) -> SearchGroupOut:
+def _quotations(db: Session, query: str, owner_id: uuid.UUID | None = None) -> SearchGroupOut:
     pattern = _like_pattern(query)
     q = (
         db.query(Quotation, Project, Client.name)
@@ -203,6 +210,8 @@ def _quotations(db: Session, query: str) -> SearchGroupOut:
             )
         )
     )
+    if owner_id is not None:
+        q = q.filter(Project.owner_id == owner_id)
     total = q.count()
     rows = (
         q.order_by(_rank(Quotation.document_no, query), Quotation.created_at.desc(), Quotation.id)
@@ -238,13 +247,14 @@ def global_search(
     role = current_user.role.value
     phone_digits = _phone_digits(query)
 
+    owner = current_user.id if ownership.scoping_applies(db, current_user) else None
     groups: list[SearchGroupOut] = []
     if role in CLIENT_READ_ROLES:
-        groups.append(_clients(db, query, phone_digits))
+        groups.append(_clients(db, query, phone_digits, owner))
     if role in OPPORTUNITY_READ_ROLES:
-        groups.append(_leads(db, query, phone_digits))
+        groups.append(_leads(db, query, phone_digits, owner))
     if role in PROJECT_LIST_ROLES:
-        groups.append(_projects(db, query))
+        groups.append(_projects(db, query, owner))
     if role in QUOTATION_LIST_ROLES:
-        groups.append(_quotations(db, query))
+        groups.append(_quotations(db, query, owner))
     return SearchOut(query=query, limit=GROUP_LIMIT, groups=groups)

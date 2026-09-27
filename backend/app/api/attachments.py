@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.audit_log import write_audit_log_entry
 from app.api.documents import _document_no, _rate_blind_mode_on
 from app.config import settings
+from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
@@ -379,6 +380,7 @@ async def upload_attachment(
     are optional and, when given on an approval_evidence attachment, are
     checked against Part O CLIENT_SIGNATORIES (see _validate_signatory_if_given)."""
     _require_doc_type_role(db, doc_type, current_user)
+    ownership.require_visible_document(db, current_user, doc_type.value, doc_id)  # Amendment 60
     _get_document_or_404(db, doc_type, doc_id)
     return await _store_upload(
         db, request, current_user, doc_type, doc_id, tag, approval_strength, file, version=1,
@@ -395,6 +397,7 @@ def list_attachments(
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
     _require_doc_type_role(db, doc_type, current_user)
+    ownership.require_visible_document(db, current_user, doc_type.value, doc_id)  # Amendment 60
     query = db.query(Attachment).filter(Attachment.doc_type == doc_type, Attachment.doc_id == doc_id)
     if not include_superseded:
         query = query.filter(Attachment.superseded_by_id.is_(None))
