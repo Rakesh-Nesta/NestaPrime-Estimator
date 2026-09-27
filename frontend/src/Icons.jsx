@@ -96,3 +96,13 @@ export function SearchIcon(props) {
     </Icon>
   );
 }
+
+// Team & Access (Admin view) redesign (2026-09-27): account/password-status badges.
+export function LockIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="11" width="14" height="9" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 018 0v4" />
+    </Icon>
+  );
+}
