@@ -11,6 +11,51 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-27 -- PRs #244-#246: Amendment 60 (own-records visibility) and a production data cleanup
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `7e42cab` -> `2d7c998` (PRs #244 backend, #245 screens), then `2d7c998` -> `16cebad` (#246, ops
+script only). Backend rebuild **and** frontend build for #244/#245, **with one migration** (`owner_id` added to
+`clients`, `projects` and `opportunities`, backfilled from the enquiry trail). Backend rebuild only for #246 (no
+migration; a script file, not app code). Nobody is signed out.
+
+**#244/#245.** `git pull` fast-forwarded `7e42cab..2d7c998` (33 files); backend rebuilt (`up -d --build backend`),
+log shows `Running upgrade e5b3d97a41c8 -> a3f9c27d5e14, add owner_id to clients, projects and opportunities
+(Amendment 60, Section 63)`; frontend rebuilt with `VITE_API_URL=https://app.nestaprime.in/api` and copied as its
+own step. Verified from outside: bundle `index-Dr2-FvUW.js`, containing "Record owners", "My overview" and the
+duplicate-client message; `/api/openapi.json` schemas show `owner_id` on `ClientOut`/`ProjectOut` and
+`scope`/`sales_performance` on `DashboardOut`, and lists all six `/ownership/*` routes; anonymous `GET
+/ownership/overview` 401.
+
+**Ownership review found a housekeeping gap, not a records-without-owners problem.** The Director opened Team &
+Access → Record owners and found 20/21 clients and 19/21 projects unassigned -- almost all of it leftover
+verification data from past Amendments' own live-verification steps (a full read-only listing is in the register
+entry above). Confirmed by name against that listing, not by guessing: 18 client ids were test data (12 explicitly
+"(delete me)"/"Verify"-named, plus six identical unlabelled "Home Solutions" clients from one session on 11
+September); "Pathankot Badminton Court (FY23-24 actual, calibration)" and "Imperial International School" were
+confirmed real and kept.
+
+**#246.** `git pull` `2d7c998..16cebad` (2 files, an ops script and its local-only test, no app code). First attempt
+to run it (`docker compose exec backend python scripts/...`) failed -- the file exists on the host but not inside
+the already-running container image, corrected by rebuilding backend first (`up -d --build backend`, no new
+migration, as expected). Dry run printed exactly the 18 confirmed client ids/names and their dependent counts (15
+projects, 9 cost sheets, 9 estimates, 7 quotations, 1 purchase order, 0 work orders/attachments/messages/site
+surveys/tender details/technical bid items); checked against the confirmed list before proceeding. `--confirm` run:
+identical output, ending "Deleted." with no error. Verified from the Record owners screen: unassigned count down
+to 2 (the two kept records), matching expectation exactly.
+
+**Switch on.** The Director assigned Imperial International School to whoever is actually handling it (its own
+projects and enquiry moved with it, per the reassign-a-client cascade), leaving only Pathankot's reference data
+unassigned on purpose, then turned "each salesperson sees only their own" on from that same screen. Not verified
+independently from outside (no production credentials on this side; the Director's own screen and action are the
+record here).
+
+**Not done:** the "Verification Account (throwaway)" Director user (`verify-director@nestaprime.local`), found
+live in production during this same review holding a few records of its own, was left alone -- a separate,
+non-urgent item for a later session.
+
+---
+
 ## 2026-09-26 -- PRs #240-#242: Amendment 59 (the Admin role) and the first-Admin safety fix
 
 **Run by:** R. Patni (with AI development assistance)
