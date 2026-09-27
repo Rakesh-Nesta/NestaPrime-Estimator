@@ -42,9 +42,17 @@ and CSP header were unchanged afterwards. The script refused the placeholder wor
 then created the real first Admin, `info@nestainfotech.com`, and printed a generated temporary password once. **That
 password was then pasted into the chat.** A repeat of the creation command was pasted afterwards without its output.
 
-**Not verified in production:** that the temporary password has been changed; that exactly one Admin exists (a repeat run
-is unexplained); the Admin's sidebar; any logged-in behaviour of the new Admin, PM and Director screens; the audit-log
-masking on real data.
+**27 September check (the Director's read-only query):** exactly one Admin, `info@nestainfotech.com`, active, created 26 Sep
+16:17:49 UTC, **`must_change_password = t` -- the temporary password had not been changed** ten hours after it was
+created; the repeat run of the creation command was therefore refused (one Admin, not two).
+
+**Not verified in production:** that the temporary password has been changed (it had not, on the morning of 27 September);
+the Admin's sidebar; any logged-in behaviour of the new Admin, PM and Director screens; the audit-log masking on real data.
+
+**Also seen on 27 September -- the nightly backup works.** `~/nestaprime-backups/` now holds
+`nestaprime_estimator_20260927T020001Z.sql.gz` (39K, written at 02:00 by the cron installed on 26 September) and
+`backup.log` (283 bytes), next to the 15 and 26 September dumps. This closes the "first scheduled 02:00 dump not yet seen"
+item of the 26 September housekeeping entry.
 
 **Left on the server:** `nestaprime.pre-hardening`, `nestaprime.pre-https`, `.env.pre-https`, the pending
 kernel/libc reboot flag (see the 26 September housekeeping entry).

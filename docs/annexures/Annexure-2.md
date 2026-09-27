@@ -2853,10 +2853,15 @@ table, settings (GET and POST), the dashboard and search answer 401; a wrong sig
 backend rebuild only; the script inside the container is the new one -- `grep` finds `admin_bootstrap` in it).
 
 **Open items.**
-- **[UNCONFIRMED] The real Admin has signed in and changed the exposed temporary password**, and the Admin's sidebar
-  looks as intended (Overview, Team & Access, More -> Master Settings and Audit Log). A read-only query answers the first:
-  `must_change_password` is false once it has been changed. It also shows whether exactly one Admin exists -- a repeat of
-  the creation command was pasted without its output, so whether it created a second account or refused is not known.
+- **[OPEN] The exposed temporary password has NOT been changed.** The Director's read-only query on the morning of 27
+  September shows **exactly one Admin**, `info@nestainfotech.com` (active, created 26 Sep 16:17:49 UTC), with
+  `must_change_password = t`: nobody has yet completed the forced change, so the password that was pasted into the chat
+  is still the working one, about ten hours after it was created. (The repeat of the creation command was therefore
+  refused, as intended: there is one Admin, not two.) Closing it: sign in once and choose a new password, or delete the
+  account while `must_change_password` is still true and create it again, reading the new password from the terminal only.
+  The web server's log (`POST /api/auth/login`, status 200) shows whether anyone has signed in at all in the meantime.
+  The Admin's sidebar has not been looked at yet either (should be Overview, Team & Access, More -> Master Settings and
+  Audit Log).
 - **Not verified in production:** any logged-in behaviour of the Admin, PM or Director screens (there is no production
   login here); the one-time start by the Director; the Admin's audit-log masking on real data.
 - **The README's example address** (`the-real-address@theircompany.in`) would have passed the script's check and created
