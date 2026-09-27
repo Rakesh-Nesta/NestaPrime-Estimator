@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getDashboard, listClients, listOpportunities } from "./api";
 import { ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
+import { formatRsWhole } from "./money";
 import { CollectionsPanel, PaymentsOverdueTile } from "./OverviewPayments";
 
 // Small local duplicate of FollowUps.jsx's own due-date merge/sort (same
@@ -129,6 +130,11 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
 
   const { summary, recent_projects: recentProjects } = data;
   const payments = data.payments || null; // null unless pm / director / ca_tax
+  // Amendment 60: "own" when the Director has switched own-records on and this is a Sales user -- every number
+  // below is then theirs alone, and says so. PM and Director also get the per-salesperson table.
+  const own = data.scope === "own";
+  const salesTeam = data.sales_performance || null;
+  const mine = (label) => (own ? `My ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label);
   const nextMoves = clients ? dueFollowUps(clients, opportunities || []).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
 
   // Amendment 49 (Section 53): the drill-down behind "Pending quotations" --
@@ -139,28 +145,28 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   const canSeeQuotations = ["sales", "pm", "director"].includes(role);
   const realTiles = [
     {
-      label: "Open opportunities",
+      label: mine("Open opportunities"),
       value: summary.open_opportunities_count,
       target: canSeeList ? "opportunities" : null,
       preset: {},
       icon: FunnelIcon,
     },
     {
-      label: "Pending quotations",
+      label: mine("Pending quotations"),
       value: summary.pending_quotations_count,
       target: canSeeQuotations ? "quotations_admin" : null,
       preset: { statusGroup: "pending" },
       icon: DocumentIcon,
     },
     {
-      label: "Active projects",
+      label: mine("Active projects"),
       value: summary.open_projects_count,
       target: "projects_admin",
       preset: { status: "open" },
       icon: FolderIcon,
     },
     {
-      label: "Follow-ups due",
+      label: mine("Follow-ups due"),
       value: summary.followups_due_count,
       target: CAN_SEE_CLIENT_LIST.includes(role) ? "followups" : null,
       preset: {},
@@ -197,8 +203,14 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
-            <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1">Business overview.</h2>
-            <p className="text-sm text-text-secondary mt-1">Every relationship. Every opportunity. One clear view.</p>
+            <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1">
+              {own ? "My overview." : "Business overview."}
+            </h2>
+            <p className="text-sm text-text-secondary mt-1">
+              {own
+                ? "Your clients, projects and quotations -- the ones you own."
+                : "Every relationship. Every opportunity. One clear view."}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -262,6 +274,14 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             </div>
           )
         )}
+        {own && (
+          <div className="text-left bg-surface border border-border-dark rounded-lg p-5">
+            <p className="text-xs uppercase tracking-wide text-text-secondary">My won this month</p>
+            <p className="text-2xl font-heading font-bold mt-2 text-text-primary">
+              {formatRsWhole(summary.won_this_month_total)}
+            </p>
+          </div>
+        )}
         {payments && (
           <PaymentsOverdueTile
             payments={payments}
@@ -279,7 +299,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         {payments && <CollectionsPanel payments={payments} onOpen={() => onDrillDown("payments", {})} />}
         <div className={`bg-surface border border-border-dark rounded-lg p-5 ${payments ? "" : "lg:col-span-2"}`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-heading font-semibold text-text-primary text-base">Sales pipeline</h3>
+            <h3 className="font-heading font-semibold text-text-primary text-base">{own ? "My sales pipeline" : "Sales pipeline"}</h3>
             {canSeeList && (
               <button
                 onClick={() => onDrillDown("opportunities", {})}
@@ -320,9 +340,44 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         </div>
       </div>
 
+      {salesTeam && salesTeam.length > 0 && (
+        <div className="bg-surface border border-border-dark rounded-lg p-5 rise" style={{ "--d": "0.24s" }}>
+          <h3 className="font-heading font-semibold text-text-primary text-base">Sales team</h3>
+          <p className="text-xs text-text-secondary mt-0.5 mb-3">
+            Each salesperson's own records -- the same figures their own Overview shows them.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[36rem]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-text-secondary border-b border-border-dark">
+                  <th className="py-2 pr-3 font-medium">Salesperson</th>
+                  <th className="py-2 px-3 font-medium text-right">Open enquiries</th>
+                  <th className="py-2 px-3 font-medium text-right">Pending quotations</th>
+                  <th className="py-2 px-3 font-medium text-right">Active projects</th>
+                  <th className="py-2 px-3 font-medium text-right">Follow-ups due</th>
+                  <th className="py-2 pl-3 font-medium text-right">Won this month</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-dark tabular-nums">
+                {salesTeam.map((row) => (
+                  <tr key={row.user_id}>
+                    <td className="py-2 pr-3 text-text-primary">{row.name}</td>
+                    <td className="py-2 px-3 text-right">{row.open_opportunities_count}</td>
+                    <td className="py-2 px-3 text-right">{row.pending_quotations_count}</td>
+                    <td className="py-2 px-3 text-right">{row.open_projects_count}</td>
+                    <td className="py-2 px-3 text-right">{row.followups_due_count}</td>
+                    <td className="py-2 pl-3 text-right">{formatRsWhole(row.won_this_month_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-5 rise" style={{ "--d": "0.28s" }}>
         <div className="lg:col-span-2 bg-surface border border-border-dark rounded-lg p-5">
-          <h3 className="font-heading font-semibold text-text-primary text-base mb-3">Recent projects</h3>
+          <h3 className="font-heading font-semibold text-text-primary text-base mb-3">{own ? "My recent projects" : "Recent projects"}</h3>
           {recentProjects.length === 0 ? (
             <p className="text-sm text-text-secondary">No projects yet -- create one to get started.</p>
           ) : (

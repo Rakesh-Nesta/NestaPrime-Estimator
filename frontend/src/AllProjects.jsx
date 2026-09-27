@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listProjects } from "./api";
+import OwnerControl, { CAN_ASSIGN_OWNERS, useOwners } from "./OwnerControl";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All projects" },
@@ -13,7 +14,9 @@ const STATUS_OPTIONS = [
 // screen: every project, filterable by open/won/lost (matching
 // dashboard.py's own status vocabulary), with a client-side search on top
 // of the backend's own project_no/client_name search.
-export default function AllProjects({ token, initialStatus = "", onOpenProject, onBack }) {
+export default function AllProjects({ token, role, initialStatus = "", onOpenProject, onBack }) {
+  const owners = useOwners(token, role);
+  const canAssign = CAN_ASSIGN_OWNERS.includes(role);
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(initialStatus);
   const [search, setSearch] = useState("");
@@ -75,22 +78,35 @@ export default function AllProjects({ token, initialStatus = "", onOpenProject, 
 
       <div className="bg-surface shadow rounded-lg divide-y divide-border-dark">
         {visibleRows.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onOpenProject(p.id)}
-            className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-surface-raised hover:-translate-y-0.5 transition-all duration-250 ease-out"
-          >
-            <span className="text-sm">
-              <span className="font-medium text-text-primary font-mono">{p.project_no}</span>{" "}
-              <span className="text-text-secondary">
-                · {p.client_name} · {p.city}
+          <div key={p.id} className="flex flex-wrap items-center gap-x-3 hover:bg-surface-raised transition-colors duration-250">
+            <button
+              onClick={() => onOpenProject(p.id)}
+              className="flex-1 min-w-0 text-left px-4 py-3 flex items-center justify-between gap-3"
+            >
+              <span className="text-sm min-w-0 break-words">
+                <span className="font-medium text-text-primary font-mono">{p.project_no}</span>{" "}
+                <span className="text-text-secondary">
+                  · {p.client_name} · {p.city}
+                </span>
               </span>
-            </span>
-            <span className="flex items-center gap-3">
-              <StatusPill status={p.status} />
-              <span className="text-sm text-gold">Open →</span>
-            </span>
-          </button>
+              <span className="flex items-center gap-3 shrink-0">
+                <StatusPill status={p.status} />
+                <span className="text-sm text-gold">Open →</span>
+              </span>
+            </button>
+            {canAssign && (
+              <span className="px-4 pb-2 sm:pb-0 sm:pr-4 sm:pl-0">
+                <OwnerControl
+                  token={token}
+                  kind="project"
+                  recordId={p.id}
+                  ownerId={p.owner_id}
+                  owners={owners}
+                  onChanged={(next) => setRows((rs) => rs.map((r) => (r.id === p.id ? { ...r, owner_id: next } : r)))}
+                />
+              </span>
+            )}
+          </div>
         ))}
         {visibleRows.length === 0 && (
           <p className="text-sm text-text-secondary text-center py-6">No projects match these filters.</p>

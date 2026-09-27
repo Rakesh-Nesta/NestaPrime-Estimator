@@ -2007,3 +2007,51 @@ export async function askEducationAssistant(token, { question, context, history 
   });
   return handle(res);
 }
+
+// Amendment 60 (Section 63): who owns which client, project and enquiry (PM and Director; the switch is
+// Director only).
+export async function getOwnershipOverview(token) {
+  const res = await fetch(`${API_BASE}/ownership/overview`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listUnassigned(token, kind) {
+  const res = await fetch(`${API_BASE}/ownership/unassigned?kind=${encodeURIComponent(kind)}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function assignOwner(token, kind, recordId, ownerId, { cascade = true } = {}) {
+  const res = await fetch(`${API_BASE}/ownership/${kind}/${recordId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ owner_id: ownerId || null, cascade }),
+  });
+  return handle(res);
+}
+
+export async function reassignAllOwnership(token, fromUserId, toUserId) {
+  const res = await fetch(`${API_BASE}/ownership/reassign-all`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ from_user_id: fromUserId, to_user_id: toUserId }),
+  });
+  return handle(res);
+}
+
+export async function acceptOwnerSuggestions(token, kind) {
+  const res = await fetch(`${API_BASE}/ownership/accept-suggestions`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ kind }),
+  });
+  return handle(res);
+}
+
+export async function setOwnRecordsSwitch(token, on) {
+  const res = await fetch(`${API_BASE}/ownership/switch`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ on }),
+  });
+  return handle(res);
+}
