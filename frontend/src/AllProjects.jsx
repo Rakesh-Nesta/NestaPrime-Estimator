@@ -63,6 +63,7 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [autoSelectDone, setAutoSelectDone] = useState(false);
   const [sort, setSort] = useState({ key: "project_no", dir: "asc" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -74,6 +75,15 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [token, status]);
+
+  // The "Selected project" summary bar reads as part of the page -- so the first row is selected by
+  // default as soon as there is one, the same as the mockup shows it. Once, not on every load.
+  useEffect(() => {
+    if (!autoSelectDone && selectedId === null && rows.length > 0) {
+      setSelectedId(rows[0].id);
+      setAutoSelectDone(true);
+    }
+  }, [rows, autoSelectDone, selectedId]);
 
   function onSort(key) {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
@@ -129,7 +139,13 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
 
       <div className="grid grid-cols-3 gap-4">
         {tiles.map((tile) => (
-          <div key={tile.label} className="bg-surface border border-border-dark rounded-lg p-4 flex items-center gap-3">
+          <button
+            key={tile.label}
+            onClick={() => setStatus(tile.key)}
+            className={`text-left bg-surface border rounded-lg p-4 flex items-center gap-3 hover:-translate-y-0.5 transition-all duration-250 ease-out ${
+              status === tile.key ? "border-gold" : "border-border-dark"
+            }`}
+          >
             <span className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${TILE_STYLE[tile.key || "total"]}`}>
               <tile.icon className="w-4 h-4" />
             </span>
@@ -137,7 +153,7 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
               <p className="text-xs uppercase tracking-wide text-text-secondary truncate">{tile.label}</p>
               <p className="text-xl font-heading font-bold text-text-primary">{tile.value}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
