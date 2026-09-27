@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getDashboard, listClients, listOpportunities } from "./api";
-import { ClockIcon, DocumentIcon, FolderIcon, FunnelIcon } from "./Icons";
+import { CalendarIcon, ChartIcon, ClockIcon, DocumentIcon, FolderIcon, FunnelIcon, UsersIcon } from "./Icons";
 import { formatRsWhole } from "./money";
 import { CollectionsPanel, PaymentsOverdueTile } from "./OverviewPayments";
 
@@ -216,9 +216,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             <button
               onClick={() => onDrillDown("reports", {})}
               title="Pinned for quick access"
-              className="text-xs uppercase tracking-wider bg-surface border border-gold/40 text-gold hover:bg-gold/10 rounded px-4 py-2.5 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+              className="text-xs uppercase tracking-wider bg-surface border border-gold/40 text-gold hover:bg-gold/10 rounded px-4 py-2.5 font-semibold hover:-translate-y-0.5 transition-all duration-250 ease-out flex items-center gap-1.5"
             >
-              📌 Reports
+              <ChartIcon className="w-3.5 h-3.5" /> Reports
             </button>
             <button
               onClick={onNewProject}
@@ -299,7 +299,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         {payments && <CollectionsPanel payments={payments} onOpen={() => onDrillDown("payments", {})} />}
         <div className={`bg-surface border border-border-dark rounded-lg p-5 ${payments ? "" : "lg:col-span-2"}`}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-heading font-semibold text-text-primary text-base">{own ? "My sales pipeline" : "Sales pipeline"}</h3>
+            <h3 className="font-heading font-semibold text-text-primary text-base flex items-center gap-2">
+            <ChartIcon className="w-4 h-4 text-gold" /> {own ? "My sales pipeline" : "Sales pipeline"}
+          </h3>
             {canSeeList && (
               <button
                 onClick={() => onDrillDown("opportunities", {})}
@@ -342,7 +344,9 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
 
       {salesTeam && salesTeam.length > 0 && (
         <div className="bg-surface border border-border-dark rounded-lg p-5 rise" style={{ "--d": "0.24s" }}>
-          <h3 className="font-heading font-semibold text-text-primary text-base">Sales team</h3>
+          <h3 className="font-heading font-semibold text-text-primary text-base flex items-center gap-2">
+            <UsersIcon className="w-4 h-4 text-gold" /> Sales team
+          </h3>
           <p className="text-xs text-text-secondary mt-0.5 mb-3">
             Each salesperson's own records -- the same figures their own Overview shows them.
           </p>
@@ -377,34 +381,47 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
 
       <div className="grid lg:grid-cols-3 gap-5 rise" style={{ "--d": "0.28s" }}>
         <div className="lg:col-span-2 bg-surface border border-border-dark rounded-lg p-5">
-          <h3 className="font-heading font-semibold text-text-primary text-base mb-3">{own ? "My recent projects" : "Recent projects"}</h3>
+          <h3 className="font-heading font-semibold text-text-primary text-base mb-3 flex items-center gap-2">
+            <FolderIcon className="w-4 h-4 text-gold" /> {own ? "My recent projects" : "Recent projects"}
+          </h3>
           {recentProjects.length === 0 ? (
             <p className="text-sm text-text-secondary">No projects yet -- create one to get started.</p>
           ) : (
-            <ul className="divide-y divide-border-dark">
-              {recentProjects.map((project) => (
-                <li key={project.id}>
-                  <button
-                    onClick={() => onOpenProject(project.id)}
-                    className="w-full text-left py-3 flex items-center justify-between gap-3 hover:bg-surface-raised px-2 rounded hover:-translate-y-0.5 transition-all duration-250 ease-out"
-                  >
-                    <span className="flex items-center gap-3 min-w-0">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-gold bg-gold-muted border border-gold/30 rounded-full px-2 py-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gold" />
-                        Open
-                      </span>
-                      <span className="min-w-0 break-words">
-                        <span className="font-medium text-text-primary font-mono text-sm">{project.project_no}</span>{" "}
-                        <span className="text-text-secondary">
-                          · {project.client_name} · {project.city}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-text-secondary border-b border-border-dark">
+                    <th className="py-2 pr-3 font-medium">Project</th>
+                    <th className="py-2 px-3 font-medium">Client</th>
+                    <th className="py-2 px-3 font-medium">Location</th>
+                    <th className="py-2 px-3 font-medium">Status</th>
+                    <th className="py-2 pl-3 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-dark">
+                  {recentProjects.map((project) => (
+                    <tr
+                      key={project.id}
+                      onClick={() => onOpenProject(project.id)}
+                      className="cursor-pointer hover:bg-surface-raised transition-colors duration-150"
+                    >
+                      <td className="py-2.5 pr-3 font-mono text-text-primary whitespace-nowrap">{project.project_no}</td>
+                      <td className="py-2.5 px-3 text-text-primary">{project.client_name}</td>
+                      <td className="py-2.5 px-3 text-text-secondary">{project.city}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-gold bg-gold-muted border border-gold/30 rounded-full px-2 py-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gold" />
+                          Open
                         </span>
-                      </span>
-                    </span>
-                    <span className="text-sm text-gold shrink-0">Open →</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      </td>
+                      <td className="py-2.5 pl-3 text-right whitespace-nowrap">
+                        <span className="text-gold">Open →</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           <button
             onClick={() => onDrillDown("projects_admin", {})}
@@ -414,11 +431,18 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
           </button>
         </div>
         <div className="bg-surface border border-border-dark rounded-lg p-5">
-          <h3 className="font-heading font-semibold text-text-primary text-base mb-3">Your next moves</h3>
+          <h3 className="font-heading font-semibold text-text-primary text-base mb-3 flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-gold" /> Your next moves
+          </h3>
           {nextMoves === null ? (
             <p className="text-sm text-text-secondary">Follow-up details aren't available for your role.</p>
           ) : nextMoves.length === 0 ? (
-            <p className="text-sm text-text-secondary">No client follow-ups due right now.</p>
+            <div className="text-center py-6 space-y-3">
+              <div className="mx-auto w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center">
+                <CalendarIcon className="w-6 h-6 text-gold" />
+              </div>
+              <p className="text-sm text-text-secondary">No client follow-ups due right now.</p>
+            </div>
           ) : (
             <ul className="divide-y divide-border-dark">
               {nextMoves.map((c) => (
