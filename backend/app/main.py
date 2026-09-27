@@ -25,6 +25,7 @@ from app.api import (
     exports,
     field_settings,
     flooring,
+    follow_ups,
     gym,
     hubs,
     hvac,
@@ -144,6 +145,7 @@ app.include_router(structures.structures_router)
 app.include_router(structures.netting_grades_router)
 app.include_router(site_works.site_works_router)
 app.include_router(flooring.flooring_router)
+app.include_router(follow_ups.router)
 app.include_router(lighting.lighting_router)
 app.include_router(hvac.hvac_router)
 app.include_router(gym.gym_router)

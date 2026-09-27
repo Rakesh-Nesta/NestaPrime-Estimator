@@ -5,6 +5,13 @@ from app.models.client_signatory import ClientSignatory  # noqa: F401
 from app.models.company_logo import CompanyLogo  # noqa: F401
 from app.models.construction_sequence_step import ConstructionPhase, ConstructionSequenceStep  # noqa: F401
 from app.models.flooring_guide import FlooringGuide  # noqa: F401
+from app.models.follow_up import (  # noqa: F401
+    FollowUp,
+    FollowUpEntityType,
+    FollowUpHistory,
+    FollowUpStatus,
+    WaitingParty,
+)
 from app.models.document import (  # noqa: F401
     CostSheet,
     CostSheetLine,
