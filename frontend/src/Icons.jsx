@@ -79,6 +79,39 @@ export function BellIcon(props) {
   );
 }
 
+export function RupeeIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h12M6 9h12M6 4c4 0 7 1.5 7 4.5S10 13 6 13h9l-9 8" />
+    </Icon>
+  );
+}
+
+export function BankIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 10l9-6 9 6M4 10v9M9 10v9M15 10v9M20 10v9M2 21h20" />
+    </Icon>
+  );
+}
+
+export function PieIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3a9 9 0 109 9h-9z" />
+    </Icon>
+  );
+}
+
+export function AlertIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5M12 16h.01" />
+    </Icon>
+  );
+}
+
 export function ShieldIcon(props) {
   return (
     <Icon {...props}>
