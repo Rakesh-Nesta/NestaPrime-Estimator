@@ -663,7 +663,7 @@ function DetailsPanel({
   return (
     <form
       onSubmit={handleSubmit}
-      className="w-full lg:w-[22rem] shrink-0 bg-surface border border-border-dark rounded-lg p-5 space-y-4 h-fit lg:sticky lg:top-4"
+      className="w-full lg:w-[22rem] shrink-0 bg-surface border border-border-dark rounded-lg p-5 space-y-4 h-fit lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] overflow-y-auto"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-text-primary">
