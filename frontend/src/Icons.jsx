@@ -113,3 +113,60 @@ export function SearchIcon(props) {
     </Icon>
   );
 }
+
+// Admin Overview redesign (2026-09-27): one small icon per role in the
+// "Active people by role" grid, same stroke style as the rest of this file.
+export function CrownIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 17h18l-1.5-8-4 3-3.5-5-3.5 5-4-3z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 20h15" />
+    </Icon>
+  );
+}
+
+export function BriefcaseIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="8" width="18" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 8V6a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18" />
+    </Icon>
+  );
+}
+
+export function TruckIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h11v9H3zM14 10h4l3 3v3h-7z" />
+      <circle cx="7.5" cy="18" r="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="17.5" cy="18" r="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </Icon>
+  );
+}
+
+export function WrenchIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.5 6.5a4 4 0 00-5.4 4.6L4 16.2V20h3.8l5.1-5.1a4 4 0 004.6-5.4l-2.8 2.8-2-2z" />
+    </Icon>
+  );
+}
+
+export function ReceiptIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 3h14v18l-2.5-1.5L14 21l-2.5-1.5L9 21l-2.5-1.5L4 21V3z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 8h8M8 12h8M8 16h5" />
+    </Icon>
+  );
+}
+
+// Team & Access (Admin view) redesign (2026-09-27): account/password-status badges.
+export function LockIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="11" width="14" height="9" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 018 0v4" />
+    </Icon>
+  );
+}
