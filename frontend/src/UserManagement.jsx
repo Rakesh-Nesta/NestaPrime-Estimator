@@ -39,6 +39,7 @@ export default function UserManagementTab({ token, currentUser }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [ownerNote, setOwnerNote] = useState("");
 
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState(emptyUserForm());
@@ -88,8 +89,15 @@ export default function UserManagementTab({ token, currentUser }) {
 
   async function handleToggleActive(u) {
     setError("");
+    setOwnerNote("");
     try {
       await updateUser(token, u.id, { is_active: !u.is_active });
+      // Amendment 60: a person's clients, projects and enquiries stay theirs until someone moves them.
+      if (u.is_active && ["sales", "pm", "director"].includes(u.role)) {
+        setOwnerNote(
+          `${u.name} still owns any clients, projects and enquiries they held. A PM or the Director can move them in Team & Access, under Record owners.`
+        );
+      }
       await load();
     } catch (err) {
       setError(err.message);
@@ -127,6 +135,7 @@ export default function UserManagementTab({ token, currentUser }) {
         </p>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
+      {ownerNote && <p className="text-sm text-amber-400">{ownerNote}</p>}
 
       <div className="space-y-2">
         {users.map((u) => {

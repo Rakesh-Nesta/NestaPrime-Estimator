@@ -356,6 +356,11 @@ export const DIRECTOR_ADMIN_GUIDE = {
         "Team & Access → Roles & permissions shows exactly what each role can do, read live from the access checks the server enforces, so it cannot fall out of date. It's read-only by design — some rules (cost/margin visibility, Director-only release gates, the last-Director and last-Admin guardrails above) are deliberately not adjustable from any screen.",
     },
     {
+      title: "Team & Access — Record owners",
+      body:
+        "Every client, project and enquiry has an owner: whoever created it, or whoever a PM or the Director gave it to. Team & Access → Record owners (PM and Director) shows how many records each person owns, lists the ones with no owner (with a suggested owner where the records themselves point to one), and lets you assign them one at a time, accept all suggestions, or move everything one person owns to another when they leave. Changing a client's owner moves its projects and enquiries that were the old owner's along with it. The Director alone can turn on \"each salesperson sees only their own\": from then on a Sales user sees only what they own, plus its quotations, estimates and cost sheets, and their Overview shows only their own numbers. It is off until then. Records with no owner are hidden from every salesperson once it is on, so assign them first. Every change is written to the Audit Log.",
+    },
+    {
       title: "All Quotations — reviewing every quotation, not just one project's",
       body:
         "The cross-project register (Amendment 6b): filter by status or the quicker All/Pending/Old pills, plus a date range on when each Quotation was created. This is the one cross-project list that shows real cost and margin figures, including a below-floor flag — Export CSV for anything you want to review or hand off outside the app.",
@@ -464,6 +469,18 @@ export const FAQ = [
   {
     q: "Is the Pricing Calculator the same as a real Estimate?",
     a: "No — it's a standalone what-if sandbox. Nothing you type there is saved, linked to a real project, or fed into any Cost Sheet or Estimate.",
+  },
+  {
+    q: "Why can't I see a client or project a colleague is working on?",
+    a: "Once the Director has turned on own-records, a salesperson sees only the clients, projects and enquiries they own -- and the quotations, estimates and cost sheets under them. Everything else behaves as if it isn't there. If a client should be yours, ask a PM: they can reassign it from Team & Access → Record owners.",
+  },
+  {
+    q: "Who sees what — my numbers, or the company's?",
+    a: "A salesperson sees their own Overview (\"My overview\": their enquiries, quotations, projects, follow-ups and what they won this month). A PM or the Director sees the company's figures, and a Sales team table with the same numbers for each salesperson. The switch is off until the Director turns it on.",
+  },
+  {
+    q: "It says this client already exists under another salesperson — what now?",
+    a: "The app found a client with the same email, phone number, or name and city, owned by someone else, and won't create a second one. Ask a PM: they can assign that client to you, or tell you who owns it.",
   },
   {
     q: "Who can see the Audit Log?",

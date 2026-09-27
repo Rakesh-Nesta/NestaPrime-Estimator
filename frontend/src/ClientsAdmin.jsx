@@ -14,6 +14,7 @@ import {
 } from "./api";
 import EditDetailsForm from "./EditDetailsForm";
 import { UsersIcon } from "./Icons";
+import OwnerControl, { CAN_ASSIGN_OWNERS, useOwners } from "./OwnerControl";
 
 const CLIENT_TYPES = ["school", "college", "housing_society", "corporate", "club", "government", "individual"];
 const emptyClientForm = { name: "", type: "school", contact_name: "", phone: "", email: "", city: "", notes: "" };
@@ -111,6 +112,8 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
   const [submittingEnquiry, setSubmittingEnquiry] = useState(false);
   const [enquirySaved, setEnquirySaved] = useState(false);
   const canEditFlags = role === "director";
+  const owners = useOwners(token, role);
+  const canAssign = CAN_ASSIGN_OWNERS.includes(role);
 
   const [expandedClientId, setExpandedClientId] = useState(null);
   const [projectsByClient, setProjectsByClient] = useState({});
@@ -600,6 +603,17 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
                   />
                 )}
 
+                {canAssign && (
+                  <OwnerControl
+                    token={token}
+                    kind="opportunity"
+                    recordId={o.id}
+                    ownerId={o.owner_id}
+                    owners={owners}
+                    onChanged={(next) => setLeads((ls) => ls.map((l) => (l.id === o.id ? { ...l, owner_id: next } : l)))}
+                  />
+                )}
+
                 {o.next_follow_up_date && (
                   <p className={`text-xs ${overdue ? "text-red-400" : "text-text-secondary"}`}>
                     <span className="font-medium">Follow-up</span> {o.next_follow_up_date}
@@ -716,6 +730,17 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
               initial={{ name: c.name, contact_name: c.contact_name, phone: c.phone, email: c.email, city: c.city }}
               onSave={(values) => saveDetails(c.id, values)}
               onCancel={() => setEditingClientId(null)}
+            />
+          )}
+
+          {canAssign && (
+            <OwnerControl
+              token={token}
+              kind="client"
+              recordId={c.id}
+              ownerId={c.owner_id}
+              owners={owners}
+              onChanged={(next) => setClients((cs) => cs.map((x) => (x.id === c.id ? { ...x, owner_id: next } : x)))}
             />
           )}
 

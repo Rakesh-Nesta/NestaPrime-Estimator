@@ -260,6 +260,7 @@ export default function App() {
         {screen === "projects_admin" && (
           <AllProjects
             token={accessToken}
+            role={user.role}
             initialStatus={drillPreset.status || ""}
             onOpenProject={handleOpenProject}
             onBack={() => setScreen(preNavScreen)}
