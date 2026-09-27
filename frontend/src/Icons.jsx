@@ -144,6 +144,7 @@ export function ReceiptIcon(props) {
   );
 }
 
+// Team & Access (Admin view) redesign (2026-09-27): account/password-status badges.
 export function LockIcon(props) {
   return (
     <Icon {...props}>
