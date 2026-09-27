@@ -247,7 +247,9 @@ export default function App() {
             />
           </>
         )}
-        {screen === "dashboard" && user.role === "admin" && <AdminOverview token={accessToken} />}
+        {screen === "dashboard" && user.role === "admin" && (
+          <AdminOverview token={accessToken} onManageTeam={() => goToTopLevel("team_access")} />
+        )}
         {screen === "dashboard" && user.role !== "admin" && (
           <Dashboard
             token={accessToken}
