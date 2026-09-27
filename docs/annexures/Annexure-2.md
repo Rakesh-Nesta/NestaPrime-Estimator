@@ -2894,6 +2894,35 @@ on the dashboard only their own performance, not the company's performance or re
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-63-specs.md`, approved 26 September 2026).
 
+**LIVE 27 September 2026** (PRs #244 backend, #245 screens, deployed together; #246 a separate housekeeping fix
+described below). `owner_id` added to clients, projects and opportunities (migration `a3f9c27d5e14`); a global
+by-id guard answers 404 for a Sales user's request naming a record that is not theirs, the same answer as one that
+does not exist; lists, search, the dashboard and reports narrow the same way; `/ownership/*` gives PM and Director
+a review screen (who owns what, unassigned records with a suggested owner where the data points to one, reassign
+one/all/by-suggestion) and the Director alone the switch, off by default. Two differences from the spec, both
+reported in #244: there was no existing check against a duplicate client (added: same email, phone, or name+city
+against another salesperson's client, 409 "ask a PM"), and client/project creation was never audited, so the
+migration's backfill can only use the enquiry trail -- a client or project with no linked enquiry came out with no
+owner, which is what the review screen exists to fix.
+
+**Before the switch could safely go on, the review itself found a housekeeping gap.** The unassigned counts read
+20 of 21 clients and 19 of 21 projects -- not real records lacking an owner, but leftover test/verification data
+from past Amendments' own live-verification steps (Amendments 28, "29-31", 33, 45, the deploy-smoke-test checks,
+and six identical unlabelled "Home Solutions" clients from one session on 11 September), left in *production*
+the whole time, never cleaned up. The Director confirmed each group by name against a read-only listing before
+anything was touched, and confirmed two records that looked similar were real and must stay: "Pathankot Badminton
+Court (FY23-24 actual, calibration)" (the `Project.is_calibration` field exists for exactly this) and "Imperial
+International School" (no test marker, a project from the day of this review). **PR #246**, a locally-proven
+script (`backend/scripts/delete_confirmed_test_records.py`, dry-run by default, the exact 18 confirmed ids only,
+never by name-matching), removed those 18 clients and everything under them -- 15 projects, 9 cost sheets, 9
+estimates, 7 quotations, 1 purchase order -- in one transaction, 27 September. The Director then assigned Imperial
+International School to whoever is actually handling it (its own projects and enquiry moved with it), leaving only
+Pathankot's reference data unassigned on purpose, and turned the switch on.
+
+**Not yet done:** the "Verification Account (throwaway)" Director user (`verify-director@nestaprime.local`), found
+during this same review still live in production holding a few records of its own, was not part of this cleanup --
+flagged for a later session, not urgent since it holds no Sales-visible records now that the switch is on.
+
 ### Amendment No. 61 — Sign-in and User Creation with a Mobile Number or an Email
 **Registered 26 September 2026**, on the Director's instruction, in their words: "login benchmark admin-manager/PM-
 Users create with mobile no or email both". Read as: an account can be created with a mobile number, an email or both;
