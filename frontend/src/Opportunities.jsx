@@ -68,10 +68,21 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
   const [error, setError] = useState("");
   const [linkPicks, setLinkPicks] = useState({});
   const [loadFailed, setLoadFailed] = useState(false);
+  const [autoSelectDone, setAutoSelectDone] = useState(false);
 
   function load() {
     return listOpportunities(token, { relationship: relationship || undefined }).then(setOpportunities);
   }
+
+  // The details panel reads as part of the page, not an optional extra -- so the first row is selected by
+  // default as soon as there is one, the same as every mockup shows it. Once, not on every load: closing
+  // the panel (or an empty list briefly reloading) must not silently reselect something for the user.
+  useEffect(() => {
+    if (!autoSelectDone && selectedId === null && opportunities.length > 0) {
+      setSelectedId(opportunities[0].id);
+      setAutoSelectDone(true);
+    }
+  }, [opportunities, autoSelectDone, selectedId]);
 
   useEffect(() => {
     setLoading(true);
@@ -141,10 +152,36 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
   const tabCounts = { "": opportunities.length };
   const selected = opportunities.find((o) => o.id === selectedId) || null;
   const tiles = [
-    { label: "Total opportunities", value: opportunities.length, icon: DocumentIcon },
-    { label: "Lead only", value: opportunities.filter((o) => !o.client_id).length, icon: UsersIcon },
-    { label: "Won", value: opportunities.filter((o) => o.stage === "won").length, icon: FunnelIcon, tone: "won" },
-    { label: "Lost", value: opportunities.filter((o) => o.stage === "lost").length, icon: FunnelIcon, tone: "lost" },
+    {
+      label: "Total opportunities",
+      value: opportunities.length,
+      icon: DocumentIcon,
+      active: !statusFilter && !relationship,
+      onClick: () => { setStatusFilter(""); setRelationship(""); },
+    },
+    {
+      label: "Lead only",
+      value: opportunities.filter((o) => !o.client_id).length,
+      icon: UsersIcon,
+      active: relationship === "lead",
+      onClick: () => { setStatusFilter(""); setRelationship("lead"); },
+    },
+    {
+      label: "Won",
+      value: opportunities.filter((o) => o.stage === "won").length,
+      icon: FunnelIcon,
+      tone: "won",
+      active: statusFilter === "won",
+      onClick: () => setStatusFilter(statusFilter === "won" ? "" : "won"),
+    },
+    {
+      label: "Lost",
+      value: opportunities.filter((o) => o.stage === "lost").length,
+      icon: FunnelIcon,
+      tone: "lost",
+      active: statusFilter === "lost",
+      onClick: () => setStatusFilter(statusFilter === "lost" ? "" : "lost"),
+    },
   ];
 
   return (
@@ -167,9 +204,12 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
         {tiles.map((tile) => (
-          <div
+          <button
             key={tile.label}
-            className={`rounded-lg border p-4 ${tile.tone ? TILE_STYLE[tile.tone] : "bg-surface border-border-dark"}`}
+            onClick={tile.onClick}
+            className={`text-left rounded-lg border p-4 hover:-translate-y-0.5 transition-all duration-250 ease-out ${
+              tile.tone ? TILE_STYLE[tile.tone] : "bg-surface border-border-dark"
+            } ${tile.active ? "ring-1 ring-gold" : ""}`}
           >
             <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
               <tile.icon className="w-3.5 h-3.5" />
@@ -182,7 +222,7 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
             >
               {tile.value}
             </p>
-          </div>
+          </button>
         ))}
       </div>
 

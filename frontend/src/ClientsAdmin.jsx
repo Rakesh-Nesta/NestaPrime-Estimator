@@ -138,6 +138,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
   const [search, setSearch] = useState(initialSearch);
   const [ownerFilter, setOwnerFilter] = useState("");
   const [panel, setPanel] = useState(null); // null | {mode:"new-client"|"new-lead"} | {mode:"edit-client"|"edit-lead", id}
+  const [autoSelectDone, setAutoSelectDone] = useState(false);
   const canEditFlags = role === "director";
   const owners = useOwners(token, role);
   const canAssign = CAN_ASSIGN_OWNERS.includes(role);
@@ -181,6 +182,22 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  // The details panel reads as part of the page, not an optional extra -- so the first client (or the
+  // first lead, if there is no client yet) is selected by default as soon as there is one, the same as
+  // every mockup shows it. Once, not on every load: closing the panel must not silently reselect something.
+  useEffect(() => {
+    if (autoSelectDone || panel !== null) return;
+    if (clients.length > 0) {
+      const first = clients.slice().sort((a, b) => a.name.localeCompare(b.name))[0];
+      setPanel({ mode: "edit-client", id: first.id });
+      setAutoSelectDone(true);
+    } else if (leads.length > 0) {
+      const first = leads.slice().sort(byFollowUp)[0];
+      setPanel({ mode: "edit-lead", id: first.id });
+      setAutoSelectDone(true);
+    }
+  }, [clients, leads, autoSelectDone, panel]);
 
   function closePanel() {
     setPanel(null);
@@ -282,10 +299,20 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
   const selectedId = panel && (panel.mode === "edit-client" || panel.mode === "edit-lead") ? panel.id : null;
 
   const summaryTiles = [
-    { label: "Total contacts", value: leads.length + clients.length, icon: UsersIcon },
-    { label: "Leads", value: leads.length, icon: FunnelIcon },
-    { label: "Clients", value: clients.length, icon: GridIcon },
-    ...(canAssign ? [{ label: "Unassigned", value: unassignedCount, icon: BellIcon, warn: unassignedCount > 0 }] : []),
+    { label: "Total contacts", value: leads.length + clients.length, icon: UsersIcon, onClick: () => { setTab("all"); setOwnerFilter(""); } },
+    { label: "Leads", value: leads.length, icon: FunnelIcon, onClick: () => { setTab("leads"); setOwnerFilter(""); } },
+    { label: "Clients", value: clients.length, icon: GridIcon, onClick: () => { setTab("clients"); setOwnerFilter(""); } },
+    ...(canAssign
+      ? [
+          {
+            label: "Unassigned",
+            value: unassignedCount,
+            icon: BellIcon,
+            warn: unassignedCount > 0,
+            onClick: () => { setTab("all"); setOwnerFilter(UNASSIGNED); },
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -328,17 +355,33 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
       </div>
 
       <div className={`grid grid-cols-2 ${summaryTiles.length > 3 ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4 mb-5`}>
-        {summaryTiles.map((tile) => (
-          <div key={tile.label} className="bg-surface border border-border-dark rounded-lg p-4">
-            <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
-              <tile.icon className="w-3.5 h-3.5" />
-              {tile.label}
-            </p>
-            <p className={`text-2xl font-heading font-bold mt-1 ${tile.warn ? "text-amber-400" : "text-text-primary"}`}>
-              {tile.value}
-            </p>
-          </div>
-        ))}
+        {summaryTiles.map((tile) => {
+          const active =
+            tile.label === "Total contacts"
+              ? tab === "all" && !ownerFilter
+              : tile.label === "Leads"
+                ? tab === "leads" && !ownerFilter
+                : tile.label === "Clients"
+                  ? tab === "clients" && !ownerFilter
+                  : ownerFilter === UNASSIGNED;
+          return (
+            <button
+              key={tile.label}
+              onClick={tile.onClick}
+              className={`text-left bg-surface border rounded-lg p-4 hover:border-gold hover:-translate-y-0.5 transition-all duration-250 ease-out ${
+                active ? "border-gold" : "border-border-dark"
+              }`}
+            >
+              <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
+                <tile.icon className="w-3.5 h-3.5" />
+                {tile.label}
+              </p>
+              <p className={`text-2xl font-heading font-bold mt-1 ${tile.warn ? "text-amber-400" : "text-text-primary"}`}>
+                {tile.value}
+              </p>
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex flex-col lg:flex-row gap-5">
