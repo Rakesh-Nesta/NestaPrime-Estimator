@@ -79,6 +79,23 @@ export function BellIcon(props) {
   );
 }
 
+export function BoxIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l9-5 9 5-9 5-9-5z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 8v8l9 5 9-5V8M12 13v8" />
+    </Icon>
+  );
+}
+
+export function ChartIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10M11 20V4M18 20v-7" />
+    </Icon>
+  );
+}
+
 export function ShieldIcon(props) {
   return (
     <Icon {...props}>
