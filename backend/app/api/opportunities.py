@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
@@ -81,6 +82,7 @@ class OpportunityDetailsUpdate(BaseModel):
 
 class OpportunityOut(BaseModel):
     id: uuid.UUID
+    owner_id: uuid.UUID | None = None  # Amendment 60: who owns this enquiry (None = unassigned)
     client_id: uuid.UUID | None
     lead_name: str
     lead_phone: str | None
@@ -107,10 +109,11 @@ def create_opportunity(
     field is asked for here."""
     _require_future_or_today(payload.next_follow_up_date)
     if payload.client_id is not None:
+        ownership.require_own_client(db, current_user, payload.client_id)
         if not db.query(Client).filter(Client.id == payload.client_id).first():
             raise HTTPException(status_code=404, detail="Client not found")
 
-    opportunity = Opportunity(**payload.model_dump(), created_by_id=current_user.id)
+    opportunity = Opportunity(**payload.model_dump(), created_by_id=current_user.id, owner_id=current_user.id)
     db.add(opportunity)
     db.commit()
     db.refresh(opportunity)
@@ -128,6 +131,8 @@ def list_opportunities(
     client_id is set. Matches the CRM reference's All/Leads/Clients tabs
     the Design input names."""
     query = db.query(Opportunity)
+    if ownership.scoping_applies(db, current_user):
+        query = query.filter(Opportunity.owner_id == current_user.id)
     if stage is not None:
         query = query.filter(Opportunity.stage == stage)
     if relationship == "lead":
@@ -212,6 +217,7 @@ def link_opportunity_client(
 ):
     """Attaches an already-existing Client -- does not create one. Creating
     a Client still goes through the existing, unchanged POST /clients."""
+    ownership.require_own_client(db, current_user, payload.client_id)
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -220,6 +226,9 @@ def link_opportunity_client(
         raise HTTPException(status_code=404, detail="Client not found")
 
     opportunity.client_id = payload.client_id
+    # Amendment 60: linking a client to an enquiry gives a client with no owner the enquiry's owner.
+    if client.owner_id is None:
+        client.owner_id = opportunity.owner_id
     db.commit()
     db.refresh(opportunity)
     return opportunity

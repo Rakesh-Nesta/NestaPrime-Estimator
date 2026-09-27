@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import AuditLogEntryOut
+from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.audit_log import AuditLogEntry
@@ -82,6 +83,18 @@ class PaymentsOverview(BaseModel):
     months: list[PaymentsMonthOut]
 
 
+class SalespersonRowOut(BaseModel):
+    """One salesperson's own numbers -- the same figures their own Overview shows (Amendment 60)."""
+
+    user_id: uuid.UUID
+    name: str
+    open_projects_count: int
+    pending_quotations_count: int
+    open_opportunities_count: int
+    followups_due_count: int
+    won_this_month_total: float
+
+
 class DashboardOut(BaseModel):
     summary: DashboardSummary
     recent_projects: list[RecentProjectOut]
@@ -89,18 +102,19 @@ class DashboardOut(BaseModel):
     # pm / director / ca_tax) -- same "return only what the role may see"
     # rule as recent_activity below.
     payments: PaymentsOverview | None = None
+    # Amendment 60: "own" when the numbers above are this person's own records, "company" when they are the company's.
+    scope: str = "company"
+    # Amendment 60: a row per active salesperson, for the PM and Director only (None for every other role).
+    sales_performance: list[SalespersonRowOut] | None = None
     # None for every role but Director -- matches audit_log.py's own
     # Director-only gate rather than inventing a broader one here.
     recent_activity: list[AuditLogEntryOut] | None
 
 
-@router.get("", response_model=DashboardOut)
-def get_dashboard(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_roles("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
-    ),
-):
+def _summary(db: Session, owner: uuid.UUID | None) -> DashboardSummary:
+    """The Overview's numbers -- for the whole company (owner None), or for one person's own records (Amendment 60,
+    Section 63: a salesperson's dashboard is their own performance, never the company's, and the same function fills
+    the Director's per-salesperson table)."""
     # Amendment 28 Part A: "closed" means *every* Quotation on the project
     # has reached Won/Lost, not just any -- a project with a newer,
     # currently-active Quotation is Open regardless of an older Lost one
@@ -115,24 +129,25 @@ def get_dashboard(
         .filter(~Quotation.project_id.in_(open_quotation_project_ids))
         .distinct()
     )
-    open_projects_count = (
-        db.query(Project)
-        .filter(~Project.id.in_(closed_project_ids), Project.is_calibration.is_(False))
-        .count()
-    )
+    open_projects = db.query(Project).filter(~Project.id.in_(closed_project_ids), Project.is_calibration.is_(False))
+    if owner is not None:
+        open_projects = open_projects.filter(Project.owner_id == owner)
+    open_projects_count = open_projects.count()
 
     # "Pending" an estimate = sent to the client, awaiting a response --
     # Draft hasn't gone out yet, Superseded/Expired are no longer live.
     # Amendment 28 Part B: calibration/test projects never contribute to
     # any of the three summary tiles.
-    pending_estimates_count = (
+    pending_estimates = (
         db.query(Estimate)
         .join(Project, Project.id == Estimate.project_id)
         .filter(Estimate.status == EstimateStatus.SENT, Project.is_calibration.is_(False))
-        .count()
     )
+    if owner is not None:
+        pending_estimates = pending_estimates.filter(Project.owner_id == owner)
+    pending_estimates_count = pending_estimates.count()
 
-    pending_quotations_count = (
+    pending_quotations = (
         db.query(Quotation)
         .join(Project, Project.id == Quotation.project_id)
         .filter(
@@ -141,10 +156,15 @@ def get_dashboard(
             ),
             Project.is_calibration.is_(False),
         )
-        .count()
     )
+    if owner is not None:
+        pending_quotations = pending_quotations.filter(Project.owner_id == owner)
+    pending_quotations_count = pending_quotations.count()
 
-    overdue_clients_count = db.query(Client).filter(Client.overdue_flag.is_(True)).count()
+    overdue_clients = db.query(Client).filter(Client.overdue_flag.is_(True))
+    if owner is not None:
+        overdue_clients = overdue_clients.filter(Client.owner_id == owner)
+    overdue_clients_count = overdue_clients.count()
 
     # Amendment 43 (Section E step 4): "due" includes due-today, not just
     # strictly overdue -- matches the overdue-red convention Amendment 42's
@@ -154,25 +174,22 @@ def get_dashboard(
     # the combined Follow-ups screen. Won/Lost carry a null date by
     # construction, but are excluded explicitly rather than relied on.
     today = date.today()
-    client_followups_due = (
-        db.query(Client)
-        .filter(Client.next_follow_up_date.isnot(None), Client.next_follow_up_date <= today)
-        .count()
+    client_followups = db.query(Client).filter(
+        Client.next_follow_up_date.isnot(None), Client.next_follow_up_date <= today
     )
-    opportunity_followups_due = (
-        db.query(Opportunity)
-        .filter(
-            Opportunity.next_follow_up_date.isnot(None),
-            Opportunity.next_follow_up_date <= today,
-            Opportunity.stage.notin_(list(TERMINAL_STAGES)),
-        )
-        .count()
+    opportunity_followups = db.query(Opportunity).filter(
+        Opportunity.next_follow_up_date.isnot(None),
+        Opportunity.next_follow_up_date <= today,
+        Opportunity.stage.notin_(list(TERMINAL_STAGES)),
     )
-    followups_due_count = client_followups_due + opportunity_followups_due
+    stage_query = db.query(Opportunity.stage, func.count(Opportunity.id))
+    if owner is not None:
+        client_followups = client_followups.filter(Client.owner_id == owner)
+        opportunity_followups = opportunity_followups.filter(Opportunity.owner_id == owner)
+        stage_query = stage_query.filter(Opportunity.owner_id == owner)
+    followups_due_count = client_followups.count() + opportunity_followups.count()
 
-    stage_counts = dict(
-        db.query(Opportunity.stage, func.count(Opportunity.id)).group_by(Opportunity.stage).all()
-    )
+    stage_counts = dict(stage_query.group_by(Opportunity.stage).all())
     opportunities_new_count = stage_counts.get(OpportunityStage.NEW, 0)
     opportunities_contacted_count = stage_counts.get(OpportunityStage.CONTACTED, 0)
     opportunities_qualified_count = stage_counts.get(OpportunityStage.QUALIFIED, 0)
@@ -186,21 +203,64 @@ def get_dashboard(
     # consistent here rather than inventing a second convention.
     now = datetime.now(UTC)
     month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
-    won_this_month_total = (
+    won = (
         db.query(func.coalesce(func.sum(Quotation.quotation_total), 0))
         .filter(Quotation.status == QuotationStatus.WON)
         .filter(Quotation.released_at.isnot(None))
         .filter(Quotation.released_at >= month_start)
-        .scalar()
+    )
+    if owner is not None:
+        won = won.join(Project, Project.id == Quotation.project_id).filter(Project.owner_id == owner)
+    won_this_month_total = won.scalar()
+
+    return DashboardSummary(
+        open_projects_count=open_projects_count,
+        pending_estimates_count=pending_estimates_count,
+        pending_quotations_count=pending_quotations_count,
+        overdue_clients_count=overdue_clients_count,
+        followups_due_count=followups_due_count,
+        open_opportunities_count=open_opportunities_count,
+        opportunities_new_count=opportunities_new_count,
+        opportunities_contacted_count=opportunities_contacted_count,
+        opportunities_qualified_count=opportunities_qualified_count,
+        won_this_month_total=float(won_this_month_total),
     )
 
-    recent_rows = (
-        db.query(Project, Client.name)
-        .join(Client, Client.id == Project.client_id)
-        .order_by(Project.created_at.desc())
-        .limit(RECENT_PROJECTS_LIMIT)
-        .all()
-    )
+
+def _sales_performance(db: Session) -> list["SalespersonRowOut"]:
+    """Amendment 60 item 6: one row per active salesperson, from the very same numbers their own dashboard shows."""
+    rows = []
+    for person in db.query(User).filter(User.role == UserRole.SALES, User.is_active.is_(True)).order_by(User.name).all():
+        s = _summary(db, person.id)
+        rows.append(
+            SalespersonRowOut(
+                user_id=person.id,
+                name=person.name,
+                open_projects_count=s.open_projects_count,
+                pending_quotations_count=s.pending_quotations_count,
+                open_opportunities_count=s.open_opportunities_count,
+                followups_due_count=s.followups_due_count,
+                won_this_month_total=s.won_this_month_total,
+            )
+        )
+    return rows
+
+
+@router.get("", response_model=DashboardOut)
+def get_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_roles("sales", "pm", "director", "procurement", "site_engineer", "ca_tax")
+    ),
+):
+    # Amendment 60: a salesperson's dashboard (once the Director has switched own-records on) is their own numbers.
+    owner = current_user.id if ownership.scoping_applies(db, current_user) else None
+    summary = _summary(db, owner)
+
+    recent_query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
+    if owner is not None:
+        recent_query = recent_query.filter(Project.owner_id == owner)
+    recent_rows = recent_query.order_by(Project.created_at.desc()).limit(RECENT_PROJECTS_LIMIT).all()
     recent_projects = [
         RecentProjectOut(
             id=project.id,
@@ -223,20 +283,11 @@ def get_dashboard(
         recent_activity = [AuditLogEntryOut.model_validate(e) for e in entries]
 
     return DashboardOut(
-        summary=DashboardSummary(
-            open_projects_count=open_projects_count,
-            pending_estimates_count=pending_estimates_count,
-            pending_quotations_count=pending_quotations_count,
-            overdue_clients_count=overdue_clients_count,
-            followups_due_count=followups_due_count,
-            open_opportunities_count=open_opportunities_count,
-            opportunities_new_count=opportunities_new_count,
-            opportunities_contacted_count=opportunities_contacted_count,
-            opportunities_qualified_count=opportunities_qualified_count,
-            won_this_month_total=float(won_this_month_total),
-        ),
+        summary=summary,
+        scope="own" if owner is not None else "company",
         recent_projects=recent_projects,
         recent_activity=recent_activity,
+        sales_performance=_sales_performance(db) if current_user.role.value in ("pm", "director") else None,
         payments=(
             PaymentsOverview(**payments_service.build_overview(db, date.today()))
             if current_user.role.value in PAYMENTS_ROLES

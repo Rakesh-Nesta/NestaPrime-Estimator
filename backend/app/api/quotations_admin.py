@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.documents import _effective_quotation_status
 from app.api.reports import _sports_for_quotation
+from app.core import ownership
 from app.core.auth import require_roles
 from app.core.export_safety import sanitize_row
 from app.db.session import get_db
@@ -87,6 +88,7 @@ def _filtered_query(
     client_id: uuid.UUID | None,
     date_from: date | None,
     date_to: date | None,
+    owner_id: uuid.UUID | None = None,
 ):
     """Filters by created_at -- the one timestamp every quotation carries
     regardless of status (released_at/sent_at are still null on a fresh
@@ -96,6 +98,8 @@ def _filtered_query(
     query = db.query(Quotation).join(Project, Quotation.project_id == Project.id).join(
         Client, Project.client_id == Client.id
     )
+    if owner_id is not None:  # Amendment 60: a salesperson sees the quotations on their own projects
+        query = query.filter(Project.owner_id == owner_id)
     if status:
         query = query.filter(Quotation.status == status)
     elif status_group in STATUS_GROUPS:
@@ -151,7 +155,8 @@ def list_all_quotations(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*LIST_ROLES)),
 ):
-    rows = _filtered_query(db, status, status_group, project_id, client_id, date_from, date_to).all()
+    owner = current_user.id if ownership.scoping_applies(db, current_user) else None
+    rows = _filtered_query(db, status, status_group, project_id, client_id, date_from, date_to, owner).all()
     out = []
     for q in rows:
         project = db.query(Project).filter(Project.id == q.project_id).first()

@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DataError
 
 from app.config import settings as app_settings
+from app.core.ownership import enforce_own_records
 
 from app.api import (
     accessories,
@@ -31,6 +32,7 @@ from app.api import (
     message_templates,
     messages,
     opportunities,
+    ownership,
     overheads,
     package_contents,
     payments,
@@ -62,7 +64,8 @@ from app.api import (
     work_orders,
 )
 
-app = FastAPI(title="NestaPrime Estimator API", version="0.1.0")
+# Amendment 60 (Section 63): the by-id half of own-records visibility applies to every route, in one place.
+app = FastAPI(title="NestaPrime Estimator API", version="0.1.0", dependencies=[Depends(enforce_own_records)])
 
 app.add_middleware(
     CORSMiddleware,
@@ -100,6 +103,7 @@ async def security_headers(request, call_next):
 
 app.include_router(auth.router)
 app.include_router(admin_overview.admin_overview_router)
+app.include_router(ownership.ownership_router)
 app.include_router(users.users_router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)

@@ -12,9 +12,11 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
+from app.core import ownership
 from app.core.auth import require_roles
 from app.core.export_safety import sanitize_row
 from app.db.session import get_db
+from app.models.project import Project
 from app.models.document import Estimate, EstimateOption, EstimateOptionClientStatus, Quotation, QuotationLine
 from app.models.report import Report, ReportStatus, ReportType
 from app.models.setting import Override
@@ -63,7 +65,7 @@ def _sports_for_quotation(db: Session, quotation_id: uuid.UUID) -> list[str]:
     return [r[0] for r in rows]
 
 
-def _build_pipeline_content(db: Session, period_from: date, period_to: date) -> dict:
+def _build_pipeline_content(db: Session, period_from: date, period_to: date, owner_id: uuid.UUID | None = None) -> dict:
     """T.1 Quotation Pipeline: estimates created/sent, and -- for the cohort
     of quotations released in the period -- counts/totals by current status,
     by sport and by who released. Won/Lost/Expired have no dedicated
@@ -71,7 +73,10 @@ def _build_pipeline_content(db: Session, period_from: date, period_to: date) -> 
     this reports their *current* status for the released-in-period cohort
     rather than a separate per-status date -- documented simplification,
     same spirit as CostSheet's own cost-buildup note."""
-    estimates = db.query(Estimate).all()
+    estimate_query = db.query(Estimate)
+    if owner_id is not None:  # Amendment 60: a salesperson's pipeline report covers only their own projects
+        estimate_query = estimate_query.join(Project, Project.id == Estimate.project_id).filter(Project.owner_id == owner_id)
+    estimates = estimate_query.all()
     estimates_created = [e for e in estimates if _in_period(e.created_at, period_from, period_to)]
     estimates_sent = [e for e in estimates if _in_period(e.sent_at, period_from, period_to)]
 
@@ -96,7 +101,10 @@ def _build_pipeline_content(db: Session, period_from: date, period_to: date) -> 
             key = option.rejection_reason.value if option.rejection_reason else "unspecified"
             rejected_by_reason[key] = rejected_by_reason.get(key, 0) + 1
 
-    quotations = db.query(Quotation).all()
+    quotation_query = db.query(Quotation)
+    if owner_id is not None:
+        quotation_query = quotation_query.join(Project, Project.id == Quotation.project_id).filter(Project.owner_id == owner_id)
+    quotations = quotation_query.all()
     released_in_period = [q for q in quotations if _in_period(q.released_at, period_from, period_to)]
 
     by_status: dict[str, int] = {}
@@ -290,7 +298,8 @@ def generate_report(
         )
 
     if payload.report_type == ReportType.PIPELINE:
-        content = _build_pipeline_content(db, payload.period_from, payload.period_to)
+        owner = current_user.id if ownership.scoping_applies(db, current_user) else None
+        content = _build_pipeline_content(db, payload.period_from, payload.period_to, owner)
         status_ = ReportStatus.RELEASED  # T.2 rule 4: nothing to gate, open to Sales already
     elif payload.report_type == ReportType.MARGIN:
         content = _build_margin_content(db, payload.period_from, payload.period_to)
@@ -322,12 +331,10 @@ def list_reports(
     current_user=Depends(require_roles(*ALL_REPORT_ROLES)),
 ):
     visible_types = [t for t, roles in VISIBLE_ROLES.items() if current_user.role.value in roles]
-    return (
-        db.query(Report)
-        .filter(Report.report_type.in_(visible_types))
-        .order_by(Report.created_at.desc())
-        .all()
-    )
+    query = db.query(Report).filter(Report.report_type.in_(visible_types))
+    if ownership.scoping_applies(db, current_user):  # Amendment 60: a salesperson sees the reports they ran themselves
+        query = query.filter(Report.generated_by_id == current_user.id)
+    return query.order_by(Report.created_at.desc()).all()
 
 
 @router.get("/{report_id}", response_model=ReportOut)

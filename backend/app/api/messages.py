@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.attachments import _get_document_or_404, _require_doc_type_role, _resolve_client_id
+from app.core import ownership
 from app.api.pdf_documents import build_estimate_pdf, build_quotation_pdf
 from app.api.settings import get_internal_email_domains
 from app.core.auth import require_roles
@@ -266,6 +267,7 @@ def draft_message(
     only a real POST /messages send does, and those gates still apply
     there unchanged."""
     _require_doc_type_role(db, payload.doc_type, current_user)
+    ownership.require_visible_document(db, current_user, payload.doc_type.value, payload.doc_id)  # Amendment 60
     document = _get_document_or_404(db, payload.doc_type, payload.doc_id)
     client_id = _resolve_client_id(db, payload.doc_type, payload.doc_id)
     client = db.query(Client).filter(Client.id == client_id).first() if client_id else None
@@ -318,6 +320,7 @@ def create_message(
     only the text actually handed to a real provider is rendered
     (render_placeholders), against the specific document being sent."""
     _require_doc_type_role(db, payload.doc_type, current_user)
+    ownership.require_visible_document(db, current_user, payload.doc_type.value, payload.doc_id)  # Amendment 60
     document = _get_document_or_404(db, payload.doc_type, payload.doc_id)
     _enforce_client_consent(db, payload.doc_type, payload.doc_id, payload.channel)
     _enforce_internal_document_channel(db, payload.doc_type, payload.channel, payload.recipient)
@@ -398,6 +401,7 @@ def list_messages(
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
     _require_doc_type_role(db, doc_type, current_user)
+    ownership.require_visible_document(db, current_user, doc_type.value, doc_id)  # Amendment 60
     return (
         db.query(Message)
         .filter(Message.doc_type == doc_type, Message.doc_id == doc_id)

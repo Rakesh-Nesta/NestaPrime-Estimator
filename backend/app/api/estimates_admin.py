@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.api.documents import _derived_client_status, _effective_estimate_status
+from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
@@ -63,6 +64,8 @@ def list_all_estimates(
         .join(Project, Estimate.project_id == Project.id)
         .join(Client, Project.client_id == Client.id)
     )
+    if ownership.scoping_applies(db, current_user):
+        query = query.filter(Project.owner_id == current_user.id)
     if search:
         needle = f"%{search}%"
         query = query.filter((Project.project_no.ilike(needle)) | (Client.name.ilike(needle)))

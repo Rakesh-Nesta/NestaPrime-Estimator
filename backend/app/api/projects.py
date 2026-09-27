@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.clients import _default_package
 from app.api.field_settings import get_field_state
+from app.core import ownership
 from app.core.auth import require_roles
 from app.core.db_retry import create_with_retry
 from app.db.session import get_db
@@ -56,6 +57,9 @@ def _generate_project_no(db: Session) -> str:
 
 class ProjectCreate(BaseModel):
     client_id: uuid.UUID
+    # Amendment 60: a PM or Director may create a project for a named owner; for anyone else this is ignored and
+    # the project takes its client's owner.
+    owner_id: uuid.UUID | None = None
     project_type: ProjectType = ProjectType.NEW_BUILD
     city: str
     site_address: str | None = None
@@ -107,6 +111,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectOut(BaseModel):
     id: uuid.UUID
+    owner_id: uuid.UUID | None = None  # Amendment 60
     project_no: str
     client_id: uuid.UUID
     project_type: ProjectType
@@ -162,6 +167,8 @@ def create_project(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("sales", "pm", "director")),
 ):
+    # Amendment 60: a salesperson may only start a project on a client they own (answered like a missing one).
+    ownership.require_own_client(db, current_user, payload.client_id)
     client = db.query(Client).filter(Client.id == payload.client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -171,6 +178,7 @@ def create_project(
     # linked to *this* Client, and not already converted, may start one.
     opportunity = None
     if payload.opportunity_id is not None:
+        ownership.require_own_opportunity(db, current_user, payload.opportunity_id)
         opportunity = db.query(Opportunity).filter(Opportunity.id == payload.opportunity_id).first()
         if not opportunity:
             raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -227,6 +235,13 @@ def create_project(
                 detail=f"No default package configured for client type '{client.type.value}' -- specify package",
             )
 
+    # Amendment 60: the owner is the person a PM/Director names, else the client's owner, else the enquiry's, else
+    # whoever is creating it -- so a project a PM prepares on a salesperson's client stays that salesperson's.
+    named_owner = payload.owner_id if current_user.role.value in ("pm", "director") else None
+    if named_owner is not None:
+        ownership.require_valid_owner(db, named_owner)
+    owner_id = named_owner or client.owner_id or (opportunity.owner_id if opportunity else None) or current_user.id
+
     def _build_project() -> Project:
         # Amendment 23: called fresh on every retry attempt so a
         # collision re-reads the now-updated row set and computes a
@@ -238,7 +253,8 @@ def create_project(
             # user-settable field, derived here at creation time.
             tender_mode=(client.type == ClientType.GOVERNMENT),
             package=package,
-            **payload.model_dump(exclude={"package"}),
+            owner_id=owner_id,
+            **payload.model_dump(exclude={"package", "owner_id"}),
         )
         db.add(project)
         return project
@@ -306,6 +322,8 @@ def list_projects(
     )
 
     query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
+    if ownership.scoping_applies(db, current_user):
+        query = query.filter(Project.owner_id == current_user.id)
     if client_id is not None:
         query = query.filter(Project.client_id == client_id)
     if search:
@@ -334,6 +352,7 @@ def list_projects(
             row_status = "open"
         out.append(
             ProjectSummaryOut(
+                owner_id=project.owner_id,
                 id=project.id,
                 project_no=project.project_no,
                 client_name=client_name,

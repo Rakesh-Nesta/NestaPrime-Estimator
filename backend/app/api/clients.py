@@ -1,12 +1,15 @@
+import re
 import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.api.settings import get_current_setting_value
+from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client, ClientType
@@ -113,6 +116,7 @@ class ClientDetailsUpdate(BaseModel):
 
 class ClientOut(BaseModel):
     id: uuid.UUID
+    owner_id: uuid.UUID | None = None  # Amendment 60: who owns this client (None = unassigned)
     name: str
     type: ClientType
     contact_name: str | None
@@ -140,6 +144,35 @@ class ClientTypeDefaultsOut(BaseModel):
 
 
 # Client creation isn't itemised in M.4's matrix, but it's the natural
+def _refuse_a_client_someone_else_owns(db: Session, fields: dict, user) -> None:
+    """Amendment 60 (Section 63) item 7: while own-records is on, a salesperson who creates a client that another
+    salesperson (or nobody yet) already holds is told so -- in one sentence that reveals nothing about the other
+    client (no name, no phone, no owner). A match is the same email, the same phone number (last ten digits), or the
+    same name in the same city. PM and Director are not stopped."""
+    email = (fields.get("email") or "").strip().lower()
+    digits = re.sub(r"[^0-9]", "", fields.get("phone") or "")[-10:]
+    name = (fields.get("name") or "").strip().lower()
+    city = (fields.get("city") or "").strip().lower()
+    conditions = []
+    if email:
+        conditions.append(func.lower(Client.email) == email)
+    if len(digits) >= 7:
+        conditions.append(func.regexp_replace(Client.phone, "[^0-9]", "", "g").like(f"%{digits}"))
+    if name and city:
+        conditions.append(and_(func.lower(Client.name) == name, func.lower(Client.city) == city))
+    if not conditions:
+        return
+    held_by_someone_else = (
+        db.query(Client.id)
+        .filter(or_(*conditions), or_(Client.owner_id.is_(None), Client.owner_id != user.id))
+        .first()
+    )
+    if held_by_someone_else:
+        raise HTTPException(
+            status_code=409, detail="This client already exists under another salesperson -- ask a PM"
+        )
+
+
 # extension of "create cost sheet / estimate / quotation" — Sales is where
 # leads enter the system, so Sales/PM/Director all create clients.
 @router.post("", response_model=ClientOut, status_code=201)
@@ -152,7 +185,9 @@ def create_client(
     if fields["payment_terms"] is None:
         fields["payment_terms"] = _default_payment_terms(db, payload.type)
     fields["city"] = (fields["city"] or "").strip() or None
-    client = Client(**fields)
+    if ownership.scoping_applies(db, current_user):
+        _refuse_a_client_someone_else_owns(db, fields, current_user)
+    client = Client(**fields, owner_id=current_user.id)
     db.add(client)
     db.commit()
     db.refresh(client)
@@ -188,7 +223,10 @@ def list_clients(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
-    return db.query(Client).order_by(Client.name).all()
+    query = db.query(Client)
+    if ownership.scoping_applies(db, current_user):
+        query = query.filter(Client.owner_id == current_user.id)
+    return query.order_by(Client.name).all()
 
 
 @router.get("/{client_id}", response_model=ClientOut)
