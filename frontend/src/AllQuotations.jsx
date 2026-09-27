@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { downloadAllQuotationsCsvBlob, downloadQuotationPdfBlob, listAllQuotations } from "./api";
 import AllEstimates from "./AllEstimates";
-import { DocumentIcon } from "./Icons";
+import { ClockIcon, DocumentIcon, FunnelIcon } from "./Icons";
 
 function downloadBlobAsFile(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -18,6 +18,33 @@ const TABS = [
   { key: "quotations", label: "Quotations" },
   { key: "estimates", label: "Estimates" },
 ];
+
+const STAGE_PILL_STYLE = {
+  draft: "bg-gold/10 text-gold",
+  released: "bg-surface-raised text-text-secondary",
+  sent: "bg-surface-raised text-text-secondary",
+  won: "bg-green-500/10 text-green-400",
+  lost: "bg-red-500/10 text-red-400",
+  expired: "bg-red-500/10 text-red-400",
+  superseded: "bg-surface-raised text-text-secondary",
+};
+const STAGE_DOT_STYLE = {
+  draft: "bg-gold",
+  released: "bg-text-secondary",
+  sent: "bg-text-secondary",
+  won: "bg-green-400",
+  lost: "bg-red-400",
+  expired: "bg-red-400",
+  superseded: "bg-text-secondary",
+};
+
+// A revision number for the timeline -- the document number's own "-R<n>" suffix when it has one (every
+// quotation created this way does), falling back to a positional count so nothing in an older or
+// differently-numbered document ever throws.
+function revisionLabel(documentNo, position) {
+  const match = /-R(\d+)$/.exec(documentNo);
+  return match ? `R${match[1]}` : `R${position}`;
+}
 
 // Amendment 6b (Section 9): "admin reviews all quotations." Cross-project
 // browse, filterable by status/date range with a client-side project/client
@@ -36,6 +63,10 @@ const TABS = [
 // one. Estimates sits beside it as a sibling tab, a row from a Won
 // Opportunity names its lead, and only the Director gets the CSV export (it
 // dumps cost/margin).
+//
+// Redesign (2026-09-27, Director's request): same screen, same data and the same server calls -- the
+// table gains row selection, which opens a read-only summary of that quotation and its revision history
+// below it. Sidebar and header are untouched; only this screen's own content changed.
 export default function AllQuotations({
   token,
   role,
@@ -52,6 +83,8 @@ export default function AllQuotations({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [revisionOrder, setRevisionOrder] = useState("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
@@ -112,6 +145,23 @@ export default function AllQuotations({
         (r) => r.project_no.toLowerCase().includes(needle) || r.client_name.toLowerCase().includes(needle)
       )
     : rows;
+  const selected = rows.find((r) => r.id === selectedId) || null;
+  const revisions = selected
+    ? rows
+        .filter((r) => r.project_id === selected.project_id)
+        .slice()
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .map((r, i) => ({ ...r, revisionLabel: revisionLabel(r.document_no, i + 1) }))
+        .sort((a, b) =>
+          revisionOrder === "newest" ? new Date(b.created_at) - new Date(a.created_at) : new Date(a.created_at) - new Date(b.created_at)
+        )
+    : [];
+
+  const tiles = [
+    { label: "Documents", value: rows.length, icon: DocumentIcon, accent: "border-l-gold" },
+    { label: "Draft", value: rows.filter((r) => r.status === "draft").length, icon: ClockIcon, accent: "border-l-gold" },
+    { label: "Lost", value: rows.filter((r) => r.status === "lost").length, icon: FunnelIcon, accent: "border-l-red-400" },
+  ];
 
   const inputClass = "rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm";
 
@@ -133,17 +183,14 @@ export default function AllQuotations({
   }
 
   return (
-    <div className="max-w-[1000px] mx-auto mt-6 mb-10 space-y-4 px-4 sm:px-6">
+    <div className="max-w-[1400px] mx-auto mt-6 mb-10 space-y-4 px-4 sm:px-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
+          <p className="text-xs uppercase tracking-wide text-text-secondary">Workspace / Customer relationships</p>
           <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1 flex items-center gap-2">
             <DocumentIcon className="w-6 h-6 text-gold" /> Quotations
           </h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Every quotation and estimate across every project, newest first. Open one to work on it -- a
-            quotation is created from a project&apos;s Documents screen once the client approves an estimate.
-          </p>
+          <p className="text-sm text-text-secondary mt-1">Manage quotations and estimates across your projects.</p>
         </div>
         <div className="flex items-center gap-4 shrink-0">
           {onNewProject && (
@@ -162,6 +209,28 @@ export default function AllQuotations({
         </div>
       </div>
 
+      <div className="flex items-start gap-2 bg-gold/5 border border-gold/20 rounded-lg px-4 py-3 text-sm text-text-secondary">
+        <span className="text-gold shrink-0">ℹ</span>
+        <span>
+          Open one to work on it -- a quotation is created from a project&apos;s Documents screen once the
+          client approves an estimate.
+        </span>
+      </div>
+
+      {tab === "quotations" && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {tiles.map((tile) => (
+            <div key={tile.label} className={`bg-surface border border-border-dark ${tile.accent} border-l-4 rounded-lg p-4`}>
+              <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
+                <tile.icon className="w-3.5 h-3.5" />
+                {tile.label}
+              </p>
+              <p className="text-2xl font-heading font-bold mt-1 text-text-primary">{tile.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-5 border-b border-border-dark">
         {TABS.map((t) => (
           <button
@@ -173,7 +242,7 @@ export default function AllQuotations({
                 : "text-text-secondary border-transparent hover:text-text-primary"
             }`}
           >
-            {t.label}
+            {t.label} {t.key === "quotations" && <span className="text-xs text-text-secondary">({rows.length})</span>}
           </button>
         ))}
       </div>
@@ -256,24 +325,22 @@ export default function AllQuotations({
               {/* Phones: stacked cards, so nothing needs sideways scrolling. */}
               <div className="space-y-3 sm:hidden">
                 {visibleRows.map((r) => (
-                  <div key={r.id} className="bg-surface border border-border-dark rounded-lg px-4 py-3 text-sm space-y-1.5">
+                  <button
+                    key={r.id}
+                    onClick={() => setSelectedId(r.id)}
+                    className={`w-full text-left bg-surface border rounded-lg px-4 py-3 text-sm space-y-1.5 ${
+                      selectedId === r.id ? "border-gold" : "border-border-dark"
+                    }`}
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <span className="font-mono text-text-primary break-all">{r.document_no}</span>
-                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-gold/10 text-gold shrink-0">
+                      <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STAGE_PILL_STYLE[r.status]}`}>
                         {r.status}
                       </span>
                     </div>
                     <p className="text-text-primary break-words">{r.client_name}</p>
                     <p className="text-xs text-text-secondary break-words">
-                      {onOpenProject ? (
-                        <button onClick={() => onOpenProject(r.project_id)} className="text-gold hover:underline">
-                          {r.project_no}
-                        </button>
-                      ) : (
-                        r.project_no
-                      )}
-                      {" · "}
-                      {r.sports.join(", ") || "—"}
+                      {r.project_no} · {r.sports.join(", ") || "—"}
                     </p>
                     <p className="text-sm">
                       Rs {Math.round(r.quotation_total).toLocaleString()}
@@ -282,14 +349,8 @@ export default function AllQuotations({
                       )}
                       {r.below_floor && <span className="text-xs text-red-400"> (below floor)</span>}
                     </p>
-                    {leadLine(r)}
-                    <div className="flex items-center justify-between text-xs text-text-secondary pt-1">
-                      <span>{new Date(r.created_at).toLocaleDateString()}</span>
-                      <button onClick={() => handleDownloadPdf(r.id, r.document_no)} className="text-gold hover:underline">
-                        PDF
-                      </button>
-                    </div>
-                  </div>
+                    <p className="text-xs text-text-secondary pt-1">{new Date(r.created_at).toLocaleDateString()}</p>
+                  </button>
                 ))}
               </div>
 
@@ -310,11 +371,23 @@ export default function AllQuotations({
                   </thead>
                   <tbody>
                     {visibleRows.map((r) => (
-                      <tr key={r.id} className="border-t border-border-dark align-top">
+                      <tr
+                        key={r.id}
+                        onClick={() => setSelectedId(r.id)}
+                        className={`border-t cursor-pointer align-top hover:bg-surface-raised transition-colors duration-150 ${
+                          selectedId === r.id ? "border-gold bg-gold/5" : "border-border-dark"
+                        }`}
+                      >
                         <td className="px-3 py-2 whitespace-nowrap">{r.document_no}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           {onOpenProject ? (
-                            <button onClick={() => onOpenProject(r.project_id)} className="text-gold hover:underline">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenProject(r.project_id);
+                              }}
+                              className="text-gold hover:underline"
+                            >
                               {r.project_no}
                             </button>
                           ) : (
@@ -327,7 +400,9 @@ export default function AllQuotations({
                         </td>
                         <td className="px-3 py-2">{r.sports.join(", ") || "—"}</td>
                         <td className="px-3 py-2">
-                          {r.status}
+                          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STAGE_PILL_STYLE[r.status]}`}>
+                            {r.status}
+                          </span>
                           {r.below_floor && <span className="text-red-400"> (below floor)</span>}
                         </td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -340,7 +415,13 @@ export default function AllQuotations({
                         )}
                         <td className="px-3 py-2 whitespace-nowrap">{new Date(r.created_at).toLocaleDateString()}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          <button onClick={() => handleDownloadPdf(r.id, r.document_no)} className="text-gold hover:underline">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadPdf(r.id, r.document_no);
+                            }}
+                            className="text-gold hover:underline"
+                          >
                             PDF
                           </button>
                         </td>
@@ -354,6 +435,110 @@ export default function AllQuotations({
                 <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5 text-center">
                   No quotations match these filters.
                 </p>
+              )}
+
+              {selected && (
+                <div className="grid lg:grid-cols-[1fr_20rem] gap-5">
+                  <div className="bg-surface border border-border-dark rounded-lg p-5">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-text-secondary">Selected quotation</h3>
+                      <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        <DocumentIcon className="w-3.5 h-3.5" /> Quotation Document
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="font-mono text-lg text-text-primary">{selected.document_no}</span>
+                      <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STAGE_PILL_STYLE[selected.status]}`}>
+                        {selected.status}
+                      </span>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
+                      <dt className="text-text-secondary">Project</dt>
+                      <dd>
+                        {onOpenProject ? (
+                          <button onClick={() => onOpenProject(selected.project_id)} className="text-gold hover:underline">
+                            {selected.project_no}
+                          </button>
+                        ) : (
+                          selected.project_no
+                        )}
+                      </dd>
+                      <dt className="text-text-secondary">Client</dt>
+                      <dd className="text-text-primary">{selected.client_name}</dd>
+                      <dt className="text-text-secondary">Sport</dt>
+                      <dd className="text-text-primary">{selected.sports.join(", ") || "—"}</dd>
+                      <dt className="text-text-secondary">Created</dt>
+                      <dd className="text-text-primary">{new Date(selected.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</dd>
+                    </dl>
+                    <div className="border-t border-border-dark pt-3 mb-4">
+                      <p className="text-xs text-text-secondary">Total (including GST)</p>
+                      <p className="text-2xl font-heading font-bold text-gold">
+                        ₹{Math.round(selected.quotation_total).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      {onOpenProject && (
+                        <button
+                          onClick={() => onOpenProject(selected.project_id)}
+                          className="bg-gold text-base text-sm rounded px-4 py-2 font-semibold hover:bg-gold-hover"
+                        >
+                          🔗 Open document
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDownloadPdf(selected.id, selected.document_no)}
+                        className="border border-border-dark text-text-primary text-sm rounded px-4 py-2 hover:bg-surface-raised"
+                      >
+                        📄 View PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-surface border border-border-dark rounded-lg p-5">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-text-primary">Revision history</h3>
+                      <select
+                        value={revisionOrder}
+                        onChange={(e) => setRevisionOrder(e.target.value)}
+                        className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs"
+                        aria-label="Revision order"
+                      >
+                        <option value="newest">Newest first</option>
+                        <option value="oldest">Oldest first</option>
+                      </select>
+                    </div>
+                    <ul className="relative space-y-4">
+                      {revisions.map((r, i) => (
+                        <li key={r.id} className="relative pl-6">
+                          {i < revisions.length - 1 && (
+                            <span className="absolute left-[5px] top-4 bottom-[-1rem] w-px bg-border-dark" />
+                          )}
+                          <button
+                            onClick={() => setSelectedId(r.id)}
+                            className={`absolute left-0 top-1 w-2.5 h-2.5 rounded-full ${STAGE_DOT_STYLE[r.status]} ${
+                              r.id === selected.id ? "ring-2 ring-gold ring-offset-2 ring-offset-surface" : ""
+                            }`}
+                            aria-label={`View ${r.revisionLabel}`}
+                          />
+                          <button onClick={() => setSelectedId(r.id)} className="text-left w-full">
+                            <p className="flex items-center gap-2">
+                              <span className={`text-sm font-medium ${r.id === selected.id ? "text-gold" : "text-text-primary"}`}>
+                                {r.revisionLabel}
+                              </span>
+                              <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STAGE_PILL_STYLE[r.status]}`}>
+                                {r.status}
+                              </span>
+                            </p>
+                            <p className="text-xs text-text-secondary mt-0.5">
+                              ₹{Math.round(r.quotation_total).toLocaleString("en-IN")} ·{" "}
+                              {new Date(r.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                            </p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               )}
             </>
           )}
