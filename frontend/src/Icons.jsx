@@ -79,6 +79,15 @@ export function BellIcon(props) {
   );
 }
 
+export function ShieldIcon(props) {
+  return (
+    <Icon {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4" />
+    </Icon>
+  );
+}
+
 export function SearchIcon(props) {
   return (
     <Icon {...props}>
