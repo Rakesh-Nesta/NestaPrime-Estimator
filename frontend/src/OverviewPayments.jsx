@@ -1,4 +1,4 @@
-import { CalendarIcon } from "./Icons";
+import { BoxIcon, CalendarIcon } from "./Icons";
 import { formatRs, formatRsWhole } from "./money";
 
 // Amendment 50 Part C (Section 54): the Overview's payments tile and panel, for
@@ -56,7 +56,9 @@ export function CollectionsPanel({ payments, onOpen }) {
   return (
     <div className="bg-surface border border-border-dark rounded-lg p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-heading font-semibold text-text-primary text-base">Orders &amp; collections</h3>
+        <h3 className="font-heading font-semibold text-text-primary text-base flex items-center gap-2">
+          <BoxIcon className="w-4 h-4 text-gold" /> Orders &amp; collections
+        </h3>
         <button onClick={onOpen} className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover">
           View all →
         </button>
