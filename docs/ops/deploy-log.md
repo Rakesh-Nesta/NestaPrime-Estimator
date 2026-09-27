@@ -11,6 +11,46 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-09-26 -- PRs #240-#242: Amendment 59 (the Admin role) and the first-Admin safety fix
+
+**Run by:** R. Patni (with AI development assistance)
+**Commit range:** `fb98766` -> `e49b08a` (PRs #240 specs, #241 backend and screens), then `e49b08a` -> `7e42cab` (#242)
+Backend rebuild **and** frontend build for #241, **with one migration** (`ADMIN` added to the `user_role` enum; no row
+changes). Backend rebuild only for #242. Nobody is signed out.
+
+**#241.** `git pull` fast-forwarded `fb98766..e49b08a` (40 files); backend rebuilt (`up -d --build backend`, code layer
+rebuilt, dependency layers cached, db healthy, backend started); the log shows `Running upgrade c37a4e8b2f19 ->
+e5b3d97a41c8, add ADMIN to user_role`; frontend rebuilt with `VITE_API_URL=https://app.nestaprime.in/api` (834.04kB) and
+copied as its own step. Verified from outside: bundle `index-vFui1Bqr.js` -> `index-BhGq2osB.js` (modified 26 Sep 15:38
+GMT) containing "Awaiting a new password", "managed by an Admin", "Add the people who work with you", "You cannot change
+your own role", "Only an Admin" and "Admin and Director", and still "Add another sport" and "at least 10 characters";
+`/api/openapi.json` lists `/admin/overview`, `AdminOverviewOut`, `UserRole` with `admin` as the seventh value,
+`ChangePasswordOut` and `included_option_ids`; anonymous `GET /admin/overview`, `/users`, `/audit-log`,
+`/role-permissions`, `/settings`, `/dashboard`, `/search`, and `POST /users`, `/settings` all 401; a wrong sign-in gives
+"Incorrect email or password"; `/api/docs` 404; CSP and Permissions-Policy headers intact; real Chrome on the live login
+page at 1280px and 375px with no CSP violation and Fraunces and Inter loaded.
+
+**First Admin -- two mistakes.** The creation step was first run with the instruction's placeholder words and created
+`THEIR-EMAIL` as an Admin with a password that had been written in the chat. It was removed at once:
+`DELETE FROM users WHERE email = 'THEIR-EMAIL' AND role = 'ADMIN' AND must_change_password = true;` -> `DELETE 1`
+(one Admin row existed before, none after). The nginx access log (`POST /api/auth/login`) showed only refused (401, 429)
+attempts, all from one address, none after 15:39:58 UTC when the account was created; the backend log records no
+requests, so the `grep -c` of it returning 0 was not evidence. **#242** was then written, merged and deployed:
+`git pull` `e49b08a..7e42cab` (4 files), backend rebuilt, `grep -c admin_bootstrap scripts/seed_initial_admin.py` inside
+the container printed 2; the health check, bundle name (`index-BhGq2osB.js`), anonymous `/users` 401, wrong-sign-in message
+and CSP header were unchanged afterwards. The script refused the placeholder words (`TYPE-THE-REAL-EMAIL-HERE`) twice,
+then created the real first Admin, `info@nestainfotech.com`, and printed a generated temporary password once. **That
+password was then pasted into the chat.** A repeat of the creation command was pasted afterwards without its output.
+
+**Not verified in production:** that the temporary password has been changed; that exactly one Admin exists (a repeat run
+is unexplained); the Admin's sidebar; any logged-in behaviour of the new Admin, PM and Director screens; the audit-log
+masking on real data.
+
+**Left on the server:** `nestaprime.pre-hardening`, `nestaprime.pre-https`, `.env.pre-https`, the pending
+kernel/libc reboot flag (see the 26 September housekeeping entry).
+
+---
+
 ## 2026-09-26 -- server housekeeping from Amendment 58's checklist (no code, no PR deploy)
 
 **Run by:** R. Patni (with AI development assistance). Four commands and a reboot, run one at a time on the server.

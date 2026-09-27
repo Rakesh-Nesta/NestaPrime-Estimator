@@ -5,7 +5,7 @@ creates another Admin, so the very first one has to come from outside the app. R
 the REAL email address of the person who will be the Admin:
 
     docker compose -f docker-compose.prod.yml exec -T \\
-      -e PYTHONPATH=/app -e INITIAL_ADMIN_EMAIL=the-real-address@theircompany.in \\
+      -e PYTHONPATH=/app -e INITIAL_ADMIN_EMAIL=TYPE-THE-REAL-EMAIL-HERE \\
       backend python scripts/seed_initial_admin.py
 
 The temporary password is generated and printed once, on your terminal only -- give it to the person privately; they
