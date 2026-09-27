@@ -79,6 +79,15 @@ export function BellIcon(props) {
   );
 }
 
+export function CalculatorIcon(props) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01" />
+    </Icon>
+  );
+}
+
 export function RupeeIcon(props) {
   return (
     <Icon {...props}>
@@ -92,6 +101,16 @@ export function BoxIcon(props) {
     <Icon {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l9-5 9 5-9 5-9-5z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 8v8l9 5 9-5V8M12 13v8" />
+    </Icon>
+  );
+}
+
+export function TargetIcon(props) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
     </Icon>
   );
 }
