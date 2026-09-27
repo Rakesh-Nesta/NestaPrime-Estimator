@@ -15,7 +15,10 @@ import {
   updateRateValue,
 } from "./api";
 import { canOpen } from "./navAccess";
+import { DocumentIcon, SearchIcon } from "./Icons";
 import SelectWithOther from "./SelectWithOther";
+
+const PAGE_SIZE = 8;
 
 function downloadBlobAsFile(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -49,6 +52,10 @@ export default function RateSheet({ token, role, onBack }) {
   const [submitting, setSubmitting] = useState(false);
   const [importingExcel, setImportingExcel] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
 
   function load() {
     return Promise.all([
@@ -163,39 +170,50 @@ export default function RateSheet({ token, role, onBack }) {
   // -- with Others still open for a genuinely new category.
   const existingCategories = [...new Set(items.map((i) => i.category))].sort();
 
+  const needle = search.trim().toLowerCase();
+  const filteredItems = items.filter(
+    (i) =>
+      (!needle || i.item_name.toLowerCase().includes(needle) || (i.spec || "").toLowerCase().includes(needle)) &&
+      (!categoryFilter || i.category === categoryFilter) &&
+      (!statusFilter || (statusFilter === "ai" ? i.source === "ai" : i.source === "manual"))
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageItems = filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
-    <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
-      <div className="bg-surface shadow rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-primary">Rate Sheet</h2>
-          {onBack && (
-            <button onClick={onBack} className="text-sm text-gold hover:underline">
-              &larr; Back
-            </button>
-          )}
+    <div className="max-w-[1400px] mx-auto mt-6 mb-10 px-4 sm:px-6 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-wide text-text-secondary">Workspace / Tools &amp; Reports</p>
+          <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1 flex items-center gap-2">
+            <DocumentIcon className="w-6 h-6 text-gold" /> Rate Sheet
+          </h2>
+          <p className="text-sm text-text-secondary mt-1">Manage item rates, verification and pricing history.</p>
         </div>
-        <p className="text-xs text-text-secondary mt-1">
-          Every entry starts as a Manual, unverified rate. A PM or Director confirming it
-          promotes it to an AI (master) rate (J.1).
-        </p>
+        {onBack && (
+          <button onClick={onBack} className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover shrink-0">
+            ← Back
+          </button>
+        )}
       </div>
 
-      <div className="bg-surface shadow rounded-lg p-6">
-        <h3 className="text-sm font-semibold text-text-secondary mb-1">Excel export / import</h3>
-        <p className="text-xs text-text-secondary mb-3">
-          P.2 Phase 1b: "Excel rate import" -- so NestaPrime can maintain its rate card in Excel and
-          upload it. Re-importing an unchanged file is a safe no-op; a changed rate on an existing item
-          goes through the same rate-history mechanics as editing it here. New items always start
-          Manual/unverified, same as adding one below -- an Excel file can never promote a rate to AI.
-        </p>
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 bg-gold/5 border border-gold/20 rounded-lg px-4 py-3">
+        <div className="flex items-start gap-2 text-sm text-text-secondary min-w-0">
+          <span className="text-gold shrink-0">ℹ</span>
+          <span>
+            New rates start as a Manual / Unverified rate. A PM or Director confirming it promotes it to an AI
+            (master) rate (J.1).
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleExportExcel}
-            className="text-xs bg-surface-raised text-text-secondary rounded px-3 py-1.5 hover:bg-surface-raised"
+            className="text-xs border border-border-dark text-text-primary rounded px-3 py-1.5 hover:bg-surface-raised whitespace-nowrap"
           >
             Export to Excel
           </button>
-          <label className="text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover">
+          <label className="text-xs bg-gold text-base rounded px-3 py-1.5 cursor-pointer hover:bg-gold-hover whitespace-nowrap">
             {importingExcel ? "Importing…" : "Import from Excel"}
             <input
               type="file"
@@ -206,103 +224,192 @@ export default function RateSheet({ token, role, onBack }) {
             />
           </label>
         </div>
-        {importResult && (
-          <div className="mt-3 text-xs bg-surface-raised border border-border-dark rounded p-3">
-            <p className="text-text-secondary">
-              <span className="font-medium">{importResult.created.length}</span> new item(s) created,{" "}
-              <span className="font-medium">{importResult.updated.length}</span> item(s) updated,{" "}
-              <span className="font-medium">{importResult.unchanged}</span> row(s) unchanged (skipped)
-              {importResult.errors.length > 0 && (
-                <>
-                  , <span className="font-medium text-red-400">{importResult.errors.length}</span> row error(s)
-                </>
-              )}
-              .
-            </p>
+      </div>
+      {importResult && (
+        <div className="text-xs bg-surface-raised border border-border-dark rounded p-3">
+          <p className="text-text-secondary">
+            <span className="font-medium">{importResult.created.length}</span> new item(s) created,{" "}
+            <span className="font-medium">{importResult.updated.length}</span> item(s) updated,{" "}
+            <span className="font-medium">{importResult.unchanged}</span> row(s) unchanged (skipped)
             {importResult.errors.length > 0 && (
-              <ul className="mt-1 list-disc list-inside text-red-400">
-                {importResult.errors.map((e) => (
-                  <li key={e.row}>
-                    Row {e.row}: {e.detail}
-                  </li>
+              <>
+                , <span className="font-medium text-red-400">{importResult.errors.length}</span> row error(s)
+              </>
+            )}
+            .
+          </p>
+          {importResult.errors.length > 0 && (
+            <ul className="mt-1 list-disc list-inside text-red-400">
+              {importResult.errors.map((e) => (
+                <li key={e.row}>
+                  Row {e.row}: {e.detail}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-[1fr_22rem] gap-5">
+        <div className="bg-surface border border-border-dark rounded-lg p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h3 className="text-sm font-semibold text-text-primary">Rate items ({filteredItems.length})</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <SearchIcon className="w-3.5 h-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search items…"
+                  className="rounded border border-border-dark bg-surface-raised text-text-primary pl-7 pr-2 py-1.5 text-xs w-36"
+                />
+              </div>
+              <select
+                value={categoryFilter}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-xs"
+              >
+                <option value="">All categories</option>
+                {existingCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
                 ))}
-              </ul>
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-xs"
+              >
+                <option value="">All statuses</option>
+                <option value="ai">AI (confirmed)</option>
+                <option value="manual">Manual / Unverified</option>
+              </select>
+            </div>
+          </div>
+
+          <BulkActionsPanel token={token} categories={existingCategories} onChanged={load} />
+
+          <div className="space-y-2 mt-4">
+            {pageItems.map((item) => (
+              <RateItemRow
+                key={item.id}
+                token={token}
+                item={item}
+                onConfirm={() => handleConfirm(item.id)}
+                onToggleWatch={() => handleToggleWatch(item)}
+                onChanged={load}
+              />
+            ))}
+            {filteredItems.length === 0 && (
+              <p className="text-sm text-text-secondary">
+                {items.length === 0 ? "No rate items yet." : "Nothing matches these filters."}
+              </p>
             )}
           </div>
-        )}
-      </div>
 
-      <form onSubmit={handleSubmit} className="bg-surface shadow rounded-lg p-6 space-y-3">
-        <h3 className="text-sm font-semibold text-text-secondary">Add a rate item</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <SelectWithOther
-            label="Category"
-            value={form.category}
-            onChange={(v) => set("category", v)}
-            options={existingCategories}
-            required
-          />
-          <Text label="Item name" value={form.item_name} onChange={(v) => set("item_name", v)} required />
-          <Text label="Spec" value={form.spec} onChange={(v) => set("spec", v)} />
-          <Text label="Unit" value={form.unit} onChange={(v) => set("unit", v)} required />
-          <Text label="HSN/SAC" value={form.hsn_sac} onChange={(v) => set("hsn_sac", v)} required />
-          <Text
-            label="Rate (Rs, blank = awaiting rate)"
-            type="number"
-            value={form.rate}
-            onChange={(v) => set("rate", v)}
-          />
-          <Text
-            label="GST % (blank = global default)"
-            type="number"
-            value={form.gst_percent}
-            onChange={(v) => set("gst_percent", v)}
-          />
-          <SelectWithOther label="Vendor" value={form.vendor} onChange={(v) => set("vendor", v)} options={vendorNames} />
-          <Text label="City of quote" value={form.city_of_quote} onChange={(v) => set("city_of_quote", v)} />
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-text-secondary">Labour category</label>
-            <select
-              value={form.labour_category_id}
-              onChange={(e) => set("labour_category_id", e.target.value)}
-              className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
-            >
-              <option value="">None (uses blended fallback %)</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.default_percent}%)
-                </option>
-              ))}
-            </select>
-          </div>
+          {filteredItems.length > 0 && (
+            <div className="flex items-center justify-between mt-4 text-xs text-text-secondary">
+              <span>
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredItems.length)} of{" "}
+                {filteredItems.length}
+              </span>
+              {pageCount > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="w-7 h-7 rounded border border-border-dark hover:bg-surface-raised disabled:opacity-30"
+                  >
+                    ‹
+                  </button>
+                  {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setPage(n)}
+                      className={`w-7 h-7 rounded border ${
+                        n === currentPage ? "border-gold text-gold" : "border-border-dark hover:bg-surface-raised"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                    disabled={currentPage === pageCount}
+                    className="w-7 h-7 rounded border border-border-dark hover:bg-surface-raised disabled:opacity-30"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="bg-gold text-base text-sm rounded px-4 py-2 hover:bg-gold-hover disabled:opacity-50"
-        >
-          {submitting ? "Saving…" : "Save as rate"}
-        </button>
-      </form>
 
-      <BulkActionsPanel token={token} categories={existingCategories} onChanged={load} />
-
-      <div className="bg-surface shadow rounded-lg p-6">
-        <h3 className="text-sm font-semibold text-text-secondary mb-3">Items ({items.length})</h3>
-        <div className="space-y-2">
-          {items.map((item) => (
-            <RateItemRow
-              key={item.id}
-              token={token}
-              item={item}
-              onConfirm={() => handleConfirm(item.id)}
-              onToggleWatch={() => handleToggleWatch(item)}
-              onChanged={load}
+        <form onSubmit={handleSubmit} className="bg-surface border border-border-dark rounded-lg p-5 space-y-3 h-fit lg:sticky lg:top-4">
+          <h3 className="text-sm font-semibold text-text-primary">Add a rate item</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <SelectWithOther
+              label="Category"
+              value={form.category}
+              onChange={(v) => set("category", v)}
+              options={existingCategories}
+              required
             />
-          ))}
-          {items.length === 0 && <p className="text-sm text-text-secondary">No rate items yet.</p>}
-        </div>
+            <Text label="Item name" value={form.item_name} onChange={(v) => set("item_name", v)} required />
+            <Text label="Spec" value={form.spec} onChange={(v) => set("spec", v)} />
+            <Text label="Unit" value={form.unit} onChange={(v) => set("unit", v)} required />
+            <Text label="HSN/SAC" value={form.hsn_sac} onChange={(v) => set("hsn_sac", v)} required />
+            <Text
+              label="Rate (Rs, blank = awaiting rate)"
+              type="number"
+              value={form.rate}
+              onChange={(v) => set("rate", v)}
+            />
+            <Text
+              label="GST % (blank = global default)"
+              type="number"
+              value={form.gst_percent}
+              onChange={(v) => set("gst_percent", v)}
+            />
+            <SelectWithOther label="Vendor" value={form.vendor} onChange={(v) => set("vendor", v)} options={vendorNames} />
+            <Text label="City of quote" value={form.city_of_quote} onChange={(v) => set("city_of_quote", v)} />
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-text-secondary">Labour category</label>
+              <select
+                value={form.labour_category_id}
+                onChange={(e) => set("labour_category_id", e.target.value)}
+                className="mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm"
+              >
+                <option value="">None (uses blended fallback %)</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.default_percent}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-gold text-base text-sm rounded px-4 py-2 font-semibold hover:bg-gold-hover disabled:opacity-50"
+          >
+            {submitting ? "Saving…" : "Save as rate"}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -363,8 +470,8 @@ function BulkActionsPanel({ token, categories, onChanged }) {
   }
 
   return (
-    <div className="bg-surface shadow rounded-lg p-6 space-y-4">
-      <h3 className="text-sm font-semibold text-text-secondary">Bulk actions (J.1)</h3>
+    <div className="bg-surface-raised border border-border-dark rounded-lg p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-text-primary">Bulk actions (J.1)</h3>
 
       <div>
         <p className="text-xs text-text-secondary mb-1">
