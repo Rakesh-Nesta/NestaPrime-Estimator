@@ -70,7 +70,8 @@ def get_internal_email_domains(db: Session) -> set[str]:
         return {domain.strip().lower() for domain in value.split(",") if domain.strip()}
     return {
         email.split("@", 1)[1].lower()
-        for (email,) in db.query(User.email).all()
+        # Amendment 61 (Section 64) item 7: a mobile-only user has no email to contribute here.
+        for (email,) in db.query(User.email).filter(User.email.isnot(None)).all()
         if "@" in email
     }
 

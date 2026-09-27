@@ -212,7 +212,12 @@ def _user_from_bearer(request: Request, db: Session) -> User | None:
     payload = decode_access_token(header[7:].strip())
     if not payload or "sub" not in payload:
         return None
-    user = db.query(User).filter(User.email == payload["sub"]).first()
+    # Amendment 61 (Section 64) item 4: the subject is the user's id, not their email.
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (ValueError, TypeError):
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
     return user if user is not None and user.is_active else None
 
 

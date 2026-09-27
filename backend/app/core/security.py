@@ -31,17 +31,26 @@ def password_fingerprint(hashed_password: str) -> str:
     return hashlib.sha256(hashed_password.encode("utf-8")).hexdigest()[:16]
 
 
-def password_problem(new_password: str, email: str, current_hash: str | None = None) -> str | None:
+def password_problem(
+    new_password: str, email: str | None, mobile: str | None = None, current_hash: str | None = None
+) -> str | None:
     """Amendment 58 item 7: beyond the minimum length, a new password may not be the person's email
-    address or the password they have now. Returns a plain sentence, or None when it is acceptable."""
-    if new_password.strip().lower() == email.strip().lower():
+    address, mobile number (Amendment 61 -- a mobile-only account has no email to check against), or the
+    password they have now. Returns a plain sentence, or None when it is acceptable."""
+    if email and new_password.strip().lower() == email.strip().lower():
         return "The password can't be the same as the email address"
+    if mobile and new_password.strip() == mobile.strip():
+        return "The password can't be the same as the mobile number"
     if current_hash and verify_password(new_password, current_hash):
         return "The new password must be different from the current one"
     return None
 
 
 def create_access_token(subject: str, role: str, password_hash: str) -> str:
+    # Amendment 61 (Section 64) item 4: `subject` is the user's id (a string), not their email --
+    # an account may have no email at all now. Every token issued before this names an email instead;
+    # get_current_user (core/auth.py) and enforce_own_records (core/ownership.py) only understand an id,
+    # so an old token is simply invalid and its holder signs in once more, the same as after Amendment 58.
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )

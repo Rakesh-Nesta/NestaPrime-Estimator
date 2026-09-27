@@ -3,11 +3,12 @@ document's Part O data model names USERS/ROLES only as a table of the six
 fixed roles, with no admin-UI spec at all), but a real operational gap: a
 user account could otherwise only be created via a raw DB script
 (scripts/seed_test_user.py). Director-only, deliberately small: create,
-deactivate/reactivate, change role, reset password. Explicitly out of
-scope for this pass (per direct instruction): editing a user's own
-name/email, bulk import, a dedicated login-history view -- every write
-here still goes through the existing audit log (document_type="user"),
-so nothing is lost, just not given its own screen."""
+deactivate/reactivate, change role, reset password, and (Amendment 61,
+Section 64) add/change/clear an email or mobile number. Explicitly out
+of scope: editing a user's own name, bulk import, a dedicated
+login-history view -- every write here still goes through the existing
+audit log (document_type="user"), so nothing is lost, just not given
+its own screen."""
 
 import uuid
 from datetime import datetime
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
+from app.core.identifiers import InvalidMobileNumber, normalize_mobile
 from app.core.security import MIN_PASSWORD_LENGTH, hash_password, password_problem
 from app.db.session import get_db
 from app.models.user import User, UserRole
@@ -79,7 +81,8 @@ def _require_may_manage(db: Session, actor: User, target: User, new_role: UserRo
 class UserOut(BaseModel):
     id: uuid.UUID
     name: str
-    email: str
+    email: str | None
+    mobile: str | None
     role: UserRole
     is_active: bool
     must_change_password: bool
@@ -98,7 +101,10 @@ def list_users(
 
 class UserCreate(BaseModel):
     name: str = Field(min_length=1)
-    email: str = Field(min_length=3)
+    # Amendment 61 (Section 64) item 5: at least one of email/mobile, checked in the handler (not here) so
+    # the message names both together rather than pydantic reporting them as two separate field errors.
+    email: str | None = Field(default=None, min_length=3)
+    mobile: str | None = None
     role: UserRole
     password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
@@ -111,15 +117,26 @@ def create_user(
     current_user=Depends(require_roles(*CREATE_ROLES)),
 ):
     _require_may_create(db, current_user, payload.role)
-    if db.query(User).filter(User.email == payload.email).first():
+    if not payload.email and not payload.mobile:
+        raise HTTPException(status_code=400, detail="Enter an email, a mobile number, or both")
+    if payload.email and db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=409, detail="A user with this email already exists")
-    problem = password_problem(payload.password, payload.email)
+    mobile = None
+    if payload.mobile:
+        try:
+            mobile = normalize_mobile(payload.mobile)
+        except InvalidMobileNumber as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if db.query(User).filter(User.mobile == mobile).first():
+            raise HTTPException(status_code=409, detail="A user with this mobile number already exists")
+    problem = password_problem(payload.password, payload.email, mobile)
     if problem:
         raise HTTPException(status_code=400, detail=problem)
 
     user = User(
         name=payload.name,
         email=payload.email,
+        mobile=mobile,
         role=payload.role,
         hashed_password=hash_password(payload.password),
         is_active=True,
@@ -129,7 +146,7 @@ def create_user(
     db.flush()
     write_audit_log_entry(
         db, current_user, "user", user.id, "created",
-        old_value=None, new_value=f"{payload.email} ({payload.role.value})", request=request,
+        old_value=None, new_value=f"{payload.email or mobile} ({payload.role.value})", request=request,
     )
     db.commit()
     db.refresh(user)
@@ -145,11 +162,16 @@ def _active_director_count(db: Session, exclude_id: uuid.UUID) -> int:
 
 
 class UserUpdate(BaseModel):
-    """role and is_active only -- name/email edits are explicitly out of
-    scope for this pass."""
+    """role, is_active, email and mobile -- name edits are explicitly out of scope. `role`/`is_active`
+    follow the original convention (omitted or null = leave alone); `email`/`mobile` (Amendment 61, Section
+    64 item 6) follow a different one so a value can be cleared: omitted (the field absent from the JSON
+    body) = leave alone, `""` = clear it, anything else = set it. `model_fields_set` is what tells the two
+    apart from an explicit JSON `null`, which is treated the same as an empty string."""
 
     role: UserRole | None = None
     is_active: bool | None = None
+    email: str | None = None
+    mobile: str | None = None
 
 
 @users_router.patch("/{user_id}", response_model=UserOut)
@@ -230,6 +252,45 @@ def update_user(
             old_value=old_active, new_value=payload.is_active, request=request,
         )
 
+    # Amendment 61 (Section 64) item 6: add, change or clear either identifier -- never both cleared.
+    fields_set = payload.model_fields_set
+    if "email" in fields_set or "mobile" in fields_set:
+        new_email = user.email
+        new_mobile = user.mobile
+        if "email" in fields_set:
+            new_email = (payload.email or "").strip() or None
+            if new_email and new_email != user.email:
+                if db.query(User).filter(User.email == new_email, User.id != user.id).first():
+                    raise HTTPException(status_code=409, detail="A user with this email already exists")
+        if "mobile" in fields_set:
+            raw_mobile = (payload.mobile or "").strip()
+            if raw_mobile:
+                try:
+                    new_mobile = normalize_mobile(raw_mobile)
+                except InvalidMobileNumber as exc:
+                    raise HTTPException(status_code=400, detail=str(exc))
+                if new_mobile != user.mobile:
+                    if db.query(User).filter(User.mobile == new_mobile, User.id != user.id).first():
+                        raise HTTPException(
+                            status_code=409, detail="A user with this mobile number already exists"
+                        )
+            else:
+                new_mobile = None
+        if new_email is None and new_mobile is None:
+            raise HTTPException(status_code=400, detail="A user must have an email, a mobile number, or both")
+        if new_email != user.email:
+            write_audit_log_entry(
+                db, current_user, "user", user.id, "email",
+                old_value=user.email, new_value=new_email, request=request,
+            )
+            user.email = new_email
+        if new_mobile != user.mobile:
+            write_audit_log_entry(
+                db, current_user, "user", user.id, "mobile",
+                old_value=user.mobile, new_value=new_mobile, request=request,
+            )
+            user.mobile = new_mobile
+
     db.commit()
     db.refresh(user)
     return user
@@ -257,7 +318,7 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     _require_may_manage(db, current_user, user)
-    problem = password_problem(payload.new_password, user.email, user.hashed_password)
+    problem = password_problem(payload.new_password, user.email, user.mobile, user.hashed_password)
     if problem:
         raise HTTPException(status_code=400, detail=problem)
 

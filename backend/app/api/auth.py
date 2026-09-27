@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.core.auth import get_current_user
+from app.core.identifiers import InvalidMobileNumber, normalize_mobile
 from app.core.security import (
     MIN_PASSWORD_LENGTH,
     create_access_token,
@@ -35,7 +36,8 @@ def _incorrect_credentials() -> HTTPException:
 class UserOut(BaseModel):
     id: str
     name: str
-    email: str
+    email: str | None
+    mobile: str | None
     role: str
     # User Management (users.py): true for any account just created or
     # password-reset by a Director. require_roles (core/auth.py) blocks
@@ -57,10 +59,21 @@ class TokenOut(BaseModel):
 def login(
     request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    # Amendment 18: an unknown email never counts toward any account's
+    # Amendment 61 (Section 64) item 3: the one field takes either -- an email (it contains "@") or a
+    # mobile number (it does not). A value that cannot even be parsed as a number is unrecognised, exactly
+    # like an unknown email: same message, no lockout, since no real account was ever found.
+    identifier = form_data.username.strip()
+    if "@" in identifier:
+        user = db.query(User).filter(User.email == identifier).first()
+    else:
+        try:
+            mobile = normalize_mobile(identifier)
+        except InvalidMobileNumber:
+            mobile = None
+        user = db.query(User).filter(User.mobile == mobile).first() if mobile else None
+    # Amendment 18: an unknown identifier never counts toward any account's
     # lockout -- counting it would let an attacker lock out an arbitrary
-    # real account just by guessing emails, a denial-of-service angle a
+    # real account just by guessing emails/numbers, a denial-of-service angle a
     # real-account-only counter avoids.
     if user is None:
         raise _incorrect_credentials()
@@ -100,7 +113,7 @@ def login(
     user.locked_until = None
     db.commit()
 
-    token = create_access_token(subject=user.email, role=user.role.value, password_hash=user.hashed_password)
+    token = create_access_token(subject=str(user.id), role=user.role.value, password_hash=user.hashed_password)
     return TokenOut(access_token=token)
 
 
@@ -110,6 +123,7 @@ def read_current_user(current_user: User = Depends(get_current_user)):
         id=str(current_user.id),
         name=current_user.name,
         email=current_user.email,
+        mobile=current_user.mobile,
         role=current_user.role.value,
         must_change_password=current_user.must_change_password,
     )
@@ -140,7 +154,9 @@ def change_password(
     endpoint beyond the password itself."""
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    problem = password_problem(payload.new_password, current_user.email, current_user.hashed_password)
+    problem = password_problem(
+        payload.new_password, current_user.email, current_user.mobile, current_user.hashed_password
+    )
     if problem:
         raise HTTPException(status_code=400, detail=problem)
     current_user.hashed_password = hash_password(payload.new_password)
@@ -156,9 +172,10 @@ def change_password(
         id=str(current_user.id),
         name=current_user.name,
         email=current_user.email,
+        mobile=current_user.mobile,
         role=current_user.role.value,
         must_change_password=current_user.must_change_password,
         access_token=create_access_token(
-            subject=current_user.email, role=current_user.role.value, password_hash=current_user.hashed_password
+            subject=str(current_user.id), role=current_user.role.value, password_hash=current_user.hashed_password
         ),
     )
