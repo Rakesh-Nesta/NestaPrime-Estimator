@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -21,7 +23,13 @@ def get_current_user(
     if payload is None or "sub" not in payload:
         raise credentials_error
 
-    user = db.query(User).filter(User.email == payload["sub"]).first()
+    # Amendment 61 (Section 64) item 4: the subject is the user's id, not their email -- a token issued
+    # before this deploy names an email instead and is simply invalid here (a malformed UUID included).
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (ValueError, TypeError):
+        raise credentials_error
+    user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
         raise credentials_error
     # Amendment 58 (Section 61) item 5: a token issued before the current password was set (or with

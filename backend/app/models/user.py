@@ -30,7 +30,12 @@ class User(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    # Amendment 61 (Section 64): an account may have an email, a mobile number, or both -- never neither
+    # (`ck_users_email_or_mobile`, added in the same migration that made this column nullable). `mobile` is
+    # always stored in one canonical form (see app.core.identifiers.normalize_mobile); it is never derived
+    # from `email` or the other way around.
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    mobile: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

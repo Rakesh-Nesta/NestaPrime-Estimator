@@ -276,7 +276,11 @@ def _trigger_structural_design_rebase(
 
     estimates = db.query(Estimate).filter(Estimate.cost_sheet_id == cost_sheet.id).all()
     if estimates:
-        sales_emails = [row[0] for row in db.query(User.email).filter(User.role == UserRole.SALES).all()]
+        # Amendment 61 (Section 64) item 7: a mobile-only Sales user has no email to notify here.
+        sales_emails = [
+            row[0]
+            for row in db.query(User.email).filter(User.role == UserRole.SALES, User.email.isnot(None)).all()
+        ]
         for estimate in estimates:
             body = (
                 f"Structural engineer design uploaded for {project.project_no} -- Cost Sheet revised to "
