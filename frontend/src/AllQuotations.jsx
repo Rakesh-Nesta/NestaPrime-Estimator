@@ -84,6 +84,7 @@ export default function AllQuotations({
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [autoSelectDone, setAutoSelectDone] = useState(false);
   const [revisionOrder, setRevisionOrder] = useState("newest");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -100,6 +101,16 @@ export default function AllQuotations({
       dateTo: dateTo || undefined,
     }).then(setRows);
   }
+
+  // The summary + revision-history panels read as part of the page, not an optional extra -- so the first
+  // row is selected by default as soon as there is one. Once, not on every load: changing a filter must
+  // not silently reselect something the user hasn't looked at.
+  useEffect(() => {
+    if (!autoSelectDone && selectedId === null && rows.length > 0) {
+      setSelectedId(rows[0].id);
+      setAutoSelectDone(true);
+    }
+  }, [rows, autoSelectDone, selectedId]);
 
   useEffect(() => {
     setLoading(true);
@@ -158,9 +169,30 @@ export default function AllQuotations({
     : [];
 
   const tiles = [
-    { label: "Documents", value: rows.length, icon: DocumentIcon, accent: "border-l-gold" },
-    { label: "Draft", value: rows.filter((r) => r.status === "draft").length, icon: ClockIcon, accent: "border-l-gold" },
-    { label: "Lost", value: rows.filter((r) => r.status === "lost").length, icon: FunnelIcon, accent: "border-l-red-400" },
+    {
+      label: "Documents",
+      value: rows.length,
+      icon: DocumentIcon,
+      accent: "border-l-gold",
+      active: !status && !statusGroup,
+      onClick: () => { setStatus(""); setStatusGroup(""); },
+    },
+    {
+      label: "Draft",
+      value: rows.filter((r) => r.status === "draft").length,
+      icon: ClockIcon,
+      accent: "border-l-gold",
+      active: status === "draft",
+      onClick: () => { setStatusGroup(""); setStatus(status === "draft" ? "" : "draft"); },
+    },
+    {
+      label: "Lost",
+      value: rows.filter((r) => r.status === "lost").length,
+      icon: FunnelIcon,
+      accent: "border-l-red-400",
+      active: status === "lost",
+      onClick: () => { setStatusGroup(""); setStatus(status === "lost" ? "" : "lost"); },
+    },
   ];
 
   const inputClass = "rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 text-sm";
@@ -220,13 +252,19 @@ export default function AllQuotations({
       {tab === "quotations" && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {tiles.map((tile) => (
-            <div key={tile.label} className={`bg-surface border border-border-dark ${tile.accent} border-l-4 rounded-lg p-4`}>
+            <button
+              key={tile.label}
+              onClick={tile.onClick}
+              className={`text-left bg-surface border border-border-dark ${tile.accent} border-l-4 rounded-lg p-4 hover:-translate-y-0.5 transition-all duration-250 ease-out ${
+                tile.active ? "ring-1 ring-gold" : ""
+              }`}
+            >
               <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
                 <tile.icon className="w-3.5 h-3.5" />
                 {tile.label}
               </p>
               <p className="text-2xl font-heading font-bold mt-1 text-text-primary">{tile.value}</p>
-            </div>
+            </button>
           ))}
         </div>
       )}
