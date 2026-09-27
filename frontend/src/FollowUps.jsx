@@ -9,20 +9,28 @@ import { CalendarIcon, ClockIcon } from "./Icons";
 
 // Amendment 43 (Section E step 4) built this as an org-wide Client queue.
 // Amendment 44 Phase D folds Opportunities into the same queue (a telecaller
-// working both needs one list, not two) and adds "My follow-ups": now that
-// Opportunity.created_by_id exists there is finally an owner to filter on.
-// Client still has no owner field, so the toggle only ever narrows the
-// Opportunity half -- Clients stay org-wide, with a note saying so, rather
-// than being silently dropped from the filtered view.
+// working both needs one list, not two) and adds "My follow-ups".
+//
+// WP2 fix (2026-09-27): "My follow-ups" now filters both Clients and
+// Opportunities by their current owner_id (Amendment 60), not by who
+// originally created the Opportunity. Filtering by created_by_id meant a
+// reassigned record (Team & Access -> Record owners) kept showing under
+// its *original* creator forever, even though the backend's own
+// owner-scoped endpoints had already moved it to the new owner -- the new
+// owner would never see it in "My follow-ups", and the old owner would
+// keep seeing a record that was no longer theirs. owner_id is the field
+// every other own-records screen in the app already keys off; this makes
+// the toggle consistent with that, for both record types.
 //
 // Not exported -- Dashboard.jsx keeps its own small local copy of this
 // merge (same pattern ClientsAdmin.jsx's STATUS_PILL_STYLE comment already
 // documents: a small local duplicate rather than a shared import).
 function mergeFollowUps(clients, opportunities, onlyMine, userId) {
   const today = new Date().toISOString().slice(0, 10);
-  const mine = onlyMine ? opportunities.filter((o) => o.created_by_id === userId) : opportunities;
+  const mineClients = onlyMine ? clients.filter((c) => c.owner_id === userId) : clients;
+  const mineOpportunities = onlyMine ? opportunities.filter((o) => o.owner_id === userId) : opportunities;
   return [
-    ...clients.map((c) => ({
+    ...mineClients.map((c) => ({
       key: `client-${c.id}`,
       kind: "client",
       id: c.id,
@@ -30,7 +38,7 @@ function mergeFollowUps(clients, opportunities, onlyMine, userId) {
       date: c.next_follow_up_date,
       note: c.follow_up_note,
     })),
-    ...mine.map((o) => ({
+    ...mineOpportunities.map((o) => ({
       key: `opportunity-${o.id}`,
       kind: "opportunity",
       id: o.id,
@@ -209,7 +217,7 @@ export default function FollowUps({ token, userId, onBack, onOpenLeadsClients })
       </div>
       {onlyMine && (
         <p className="text-xs text-text-secondary -mt-2">
-          Narrows leads to the ones you created. Clients have no owner yet, so all are still shown.
+          Narrows to the clients and leads currently assigned to you.
         </p>
       )}
 
