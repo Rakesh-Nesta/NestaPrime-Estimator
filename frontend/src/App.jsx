@@ -339,7 +339,12 @@ export default function App() {
           <Opportunities token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} onStartProject={handleStartProject} />
         )}
         {screen === "followups" && (
-          <FollowUps token={accessToken} userId={user.id} onBack={() => setScreen(preNavScreen)} />
+          <FollowUps
+            token={accessToken}
+            userId={user.id}
+            onBack={() => setScreen(preNavScreen)}
+            onOpenLeadsClients={() => goToTopLevel("clients_admin")}
+          />
         )}
         {screen === "payments" && ["pm", "director", "ca_tax"].includes(user.role) && (
           <Payments
