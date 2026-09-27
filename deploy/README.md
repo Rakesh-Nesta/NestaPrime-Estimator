@@ -131,11 +131,11 @@ outside the app, once, with the **real email address of the person**:
 ```bash
 docker compose -f docker-compose.prod.yml exec -T \
   -e PYTHONPATH=/app \
-  -e INITIAL_ADMIN_EMAIL="the-real-address@theircompany.in" \
+  -e INITIAL_ADMIN_EMAIL="TYPE-THE-REAL-EMAIL-HERE" \
   backend python scripts/seed_initial_admin.py
 ```
 
-Replace the address first. The temporary password is **generated and printed once, on your terminal only** -- give it
+Replace `TYPE-THE-REAL-EMAIL-HERE` with the real address first (left as it is, the script refuses). The temporary password is **generated and printed once, on your terminal only** -- give it
 to the person privately; they must change it at first sign-in. There is no password to type or paste. The script
 refuses anything that does not look like an email address, refuses placeholder addresses (`example.com`,
 `yourcompany.com`, ...), refuses if an active Admin already exists, and never creates a duplicate.

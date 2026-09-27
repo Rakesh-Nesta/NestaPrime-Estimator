@@ -2786,6 +2786,97 @@ when the Director added that the admin work should not sit with the Director.) G
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-62-specs.md`, approved 26 September 2026).
 
+**Implemented (PRs #240 the register and the three approved specs, #241 backend and screens, #242 a first-Admin
+safety fix).**
+- *Who can do what.* An **Admin** creates any role, changes, deactivates and resets anyone, edits the six
+  company-identity settings (legal name, GSTIN, PAN, city, signatory name and designation), the logo, message
+  templates and which fields are required, reads the Audit Log and the Role & Permissions screen, and sees a small
+  Overview of people and recent activity. An Admin approves, prices and sees nothing of the business: a test pins the
+  **exact 17 routes** an Admin can reach, and every clients, projects, quotations, rates, reports, search and dashboard
+  route answers 403. The **Director** keeps pricing policy (the 27 pricing and wording settings), the four
+  bank-account settings and every approval; may create any role except Admin and manage anyone except an Admin. A
+  **PM** may create Sales, Procurement, Site Engineer and CA/Tax accounts and see the People list, nothing more.
+  Nobody changes their own role or deactivates themselves; the last active Admin and the last active Director cannot be
+  demoted or deactivated. The very first Admin comes from outside the app (the Director may create it once, only while
+  none exists, or a server script does it); after that only an Admin creates or promotes one.
+- *Settings by key.* `POST /settings` admits an Admin for the six identity keys only, global scope; the other keys,
+  bulk update and the import stay with the Director. The Admin's settings list and history are filtered the same way.
+- *The Audit Log for an Admin hides values.* Old value, new value and reason are hidden except for people, field
+  settings, message templates and the identity settings -- an allow-list, so a newly audited field stays hidden until
+  someone decides otherwise. The Director sees everything, and Admin actions appear in the Director's Recent activity.
+- *Screens.* Admin's sidebar is Overview, Team & Access and, under More, Master Settings and Audit Log (Help in the
+  footer; no search, no Projects, no Education). Team & Access and Master Settings show each role only what it may do;
+  a PM sees the People tab only; own role selector disabled; an Admin row is marked "managed by an Admin" for a
+  Director. Handbook, Roles & permissions (seven roles) and the Audit Log wording updated.
+- *Found while building.* Quick search took "every role in the enum" and would have admitted an Admin; it now lists its
+  six roles. One existing test demoted the acting Director themselves, which the approved "nobody changes their own role"
+  rule forbids; it now uses a second Director. The route-check script gained a list of routes that narrow inside
+  (Admin on setting history), so a real mismatch still shows.
+- *Deviations to confirm.* The audit-log allow-list is stricter than the spec's "hides cost and margin values"
+  (everything outside it is hidden, not only cost and margin). The backend and the screens went in one PR, not two.
+  The bank-account settings staying with the Director and the audit masking are drafting additions flagged in the spec.
+
+**Two mistakes on the day it shipped, recorded because the second could have mattered.**
+1. **A placeholder Admin.** The first-Admin script was run with the placeholder words from the instructions
+   (`THEIR-EMAIL` and `A-LONG-TEMPORARY-PASSWORD`), which created an active Admin with that email and that password, both
+   written in the chat. The Director deleted it within minutes (`DELETE 1`; it was the only Admin, had never signed in and
+   nothing referred to it). The web server's log showed every sign-in attempt in that period came from one address, all
+   refused (401 or 429), and none after the account was created (15:39:58 UTC). The backend log records no requests, so
+   the "0" that check returned proved nothing -- the web server's log is the evidence. **#242** changed the script:
+   the email must look like an email address and may not use a placeholder domain, and the temporary password is
+   generated and shown once instead of typed in (23 tests; removing the email check fails 9, the placeholder-domain
+   check fails 5). It then refused the placeholder words when the Director ran it again, as intended.
+2. **The real first Admin's password was pasted into the chat.** The first Admin, `info@nestainfotech.com`, was created
+   and its generated temporary password was pasted into the conversation despite the request not to. It must be changed
+   at first sign-in; until then it is exposed. **Not yet confirmed that it has been changed** (see open items). The
+   address is a shared-style mailbox, so the audit log will name the mailbox, not a person.
+
+**Verified.** 52 new backend tests (`test_admin_role.py`), each guard removed in turn and a test failing (PM creating any
+role 3, an Admin changing any setting 1, audit values unmasked 2, search admitting every enum role 2, a Director
+managing an Admin 1); the existing role, user, search, audit, settings, company, template, field-setting, auth and
+security tests pass with three role pins and two user tests updated. The migration on a scratch database: the whole
+chain to the previous head, then upgrade to `{...,CA_TAX,ADMIN}`, an ADMIN row inserts, re-running is a no-op,
+downgrade and re-upgrade clean. The role-by-route check with all seven roles: 248 gated routes, table and server agree.
+Real Chrome against the local copy, Admin, PM, Director and Sales at 1280px and 375px: **60 of 60 checks, no refused
+API calls, no JS errors**, and no horizontal overflow on Overview, Team & Access, Master Settings and Audit Log at 375,
+414 and 768px.
+
+**Deployed 26 September 2026.** The pull moved `fb98766` to `e49b08a` (40 files); the backend was rebuilt and the log shows
+`Running upgrade c37a4e8b2f19 -> e5b3d97a41c8, add ADMIN to user_role (Amendment 59, Section 62)`; the frontend was built
+with the HTTPS address and copied as its own step. From outside: bundle `index-vFui1Bqr.js` -> `index-BhGq2osB.js`
+(modified 26 Sep 15:38 GMT) containing the Admin screens' text and still the Amendment 57 and 58 text; the API lists
+`/admin/overview` and `AdminOverviewOut`, `UserRole` has `admin` as its seventh value, the earlier change-password and
+multi-sport fields are present; anonymous calls to `/admin/overview`, `/users` (GET and POST), the audit log, the role
+table, settings (GET and POST), the dashboard and search answer 401; a wrong sign-in gives the same message;
+`/api/docs` is still closed; the CSP and Permissions-Policy headers are intact; real Chrome on the live login page at
+1280px and 375px shows no CSP violation and the fonts load. **#242** was deployed the same day (`e49b08a..7e42cab`,
+backend rebuild only; the script inside the container is the new one -- `grep` finds `admin_bootstrap` in it).
+
+**Open items.**
+- **[CLOSED, 27 September] The exposed temporary password is changed -- but it took a second account.** The morning query
+  showed one Admin, `info@nestainfotech.com`, still with `must_change_password = t`, ten hours after creation. The
+  web server's log (`POST /api/auth/login`, status 200) showed **no successful sign-in by anyone**, so the first
+  password was never used. That account was deleted while the flag was still true (`DELETE 1`) and created again -- and
+  **the new temporary password was pasted into the chat too.** The Director signed in with it and chose their own the same
+  morning: the Admin's Overview then read "Awaiting a new password: 0" and the Recent activity list shows the Admin's own
+  `user · password (self-service change)` at 03:48:48 UTC on 27 September. The web server's log had shown no successful
+  sign-in when it was checked right after the recreation; whether anyone other than the Director signed in between then and
+  the change is not something the log sent could show. Lesson recorded: the temporary password is printed once, on the
+  operator's terminal, and must never leave it; the safe habit is to sign in and change it at once.
+- **Verified in production on 27 September (the Director's screenshot of the Admin's Overview):** the Admin signs in and
+  sees only Overview, Team & Access and More; the Overview shows 4 active people (1 Admin, 2 Directors, 1 PM), 2 inactive,
+  0 locked out, 0 awaiting a password change; and **the audit-log masking works on real data** -- the four bank-account
+  settings read "(hidden for your role)" while the company-identity values (legal name, city, PAN, GSTIN) are visible.
+  One cosmetic item noticed: recent-activity times are UTC without a label (03:48 AM beside a 09:19 header clock in
+  India), a display quirk that predates this amendment.
+- **Not yet seen:** the Admin's Team & Access (People and Roles & permissions) and Master Settings screens, and the PM's and
+  Director's reduced and full versions of Team & Access; I have no production login here, so these are the Director's
+  click-through. The Director's one-time start was not used (the first Admin came from the server script).
+- **The README's example address** (`the-real-address@theircompany.in`) would have passed the script's check and created
+  a junk Admin; it now reads `TYPE-THE-REAL-EMAIL-HERE`, which the script refuses. (A docstring change only; it reaches
+  the server with the next backend rebuild.)
+- Amendment 60 (own-records visibility) and Amendment 61 (mobile-or-email sign-in) are approved and next, in that order.
+
 ### Amendment No. 60 — Own-Records Visibility and the Personal Dashboard
 **Registered 26 September 2026**, on the Director's instruction that a user should see only their own entries, and
 on the dashboard only their own performance, not the company's performance or revenue. Grounded against current code:
