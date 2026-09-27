@@ -1,4 +1,5 @@
 import { useState } from "react";
+import AdminPeoplePanel from "./AdminPeoplePanel";
 import RecordOwners from "./RecordOwners";
 import RolePermissionsViewer from "./RolePermissionsViewer";
 import UserManagementTab from "./UserManagement";
@@ -51,7 +52,12 @@ export default function TeamAccess({ token, currentUser, onBack }) {
         </div>
       </div>
 
-      {tab === "people" && <UserManagementTab token={token} currentUser={currentUser} />}
+      {tab === "people" && currentUser?.role === "admin" && (
+        <AdminPeoplePanel token={token} currentUser={currentUser} />
+      )}
+      {tab === "people" && currentUser?.role !== "admin" && (
+        <UserManagementTab token={token} currentUser={currentUser} />
+      )}
 
       {tab === "owners" && <RecordOwners token={token} currentUser={currentUser} />}
 
