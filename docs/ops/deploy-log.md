@@ -40,14 +40,21 @@ requests, so the `grep -c` of it returning 0 was not evidence. **#242** was then
 the container printed 2; the health check, bundle name (`index-BhGq2osB.js`), anonymous `/users` 401, wrong-sign-in message
 and CSP header were unchanged afterwards. The script refused the placeholder words (`TYPE-THE-REAL-EMAIL-HERE`) twice,
 then created the real first Admin, `info@nestainfotech.com`, and printed a generated temporary password once. **That
-password was then pasted into the chat.** A repeat of the creation command was pasted afterwards without its output.
+password was then pasted into the chat** -- and, after the account was deleted and recreated on 27 September, so was the new
+one (see below).
 
-**27 September check (the Director's read-only query):** exactly one Admin, `info@nestainfotech.com`, active, created 26 Sep
-16:17:49 UTC, **`must_change_password = t` -- the temporary password had not been changed** ten hours after it was
-created; the repeat run of the creation command was therefore refused (one Admin, not two).
+**27 September -- the exposed password, closed.** The Director's read-only query found exactly one Admin,
+`info@nestainfotech.com` (active, created 26 Sep 16:17:49 UTC), still with `must_change_password = t` ten hours later, so
+the password pasted into the chat had not been changed; the repeat run of the creation command had been refused (one Admin,
+not two). The nginx log (`POST /api/auth/login`, status 200) showed no successful sign-in by anyone. The account was
+deleted while the flag was still true (`DELETE 1`) and created again with a fresh generated password -- **which was pasted
+into the chat as well**. The Director then signed in and chose their own password: the Admin's Overview shows "Awaiting a
+new password: 0" and Recent activity lists the Admin's `user · password (self-service change)` at 03:48:48 UTC.
 
-**Not verified in production:** that the temporary password has been changed (it had not, on the morning of 27 September);
-the Admin's sidebar; any logged-in behaviour of the new Admin, PM and Director screens; the audit-log masking on real data.
+**Verified in production (the Director's screenshot of the Admin's Overview):** sidebar Overview, Team & Access, More; 4 active
+people (1 Admin, 2 Directors, 1 PM), 2 inactive, 0 locked out; audit-log values for the four bank-account settings show
+"(hidden for your role)" while the company-identity values are visible. **Not yet seen:** the Admin's Team & Access and Master
+Settings screens; the PM's and Director's Team & Access.
 
 **Also seen on 27 September -- the nightly backup works.** `~/nestaprime-backups/` now holds
 `nestaprime_estimator_20260927T020001Z.sql.gz` (39K, written at 02:00 by the cron installed on 26 September) and

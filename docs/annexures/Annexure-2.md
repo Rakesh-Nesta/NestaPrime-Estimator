@@ -2853,17 +2853,25 @@ table, settings (GET and POST), the dashboard and search answer 401; a wrong sig
 backend rebuild only; the script inside the container is the new one -- `grep` finds `admin_bootstrap` in it).
 
 **Open items.**
-- **[OPEN] The exposed temporary password has NOT been changed.** The Director's read-only query on the morning of 27
-  September shows **exactly one Admin**, `info@nestainfotech.com` (active, created 26 Sep 16:17:49 UTC), with
-  `must_change_password = t`: nobody has yet completed the forced change, so the password that was pasted into the chat
-  is still the working one, about ten hours after it was created. (The repeat of the creation command was therefore
-  refused, as intended: there is one Admin, not two.) Closing it: sign in once and choose a new password, or delete the
-  account while `must_change_password` is still true and create it again, reading the new password from the terminal only.
-  The web server's log (`POST /api/auth/login`, status 200) shows whether anyone has signed in at all in the meantime.
-  The Admin's sidebar has not been looked at yet either (should be Overview, Team & Access, More -> Master Settings and
-  Audit Log).
-- **Not verified in production:** any logged-in behaviour of the Admin, PM or Director screens (there is no production
-  login here); the one-time start by the Director; the Admin's audit-log masking on real data.
+- **[CLOSED, 27 September] The exposed temporary password is changed -- but it took a second account.** The morning query
+  showed one Admin, `info@nestainfotech.com`, still with `must_change_password = t`, ten hours after creation. The
+  web server's log (`POST /api/auth/login`, status 200) showed **no successful sign-in by anyone**, so the first
+  password was never used. That account was deleted while the flag was still true (`DELETE 1`) and created again -- and
+  **the new temporary password was pasted into the chat too.** The Director signed in with it and chose their own the same
+  morning: the Admin's Overview then read "Awaiting a new password: 0" and the Recent activity list shows the Admin's own
+  `user · password (self-service change)` at 03:48:48 UTC on 27 September. The web server's log had shown no successful
+  sign-in when it was checked right after the recreation; whether anyone other than the Director signed in between then and
+  the change is not something the log sent could show. Lesson recorded: the temporary password is printed once, on the
+  operator's terminal, and must never leave it; the safe habit is to sign in and change it at once.
+- **Verified in production on 27 September (the Director's screenshot of the Admin's Overview):** the Admin signs in and
+  sees only Overview, Team & Access and More; the Overview shows 4 active people (1 Admin, 2 Directors, 1 PM), 2 inactive,
+  0 locked out, 0 awaiting a password change; and **the audit-log masking works on real data** -- the four bank-account
+  settings read "(hidden for your role)" while the company-identity values (legal name, city, PAN, GSTIN) are visible.
+  One cosmetic item noticed: recent-activity times are UTC without a label (03:48 AM beside a 09:19 header clock in
+  India), a display quirk that predates this amendment.
+- **Not yet seen:** the Admin's Team & Access (People and Roles & permissions) and Master Settings screens, and the PM's and
+  Director's reduced and full versions of Team & Access; I have no production login here, so these are the Director's
+  click-through. The Director's one-time start was not used (the first Admin came from the server script).
 - **The README's example address** (`the-real-address@theircompany.in`) would have passed the script's check and created
   a junk Admin; it now reads `TYPE-THE-REAL-EMAIL-HERE`, which the script refuses. (A docstring change only; it reaches
   the server with the next backend rebuild.)
