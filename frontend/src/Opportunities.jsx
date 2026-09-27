@@ -8,11 +8,11 @@ import {
   updateOpportunityNotes,
   updateOpportunityStage,
 } from "./api";
-import EditDetailsForm from "./EditDetailsForm";
-import { FunnelIcon } from "./Icons";
+import { DocumentIcon, FunnelIcon, SearchIcon, UsersIcon } from "./Icons";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const TERMINAL_STAGES = ["won", "lost"];
+const STATUS_FILTERS = ["", ...STAGES];
 
 // Amendment 44 (Section E step 5): same small-local-duplicate style as
 // ClientsAdmin.jsx's own STATUS_PILL_STYLE.
@@ -22,6 +22,17 @@ const STAGE_PILL_STYLE = {
   qualified: "bg-gold-muted text-gold",
   won: "bg-green-500/10 text-green-400",
   lost: "bg-red-500/10 text-red-400",
+};
+const STAGE_DOT_STYLE = {
+  new: "bg-text-secondary",
+  contacted: "bg-gold",
+  qualified: "bg-gold",
+  won: "bg-green-400",
+  lost: "bg-red-400",
+};
+const TILE_STYLE = {
+  won: "border-green-500/30 bg-green-500/5",
+  lost: "border-red-500/30 bg-red-500/5",
 };
 
 const RELATIONSHIP_TABS = [
@@ -34,20 +45,28 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function matchesSearch(needle, ...fields) {
+  if (!needle) return true;
+  return fields.some((f) => (f || "").toLowerCase().includes(needle));
+}
+
 // Same write set as the backend's WRITE_ROLES -- Procurement can read the
 // pipeline but not change it.
 const canEditDetails = (role) => ["sales", "pm", "director"].includes(role);
 
+// Redesign (2026-09-27, Director's request): same screen, same data and the same server calls -- presented
+// as a list with a slide-in details panel instead of stacked cards with every field editable inline. The
+// sidebar and header are untouched; only this screen's own content changed.
 export default function Opportunities({ token, role, onBack, onStartProject }) {
   const [opportunities, setOpportunities] = useState([]);
-  const [editingId, setEditingId] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [clients, setClients] = useState([]);
   const [relationship, setRelationship] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [drafts, setDrafts] = useState({});
   const [linkPicks, setLinkPicks] = useState({});
-  const [notesDrafts, setNotesDrafts] = useState({});
   const [loadFailed, setLoadFailed] = useState(false);
 
   function load() {
@@ -67,34 +86,22 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
 
   const clientNameById = Object.fromEntries(clients.map((c) => [c.id, c.name]));
 
-  function draftFor(o) {
-    return drafts[o.id] || { stage: o.stage, date: o.next_follow_up_date || "", note: o.follow_up_note || "" };
-  }
-  function setDraftField(id, field, value) {
-    setDrafts((d) => ({ ...d, [id]: { ...draftFor(opportunities.find((o) => o.id === id)), ...d[id], [field]: value } }));
-  }
-
-  async function saveRow(o) {
-    setError("");
-    const draft = draftFor(o);
-    try {
-      if (draft.stage !== o.stage) {
-        await updateOpportunityStage(token, o.id, {
-          stage: draft.stage,
-          next_follow_up_date: TERMINAL_STAGES.includes(draft.stage) ? null : draft.date || null,
-          lost_reason: draft.stage === "lost" ? draft.lostReason || null : null,
-        });
-      } else if (!TERMINAL_STAGES.includes(o.stage)) {
-        await updateOpportunityFollowUp(token, o.id, {
-          next_follow_up_date: draft.date,
-          follow_up_note: draft.note || null,
-        });
-      }
-      setDrafts((d) => ({ ...d, [o.id]: undefined }));
-      await load();
-    } catch (err) {
-      setError(err.message);
+  async function saveRow(o, values) {
+    if (values.stage !== o.stage) {
+      await updateOpportunityStage(token, o.id, {
+        stage: values.stage,
+        next_follow_up_date: TERMINAL_STAGES.includes(values.stage) ? null : values.date || null,
+        lost_reason: values.stage === "lost" ? values.lostReason || null : null,
+      });
+    } else if (!TERMINAL_STAGES.includes(o.stage)) {
+      await updateOpportunityFollowUp(token, o.id, {
+        next_follow_up_date: values.date,
+        follow_up_note: values.note || null,
+      });
     }
+    await updateOpportunityNotes(token, o.id, { notes: values.notes || null });
+    setSelectedId(null);
+    await load();
   }
 
   async function linkClient(o) {
@@ -110,19 +117,6 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
     }
   }
 
-  // Amendment 45 (Section 51): a general free-text catch-all, distinct
-  // from the follow-up note in the stage/date row above.
-  async function saveNotes(o) {
-    setError("");
-    try {
-      await updateOpportunityNotes(token, o.id, { notes: notesDrafts[o.id] || null });
-      setNotesDrafts((d) => ({ ...d, [o.id]: undefined }));
-      await load();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
   // Amendment 47 (Section 52): fixing a typo in name/phone/email, allowed at
   // any stage. Sending blank contact fields clears them.
   async function saveDetails(o, values) {
@@ -131,7 +125,6 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
       lead_phone: values.phone || null,
       lead_email: values.email || null,
     });
-    setEditingId(null);
     await load();
   }
 
@@ -139,196 +132,373 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
     return <p className="text-center text-text-secondary mt-10">Loading Opportunities…</p>;
   }
 
+  const needle = search.trim().toLowerCase();
+  const visible = opportunities.filter(
+    (o) =>
+      (!statusFilter || o.stage === statusFilter) &&
+      matchesSearch(needle, o.lead_name, o.lead_phone, o.lead_email, o.client_id && clientNameById[o.client_id])
+  );
+  const tabCounts = { "": opportunities.length };
+  const selected = opportunities.find((o) => o.id === selectedId) || null;
+  const tiles = [
+    { label: "Total opportunities", value: opportunities.length, icon: DocumentIcon },
+    { label: "Lead only", value: opportunities.filter((o) => !o.client_id).length, icon: UsersIcon },
+    { label: "Won", value: opportunities.filter((o) => o.stage === "won").length, icon: FunnelIcon, tone: "won" },
+    { label: "Lost", value: opportunities.filter((o) => o.stage === "lost").length, icon: FunnelIcon, tone: "lost" },
+  ];
+
   return (
-    <div className="max-w-[1000px] mx-auto mt-6 mb-10 space-y-4 px-4 sm:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="max-w-[1400px] mx-auto mt-6 mb-10 px-4 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
+          <p className="text-xs uppercase tracking-wide text-text-secondary">Workspace / Customer relationships</p>
           <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1 flex items-center gap-2">
             <FunnelIcon className="w-6 h-6 text-gold" /> Opportunities
           </h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Leads and enquiries, from first contact through Won or Lost. New enquiries start on
-            "Leads & Clients" -- "Add Enquiry".
-          </p>
+          <p className="text-sm text-text-secondary mt-1">Track every enquiry from first contact to outcome.</p>
         </div>
-        <button onClick={onBack} className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover shrink-0">
-          ← Back
-        </button>
+        <div className="text-right shrink-0">
+          <button onClick={onBack} className="bg-gold text-base text-sm rounded px-4 py-2 font-semibold hover:bg-gold-hover">
+            View Leads &amp; Clients →
+          </button>
+          <p className="text-[11px] text-text-secondary mt-1">New enquiries are added in Leads &amp; Clients.</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-5 border-b border-border-dark">
-        {RELATIONSHIP_TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setRelationship(t.key)}
-            className={`text-sm pb-2.5 border-b-2 whitespace-nowrap transition-colors duration-200 ${
-              relationship === t.key
-                ? "text-gold border-gold font-medium"
-                : "text-text-secondary border-transparent hover:text-text-primary"
-            }`}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        {tiles.map((tile) => (
+          <div
+            key={tile.label}
+            className={`rounded-lg border p-4 ${tile.tone ? TILE_STYLE[tile.tone] : "bg-surface border-border-dark"}`}
           >
-            {t.label}
-          </button>
+            <p className="text-xs uppercase tracking-wide text-text-secondary flex items-center gap-1.5">
+              <tile.icon className="w-3.5 h-3.5" />
+              {tile.label}
+            </p>
+            <p
+              className={`text-2xl font-heading font-bold mt-1 ${
+                tile.tone === "won" ? "text-green-400" : tile.tone === "lost" ? "text-red-400" : "text-text-primary"
+              }`}
+            >
+              {tile.value}
+            </p>
+          </div>
         ))}
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      <div className="flex flex-col lg:flex-row gap-5">
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-dark">
+            <div className="flex items-center gap-5 overflow-x-auto">
+              {RELATIONSHIP_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setRelationship(t.key)}
+                  className={`text-sm pb-2.5 border-b-2 whitespace-nowrap transition-colors duration-200 ${
+                    relationship === t.key
+                      ? "text-gold border-gold font-medium"
+                      : "text-text-secondary border-transparent hover:text-text-primary"
+                  }`}
+                >
+                  {t.label} {t.key === relationship && <span className="text-xs text-text-secondary">({tabCounts[""] ?? opportunities.length})</span>}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 pb-2 shrink-0">
+              <div className="relative">
+                <SearchIcon className="w-3.5 h-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search opportunities…"
+                  aria-label="Search opportunities"
+                  className="rounded border border-border-dark bg-surface-raised text-text-primary pl-7 pr-2 py-1.5 text-xs w-40"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-text-secondary">
+                Status
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1.5 text-xs"
+                >
+                  {STATUS_FILTERS.map((s) => (
+                    <option key={s} value={s}>
+                      {s ? s[0].toUpperCase() + s.slice(1) : "All statuses"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
 
-      {opportunities.length === 0 && loadFailed ? null : opportunities.length === 0 ? (
-        <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
-          No opportunities in this view yet.
-        </p>
-      ) : (
-        <ul className="space-y-3">
-          {opportunities.map((o) => {
-            const draft = draftFor(o);
-            const overdue = o.next_follow_up_date && o.next_follow_up_date < todayStr();
-            const closed = TERMINAL_STAGES.includes(o.stage);
-            const dirty = draft.stage !== o.stage || draft.date !== (o.next_follow_up_date || "") || draft.note !== (o.follow_up_note || "");
-            return (
-              <li key={o.id} className="bg-surface border border-border-dark rounded-lg p-4 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-medium text-text-primary truncate">{o.lead_name}</p>
-                    <p className="text-xs text-text-secondary truncate">
-                      {o.client_id ? `Client · ${clientNameById[o.client_id] || "linked"}` : "Lead only -- not yet a Client"}
-                      {(o.lead_phone || o.lead_email) && ` · ${[o.lead_phone, o.lead_email].filter(Boolean).join(" · ")}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {canEditDetails(role) && editingId !== o.id && (
-                      <button onClick={() => setEditingId(o.id)} className="text-xs text-gold hover:underline">
-                        Edit details
-                      </button>
-                    )}
-                    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${STAGE_PILL_STYLE[o.stage]}`}>
-                      {o.stage}
-                    </span>
-                  </div>
-                </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
-                {editingId === o.id && (
-                  <EditDetailsForm
-                    idPrefix={`opp-${o.id}`}
-                    initial={{ name: o.lead_name, phone: o.lead_phone, email: o.lead_email }}
-                    onSave={(values) => saveDetails(o, values)}
-                    onCancel={() => setEditingId(null)}
-                  />
-                )}
-
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <select
-                    value={draft.stage}
-                    onChange={(e) => setDraftField(o.id, "stage", e.target.value)}
-                    className="rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
+          {visible.length === 0 && loadFailed ? null : visible.length === 0 ? (
+            <p className="text-sm text-text-secondary bg-surface border border-border-dark rounded-lg p-5">
+              {needle || statusFilter ? "Nothing matches these filters." : "No opportunities in this view yet."}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {visible.map((o) => {
+                const isSelected = selectedId === o.id;
+                const Icon = o.client_id ? UsersIcon : DocumentIcon;
+                return (
+                  <li
+                    key={o.id}
+                    className={`bg-surface rounded-lg p-4 border ${isSelected ? "border-gold" : "border-border-dark"}`}
                   >
-                    {STAGES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-
-                  {!TERMINAL_STAGES.includes(draft.stage) && (
-                    <>
-                      <input
-                        type="date"
-                        value={draft.date}
-                        onChange={(e) => setDraftField(o.id, "date", e.target.value)}
-                        className={`rounded border border-border-dark bg-surface-raised px-1.5 py-1 ${overdue ? "text-red-400" : "text-text-primary"}`}
-                      />
-                      <input
-                        value={draft.note}
-                        onChange={(e) => setDraftField(o.id, "note", e.target.value)}
-                        placeholder="Note (optional)"
-                        className="w-full sm:w-auto sm:flex-1 sm:min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
-                      />
-                    </>
-                  )}
-                  {draft.stage === "lost" && (
-                    <input
-                      value={draft.lostReason || ""}
-                      onChange={(e) => setDraftField(o.id, "lostReason", e.target.value)}
-                      placeholder="Lost reason (optional)"
-                      className="w-full sm:w-auto sm:flex-1 sm:min-w-[8rem] rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
-                    />
-                  )}
-
-                  <button
-                    onClick={() => saveRow(o)}
-                    disabled={!dirty && closed}
-                    className="text-gold hover:underline shrink-0 disabled:opacity-40 disabled:no-underline"
-                  >
-                    Save
-                  </button>
-                </div>
-
-                <div className="flex items-start gap-2 text-xs">
-                  <span className="text-text-secondary pt-1 shrink-0">Notes</span>
-                  <textarea
-                    value={notesDrafts[o.id] ?? o.notes ?? ""}
-                    onChange={(e) => setNotesDrafts((d) => ({ ...d, [o.id]: e.target.value }))}
-                    rows={1}
-                    placeholder="Notes / remarks (optional)"
-                    className="flex-1 min-w-0 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
-                  />
-                  <button onClick={() => saveNotes(o)} className="text-gold hover:underline shrink-0">
-                    Save
-                  </button>
-                </div>
-
-                {o.stage === "won" && (
-                  <div className="flex flex-wrap items-center gap-2 text-xs border-t border-border-dark pt-2">
-                    {o.project_id ? (
-                      <span className="text-green-400">Project started.</span>
-                    ) : o.client_id ? (
-                      <button
-                        onClick={() =>
-                          onStartProject({
-                            opportunityId: o.id,
-                            clientId: o.client_id,
-                            clientName: clientNameById[o.client_id] || "the linked client",
-                            leadName: o.lead_name,
-                          })
-                        }
-                        className="bg-gold text-base rounded px-3 py-1.5 font-semibold hover:bg-gold-hover"
-                      >
-                        Start Project →
-                      </button>
-                    ) : (
-                      <span className="text-text-secondary">
-                        Won -- link this Opportunity to a client below to start a Project.
+                    <div className="flex items-start gap-3">
+                      <span className="w-9 h-9 rounded bg-surface-raised border border-border-dark flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4 text-gold" />
                       </span>
-                    )}
-                  </div>
-                )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium text-text-primary truncate">{o.lead_name}</p>
+                          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${STAGE_PILL_STYLE[o.stage]}`}>
+                            {o.stage}
+                          </span>
+                        </div>
+                        <p className="text-xs text-text-secondary truncate">
+                          {o.client_id ? `Client · ${clientNameById[o.client_id] || "linked"}` : "Lead only · Not linked to a client"}
+                          {(o.lead_phone || o.lead_email) && ` · ${[o.lead_phone, o.lead_email].filter(Boolean).join(" · ")}`}
+                        </p>
+                        <div className="flex items-center justify-between gap-2 mt-1.5">
+                          <p className="text-xs text-text-secondary truncate">
+                            {o.notes ? <>Notes: {o.notes}</> : " "}
+                          </p>
+                          {canEditDetails(role) && (
+                            <button
+                              onClick={() => setSelectedId(o.id)}
+                              className="text-xs text-gold hover:underline shrink-0"
+                            >
+                              Edit details →
+                            </button>
+                          )}
+                        </div>
+                        {o.stage === "won" && (
+                          <p className="mt-1 text-xs">
+                            {o.project_id ? (
+                              <span className="text-green-400">🏁 Project started.</span>
+                            ) : (
+                              <span className="text-text-secondary">Won -- open it to start a Project.</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
-                {!o.client_id && (
-                  <div className="flex flex-wrap items-center gap-2 text-xs border-t border-border-dark pt-2">
-                    <span className="text-text-secondary">Link to an existing client:</span>
-                    <select
-                      value={linkPicks[o.id] || ""}
-                      onChange={(e) => setLinkPicks((p) => ({ ...p, [o.id]: e.target.value }))}
-                      className="min-w-0 max-w-full rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-1"
-                    >
-                      <option value="">Select a client…</option>
-                      {clients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button onClick={() => linkClient(o)} disabled={!linkPicks[o.id]} className="text-gold hover:underline disabled:opacity-40">
-                      Link
-                    </button>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+        {selected && (
+          <OpportunityPanel
+            opportunity={selected}
+            clients={clients}
+            clientNameById={clientNameById}
+            linkPick={linkPicks[selected.id] || ""}
+            onLinkPickChange={(v) => setLinkPicks((p) => ({ ...p, [selected.id]: v }))}
+            onLinkClient={() => linkClient(selected)}
+            onSave={(values) => saveRow(selected, values)}
+            onSaveDetails={(values) => saveDetails(selected, values)}
+            onStartProject={onStartProject}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
+      </div>
     </div>
+  );
+}
+
+function OpportunityPanel({
+  opportunity: o, clients, clientNameById, linkPick, onLinkPickChange, onLinkClient, onSave, onSaveDetails, onStartProject, onClose,
+}) {
+  const [values, setValues] = useState({
+    name: o.lead_name,
+    phone: o.lead_phone || "",
+    email: o.lead_email || "",
+    stage: o.stage,
+    date: o.next_follow_up_date || "",
+    note: o.follow_up_note || "",
+    lostReason: o.lost_reason || "",
+    notes: o.notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const overdue = o.next_follow_up_date && o.next_follow_up_date < todayStr();
+
+  function setField(field, value) {
+    setValues((v) => ({ ...v, [field]: value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!values.name.trim()) {
+      setError("A name is required.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      if (values.name !== o.lead_name || values.phone !== (o.lead_phone || "") || values.email !== (o.lead_email || "")) {
+        await onSaveDetails(values);
+      }
+      await onSave(values);
+    } catch (err) {
+      setError(err.message);
+      setSaving(false);
+    }
+  }
+
+  const inputClass = "mt-1 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-2.5 py-2 text-sm";
+  const labelClass = "block text-xs font-medium text-text-secondary";
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="w-full lg:w-[22rem] shrink-0 bg-surface border border-border-dark rounded-lg p-5 space-y-4 h-fit lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] overflow-y-auto"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="w-9 h-9 rounded bg-surface-raised border border-border-dark flex items-center justify-center shrink-0">
+            {o.client_id ? <UsersIcon className="w-4 h-4 text-gold" /> : <DocumentIcon className="w-4 h-4 text-gold" />}
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-text-primary truncate">Opportunity details</h3>
+            <p className="text-xs text-text-secondary truncate">
+              {o.client_id ? `Client · ${clientNameById[o.client_id] || "linked"}` : "Lead only · Not linked to a client"}
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="text-text-secondary hover:text-text-primary text-lg leading-none shrink-0">
+          ✕
+        </button>
+      </div>
+
+      <div>
+        <label className={labelClass}>Name</label>
+        <input required value={values.name} onChange={(e) => setField("name", e.target.value)} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Phone</label>
+        <input inputMode="tel" value={values.phone} onChange={(e) => setField("phone", e.target.value)} className={inputClass} />
+      </div>
+      <div>
+        <label className={labelClass}>Email</label>
+        <input type="email" value={values.email} onChange={(e) => setField("email", e.target.value)} className={inputClass} />
+      </div>
+
+      <div>
+        <label className={labelClass}>Stage *</label>
+        <div className="relative mt-1">
+          <span className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${STAGE_DOT_STYLE[values.stage]}`} />
+          <select
+            value={values.stage}
+            onChange={(e) => setField("stage", e.target.value)}
+            className="w-full rounded border border-border-dark bg-surface-raised text-text-primary pl-6 pr-2.5 py-2 text-sm capitalize"
+          >
+            {STAGES.map((s) => (
+              <option key={s} value={s} className="capitalize">
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {!TERMINAL_STAGES.includes(values.stage) && (
+        <>
+          <div>
+            <label className={labelClass}>Follow-up date</label>
+            <input
+              type="date"
+              value={values.date}
+              onChange={(e) => setField("date", e.target.value)}
+              className={`${inputClass} ${overdue ? "text-red-400" : ""}`}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Follow-up note (optional)</label>
+            <input value={values.note} onChange={(e) => setField("note", e.target.value)} className={inputClass} />
+          </div>
+        </>
+      )}
+      {values.stage === "lost" && (
+        <div>
+          <label className={labelClass}>Lost reason (optional)</label>
+          <input value={values.lostReason} onChange={(e) => setField("lostReason", e.target.value)} className={inputClass} />
+        </div>
+      )}
+
+      <div>
+        <label className={labelClass}>Notes *</label>
+        <textarea
+          value={values.notes}
+          onChange={(e) => setField("notes", e.target.value)}
+          rows={3}
+          placeholder="Anything else worth noting -- not tied to any field above."
+          className={inputClass}
+        />
+      </div>
+
+      {!o.client_id && (
+        <div className="border-t border-border-dark pt-3">
+          <label className={labelClass}>Link to existing client</label>
+          <div className="flex items-center gap-2 mt-1">
+            <select
+              value={linkPick}
+              onChange={(e) => onLinkPickChange(e.target.value)}
+              className="min-w-0 flex-1 rounded border border-border-dark bg-surface-raised text-text-primary px-2.5 py-2 text-sm"
+            >
+              <option value="">Select a client…</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={onLinkClient}
+              disabled={!linkPick}
+              className="text-xs border border-gold/50 text-gold rounded px-3 py-2 hover:bg-gold/10 disabled:opacity-40 shrink-0"
+            >
+              🔗 Link client
+            </button>
+          </div>
+        </div>
+      )}
+
+      {o.stage === "won" && o.client_id && !o.project_id && (
+        <button
+          type="button"
+          onClick={() =>
+            onStartProject({
+              opportunityId: o.id,
+              clientId: o.client_id,
+              clientName: clientNameById[o.client_id] || "the linked client",
+              leadName: o.lead_name,
+            })
+          }
+          className="w-full bg-gold text-base rounded px-4 py-2.5 font-semibold hover:bg-gold-hover"
+        >
+          Start Project →
+        </button>
+      )}
+      {o.stage === "won" && o.project_id && <p className="text-xs text-green-400">🏁 Project started.</p>}
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <button
+        type="submit"
+        disabled={saving}
+        className="w-full bg-gold text-base rounded px-4 py-2.5 font-semibold hover:bg-gold-hover disabled:opacity-50"
+      >
+        💾 {saving ? "Saving…" : "Save changes"}
+      </button>
+    </form>
   );
 }
