@@ -238,6 +238,20 @@ def test_full_lifecycle_draft_issue_receive(client, director_user):
     assert full.json()["status"] == "received"
     assert full.json()["lines"][0]["balance_qty"] == 0
 
+    # WP3 (correction plan, 2026-09-27): every status transition above is now
+    # audit-logged -- draft->issued (explicit call), issued->partially_received
+    # and partially_received->received (both from receive_purchase_order).
+    entries = client.get(
+        "/audit-log", params={"document_type": "purchase_order", "document_id": po["id"]}, headers=headers
+    ).json()
+    # /audit-log returns newest first.
+    status_transitions = [(e["old_value"], e["new_value"]) for e in entries if e["field"] == "status"]
+    assert status_transitions == [
+        ("partially_received", "received"),
+        ("issued", "partially_received"),
+        ("draft", "issued"),
+    ]
+
 
 def test_received_qty_cannot_exceed_ordered_qty(client, director_user):
     headers = _director_headers(client, director_user)

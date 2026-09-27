@@ -1,10 +1,11 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.api.clients import _default_package
 from app.api.field_settings import get_field_state
 from app.core import ownership
@@ -164,6 +165,7 @@ def _to_out(project: Project) -> ProjectOut:
 @router.post("", response_model=ProjectOut, status_code=201)
 def create_project(
     payload: ProjectCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("sales", "pm", "director")),
 ):
@@ -264,6 +266,16 @@ def create_project(
         opportunity.project_id = project.id
         db.commit()
         db.refresh(project)
+
+    # WP3 (correction plan, 2026-09-27): project creation had no audit entry at all.
+    write_audit_log_entry(
+        db, current_user, "project", project.id, "created",
+        old_value=None, new_value=project.project_no,
+        reason=f"From Opportunity {opportunity.id}" if opportunity is not None else None,
+        request=request,
+    )
+    db.commit()
+
     return _to_out(project)
 
 
