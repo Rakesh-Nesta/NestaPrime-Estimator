@@ -190,27 +190,25 @@ def update_opportunity_stage(
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
-    # WP6 (correction plan, 2026-09-28): the design's own stated rule is that a Quotation
-    # being marked Won is what confirms a Pre-sales Project -- not a direct stage change
-    # here. Applying the same "reject an inconsistent state, never silently resolve it"
-    # principle mark_quotation_won already uses for the mirror-image conflict: a direct
-    # PATCH straight to Won is refused while a linked Project is still Pre-sales, rather
-    # than silently leaving the Opportunity Won with its Project unconfirmed. Scoped
-    # narrowly to exactly that state -- an Opportunity with no linked Project (the
-    # overwhelming majority of existing Won transitions, including every one already
-    # covered by test_opportunities.py's own stage tests) is completely unaffected, and
-    # a Project already Confirmed or Abandoned is also unaffected (nothing to protect).
-    if payload.stage == OpportunityStage.WON and opportunity.project_id is not None:
-        linked_project = db.query(Project).filter(Project.id == opportunity.project_id).first()
-        if linked_project is not None and linked_project.phase == ProjectPhase.PRESALES:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "This Opportunity's Project is still Pre-sales -- mark its Quotation Won to "
-                    "confirm the Project and close the Opportunity together, rather than changing "
-                    "the Opportunity's stage directly."
-                ),
-            )
+    # WP6 (correction plan, 2026-09-28, tightened after review): the only route to Won is
+    # Qualified -> Start Project -> Quotation marked Won (mark_quotation_won, which writes
+    # Opportunity.stage directly and never calls this endpoint). This PATCH endpoint
+    # unconditionally refuses a direct transition to Won -- no exception for an
+    # already-Confirmed Project, deliberately: checking the Project's phase here could
+    # never actually distinguish "confirmed by a real Quotation acceptance" from any other
+    # way that state might arise, so it is not a safe condition to gate on. Rejecting Won
+    # here outright, always, is the only version of this rule that cannot be bypassed.
+    # This never touches existing historical rows (no migration, no backfill) -- it only
+    # governs new stage transitions going forward, same as every other check here.
+    if payload.stage == OpportunityStage.WON:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An Opportunity can only be marked Won by marking its Project's Quotation "
+                "Won -- start a Project (it must be Qualified first) and mark its Quotation "
+                "Won, rather than changing the Opportunity's stage directly."
+            ),
+        )
 
     if payload.stage in TERMINAL_STAGES:
         # WP5 integration: clearing the date also completes the shared FollowUp row

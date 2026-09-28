@@ -390,6 +390,60 @@ def _create_opportunity(client, headers, follow_up, name="Dash Lead"):
     return res.json()["id"]
 
 
+def _legitimately_won_opportunity(client, headers, follow_up, name="Won Lead"):
+    """WP6 (correction plan, 2026-09-28, tightened after review): the only route to Won is
+    Qualified -> Start Project -> Quotation marked Won -- a bare PATCH straight to Won is
+    refused unconditionally now. Builds the real chain so dashboard tests that need a
+    genuinely Won Opportunity (not just any terminal stage) still get one."""
+    client_id = _create_client_record(client, headers, name=f"{name} Client")
+    opp_id = _create_opportunity(client, headers, follow_up, name=name)
+    res = client.patch(
+        f"/opportunities/{opp_id}/stage", json={"stage": "qualified", "next_follow_up_date": follow_up}, headers=headers
+    )
+    assert res.status_code == 200, res.text
+    client.patch(f"/opportunities/{opp_id}/link-client", json={"client_id": client_id}, headers=headers)
+
+    project = client.post(
+        "/projects",
+        json={
+            "client_id": client_id, "opportunity_id": opp_id, "city": "Mumbai", "site_condition": "level",
+            "soil_type": "normal", "building_status": "open_air", "site_access": "good",
+            "power_available": "yes", "water_available": True, "package": "standard",
+        },
+        headers=headers,
+    ).json()
+    project_sport_id = _add_project_sport(client, headers, project["id"])
+    cost_sheet_id = client.post(
+        f"/projects/{project['id']}/cost-sheets", json={"cost_total": 850000}, headers=headers
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    estimate = client.post(
+        f"/projects/{project['id']}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},
+        headers=headers,
+    ).json()
+    option_id = estimate["options"][0]["id"]
+    client.patch(
+        f"/estimates/{estimate['id']}/options/{option_id}/client-status",
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    quotation = client.post(
+        f"/projects/{project['id']}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [option_id]},
+        headers=headers,
+    ).json()
+    client.post(f"/quotations/{quotation['id']}/release", headers=headers)
+    client.post(f"/quotations/{quotation['id']}/send", headers=headers)
+    won = client.post(
+        f"/quotations/{quotation['id']}/mark-won",
+        json={"reason": "Best offer", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert won.status_code == 200, won.text
+    return opp_id
+
+
 def test_followups_due_count_includes_opportunities_due_today_but_not_future_ones(client, director_user):
     headers = _director_headers(client, director_user)
     today = date.today().isoformat()
@@ -416,9 +470,8 @@ def test_followups_due_count_sums_clients_and_opportunities(client, director_use
 def test_won_and_lost_opportunities_never_count_as_due(client, director_user):
     headers = _director_headers(client, director_user)
     today = date.today().isoformat()
-    won_id = _create_opportunity(client, headers, today, "Won Lead")
+    _legitimately_won_opportunity(client, headers, today, "Won Lead")
     lost_id = _create_opportunity(client, headers, today, "Lost Lead")
-    client.patch(f"/opportunities/{won_id}/stage", json={"stage": "won"}, headers=headers)
     client.patch(f"/opportunities/{lost_id}/stage", json={"stage": "lost"}, headers=headers)
 
     res = client.get("/dashboard", headers=headers)
@@ -432,7 +485,6 @@ def test_open_opportunities_and_pipeline_stage_counts(client, director_user):
     _create_opportunity(client, headers, future, "New B")
     contacted_id = _create_opportunity(client, headers, future, "Contacted A")
     qualified_id = _create_opportunity(client, headers, future, "Qualified A")
-    won_id = _create_opportunity(client, headers, future, "Won A")
     lost_id = _create_opportunity(client, headers, future, "Lost A")
     client.patch(
         f"/opportunities/{contacted_id}/stage",
@@ -444,7 +496,7 @@ def test_open_opportunities_and_pipeline_stage_counts(client, director_user):
         json={"stage": "qualified", "next_follow_up_date": future},
         headers=headers,
     )
-    client.patch(f"/opportunities/{won_id}/stage", json={"stage": "won"}, headers=headers)
+    _legitimately_won_opportunity(client, headers, future, "Won A")
     client.patch(f"/opportunities/{lost_id}/stage", json={"stage": "lost"}, headers=headers)
 
     summary = client.get("/dashboard", headers=headers).json()["summary"]

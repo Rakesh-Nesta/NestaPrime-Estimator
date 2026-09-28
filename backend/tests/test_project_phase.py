@@ -299,22 +299,17 @@ def test_containment_lock_blocks_marking_quotation_won_only_when_it_would_close_
     assert client.get(f"/projects/{plain_project_id}", headers=headers).json()["phase"] == "confirmed"
 
 
-def test_an_opportunity_marked_won_directly_without_starting_a_project_first_cannot_retroactively_start_one(
-    client, director_user
-):
-    """Documents a known, accepted edge case (not a bug fixed by WP6): the API has
-    always allowed PATCH /opportunities/{id}/stage to set any stage directly, including
-    straight from Qualified to Won, bypassing "Start Project" entirely -- this was true
-    before WP6 too, and plenty of existing tests rely on exactly this shortcut (e.g.
-    test_opportunities.py's own stage-change tests, which never touch a Project at all).
-    WP6 does not add a new restriction on that direct PATCH -- doing so would break that
-    existing, legitimate use and is not something the design asked for. The real
-    consequence, worth locking in with a test: once such an Opportunity is Won without
-    ever starting a Project, it can no longer start one through the normal flow, because
-    the gate is now Qualified specifically, not "Qualified or later" -- it is stuck. The
-    intended way to reach Won is still via mark_quotation_won on a Project that WAS
-    started while Qualified; a direct stage PATCH to Won is a manual override, same as
-    it always was, and inherits this one limitation from moving the gate."""
+def test_a_bare_qualified_opportunity_cannot_skip_straight_to_won_bypassing_start_project(client, director_user):
+    """Superseded design note: an earlier version of this guard conditionally allowed a
+    direct Won PATCH once a linked Project was already Confirmed. Tightened after review
+    (see update_opportunity_stage's own comment) to an unconditional refusal -- checking
+    the Project's phase could never actually prove the Won outcome came from a real
+    Quotation acceptance rather than some other route to that same phase value, so it was
+    not a safe condition to gate on. The only route to Won is now mark_quotation_won,
+    full stop; this endpoint never allows it, with no exception. See
+    test_a_qualified_opportunity_with_no_project_cannot_be_marked_won_directly
+    (test_opportunities.py) for the direct-PATCH-refusal test itself; this file's own
+    coverage of "no linked Project" is now that shared case, not a separate scenario."""
     headers = _director_headers(client, director_user)
     client_id = _create_client_record(client, headers)
     opp = client.post(
@@ -327,21 +322,10 @@ def test_an_opportunity_marked_won_directly_without_starting_a_project_first_can
         headers=headers,
     )
     client.patch(f"/opportunities/{opp['id']}/link-client", json={"client_id": client_id}, headers=headers)
-    won = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
-    assert won.status_code == 200, won.text
-    assert client.get(f"/opportunities/{opp['id']}", headers=headers).json()["project_id"] is None
 
-    res = client.post(
-        "/projects",
-        json={"client_id": client_id, "opportunity_id": opp["id"], **{
-            "city": "Mumbai", "site_condition": "level", "soil_type": "normal",
-            "building_status": "open_air", "site_access": "good", "power_available": "yes",
-            "water_available": True, "package": "standard",
-        }},
-        headers=headers,
-    )
-    assert res.status_code == 400
-    assert "Qualified" in res.json()["detail"]
+    won = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    assert won.status_code == 409, won.text
+    assert client.get(f"/opportunities/{opp['id']}", headers=headers).json()["stage"] == "qualified"
 
 
 def test_an_opportunity_can_pass_through_earlier_stages_before_qualifying_and_still_start_a_project(
@@ -397,10 +381,17 @@ def test_directly_marking_an_opportunity_won_is_rejected_while_its_project_is_st
     assert client.get(f"/projects/{project['id']}", headers=headers).json()["phase"] == "presales"
 
 
-def test_directly_marking_an_opportunity_won_still_works_once_its_project_is_confirmed(client, director_user):
-    """The new guard only protects a still-Pre-sales Project -- it must never block a
-    redundant or otherwise legitimate Won transition once the Project is already
-    Confirmed (via mark_quotation_won) or has no linked Project at all."""
+def test_directly_marking_an_opportunity_won_is_rejected_even_once_its_project_is_already_confirmed(
+    client, director_user
+):
+    """Tightened after review: this endpoint refuses a direct Won transition
+    unconditionally, with no exception for an already-Confirmed Project -- checking the
+    Project's phase could never actually prove the Won outcome came from a real Quotation
+    acceptance (mark_quotation_won) rather than some other way that state might arise, so
+    it is not a safe condition to gate on. mark_quotation_won itself writes
+    Opportunity.stage directly and never calls this endpoint, so it is unaffected: the
+    Opportunity below is genuinely, correctly Won by the time this test's PATCH runs --
+    proving the block applies even then, not just to the still-Pre-sales case above."""
     headers = _director_headers(client, director_user)
     client_id = _create_client_record(client, headers)
     opp_id = _qualified_opportunity(client, headers, client_id)
@@ -412,8 +403,12 @@ def test_directly_marking_an_opportunity_won_still_works_once_its_project_is_con
     )
     assert won.status_code == 200, won.text
     assert client.get(f"/opportunities/{opp_id}", headers=headers).json()["stage"] == "won"
+    assert client.get(f"/projects/{project_id}", headers=headers).json()["phase"] == "confirmed"
 
-    # Redundant PATCH to the same stage the Opportunity is already at -- allowed.
     res = client.patch(f"/opportunities/{opp_id}/stage", json={"stage": "won"}, headers=headers)
-    assert res.status_code == 200, res.text
+    assert res.status_code == 409, res.text
+
+    # Still correctly Won/Confirmed from the real mark_quotation_won call -- the rejected
+    # redundant PATCH didn't undo anything either.
+    assert client.get(f"/opportunities/{opp_id}", headers=headers).json()["stage"] == "won"
     assert client.get(f"/projects/{project_id}", headers=headers).json()["phase"] == "confirmed"

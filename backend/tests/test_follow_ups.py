@@ -235,6 +235,9 @@ def test_completing_a_non_last_open_follow_up_needs_no_replacement(client, direc
 
 
 def test_the_guard_does_not_apply_once_the_opportunity_is_closed(client, director_user):
+    """Lost, not Won: WP6 (tightened after review) refuses a direct PATCH straight to Won
+    unconditionally now (this Opportunity has no linked Project). Lost exercises the
+    identical "closed" (TERMINAL_STAGES) condition the guard under test here checks."""
     headers = _director_headers(client, director_user)
     opp = _create_opportunity(client, headers)
     fu = client.post(
@@ -242,7 +245,7 @@ def test_the_guard_does_not_apply_once_the_opportunity_is_closed(client, directo
         json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": "2026-10-05"},
         headers=headers,
     ).json()
-    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "lost"}, headers=headers)
 
     ok = client.patch(f"/follow-ups/{fu['id']}", json={"status": "completed"}, headers=headers)
     assert ok.status_code == 200
