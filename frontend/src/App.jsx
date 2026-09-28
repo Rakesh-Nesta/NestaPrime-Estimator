@@ -344,6 +344,7 @@ export default function App() {
           <FollowUps
             token={accessToken}
             userId={user.id}
+            role={user.role}
             onBack={() => setScreen(preNavScreen)}
             onOpenLeadsClients={() => goToTopLevel("clients_admin")}
           />

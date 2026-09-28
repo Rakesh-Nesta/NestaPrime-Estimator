@@ -2055,3 +2055,44 @@ export async function setOwnRecordsSwitch(token, on) {
   });
   return handle(res);
 }
+
+// WP5 integration (correction plan, 2026-09-28): the shared follow-up API. FollowUps.jsx
+// is the one screen wired to it directly -- ClientsAdmin.jsx/Opportunities.jsx keep
+// calling updateClientFollowUp/updateOpportunityFollowUp above, which the backend now
+// writes through to this same table on their behalf (app/core/follow_up_sync.py).
+export async function listFollowUps(token, { entityType, entityId, ownerId, status } = {}) {
+  const params = new URLSearchParams();
+  if (entityType) params.set("entity_type", entityType);
+  if (entityId) params.set("entity_id", entityId);
+  if (ownerId) params.set("owner_id", ownerId);
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/follow-ups${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createFollowUp(token, payload) {
+  const res = await fetch(`${API_BASE}/follow-ups`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateFollowUp(token, followUpId, payload) {
+  const res = await fetch(`${API_BASE}/follow-ups/${followUpId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function deleteFollowUp(token, followUpId) {
+  const res = await fetch(`${API_BASE}/follow-ups/${followUpId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
