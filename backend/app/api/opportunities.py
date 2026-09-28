@@ -6,10 +6,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
-from app.core import ownership
+from app.core import follow_up_sync, ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
+from app.models.follow_up import FollowUpEntityType
 from app.models.opportunity import TERMINAL_STAGES, Opportunity, OpportunityStage
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
@@ -108,6 +109,12 @@ def create_opportunity(
     """Add Enquiry -- the quick-capture intake the Design input calls for,
     distinct from POST /clients: no ClientType or any other full-Client
     field is asked for here."""
+    # WP5 containment: creating an Opportunity always writes a follow-up (the
+    # mandatory next_follow_up_date), so it is blocked like every other route that
+    # writes follow-up data -- checked first, before anything else, so a rejection
+    # leaves no partial change.
+    if follow_up_sync.follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=follow_up_sync.WRITES_LOCKED_DETAIL)
     _require_future_or_today(payload.next_follow_up_date)
     if payload.client_id is not None:
         ownership.require_own_client(db, current_user, payload.client_id)
@@ -116,6 +123,12 @@ def create_opportunity(
 
     opportunity = Opportunity(**payload.model_dump(), created_by_id=current_user.id, owner_id=current_user.id)
     db.add(opportunity)
+    db.flush()  # assigns opportunity.id, which the FollowUp row below needs
+    follow_up_sync.set_primary_follow_up(
+        db, opportunity, FollowUpEntityType.OPPORTUNITY,
+        due_date=opportunity.next_follow_up_date, note=opportunity.follow_up_note,
+        current_user=current_user,
+    )
     db.commit()
     db.refresh(opportunity)
     return opportunity
@@ -167,12 +180,23 @@ def update_opportunity_stage(
     with no future follow-up date, enforced at every stage change -- a
     transition to a non-terminal stage requires a fresh date; a transition
     to WON/LOST is terminal and clears it instead."""
+    # WP5 containment: every stage change writes (or clears) a follow-up, so the whole
+    # route is blocked during containment, not just the follow-up half of it -- checked
+    # before the record lookup, so a rejection leaves no partial change.
+    if follow_up_sync.follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=follow_up_sync.WRITES_LOCKED_DETAIL)
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
     if payload.stage in TERMINAL_STAGES:
-        opportunity.next_follow_up_date = None
+        # WP5 integration: clearing the date also completes the shared FollowUp row
+        # (see follow_up_sync.set_primary_follow_up) -- the note itself is left as
+        # historical context, same as before this integration.
+        follow_up_sync.set_primary_follow_up(
+            db, opportunity, FollowUpEntityType.OPPORTUNITY,
+            due_date=None, note=opportunity.follow_up_note, current_user=current_user,
+        )
     else:
         if payload.next_follow_up_date is None:
             raise HTTPException(
@@ -180,7 +204,10 @@ def update_opportunity_stage(
                 detail="next_follow_up_date is required when moving to a non-terminal stage",
             )
         _require_future_or_today(payload.next_follow_up_date)
-        opportunity.next_follow_up_date = payload.next_follow_up_date
+        follow_up_sync.set_primary_follow_up(
+            db, opportunity, FollowUpEntityType.OPPORTUNITY,
+            due_date=payload.next_follow_up_date, note=opportunity.follow_up_note, current_user=current_user,
+        )
 
     old_stage = opportunity.stage
     opportunity.stage = payload.stage
@@ -217,6 +244,9 @@ def update_opportunity_follow_up(
     should stay free of. Its own reschedule history is WP5's job (a dedicated
     FollowUpHistory table), not this endpoint calling write_audit_log_entry -- see
     update_opportunity_stage above for the one Opportunity event that IS logged."""
+    # WP5 containment: see create_opportunity's own comment above.
+    if follow_up_sync.follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=follow_up_sync.WRITES_LOCKED_DETAIL)
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
@@ -224,8 +254,10 @@ def update_opportunity_follow_up(
         raise HTTPException(status_code=400, detail="Cannot set a follow-up date on a closed Opportunity")
 
     _require_future_or_today(payload.next_follow_up_date)
-    opportunity.next_follow_up_date = payload.next_follow_up_date
-    opportunity.follow_up_note = payload.follow_up_note
+    follow_up_sync.set_primary_follow_up(
+        db, opportunity, FollowUpEntityType.OPPORTUNITY,
+        due_date=payload.next_follow_up_date, note=payload.follow_up_note, current_user=current_user,
+    )
     db.commit()
     db.refresh(opportunity)
     return opportunity

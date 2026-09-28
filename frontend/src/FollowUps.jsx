@@ -1,53 +1,45 @@
 import { useEffect, useState } from "react";
-import {
-  listClients,
-  listOpportunities,
-  updateClientFollowUp,
-  updateOpportunityFollowUp,
-} from "./api";
+import { listClients, listOpportunities, listFollowUps, updateFollowUp } from "./api";
 import { CalendarIcon, ClockIcon } from "./Icons";
+import { CAN_ASSIGN_OWNERS, ownerLabel, useOwners } from "./OwnerControl";
 
 // Amendment 43 (Section E step 4) built this as an org-wide Client queue.
 // Amendment 44 Phase D folds Opportunities into the same queue (a telecaller
 // working both needs one list, not two) and adds "My follow-ups".
 //
-// WP2 fix (2026-09-27): "My follow-ups" now filters both Clients and
+// WP2 fix (2026-09-27): "My follow-ups" filters both Clients and
 // Opportunities by their current owner_id (Amendment 60), not by who
-// originally created the Opportunity. Filtering by created_by_id meant a
-// reassigned record (Team & Access -> Record owners) kept showing under
-// its *original* creator forever, even though the backend's own
-// owner-scoped endpoints had already moved it to the new owner -- the new
-// owner would never see it in "My follow-ups", and the old owner would
-// keep seeing a record that was no longer theirs. owner_id is the field
-// every other own-records screen in the app already keys off; this makes
-// the toggle consistent with that, for both record types.
+// originally created the record.
 //
-// Not exported -- Dashboard.jsx keeps its own small local copy of this
-// merge (same pattern ClientsAdmin.jsx's STATUS_PILL_STYLE comment already
-// documents: a small local duplicate rather than a shared import).
-function mergeFollowUps(clients, opportunities, onlyMine, userId) {
+// WP5 integration (correction plan, 2026-09-28): this screen is now wired to
+// the shared /follow-ups API instead of reading Client/Opportunity rows
+// directly -- ClientsAdmin.jsx and Opportunities.jsx keep calling their own
+// existing endpoints unchanged (updateClientFollowUp/updateOpportunityFollowUp),
+// which the backend now writes through to this same shared table on their
+// behalf (app/core/follow_up_sync.py), so an action taken on either source
+// screen shows up here immediately. listClients/listOpportunities are still
+// fetched, but only to resolve an entity_id to a display name -- the shared
+// API itself has no denormalised name field.
+function mergeFollowUps(followUps, clientNames, opportunityNames, onlyMine, userId) {
   const today = new Date().toISOString().slice(0, 10);
-  const mineClients = onlyMine ? clients.filter((c) => c.owner_id === userId) : clients;
-  const mineOpportunities = onlyMine ? opportunities.filter((o) => o.owner_id === userId) : opportunities;
-  return [
-    ...mineClients.map((c) => ({
-      key: `client-${c.id}`,
-      kind: "client",
-      id: c.id,
-      name: c.name,
-      date: c.next_follow_up_date,
-      note: c.follow_up_note,
-    })),
-    ...mineOpportunities.map((o) => ({
-      key: `opportunity-${o.id}`,
-      kind: "opportunity",
-      id: o.id,
-      name: o.lead_name,
-      date: o.next_follow_up_date,
-      note: o.follow_up_note,
-    })),
-  ]
-    .filter((i) => i.date)
+  // A completed/cancelled follow-up is done -- it drops off this queue rather
+  // than cluttering "upcoming" forever, same as the old system where clearing
+  // the date removed it from view.
+  const open = followUps.filter((f) => f.status === "open" || f.status === "in_progress" || f.status === "waiting");
+  const mine = onlyMine ? open.filter((f) => f.owner_id === userId) : open;
+  return mine
+    .map((f) => ({
+      key: f.id,
+      id: f.id,
+      kind: f.entity_type,
+      entityId: f.entity_id,
+      name: (f.entity_type === "client" ? clientNames : opportunityNames)[f.entity_id] || "Unknown record",
+      date: f.due_date,
+      note: f.next_action,
+      ownerId: f.owner_id,
+      lifecycle: f.status,
+      waitingParty: f.waiting_party,
+    }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((i) => ({
       ...i,
@@ -91,48 +83,75 @@ function Toggle({ checked, onChange, label }) {
 // Redesign (2026-09-27, Director's request): same screen, same data and the same server calls -- summary
 // tiles and status tabs on top of the existing merged queue, and an illustrated empty state pointing at
 // Leads & Clients. Sidebar and header are untouched; only this screen's own content changed.
-export default function FollowUps({ token, userId, onBack, onOpenLeadsClients }) {
+export default function FollowUps({ token, userId, role, onBack, onOpenLeadsClients }) {
   const [clients, setClients] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
+  const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [drafts, setDrafts] = useState({});
   const [onlyMine, setOnlyMine] = useState(false);
   const [statusTab, setStatusTab] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
+  const owners = useOwners(token, role);
+  const canReassign = CAN_ASSIGN_OWNERS.includes(role);
+
+  function reload() {
+    return Promise.all([
+      listClients(token).then(setClients),
+      listOpportunities(token).then(setOpportunities),
+      listFollowUps(token).then(setFollowUps),
+    ]);
+  }
 
   useEffect(() => {
-    Promise.all([listClients(token).then(setClients), listOpportunities(token).then(setOpportunities)])
+    setLoading(true);
+    reload()
       .catch((err) => {
         setError(err.message);
         setLoadFailed(true);
       })
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  async function save(item) {
+  async function reschedule(item) {
     setError("");
     const draft = drafts[item.key] || {};
+    const date = draft.date !== undefined ? draft.date : item.date;
+    if (!date) {
+      setError("A follow-up always needs a date -- pick one, or complete/close the record instead.");
+      return;
+    }
     try {
-      if (item.kind === "client") {
-        const updated = await updateClientFollowUp(token, item.id, {
-          next_follow_up_date: draft.date !== undefined ? draft.date || null : undefined,
-          follow_up_note: draft.note !== undefined ? draft.note || null : undefined,
-        });
-        setClients((cs) => cs.map((c) => (c.id === item.id ? updated : c)));
-      } else {
-        const date = draft.date !== undefined ? draft.date : item.date;
-        if (!date) {
-          setError("An Opportunity always needs a follow-up date -- pick one, or close it as Won/Lost.");
-          return;
-        }
-        const updated = await updateOpportunityFollowUp(token, item.id, {
-          next_follow_up_date: date,
-          follow_up_note: (draft.note !== undefined ? draft.note : item.note) || null,
-        });
-        setOpportunities((os) => os.map((o) => (o.id === item.id ? updated : o)));
-      }
+      const updated = await updateFollowUp(token, item.id, {
+        due_date: date,
+        next_action: (draft.note !== undefined ? draft.note : item.note) || "Follow up",
+      });
+      setFollowUps((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
       setDrafts((d) => ({ ...d, [item.key]: undefined }));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function complete(item) {
+    setError("");
+    try {
+      const updated = await updateFollowUp(token, item.id, { status: "completed" });
+      setFollowUps((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (err) {
+      // The Opportunity last-open-follow-up guard answers 400 with a message telling the
+      // user to reschedule instead -- surfaced as-is rather than a generic failure.
+      setError(err.message);
+    }
+  }
+
+  async function reassign(item, newOwnerId) {
+    setError("");
+    try {
+      const updated = await updateFollowUp(token, item.id, { owner_id: newOwnerId || null });
+      setFollowUps((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
     } catch (err) {
       setError(err.message);
     }
@@ -142,7 +161,9 @@ export default function FollowUps({ token, userId, onBack, onOpenLeadsClients })
     return <p className="text-center text-text-secondary mt-10">Loading Follow-ups…</p>;
   }
 
-  const allItems = mergeFollowUps(clients, opportunities, onlyMine, userId);
+  const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const opportunityNames = Object.fromEntries(opportunities.map((o) => [o.id, o.lead_name]));
+  const allItems = mergeFollowUps(followUps, clientNames, opportunityNames, onlyMine, userId);
   const items = statusTab ? allItems.filter((i) => i.status === statusTab) : allItems;
   const tabCounts = {
     "": allItems.length,
@@ -233,7 +254,7 @@ export default function FollowUps({ token, userId, onBack, onOpenLeadsClients })
             <p className="text-sm text-text-secondary mt-1">
               {statusTab || onlyMine
                 ? "Nothing matches these filters right now."
-                : "No client or lead has a follow-up date set. Set a date in Leads & Clients to see it here."}
+                : "No client or lead has an open follow-up. Set one in Leads & Clients to see it here."}
             </p>
           </div>
           {onOpenLeadsClients && (
@@ -296,9 +317,27 @@ export default function FollowUps({ token, userId, onBack, onOpenLeadsClients })
                   placeholder="Note (optional)"
                   className="w-full sm:w-32 rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs"
                 />
-                <button onClick={() => save(c)} className="text-gold hover:underline text-xs shrink-0">
+                <button onClick={() => reschedule(c)} className="text-gold hover:underline text-xs shrink-0">
                   Save
                 </button>
+                <button onClick={() => complete(c)} className="text-emerald-400 hover:underline text-xs shrink-0">
+                  Complete
+                </button>
+                {canReassign && (
+                  <select
+                    aria-label="Reassign"
+                    value={c.ownerId || ""}
+                    onChange={(e) => reassign(c, e.target.value)}
+                    className="rounded border border-border-dark bg-surface-raised text-text-primary px-1.5 py-0.5 text-xs max-w-[9rem]"
+                  >
+                    <option value="">Unassigned</option>
+                    {owners.options.map((o) => (
+                      <option key={o.user_id} value={o.user_id}>
+                        {ownerLabel(o)}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </li>
           ))}

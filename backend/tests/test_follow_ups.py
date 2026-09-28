@@ -43,6 +43,18 @@ def _create_client_record(client, headers, **overrides):
     return res.json()
 
 
+def _the_open_follow_up(client, headers, opp):
+    """WP5 integration (2026-09-28): creating an Opportunity now auto-creates its own
+    primary-reminder FollowUp (app/core/follow_up_sync.py) -- a freshly created
+    Opportunity already has one open follow-up, not zero. Tests below that want "the"
+    single open follow-up to exercise the last-open-follow-up guard fetch this
+    auto-created row instead of posting a redundant second one."""
+    rows = client.get("/follow-ups", params={"entity_type": "opportunity", "entity_id": opp["id"]}, headers=headers).json()
+    open_rows = [r for r in rows if r["status"] not in ("completed", "cancelled")]
+    assert len(open_rows) == 1, open_rows
+    return open_rows[0]
+
+
 def test_create_follow_up_defaults_owner_from_entity(client, director_user):
     headers = _director_headers(client, director_user)
     row = _create_client_record(client, headers)
@@ -150,11 +162,7 @@ def test_waiting_status_requires_waiting_party(client, director_user):
 def test_completing_the_last_open_follow_up_on_an_open_opportunity_requires_a_replacement(client, director_user):
     headers = _director_headers(client, director_user)
     opp = _create_opportunity(client, headers)
-    fu = client.post(
-        "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": "2026-10-05"},
-        headers=headers,
-    ).json()
+    fu = _the_open_follow_up(client, headers, opp)
 
     blocked = client.patch(f"/follow-ups/{fu['id']}", json={"status": "completed"}, headers=headers)
     assert blocked.status_code == 400
@@ -177,11 +185,7 @@ def test_completing_the_last_open_follow_up_on_an_open_opportunity_requires_a_re
 def test_cancelling_the_last_open_follow_up_on_an_open_opportunity_requires_a_replacement(client, director_user):
     headers = _director_headers(client, director_user)
     opp = _create_opportunity(client, headers)
-    fu = client.post(
-        "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": "2026-10-05"},
-        headers=headers,
-    ).json()
+    fu = _the_open_follow_up(client, headers, opp)
 
     blocked = client.patch(f"/follow-ups/{fu['id']}", json={"status": "cancelled"}, headers=headers)
     assert blocked.status_code == 400
@@ -197,11 +201,7 @@ def test_cancelling_the_last_open_follow_up_on_an_open_opportunity_requires_a_re
 def test_deleting_the_last_open_follow_up_on_an_open_opportunity_is_blocked(client, director_user):
     headers = _director_headers(client, director_user)
     opp = _create_opportunity(client, headers)
-    fu = client.post(
-        "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": "2026-10-05"},
-        headers=headers,
-    ).json()
+    fu = _the_open_follow_up(client, headers, opp)
 
     blocked = client.delete(f"/follow-ups/{fu['id']}", headers=headers)
     assert blocked.status_code == 400

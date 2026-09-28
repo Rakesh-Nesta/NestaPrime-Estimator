@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.follow_up_entities import check_follow_up_access, resolve_entity
+from app.core.follow_up_sync import WRITES_LOCKED_DETAIL, follow_up_writes_locked, mirror_legacy_columns
 from app.db.session import get_db
 from app.models.follow_up import (
     TERMINAL_FOLLOW_UP_STATUSES,
@@ -126,6 +127,8 @@ def create_follow_up(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=WRITES_LOCKED_DETAIL)
     resolved = check_follow_up_access(db, current_user, payload.entity_type, payload.entity_id, need="write")
 
     if payload.purpose_key is not None:
@@ -181,6 +184,12 @@ def create_follow_up(
         if existing is None:
             raise
         return _to_out(existing)
+    # WP5 integration: the reverse direction of follow_up_sync.set_primary_follow_up --
+    # a follow-up created directly through this API (the central Follow-ups screen) may
+    # be the soonest-due one on a Client/Opportunity, so its own legacy column needs to
+    # reflect that (see follow_up_sync.mirror_legacy_columns).
+    mirror_legacy_columns(db, row.entity_type, row.entity_id)
+    db.commit()
     db.refresh(row)
     return _to_out(row)
 
@@ -194,27 +203,39 @@ def list_follow_ups(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    per_row_check = True
     if entity_type is not None and entity_id is not None:
         check_follow_up_access(db, current_user, entity_type, entity_id, need="read")
         query = db.query(FollowUp).filter(FollowUp.entity_type == entity_type, FollowUp.entity_id == entity_id)
+        per_row_check = False
     elif owner_id is not None:
-        # The central Follow-ups screen / "my follow-ups": every row this user is entitled
-        # to see across every entity type, narrowed to one owner. A Sales user may only ask
-        # for their own id here -- this list intentionally does not become a way to browse
-        # everyone else's follow-ups one owner at a time.
+        # "My follow-ups": every row this user is entitled to see across every entity
+        # type, narrowed to one owner. A Sales user may only ask for their own id here --
+        # this list intentionally does not become a way to browse everyone else's
+        # follow-ups one owner at a time.
         if current_user.role.value == "sales" and owner_id != current_user.id:
             raise HTTPException(status_code=403, detail="Sales may only list their own follow-ups")
         query = db.query(FollowUp).filter(FollowUp.owner_id == owner_id)
     else:
-        raise HTTPException(status_code=400, detail="Provide entity_type+entity_id, or owner_id")
+        # WP5 integration: the central Follow-ups screen's org-wide view -- no filter at
+        # all means "everything this user is entitled to see". A Sales user is ALWAYS
+        # narrowed to their own here -- unlike list_opportunities/list_clients, this is
+        # not conditional on the Director's own-records switch (Amendment 60): browsing
+        # every other Sales rep's follow-up notes org-wide in one screen is a bigger
+        # exposure than seeing an unowned record in a filtered list, so this list stays
+        # narrow for Sales regardless of that switch's state. Every other role sees the
+        # full set, still re-checked per row below.
+        query = db.query(FollowUp)
+        if current_user.role.value == "sales":
+            query = query.filter(FollowUp.owner_id == current_user.id)
 
     if status is not None:
         query = query.filter(FollowUp.status == status)
     rows = query.order_by(FollowUp.due_date.asc()).all()
 
-    if entity_type is None:
-        # owner_id path: re-check access per row rather than trusting the owner_id filter
-        # alone, since a follow-up's current owner and its entity's own permission gate can
+    if per_row_check:
+        # Re-check access per row rather than trusting the owner_id/no-filter query alone,
+        # since a follow-up's current owner and its entity's own permission gate can
         # diverge (an explicitly-assigned specialist may not otherwise have write access to
         # the parent record) -- read access on the entity is still required to see it here.
         visible = []
@@ -237,6 +258,8 @@ def update_follow_up(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=WRITES_LOCKED_DETAIL)
     row = db.query(FollowUp).filter(FollowUp.id == follow_up_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Follow-up not found")
@@ -285,6 +308,12 @@ def update_follow_up(
             )
         )
 
+    # autoflush is off for this app's sessions (app/db/session.py) -- without an
+    # explicit flush here, mirror_legacy_columns' own query would still see the
+    # pre-update DB state (the status change above, and any new replacement row,
+    # not yet visible), and mirror the wrong follow-up onto the legacy columns.
+    db.flush()
+    mirror_legacy_columns(db, row.entity_type, row.entity_id)
     db.commit()
     db.refresh(row)
     return _to_out(row)
@@ -296,6 +325,8 @@ def delete_follow_up(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=WRITES_LOCKED_DETAIL)
     row = db.query(FollowUp).filter(FollowUp.id == follow_up_id).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Follow-up not found")
@@ -310,6 +341,9 @@ def delete_follow_up(
             ),
         )
 
+    entity_type, entity_id = row.entity_type, row.entity_id
     db.query(FollowUpHistory).filter(FollowUpHistory.follow_up_id == row.id).delete()
     db.delete(row)
+    db.flush()
+    mirror_legacy_columns(db, entity_type, entity_id)
     db.commit()

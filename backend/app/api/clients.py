@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.api.settings import get_current_setting_value
-from app.core import ownership
+from app.core import follow_up_sync, ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client, ClientType
+from app.models.follow_up import FollowUpEntityType
 from app.models.project import Package
 
 router = APIRouter(prefix="/clients", tags=["clients"])
@@ -320,13 +321,23 @@ def update_client_follow_up(
     # like a flag or consent change.
     current_user=Depends(require_roles("sales", "pm", "director")),
 ):
+    # WP5 containment: blocked before the record lookup, so a rejection leaves no
+    # partial change (see app/core/follow_up_sync.py).
+    if follow_up_sync.follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=follow_up_sync.WRITES_LOCKED_DETAIL)
     client = db.query(Client).filter(Client.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
+    # WP5 integration: this is the one place a Client's reminder is written, so it
+    # goes through the shared write path -- a partial PATCH (date only, or note only)
+    # keeps whichever field wasn't sent at its current value.
     changes = payload.model_dump(exclude_unset=True)
-    for field, value in changes.items():
-        setattr(client, field, value)
+    new_date = changes.get("next_follow_up_date", client.next_follow_up_date)
+    new_note = changes.get("follow_up_note", client.follow_up_note)
+    follow_up_sync.set_primary_follow_up(
+        db, client, FollowUpEntityType.CLIENT, due_date=new_date, note=new_note, current_user=current_user,
+    )
 
     db.commit()
     db.refresh(client)
