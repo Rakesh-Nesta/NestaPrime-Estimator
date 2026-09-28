@@ -359,10 +359,16 @@ def test_audit_log_filters_by_document_type_and_id(client, director_user):
     client.post(f"/skip-requests/{req['id']}/approve", json={"cost_total": 100000}, headers=headers)
 
     all_entries = _audit_entries(client, headers)
-    assert len(all_entries) == 2
+    # WP3 (correction plan, 2026-09-27): project creation now writes its own entry too
+    # (setting, project created, skip_request approved) -- was 2 before that change.
+    assert len(all_entries) == 3
 
     setting_only = _audit_entries(client, headers, document_type="setting")
     assert len(setting_only) == 1
+
+    project_only = _audit_entries(client, headers, document_type="project")
+    assert len(project_only) == 1
+    assert project_only[0]["document_id"] == project_id
 
     skip_only = _audit_entries(client, headers, document_id=req["id"])
     assert len(skip_only) == 1

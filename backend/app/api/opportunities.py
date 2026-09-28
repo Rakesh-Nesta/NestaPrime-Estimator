@@ -1,10 +1,11 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.core import ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -158,6 +159,7 @@ def get_opportunity(
 def update_opportunity_stage(
     opportunity_id: uuid.UUID,
     payload: OpportunityStageUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*WRITE_ROLES)),
 ):
@@ -180,8 +182,24 @@ def update_opportunity_stage(
         _require_future_or_today(payload.next_follow_up_date)
         opportunity.next_follow_up_date = payload.next_follow_up_date
 
+    old_stage = opportunity.stage
     opportunity.stage = payload.stage
     opportunity.lost_reason = payload.lost_reason if payload.stage == OpportunityStage.LOST else None
+
+    # WP3 (correction plan, 2026-09-27): a stage change is a significant business
+    # event (especially the transition to Won/Lost, which the whole downstream
+    # pipeline reads off) and was not audit-logged before this. Routine follow-up
+    # note/date edits on this same record stay out of the audit log on purpose
+    # (see update_opportunity_follow_up below) -- only the stage itself, which is
+    # what "significant" means here, is logged.
+    if old_stage != opportunity.stage:
+        write_audit_log_entry(
+            db, current_user, "opportunity", opportunity.id, "stage",
+            old_value=old_stage.value, new_value=opportunity.stage.value,
+            reason=payload.lost_reason if opportunity.stage == OpportunityStage.LOST else None,
+            request=request,
+        )
+
     db.commit()
     db.refresh(opportunity)
     return opportunity
@@ -194,6 +212,11 @@ def update_opportunity_follow_up(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*WRITE_ROLES)),
 ):
+    """Deliberately NOT audit-logged (correction-plan decision, 2026-09-27): a routine
+    follow-up date/note edit is exactly the kind of noise the Director's activity feed
+    should stay free of. Its own reschedule history is WP5's job (a dedicated
+    FollowUpHistory table), not this endpoint calling write_audit_log_entry -- see
+    update_opportunity_stage above for the one Opportunity event that IS logged."""
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")

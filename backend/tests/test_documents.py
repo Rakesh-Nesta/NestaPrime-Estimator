@@ -470,6 +470,15 @@ def test_quotation_lifecycle_release_send_mark_won(client, director_user):
     assert won_res.json()["status"] == "won"
     assert won_res.json()["won_lost_reason"] == "Best offer"
 
+    # WP3 (correction plan, 2026-09-27): mark-won is now audit-logged --
+    # previously the single most consequential event in the pipeline left no trail.
+    entries = client.get(
+        "/audit-log", params={"document_type": "quotation", "document_id": quotation_id}, headers=headers
+    ).json()
+    status_entries = [e for e in entries if e["field"] == "status" and e["new_value"] == "won"]
+    assert len(status_entries) == 1
+    assert status_entries[0]["reason"] == "Best offer"
+
 
 def test_quotation_can_be_marked_lost_with_reason(client, director_user):
     headers = _director_headers(client, director_user)
@@ -485,6 +494,14 @@ def test_quotation_can_be_marked_lost_with_reason(client, director_user):
     assert res.status_code == 200
     assert res.json()["status"] == "lost"
     assert res.json()["won_lost_reason"] == "competitor"
+
+    # WP3: mark-lost is audit-logged the same way mark-won is.
+    entries = client.get(
+        "/audit-log", params={"document_type": "quotation", "document_id": quotation_id}, headers=headers
+    ).json()
+    status_entries = [e for e in entries if e["field"] == "status" and e["new_value"] == "lost"]
+    assert len(status_entries) == 1
+    assert status_entries[0]["reason"] == "competitor"
 
 
 def test_sales_sees_quotation_without_cost_or_margin(client, db_session, director_user):

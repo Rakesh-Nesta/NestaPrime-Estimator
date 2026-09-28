@@ -264,12 +264,34 @@ def test_list_filters_by_stage(client, director_user):
     assert [o["lead_name"] for o in won] == ["Won Lead"]
 
 
-def test_opportunity_changes_are_not_audit_logged(client, director_user):
-    """Same convention as Client's own follow-up endpoint (Amendment 42):
-    routine workflow, not a governance-relevant fact."""
+def test_opportunity_stage_change_is_audit_logged(client, director_user):
+    """WP3 (correction plan, 2026-09-27): a stage change -- especially the
+    transition to Won/Lost, which the dashboard and Pipeline report both
+    read off -- is a significant business event and is now audit-logged."""
     headers = _director_headers(client, director_user)
     row = _create_opportunity(client, headers)
     client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "won"}, headers=headers)
+
+    entries = client.get(
+        "/audit-log", params={"document_type": "opportunity", "document_id": row["id"]}, headers=headers
+    ).json()
+    stage_entries = [e for e in entries if e["field"] == "stage"]
+    assert len(stage_entries) == 1
+    assert stage_entries[0]["old_value"] == "new"
+    assert stage_entries[0]["new_value"] == "won"
+
+
+def test_opportunity_follow_up_edits_stay_out_of_the_audit_log(client, director_user):
+    """Same convention as Client's own follow-up endpoint (Amendment 42): a
+    routine follow-up date/note edit is not a governance-relevant fact --
+    only the stage itself is logged (see the test above)."""
+    headers = _director_headers(client, director_user)
+    row = _create_opportunity(client, headers)
+    client.patch(
+        f"/opportunities/{row['id']}/follow-up",
+        json={"next_follow_up_date": "2027-01-01", "follow_up_note": "called, no answer"},
+        headers=headers,
+    )
 
     entries = client.get(
         "/audit-log", params={"document_type": "opportunity", "document_id": row["id"]}, headers=headers
