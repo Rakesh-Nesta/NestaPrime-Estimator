@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.client import Client
 from app.models.follow_up import FollowUpEntityType
 from app.models.opportunity import TERMINAL_STAGES, Opportunity, OpportunityStage
+from app.models.project import Project, ProjectPhase
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
 
@@ -189,6 +190,28 @@ def update_opportunity_stage(
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
+    # WP6 (correction plan, 2026-09-28): the design's own stated rule is that a Quotation
+    # being marked Won is what confirms a Pre-sales Project -- not a direct stage change
+    # here. Applying the same "reject an inconsistent state, never silently resolve it"
+    # principle mark_quotation_won already uses for the mirror-image conflict: a direct
+    # PATCH straight to Won is refused while a linked Project is still Pre-sales, rather
+    # than silently leaving the Opportunity Won with its Project unconfirmed. Scoped
+    # narrowly to exactly that state -- an Opportunity with no linked Project (the
+    # overwhelming majority of existing Won transitions, including every one already
+    # covered by test_opportunities.py's own stage tests) is completely unaffected, and
+    # a Project already Confirmed or Abandoned is also unaffected (nothing to protect).
+    if payload.stage == OpportunityStage.WON and opportunity.project_id is not None:
+        linked_project = db.query(Project).filter(Project.id == opportunity.project_id).first()
+        if linked_project is not None and linked_project.phase == ProjectPhase.PRESALES:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This Opportunity's Project is still Pre-sales -- mark its Quotation Won to "
+                    "confirm the Project and close the Opportunity together, rather than changing "
+                    "the Opportunity's stage directly."
+                ),
+            )
+
     if payload.stage in TERMINAL_STAGES:
         # WP5 integration: clearing the date also completes the shared FollowUp row
         # (see follow_up_sync.set_primary_follow_up) -- the note itself is left as
@@ -212,6 +235,20 @@ def update_opportunity_stage(
     old_stage = opportunity.stage
     opportunity.stage = payload.stage
     opportunity.lost_reason = payload.lost_reason if payload.stage == OpportunityStage.LOST else None
+
+    # WP6 (correction plan, 2026-09-28): a still-Pre-sales Project whose Opportunity is
+    # independently marked Lost is abandoned -- kept, never deleted, simply out of the
+    # active pipeline. A Project already Confirmed (its Quotation already won) is
+    # untouched here; mark_quotation_won is the only place that confirms a Project, and
+    # once confirmed it stays confirmed regardless of what its Opportunity does later.
+    if (
+        old_stage != OpportunityStage.LOST
+        and payload.stage == OpportunityStage.LOST
+        and opportunity.project_id is not None
+    ):
+        linked_project = db.query(Project).filter(Project.id == opportunity.project_id).first()
+        if linked_project is not None and linked_project.phase == ProjectPhase.PRESALES:
+            linked_project.phase = ProjectPhase.ABANDONED
 
     # WP3 (correction plan, 2026-09-27): a stage change is a significant business
     # event (especially the transition to Won/Lost, which the whole downstream

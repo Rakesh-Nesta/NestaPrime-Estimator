@@ -38,6 +38,7 @@ from app.models.project import (  # noqa: F401
     Package,
     PowerAvailable,
     Project,
+    ProjectPhase,
     ProjectType,
     SiteAccess,
     SiteCondition,

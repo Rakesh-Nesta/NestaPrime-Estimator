@@ -78,10 +78,10 @@ const emptyForm = {
   existingBuildingClearHeightFt: "",
 };
 
-// Amendment 44 Phase C: startFrom = { opportunityId, clientId, clientName,
-// leadName } when reached via "Start Project" on a Won Opportunity -- the
-// client is pre-selected and locked (the backend rejects a mismatch anyway),
-// and opportunity_id rides along on createProject so the new Project records
+// Amendment 44 Phase C / WP6 (correction plan, 2026-09-28): startFrom = { opportunityId,
+// clientId, clientName, leadName } when reached via "Start Project" on a Qualified
+// Opportunity -- the client is pre-selected and locked (the backend rejects a mismatch
+// anyway), and opportunity_id rides along on createProject so the new Project records
 // where it came from.
 export default function ProjectSetup({ token, onProjectCreated, onQuickSetupComplete, startFrom = null }) {
   const [form, setForm] = useState(

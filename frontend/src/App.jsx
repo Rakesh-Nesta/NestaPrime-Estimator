@@ -50,8 +50,9 @@ export default function App() {
   // filter (e.g. { status: "open" }, { statusGroup: "pending" }) into
   // whichever list screen it targets.
   const [drillPreset, setDrillPreset] = useState({});
-  // Amendment 44 Phase C: set by "Start Project" on a Won Opportunity, read
-  // by ProjectSetup, cleared as soon as any other path starts a project.
+  // Amendment 44 Phase C / WP6 (correction plan, 2026-09-28): set by "Start Project" on
+  // a Qualified Opportunity, read by ProjectSetup, cleared as soon as any other path
+  // starts a project.
   const [startFrom, setStartFrom] = useState(null);
   // Amendment 53: the global quick search palette, and the text a client/lead result
   // pre-fills into Leads & Clients (`nonce` remounts it even when already open).

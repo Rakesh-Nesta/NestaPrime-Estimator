@@ -317,14 +317,16 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
                             </button>
                           )}
                         </div>
-                        {o.stage === "won" && (
-                          <p className="mt-1 text-xs">
-                            {o.project_id ? (
-                              <span className="text-green-400">🏁 Project started.</span>
-                            ) : (
-                              <span className="text-text-secondary">Won -- open it to start a Project.</span>
-                            )}
-                          </p>
+                        {/* WP6 (correction plan, 2026-09-28): "Start Project" moved from Won to
+                            Qualified -- see ProjectPhase's own docstring (app/models/project.py).
+                            A Project already started stays "started" regardless of what its
+                            Opportunity does afterwards (Won via mark_quotation_won, or Lost). */}
+                        {o.project_id ? (
+                          <p className="mt-1 text-xs text-green-400">🏁 Project started.</p>
+                        ) : (
+                          o.stage === "qualified" && (
+                            <p className="mt-1 text-xs text-text-secondary">Qualified -- open it to start a Project.</p>
+                          )
                         )}
                       </div>
                     </div>
@@ -513,7 +515,7 @@ function OpportunityPanel({
         </div>
       )}
 
-      {o.stage === "won" && o.client_id && !o.project_id && (
+      {o.stage === "qualified" && o.client_id && !o.project_id && (
         <button
           type="button"
           onClick={() =>
@@ -529,7 +531,7 @@ function OpportunityPanel({
           Start Project →
         </button>
       )}
-      {o.stage === "won" && o.project_id && <p className="text-xs text-green-400">🏁 Project started.</p>}
+      {o.project_id && <p className="text-xs text-green-400">🏁 Project started.</p>}
 
       {error && <p className="text-xs text-red-400">{error}</p>}
       <button

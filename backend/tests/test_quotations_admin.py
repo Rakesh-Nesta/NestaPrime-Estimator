@@ -105,13 +105,18 @@ def _released_quotation(client, headers, project_id, estimate_id, option_id):
     return res.json()
 
 
-def _won_opportunity_for(client, headers, client_id, lead_name):
-    """A Won Opportunity linked to the client -- the only way a project gets
-    an opportunity_id (Amendment 44 Phase C)."""
+def _qualified_opportunity_for(client, headers, client_id, lead_name):
+    """A Qualified Opportunity linked to the client -- the only way a project gets an
+    opportunity_id (Amendment 44 Phase C / WP6, correction plan 2026-09-28: "Start
+    Project" opens at Qualified, not Won -- see ProjectPhase's own docstring)."""
     opp = client.post(
         "/opportunities", json={"lead_name": lead_name, "next_follow_up_date": "2099-01-01"}, headers=headers
     ).json()
-    assert client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers).status_code == 200
+    assert client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2099-01-01"},
+        headers=headers,
+    ).status_code == 200
     res = client.patch(f"/opportunities/{opp['id']}/link-client", json={"client_id": client_id}, headers=headers)
     assert res.status_code == 200, res.text
     return opp["id"]
@@ -121,7 +126,7 @@ def _quotation_for_new_project(client, headers, client_name, lead_name=None):
     client_id = _create_client_record(client, headers, client_name)
     extra = {}
     if lead_name:
-        extra["opportunity_id"] = _won_opportunity_for(client, headers, client_id, lead_name)
+        extra["opportunity_id"] = _qualified_opportunity_for(client, headers, client_id, lead_name)
     project_id = _create_project(client, headers, client_id, **extra)
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)

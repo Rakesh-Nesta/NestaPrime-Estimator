@@ -300,7 +300,11 @@ def test_opportunity_follow_up_edits_stay_out_of_the_audit_log(client, director_
 
 
 # ---------------------------------------------------------------------------
-# Amendment 44 Phase C: Won -> Start Project hand-off
+# Amendment 44 Phase C / WP6 (correction plan, 2026-09-28): Qualified -> Start Project
+# hand-off. "Start Project" used to require a Won Opportunity; WP6 moves it to
+# Qualified -- see ProjectPhase's own docstring (app/models/project.py) and
+# mark_quotation_won (app/api/documents.py), which is what now confirms the Project
+# and closes the Opportunity as Won, together, once its Quotation actually wins.
 # ---------------------------------------------------------------------------
 
 _PROJECT_FIELDS = {
@@ -315,17 +319,21 @@ _PROJECT_FIELDS = {
 }
 
 
-def _won_linked_opportunity(client, headers):
+def _qualified_linked_opportunity(client, headers):
     client_row = _create_client_record(client, headers)
     opp = _create_opportunity(client, headers, client_id=client_row["id"])
-    res = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    res = client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        headers=headers,
+    )
     assert res.status_code == 200, res.text
     return client_row, res.json()
 
 
-def test_start_project_from_a_won_linked_opportunity(client, director_user):
+def test_start_project_from_a_qualified_linked_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
-    client_row, opp = _won_linked_opportunity(client, headers)
+    client_row, opp = _qualified_linked_opportunity(client, headers)
 
     res = client.post(
         "/projects",
@@ -335,15 +343,34 @@ def test_start_project_from_a_won_linked_opportunity(client, director_user):
     assert res.status_code == 201, res.text
     project = res.json()
     assert project["opportunity_id"] == opp["id"]
+    assert project["phase"] == "presales"
 
     back = client.get(f"/opportunities/{opp['id']}", headers=headers).json()
     assert back["project_id"] == project["id"]
 
 
-def test_start_project_rejects_a_non_won_opportunity(client, director_user):
+def test_start_project_rejects_a_non_qualified_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
     client_row = _create_client_record(client, headers)
     opp = _create_opportunity(client, headers, client_id=client_row["id"])  # still "new"
+
+    res = client.post(
+        "/projects",
+        json={"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS},
+        headers=headers,
+    )
+    assert res.status_code == 400
+
+
+def test_start_project_rejects_a_won_opportunity(client, director_user):
+    """WP6: Won is no longer the gate -- an Opportunity must be Qualified, not (yet or
+    already) Won, to start a Project. Going straight from Qualified to Won without
+    starting a Project first, then trying to start one, is rejected the same as any
+    other non-Qualified stage."""
+    headers = _director_headers(client, director_user)
+    client_row, opp = _qualified_linked_opportunity(client, headers)
+    won = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    assert won.status_code == 200, won.text
 
     res = client.post(
         "/projects",
@@ -357,7 +384,11 @@ def test_start_project_rejects_a_lead_only_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
     client_row = _create_client_record(client, headers)
     opp = _create_opportunity(client, headers)  # no client_id
-    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        headers=headers,
+    )
 
     res = client.post(
         "/projects",
@@ -369,7 +400,7 @@ def test_start_project_rejects_a_lead_only_opportunity(client, director_user):
 
 def test_start_project_rejects_a_client_mismatch(client, director_user):
     headers = _director_headers(client, director_user)
-    _, opp = _won_linked_opportunity(client, headers)
+    _, opp = _qualified_linked_opportunity(client, headers)
     other_client = _create_client_record(client, headers, name="Some Other Client")
 
     res = client.post(
@@ -382,7 +413,7 @@ def test_start_project_rejects_a_client_mismatch(client, director_user):
 
 def test_an_opportunity_can_only_start_one_project(client, director_user):
     headers = _director_headers(client, director_user)
-    client_row, opp = _won_linked_opportunity(client, headers)
+    client_row, opp = _qualified_linked_opportunity(client, headers)
     payload = {"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS}
 
     assert client.post("/projects", json=payload, headers=headers).status_code == 201
