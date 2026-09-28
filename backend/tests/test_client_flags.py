@@ -22,9 +22,30 @@ def _pm_headers(client, db_session):
 
 
 def _create_client_record(client, headers, client_type="school", name="Flagged Client"):
-    res = client.post("/clients", json={"name": name, "type": client_type}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": name, "type": client_type, "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
+
+
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
 
 
 def _create_project(client, headers, client_id):
@@ -57,6 +78,7 @@ def _verified_cost_sheet(client, headers, project_id, cost_total=850000):
 
 def _draft_quotation(client, headers, project_id, project_sport_id, cost_for_option=850000):
     _verified_cost_sheet(client, headers, project_id, cost_for_option)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": cost_for_option}]},

@@ -27,9 +27,30 @@ def _role_headers(client, db_session, role, email):
     return _login(client, email)
 
 
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
+
+
 def _won_work_order(client, headers, name="Payments Client", cost_for_option=850000):
     """A Work Order on a Won Quotation; returns (work_order_id, project_id, order_value)."""
-    client_id = client.post("/clients", json={"name": name, "type": "school"}, headers=headers).json()["id"]
+    client_id = client.post(
+        "/clients",
+        json={"name": name, "type": "school", "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    ).json()["id"]
     fields = {
         "client_id": client_id, "city": "Mumbai", "site_condition": "level", "soil_type": "normal",
         "building_status": "open_air", "site_access": "good", "power_available": "yes",
@@ -44,6 +65,7 @@ def _won_work_order(client, headers, name="Payments Client", cost_for_option=850
         f"/projects/{project_id}/cost-sheets", json={"cost_total": cost_for_option}, headers=headers
     ).json()["id"]
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": cost_for_option}]},

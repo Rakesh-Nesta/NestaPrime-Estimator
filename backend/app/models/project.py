@@ -195,6 +195,19 @@ class Project(Base):
         Enum(ProjectPhase, name="project_phase"), default=ProjectPhase.PRESALES, nullable=False
     )
 
+    # WP7 (correction plan, 2026-09-28): the Scope readiness check (app/core/readiness.py)
+    # passes once either at least one ProjectScopeItem exists, or this is set -- an
+    # explicit "confirmed zero additional scope" action, distinct from "nobody has looked
+    # at the Scope screen yet" (both look identical as zero rows otherwise; see
+    # app/models/scope_item.py's own docstring on that ambiguity). Set only by
+    # confirm_empty_scope (app/api/scope_items.py), never cleared automatically -- adding
+    # a scope item later doesn't need to un-confirm this, the check already passes either
+    # way once one exists.
+    scope_confirmed_empty_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scope_confirmed_empty_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
     # Amendment 28 Part B: marks validation/demo data (e.g. Note R1's own
     # Mathura/Noida/Bathinda projects) so it doesn't crowd the dashboard's
     # business-summary tiles alongside real client work.

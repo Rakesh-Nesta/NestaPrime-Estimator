@@ -138,6 +138,11 @@ class ProjectOut(BaseModel):
     is_calibration: bool
     opportunity_id: uuid.UUID | None
     phase: ProjectPhase
+    # WP7 (correction plan, 2026-09-28): see Project.scope_confirmed_empty_at's own
+    # docstring (app/models/project.py) -- the frontend's Scope screen reads this to show
+    # whether "no additional scope" has already been confirmed.
+    scope_confirmed_empty_at: datetime | None
+    scope_confirmed_empty_by_id: uuid.UUID | None
     soil_test_required: bool = False  # derived, not stored — D.4; _to_out() sets the real value
 
     # D.4 site-prep triggers (B.2's worked examples), all derived — none

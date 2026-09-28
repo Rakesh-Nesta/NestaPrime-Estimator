@@ -27,9 +27,30 @@ def _sales_headers(client, db_session):
 
 
 def _create_client_record(client, headers, name):
-    res = client.post("/clients", json={"name": name, "type": "school"}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": name, "type": "school", "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
+
+
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
 
 
 def _create_project(client, headers, client_id):
@@ -76,6 +97,7 @@ def _estimate_for_new_project(client, headers, client_name, send=False):
     project_id = _create_project(client, headers, client_id)
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _draft_estimate(client, headers, project_id, project_sport_id)
     if send:
         res = client.post(f"/estimates/{estimate['id']}/send", headers=headers)

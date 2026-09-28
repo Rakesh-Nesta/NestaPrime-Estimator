@@ -726,6 +726,60 @@ export async function approveSkipRequest(token, skipRequestId, payload) {
   return handle(res);
 }
 
+// WP7 (correction plan, 2026-09-28): readiness checks before document issuance.
+export async function getProjectReadiness(token, projectId, { documentType, documentId } = {}) {
+  const params = new URLSearchParams();
+  if (documentType) params.set("document_type", documentType);
+  if (documentId) params.set("document_id", documentId);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/projects/${projectId}/readiness${qs ? `?${qs}` : ""}`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function confirmEmptyScope(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/scope-items/confirm-empty`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function createReadinessException(token, payload) {
+  const res = await fetch(`${API_BASE}/readiness-exceptions`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function listReadinessExceptions(token, documentType, documentId) {
+  const params = new URLSearchParams({ document_type: documentType, document_id: documentId });
+  const res = await fetch(`${API_BASE}/readiness-exceptions?${params.toString()}`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function approveReadinessException(token, exceptionId) {
+  const res = await fetch(`${API_BASE}/readiness-exceptions/${exceptionId}/approve`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function rejectReadinessException(token, exceptionId, payload) {
+  const res = await fetch(`${API_BASE}/readiness-exceptions/${exceptionId}/reject`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
 export async function verifyCostSheet(token, costSheetId) {
   const res = await fetch(`${API_BASE}/cost-sheets/${costSheetId}/verify`, {
     method: "POST",

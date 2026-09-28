@@ -8,6 +8,7 @@ from datetime import date
 from app.core.security import hash_password
 from app.models.setting import Setting, SettingScope
 from app.models.user import User, UserRole
+from tests.test_quotations_admin import _satisfy_project_readiness
 
 
 def _login(client, email, password="TestPass!1"):
@@ -21,7 +22,11 @@ def _director_headers(client, director_user):
 
 
 def _create_client_record(client, headers, client_type="government", name="Municipal Corp"):
-    res = client.post("/clients", json={"name": name, "type": client_type}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": name, "type": client_type, "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
 
@@ -99,6 +104,7 @@ def _presales_project_with_sent_quotation(client, headers, client_id=None, oppor
     project = _create_project(client, headers, client_id, opportunity_id=opportunity_id)
     project_sport_id = _add_project_sport(client, headers, project["id"])
     _verified_cost_sheet(client, headers, project["id"])
+    _satisfy_project_readiness(client, headers, project["id"])
     quotation_id = _sent_quotation(client, headers, project["id"], project_sport_id)
     return project["id"], quotation_id
 

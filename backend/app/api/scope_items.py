@@ -1,9 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.project import Project
@@ -177,3 +179,43 @@ def remove_project_scope_item(
         raise HTTPException(status_code=404, detail="Scope item selection not found")
     db.delete(row)
     db.commit()
+
+
+class ProjectOut(BaseModel):
+    id: uuid.UUID
+    scope_confirmed_empty_at: datetime | None
+    scope_confirmed_empty_by_id: uuid.UUID | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@project_scope_items_router.post(
+    "/{project_id}/scope-items/confirm-empty", response_model=ProjectOut
+)
+def confirm_empty_scope(
+    project_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    """WP7 (correction plan, 2026-09-28): the explicit "confirmed zero additional scope"
+    action the Scope readiness check (app/core/readiness.py) accepts as an alternative to
+    at least one ProjectScopeItem existing -- see Project.scope_confirmed_empty_at's own
+    docstring for why this is needed (a project nobody has looked at and one genuinely
+    scoped as empty both show zero rows otherwise). Idempotent: repeating it just refreshes
+    who/when, same as re-confirming is meant to work."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project.scope_confirmed_empty_at = datetime.now(UTC)
+    project.scope_confirmed_empty_by_id = current_user.id
+
+    write_audit_log_entry(
+        db, current_user, "project", project.id, "scope_confirmed_empty_at",
+        old_value=None, new_value=project.scope_confirmed_empty_at.isoformat(), request=request,
+    )
+
+    db.commit()
+    db.refresh(project)
+    return project

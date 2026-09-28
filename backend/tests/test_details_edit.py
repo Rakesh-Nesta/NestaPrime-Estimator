@@ -32,6 +32,23 @@ def _create_client_record(client, headers, **overrides):
     return res.json()
 
 
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
+
+
 def _create_opportunity(client, headers, **overrides):
     payload = {
         "lead_name": "Original Lead", "lead_phone": "9000000002", "lead_email": "lead@example.com",
@@ -71,6 +88,7 @@ def _legitimately_won_opportunity(client, headers, lead_name="Won Lead"):
         f"/projects/{project['id']}/cost-sheets", json={"cost_total": 850000}, headers=headers
     ).json()["id"]
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    _satisfy_project_readiness(client, headers, project["id"])
     estimate = client.post(
         f"/projects/{project['id']}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},

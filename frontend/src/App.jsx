@@ -413,6 +413,9 @@ export default function App() {
             project={activeProject}
             role={user.role}
             onOpenPayments={() => goToTopLevel("payments")}
+            onOpenLeadsClients={() => goToTopLevel("clients_admin")}
+            onOpenScope={() => setScreen("scope")}
+            onOpenSiteSurvey={() => setScreen("site_survey")}
             onBack={() => setScreen("scope")}
           />
         )}
