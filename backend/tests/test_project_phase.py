@@ -176,6 +176,42 @@ def test_marking_quotation_won_is_rejected_when_the_opportunity_was_marked_lost_
     assert client.get(f"/projects/{project_id}", headers=headers).json()["phase"] == "abandoned"
 
 
+def test_marking_quotation_won_is_rejected_for_an_abandoned_project_even_when_its_opportunity_is_not_lost(
+    client, director_user, db_session
+):
+    """Isolates the Project.phase == ABANDONED check in mark_quotation_won from the
+    Opportunity.stage == LOST check next to it -- in the normal flow a Project only ever
+    becomes abandoned as a direct, synchronous consequence of its own Opportunity going
+    Lost (see update_opportunity_stage), so the two conditions are always correlated
+    there and the test above never exercises the ABANDONED branch on its own. This test
+    forces that decoupling directly at the database level (not reachable through the
+    API) to prove the ABANDONED check is real, independent protection, not dead code
+    that only ever fires alongside the LOST check."""
+    from app.models.project import Project, ProjectPhase
+
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    opp_id = _qualified_opportunity(client, headers, client_id)
+    project_id, quotation_id = _presales_project_with_sent_quotation(client, headers, client_id=client_id, opportunity_id=opp_id)
+
+    project_row = db_session.query(Project).filter(Project.id == project_id).first()
+    project_row.phase = ProjectPhase.ABANDONED
+    db_session.commit()
+    assert client.get(f"/opportunities/{opp_id}", headers=headers).json()["stage"] == "qualified"
+
+    res = client.post(
+        f"/quotations/{quotation_id}/mark-won",
+        json={"reason": "Best offer", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert res.status_code == 409, res.text
+
+    # No partial change: neither the Quotation nor the Opportunity moved.
+    quotation = client.get(f"/quotations/{quotation_id}", headers=headers).json()
+    assert quotation["status"] == "sent"
+    assert client.get(f"/opportunities/{opp_id}", headers=headers).json()["stage"] == "qualified"
+
+
 def test_opportunity_marked_lost_abandons_its_presales_project_but_preserves_its_records(client, director_user):
     headers = _director_headers(client, director_user)
     client_id = _create_client_record(client, headers)
