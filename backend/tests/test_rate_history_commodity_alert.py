@@ -256,7 +256,14 @@ def test_verified_cost_sheets_are_flagged_but_not_eligible_for_sync(client, dire
     assert alert["verified_cost_sheets"][0]["status"] == "verified"
 
 
-def test_superseded_cost_sheets_are_never_flagged(client, director_user):
+def test_superseded_cost_sheets_are_never_flagged_but_their_live_revision_is(client, director_user):
+    """WP4 (correction plan, 2026-09-27): revising a cost sheet now carries the prior
+    revision's lines forward onto the new one (previously a revision started empty, which
+    is why this test used to assert draft_cost_sheets stayed empty here too -- that was
+    really just a side effect of the old gap, not the behaviour under test). The superseded
+    original -- the actual thing this test is about -- is still correctly never flagged in
+    either list; its live draft successor, now correctly carrying the same rate-item line,
+    is exactly what the commodity alert and the bulk-sync-draft-lines action exist for."""
     headers = _director_headers(client, director_user)
     item_id = _create_rate_item(client, headers, is_commodity_watched=True)
 
@@ -266,12 +273,16 @@ def test_superseded_cost_sheets_are_never_flagged(client, director_user):
     client.post(f"/cost-sheets/{cost_sheet_id}/recompute", headers=headers)
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
     # Supersede by revising the cost sheet.
-    client.post(f"/cost-sheets/{cost_sheet_id}/revise", json={"cost_total": 100000}, headers=headers)
+    revised = client.post(f"/cost-sheets/{cost_sheet_id}/revise", json={"cost_total": 100000}, headers=headers).json()
 
     res = client.post(f"/rate-items/{item_id}/rate", json={"rate": 80.0, "reason": "Steel price spike"}, headers=headers)
     alert = res.json()["commodity_alert"]
-    assert alert["draft_cost_sheets"] == []
+    # The superseded original never appears in either list.
+    assert cost_sheet_id not in [c["cost_sheet_id"] for c in alert["draft_cost_sheets"]]
+    assert cost_sheet_id not in [c["cost_sheet_id"] for c in alert["verified_cost_sheets"]]
     assert alert["verified_cost_sheets"] == []
+    # Its live draft revision carries the same watched-item line forward and IS eligible.
+    assert [c["cost_sheet_id"] for c in alert["draft_cost_sheets"]] == [revised["id"]]
 
 
 def test_commodity_alert_threshold_is_configurable(client, director_user):
