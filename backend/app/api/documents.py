@@ -2761,8 +2761,21 @@ def mark_quotation_won(
         require_formal=require_formal, request=request,
     )
 
+    old_status = quotation.status
     quotation.status = QuotationStatus.WON
     quotation.won_lost_reason = payload.reason
+
+    # WP3 (correction plan, 2026-09-27): marking a Quotation Won is the single most
+    # consequential event in the sales pipeline -- the dashboard's "won this month"
+    # figure and the Pipeline report are both built from it -- and it previously
+    # wrote no audit entry at all. Logged the same way every other status change on
+    # this document already is.
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "status",
+        old_value=old_status.value, new_value=quotation.status.value,
+        reason=payload.reason, request=request,
+    )
+
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(db, quotation, current_user.role.value)
@@ -2772,6 +2785,7 @@ def mark_quotation_won(
 def mark_quotation_lost(
     quotation_id: uuid.UUID,
     payload: WonLostRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
@@ -2781,8 +2795,18 @@ def mark_quotation_lost(
     if quotation.status not in (QuotationStatus.RELEASED, QuotationStatus.SENT):
         raise HTTPException(status_code=400, detail="Only a Released or Sent quotation can be marked Lost")
 
+    old_status = quotation.status
     quotation.status = QuotationStatus.LOST
     quotation.won_lost_reason = payload.reason
+
+    # WP3: see mark_quotation_won's comment -- Lost is the same consequential
+    # event as Won, and was equally unaudited before this.
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "status",
+        old_value=old_status.value, new_value=quotation.status.value,
+        reason=payload.reason, request=request,
+    )
+
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(db, quotation, current_user.role.value)
