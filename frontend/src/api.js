@@ -140,6 +140,14 @@ export async function getProject(token, projectId) {
   return handle(res);
 }
 
+// Project Overview (correction plan Part 4, 2026-09-28): one aggregated read of phase/owner,
+// pending work with a waiting-on-us/client/vendor split, readiness gaps, payment blockers
+// and latest activity -- each section already role-gated server-side.
+export async function getProjectOverview(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/overview`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
 export async function updateProjectNotes(token, projectId, payload) {
   const res = await fetch(`${API_BASE}/projects/${projectId}/notes`, {
     method: "PATCH",

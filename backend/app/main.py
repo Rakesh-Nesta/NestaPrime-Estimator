@@ -42,6 +42,7 @@ from app.api import (
     pool,
     price_requests,
     pricing,
+    project_overview,
     projects,
     purchase_orders,
     quotations_admin,
@@ -113,6 +114,7 @@ app.include_router(opportunities.router)
 app.include_router(company.router)
 app.include_router(dashboard.router)
 app.include_router(projects.router)
+app.include_router(project_overview.project_overview_router)
 app.include_router(hubs.router)
 app.include_router(regional_multipliers.router)
 app.include_router(sports.sports_router)
