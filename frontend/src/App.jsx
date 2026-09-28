@@ -18,6 +18,7 @@ import Opportunities from "./Opportunities";
 import Payments from "./Payments";
 import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
+import ProjectOverview from "./ProjectOverview";
 import ProjectSetup from "./ProjectSetup";
 import QuickSearch from "./QuickSearch";
 import RateSheet from "./RateSheet";
@@ -87,7 +88,7 @@ export default function App() {
     // Amendment 51: the real Team & Access screen (was Master Settings).
     "team_access",
   ];
-  const PROJECT_STAGE_SCREENS = ["sports", "scope", "site_survey", "tender", "documents"];
+  const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents"];
 
   function goToTopLevel(target) {
     if (!TOP_LEVEL_SCREENS.includes(screen)) {
@@ -134,7 +135,7 @@ export default function App() {
     try {
       const project = await getProject(accessToken, projectId);
       setActiveProject(project);
-      setScreen("documents");
+      setScreen("overview");
     } catch (err) {
       setError(err.message);
     }
@@ -372,6 +373,18 @@ export default function App() {
             onQuickSetupComplete={(project) => { setStartFrom(null); setActiveProject(project); setScreen("sports"); }}
           />
         )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "overview" && (
+          <ProjectOverview
+            token={accessToken}
+            project={activeProject}
+            role={user.role}
+            onOpenSports={() => setScreen("sports")}
+            onOpenScope={() => setScreen("scope")}
+            onOpenSiteSurvey={() => setScreen("site_survey")}
+            onOpenDocuments={() => setScreen("documents")}
+            onOpenFollowUps={() => goToTopLevel("followups")}
+          />
+        )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (
           <SportSelection
             token={accessToken}
@@ -481,6 +494,7 @@ export default function App() {
 // step in the main line -- shown here as "current" by highlighting Scope.
 function ProjectBreadcrumb({ project, screen, onDashboard, onSetup, onStage }) {
   const steps = [
+    { key: "overview", label: "Overview", onClick: () => onStage("overview") },
     { key: "setup", label: "Setup", onClick: onSetup },
     { key: "sports", label: "Sport", onClick: () => onStage("sports") },
     { key: "scope", label: "Scope", onClick: () => onStage("scope") },
