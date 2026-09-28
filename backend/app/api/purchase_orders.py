@@ -1,10 +1,11 @@
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.core.auth import require_roles
 from app.core.db_retry import create_with_retry
 from app.db.session import get_db
@@ -233,13 +234,20 @@ def get_purchase_order(
 @purchase_orders_router.post("/purchase-orders/{po_id}/issue", response_model=PurchaseOrderOut)
 def issue_purchase_order(
     po_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
     po, lines = _get_po_with_lines(db, po_id)
     if po.status != PurchaseOrderStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Only a Draft purchase order can be issued")
+    old_status = po.status
     po.status = PurchaseOrderStatus.ISSUED
+    # WP3 (correction plan, 2026-09-27): PO status transitions were not audit-logged.
+    write_audit_log_entry(
+        db, current_user, "purchase_order", po.id, "status",
+        old_value=old_status.value, new_value=po.status.value, request=request,
+    )
     db.commit()
     db.refresh(po)
     vendor = db.query(Vendor).filter(Vendor.id == po.vendor_id).first()
@@ -249,13 +257,19 @@ def issue_purchase_order(
 @purchase_orders_router.post("/purchase-orders/{po_id}/cancel", response_model=PurchaseOrderOut)
 def cancel_purchase_order(
     po_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
     po, lines = _get_po_with_lines(db, po_id)
     if po.status == PurchaseOrderStatus.RECEIVED:
         raise HTTPException(status_code=400, detail="A fully received purchase order cannot be cancelled")
+    old_status = po.status
     po.status = PurchaseOrderStatus.CANCELLED
+    write_audit_log_entry(
+        db, current_user, "purchase_order", po.id, "status",
+        old_value=old_status.value, new_value=po.status.value, request=request,
+    )
     db.commit()
     db.refresh(po)
     vendor = db.query(Vendor).filter(Vendor.id == po.vendor_id).first()
@@ -282,6 +296,7 @@ class ReceivePayload(BaseModel):
 def receive_purchase_order(
     po_id: uuid.UUID,
     payload: ReceivePayload,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*PROCUREMENT_ROLES)),
 ):
@@ -324,6 +339,7 @@ def receive_purchase_order(
     for update in payload.lines:
         lines_by_id[update.line_id].received_qty = update.received_qty
 
+    old_status = po.status
     if all(float(line.received_qty) >= float(line.quantity) for line in lines):
         po.status = PurchaseOrderStatus.RECEIVED
     elif any(float(line.received_qty) > 0 for line in lines):
@@ -333,6 +349,12 @@ def receive_purchase_order(
         # revert status too -- previously this branch didn't exist, so
         # status stayed stuck at Partially received.
         po.status = PurchaseOrderStatus.ISSUED
+
+    if old_status != po.status:
+        write_audit_log_entry(
+            db, current_user, "purchase_order", po.id, "status",
+            old_value=old_status.value, new_value=po.status.value, request=request,
+        )
 
     db.commit()
     db.refresh(po)

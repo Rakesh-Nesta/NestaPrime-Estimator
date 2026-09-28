@@ -137,8 +137,13 @@ def test_revising_a_sent_estimate_creates_a_new_revision_and_supersedes_the_old(
     assert revised["status"] == "draft"
     assert revised["options"][0]["cost_for_option"] == 900000
 
+    # WP4 (correction plan, 2026-09-27): assert the old row's own option
+    # pricing is provably unchanged, not just its status.
     old = client.get(f"/estimates/{estimate['id']}", headers=headers).json()
     assert old["status"] == "superseded"
+    assert old["options"][0]["cost_for_option"] == estimate["options"][0]["cost_for_option"]
+    assert old["options"][0]["price_low"] == estimate["options"][0]["price_low"]
+    assert old["options"][0]["price_high"] == estimate["options"][0]["price_high"]
 
 
 def test_unchanged_option_keeps_its_frozen_price_by_default(client, director_user):
@@ -331,8 +336,15 @@ def test_revising_a_sent_quotation_creates_a_new_revision(client, director_user)
     assert revised["status"] == "draft"
     assert revised["discount_value"] == 5
 
+    # WP4 (correction plan, 2026-09-27): the old row's own financial fields
+    # must be provably unchanged by the revise call, not just its status --
+    # previously only status was asserted here.
     old = client.get(f"/quotations/{quotation['id']}", headers=headers).json()
     assert old["status"] == "superseded"
+    assert old["discount_value"] == quotation["discount_value"]
+    assert old["quotation_total"] == quotation["quotation_total"]
+    assert old["selling_after_discount"] == quotation["selling_after_discount"]
+    assert old["cost_total"] == quotation["cost_total"]
 
 
 def test_unchanged_quotation_content_keeps_frozen_pricing(client, director_user):

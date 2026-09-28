@@ -47,6 +47,14 @@ def test_create_client_and_project_happy_path(client, director_user):
     assert body["project_no"].startswith("P-")
     assert body["tender_mode"] is False
 
+    # WP3 (correction plan, 2026-09-27): project creation is now audit-logged.
+    entries = client.get(
+        "/audit-log", params={"document_type": "project", "document_id": body["id"]}, headers=headers
+    ).json()
+    created_entries = [e for e in entries if e["field"] == "created"]
+    assert len(created_entries) == 1
+    assert created_entries[0]["new_value"] == body["project_no"]
+
 
 # ---------------------------------------------------------------------------
 # Project Type (B.1 field #1)

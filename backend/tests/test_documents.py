@@ -119,6 +119,58 @@ def test_revising_a_verified_cost_sheet_creates_r2_and_supersedes_r1(client, dir
     assert old["status"] == "superseded"
 
 
+def test_revising_a_cost_sheet_carries_lines_forward_and_leaves_the_original_untouched(client, director_user):
+    """WP4 (correction plan, 2026-09-27): the new revision starts with a copy
+    of the prior revision's lines (previously it started empty -- a
+    self-documented gap), and the prior revision's own row and lines are
+    never mutated by the revise call."""
+    headers = _director_headers(client, director_user)
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+
+    create_res = client.post(f"/projects/{project_id}/cost-sheets", json={"cost_total": 0}, headers=headers)
+    cs1_id = create_res.json()["id"]
+    line_res = client.post(
+        f"/cost-sheets/{cs1_id}/lines",
+        json={
+            "work_package": "civil", "category": "Test category", "item_name": "Test line",
+            "unit": "sqm", "quantity": 100, "rate": 250, "source": "manual",
+        },
+        headers=headers,
+    )
+    assert line_res.status_code == 201, line_res.text
+    client.post(f"/cost-sheets/{cs1_id}/recompute", headers=headers)
+    verify_res = client.post(f"/cost-sheets/{cs1_id}/verify", headers=headers)
+    assert verify_res.status_code == 200, verify_res.text
+    original_total = verify_res.json()["cost_total"]
+    assert original_total > 0
+
+    revise_res = client.post(f"/cost-sheets/{cs1_id}/revise", json={"cost_total": 0}, headers=headers)
+    assert revise_res.status_code == 201, revise_res.text
+    cs2 = revise_res.json()
+
+    # the NEW revision carries the line forward, and its total is recomputed from it
+    # (the same K.1 formula _compute_cost_sheet_total already applies -- not a raw
+    # rate*quantity sum, so it should land on the identical figure verify did above)
+    new_lines = client.get(f"/cost-sheets/{cs2['id']}/lines", headers=headers).json()
+    assert len(new_lines) == 1
+    assert new_lines[0]["item_name"] == "Test line"
+    assert new_lines[0]["rate"] == 250.0
+    assert new_lines[0]["quantity"] == 100.0
+    assert new_lines[0]["id"] != line_res.json()["id"]  # a real copy, not the same row
+    assert cs2["cost_total"] == original_total
+
+    # the OLD revision's row and its line are completely unchanged
+    old = client.get(f"/cost-sheets/{cs1_id}", headers=headers).json()
+    assert old["status"] == "superseded"
+    assert old["cost_total"] == original_total
+    old_lines = client.get(f"/cost-sheets/{cs1_id}/lines", headers=headers).json()
+    assert len(old_lines) == 1
+    assert old_lines[0]["id"] == line_res.json()["id"]
+    assert old_lines[0]["rate"] == 250.0
+    assert old_lines[0]["quantity"] == 100.0
+
+
 def test_cannot_revise_a_draft_cost_sheet(client, director_user):
     headers = _director_headers(client, director_user)
     client_id = _create_client_record(client, headers)
@@ -418,6 +470,15 @@ def test_quotation_lifecycle_release_send_mark_won(client, director_user):
     assert won_res.json()["status"] == "won"
     assert won_res.json()["won_lost_reason"] == "Best offer"
 
+    # WP3 (correction plan, 2026-09-27): mark-won is now audit-logged --
+    # previously the single most consequential event in the pipeline left no trail.
+    entries = client.get(
+        "/audit-log", params={"document_type": "quotation", "document_id": quotation_id}, headers=headers
+    ).json()
+    status_entries = [e for e in entries if e["field"] == "status" and e["new_value"] == "won"]
+    assert len(status_entries) == 1
+    assert status_entries[0]["reason"] == "Best offer"
+
 
 def test_quotation_can_be_marked_lost_with_reason(client, director_user):
     headers = _director_headers(client, director_user)
@@ -433,6 +494,14 @@ def test_quotation_can_be_marked_lost_with_reason(client, director_user):
     assert res.status_code == 200
     assert res.json()["status"] == "lost"
     assert res.json()["won_lost_reason"] == "competitor"
+
+    # WP3: mark-lost is audit-logged the same way mark-won is.
+    entries = client.get(
+        "/audit-log", params={"document_type": "quotation", "document_id": quotation_id}, headers=headers
+    ).json()
+    status_entries = [e for e in entries if e["field"] == "status" and e["new_value"] == "lost"]
+    assert len(status_entries) == 1
+    assert status_entries[0]["reason"] == "competitor"
 
 
 def test_sales_sees_quotation_without_cost_or_margin(client, db_session, director_user):

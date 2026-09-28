@@ -641,10 +641,21 @@ def revise_cost_sheet(
 ):
     """M.2 rule 4: 'Any edit to a Verified Cost Sheet creates CS-R(n+1) in
     Draft requiring re-verification'; the prior revision becomes Superseded.
-    Known gap: the new revision does not carry over the old revision's
-    CostSheetLine rows (M.2 rule 4's 'refresh to current settings' choice
-    isn't implemented at line level yet) -- re-enter cost_total directly or
-    re-add lines and /recompute on the new revision."""
+
+    WP4 (correction plan, 2026-09-27): the new revision now carries forward a
+    copy of every CostSheetLine from the prior revision (fresh ids, this
+    revision's cost_sheet_id) -- previously it started empty, which was a
+    self-documented gap (M.2 rule 4's 'refresh to current settings' choice
+    wasn't implemented at line level). The prior revision's own rows are
+    never touched: it is left exactly as it was, marked Superseded, per the
+    same immutability guarantee Quotation and Estimate revision already
+    give. cost_total is recomputed from the carried-forward lines
+    (_compute_cost_sheet_total, the same helper /recompute uses) rather
+    than left at payload.cost_total's default of 0, which would otherwise
+    misrepresent a revision that already has real lines on it -- an
+    explicit cost_total is still honoured when the caller sends a
+    non-default value (a whole-project figure typed directly, matching
+    CostSheetCreate's own original design)."""
     current = db.query(CostSheet).filter(CostSheet.id == cost_sheet_id).first()
     if not current:
         raise HTTPException(status_code=404, detail="Cost sheet not found")
@@ -661,6 +672,32 @@ def revise_cost_sheet(
     )
     current.status = CostSheetStatus.SUPERSEDED
     db.add(new_revision)
+    db.flush()  # new_revision.id is needed below, before this transaction commits
+
+    old_lines = db.query(CostSheetLine).filter(CostSheetLine.cost_sheet_id == current.id).all()
+    for old_line in old_lines:
+        db.add(
+            CostSheetLine(
+                cost_sheet_id=new_revision.id,
+                project_sport_id=old_line.project_sport_id,
+                rate_item_id=old_line.rate_item_id,
+                work_package=old_line.work_package,
+                category=old_line.category,
+                item_name=old_line.item_name,
+                spec=old_line.spec,
+                unit=old_line.unit,
+                quantity=old_line.quantity,
+                rate=old_line.rate,
+                source=old_line.source,
+                city_of_quote=old_line.city_of_quote,
+                labour_category_id=old_line.labour_category_id,
+                wastage_percent=old_line.wastage_percent,
+            )
+        )
+    if old_lines and payload.cost_total == 0:
+        db.flush()
+        new_revision.cost_total = _compute_cost_sheet_total(db, new_revision)
+
     db.commit()
     db.refresh(new_revision)
     return _cost_sheet_to_out(db, new_revision, current_user.role.value)
@@ -2761,8 +2798,21 @@ def mark_quotation_won(
         require_formal=require_formal, request=request,
     )
 
+    old_status = quotation.status
     quotation.status = QuotationStatus.WON
     quotation.won_lost_reason = payload.reason
+
+    # WP3 (correction plan, 2026-09-27): marking a Quotation Won is the single most
+    # consequential event in the sales pipeline -- the dashboard's "won this month"
+    # figure and the Pipeline report are both built from it -- and it previously
+    # wrote no audit entry at all. Logged the same way every other status change on
+    # this document already is.
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "status",
+        old_value=old_status.value, new_value=quotation.status.value,
+        reason=payload.reason, request=request,
+    )
+
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(db, quotation, current_user.role.value)
@@ -2772,6 +2822,7 @@ def mark_quotation_won(
 def mark_quotation_lost(
     quotation_id: uuid.UUID,
     payload: WonLostRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*DOCUMENT_ROLES)),
 ):
@@ -2781,8 +2832,18 @@ def mark_quotation_lost(
     if quotation.status not in (QuotationStatus.RELEASED, QuotationStatus.SENT):
         raise HTTPException(status_code=400, detail="Only a Released or Sent quotation can be marked Lost")
 
+    old_status = quotation.status
     quotation.status = QuotationStatus.LOST
     quotation.won_lost_reason = payload.reason
+
+    # WP3: see mark_quotation_won's comment -- Lost is the same consequential
+    # event as Won, and was equally unaudited before this.
+    write_audit_log_entry(
+        db, current_user, "quotation", quotation.id, "status",
+        old_value=old_status.value, new_value=quotation.status.value,
+        reason=payload.reason, request=request,
+    )
+
     db.commit()
     db.refresh(quotation)
     return _quotation_to_out(db, quotation, current_user.role.value)
