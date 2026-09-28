@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { addProjectScopeItem, listProjectScopeItems, listScopeItems, removeProjectScopeItem } from "./api";
+import {
+  addProjectScopeItem, confirmEmptyScope, listProjectScopeItems, listScopeItems, removeProjectScopeItem,
+} from "./api";
 
 const GROUP_LABELS = {
   civil: "Civil",
@@ -18,6 +20,23 @@ export default function ScopeChecklist({ token, project, onBack, onNext, onDocum
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // WP7 (correction plan, 2026-09-28): the readiness Scope check passes once either a
+  // real scope item exists or this explicit "no additional scope" confirmation is on
+  // record -- see Project.scope_confirmed_empty_at's own docstring (app/models/project.py).
+  const [confirmedEmptyAt, setConfirmedEmptyAt] = useState(project.scope_confirmed_empty_at);
+
+  async function handleConfirmEmpty() {
+    setError("");
+    setBusy(true);
+    try {
+      const updated = await confirmEmptyScope(token, project.id);
+      setConfirmedEmptyAt(updated.scope_confirmed_empty_at);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     Promise.all([listScopeItems(token), listProjectScopeItems(token, project.id)])
@@ -124,6 +143,29 @@ export default function ScopeChecklist({ token, project, onBack, onNext, onDocum
           Unchecked items are excluded and listed under Exclusions (Part I). {selections.length} of{" "}
           {items.length} included.
         </p>
+        {selections.length === 0 && (
+          <div className="flex items-center gap-3 mt-2">
+            {confirmedEmptyAt ? (
+              <p className="text-xs text-green-400">
+                Confirmed: no additional scope on this project.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-amber-400">
+                  Nothing selected yet -- Estimate/Quotation readiness (WP7) needs either a scope item or an
+                  explicit confirmation that there is none.
+                </p>
+                <button
+                  onClick={handleConfirmEmpty}
+                  disabled={busy}
+                  className="text-xs text-gold hover:underline shrink-0"
+                >
+                  Confirm no additional scope
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 

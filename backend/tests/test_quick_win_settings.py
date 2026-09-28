@@ -67,8 +67,26 @@ def _draft_estimate(client, headers, client_type="school", cost_for_option=85000
     return project_id, project_sport_id, estimate
 
 
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
+
+
 def _sent_quotation(client, headers, client_type="school", cost_for_option=850000):
     project_id, project_sport_id, estimate = _draft_estimate(client, headers, client_type, cost_for_option)
+    _satisfy_project_readiness(client, headers, project_id)
     option_id = estimate["options"][0]["id"]
     client.patch(
         f"/estimates/{estimate['id']}/options/{option_id}/client-status",

@@ -28,9 +28,30 @@ def _director_headers(client, director_user):
 
 
 def _create_client_record(client, headers, client_type="government", name="Integration Municipal Corp"):
-    res = client.post("/clients", json={"name": name, "type": client_type}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": name, "type": client_type, "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
+
+
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
 
 
 def _create_project(client, headers, client_id, **overrides):
@@ -166,6 +187,7 @@ def test_full_tender_mode_lifecycle_end_to_end(client, director_user):
     assert "warranty_reserve_percent" not in k1_constants
 
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    _satisfy_project_readiness(client, headers, project_id)
 
     estimate = client.post(
         f"/projects/{project_id}/estimates",
@@ -273,6 +295,7 @@ def test_multi_sport_tender_mode_quotation_with_sport_margin_override(client, di
         f"/projects/{project_id}/cost-sheets", json={"cost_total": 850000 + 500000}, headers=headers
     ).json()["id"]
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    _satisfy_project_readiness(client, headers, project_id)
 
     estimate = client.post(
         f"/projects/{project_id}/estimates",
@@ -337,6 +360,7 @@ def test_work_order_cannot_be_created_before_release_and_send_even_if_evidence_e
         f"/projects/{project_id}/cost-sheets", json={"cost_total": 850000}, headers=headers
     ).json()["id"]
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},

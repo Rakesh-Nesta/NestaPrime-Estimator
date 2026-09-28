@@ -25,9 +25,30 @@ def _sales_headers(client, db_session):
 
 
 def _create_client_record(client, headers, client_type="school", name="Test School"):
-    res = client.post("/clients", json={"name": name, "type": client_type}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": name, "type": client_type, "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
+
+
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
 
 
 def _create_project(client, headers, client_id, **overrides):
@@ -276,6 +297,7 @@ def test_estimate_send_sets_status_and_fifteen_day_validity(client, director_use
     headers = _director_headers(client, director_user)
     project_id, project_sport_id = _full_project_setup(client, headers, client_type="school")
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
@@ -332,6 +354,7 @@ def test_sales_can_record_client_status_on_option(client, db_session, director_u
 def _approved_estimate(client, headers, client_type="government", cost_for_option=850000):
     project_id, project_sport_id = _full_project_setup(client, headers, client_type=client_type)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": cost_for_option}]},

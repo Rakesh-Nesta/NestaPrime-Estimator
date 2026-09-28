@@ -20,9 +20,30 @@ def _sales_headers(client, db_session):
 
 
 def _create_client_record(client, headers, name="Revision Client"):
-    res = client.post("/clients", json={"name": name, "type": "school"}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": name, "type": "school", "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
+
+
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
 
 
 def _create_project(client, headers, client_id):
@@ -102,6 +123,7 @@ def test_cannot_revise_a_draft_estimate(client, director_user):
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},
@@ -122,6 +144,7 @@ def test_revising_a_sent_estimate_creates_a_new_revision_and_supersedes_the_old(
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
 
     res = client.post(
@@ -151,6 +174,7 @@ def test_unchanged_option_keeps_its_frozen_price_by_default(client, director_use
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     original_price_low = estimate["options"][0]["price_low"]
     original_price_high = estimate["options"][0]["price_high"]
@@ -175,6 +199,7 @@ def test_changed_option_cost_is_repriced(client, director_user):
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     original_price_low = estimate["options"][0]["price_low"]
 
@@ -194,6 +219,7 @@ def test_refresh_pricing_recomputes_even_an_unchanged_option(client, director_us
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     original_price_low = estimate["options"][0]["price_low"]
 
@@ -216,6 +242,7 @@ def test_new_revision_options_start_back_at_pending(client, director_user):
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     _approve_option(client, headers, estimate["id"], estimate["options"][0]["id"])
 
@@ -233,6 +260,7 @@ def test_revising_an_estimate_writes_an_audit_log_entry(client, director_user):
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
 
     client.post(
@@ -253,6 +281,7 @@ def test_sales_cannot_revise_an_estimate(client, director_user, db_session):
     project_id = _create_project(client, director_headers, _create_client_record(client, director_headers))
     project_sport_id = _add_project_sport(client, director_headers, project_id)
     _verified_cost_sheet(client, director_headers, project_id)
+    _satisfy_project_readiness(client, director_headers, project_id)
     estimate = _sent_estimate(client, director_headers, project_id, project_sport_id)
 
     sales_headers = _sales_headers(client, db_session)
@@ -274,6 +303,7 @@ def test_cannot_revise_a_draft_quotation(client, director_user):
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -296,6 +326,7 @@ def test_revising_a_released_quotation_returns_it_to_draft_in_place(client, dire
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -318,6 +349,7 @@ def test_revising_a_sent_quotation_creates_a_new_revision(client, director_user)
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -352,6 +384,7 @@ def test_unchanged_quotation_content_keeps_frozen_pricing(client, director_user)
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -375,6 +408,7 @@ def test_refresh_pricing_recomputes_an_unchanged_quotation(client, director_user
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -402,6 +436,7 @@ def test_revising_a_sent_quotation_writes_an_audit_log_entry(client, director_us
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -438,6 +473,7 @@ def test_first_estimate_and_quotation_on_a_project_still_get_revision_1(client, 
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -454,6 +490,7 @@ def test_second_estimate_after_prior_quotation_lost_gets_incremented_document_no
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -478,6 +515,7 @@ def test_second_quotation_after_prior_quotation_lost_gets_incremented_document_n
     project_id = _create_project(client, headers, _create_client_record(client, headers))
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
@@ -519,6 +557,7 @@ def test_fast_track_quotation_after_prior_quotation_lost_gets_incremented_revisi
     project_id = res.json()["id"]
     _add_project_sport(client, headers, project_id)
     cost_sheet_id = _verified_cost_sheet(client, headers, project_id, cost_total=150000)
+    _satisfy_project_readiness(client, headers, project_id)
 
     # First pursuit: fast-track straight to a Lost quotation.
     first_quotation = client.post(

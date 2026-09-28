@@ -13,6 +13,7 @@ from pypdf import PdfReader
 
 from app.api import documents as documents_api
 from app.api import pdf_documents
+from app.models.client import Client
 from app.services import quotation_content
 from tests.test_quotations_admin import (
     _add_project_sport,
@@ -20,6 +21,7 @@ from tests.test_quotations_admin import (
     _create_project,
     _login,
     _released_quotation,
+    _satisfy_project_readiness,
     _sent_estimate,
     _verified_cost_sheet,
 )
@@ -63,11 +65,19 @@ def _set_package_content(client, headers, sport_key="badminton", tier="standard"
     assert res.status_code in (200, 201), res.text
 
 
-def _quotation(client, headers, name="Content Test School", client_type="school", contact_name=None, send=False):
-    """A released (or sent) private-client quotation for badminton, standard."""
+def _quotation(
+    client, headers, name="Content Test School", client_type="school", contact_name=None, send=False,
+    db_session=None, clear_contact_after=False,
+):
+    """A released (or sent) private-client quotation for badminton, standard. WP7
+    (correction plan, 2026-09-28) requires a contact name and a phone/email to release
+    at all, so a real one is always sent here -- `clear_contact_after` (with `db_session`)
+    lets a test still exercise the PDF's own "no contact" addressee fallback by clearing
+    it directly at the DB level *after* the document is genuinely released, the same
+    "force the state the normal flow can no longer produce" technique WP6's own tests use."""
     res = client.post(
         "/clients",
-        json={"name": name, "type": client_type, **({"contact_name": contact_name} if contact_name else {})},
+        json={"name": name, "type": client_type, "contact_name": contact_name or "Test Contact", "phone": "9876543210"},
         headers=headers,
     )
     assert res.status_code == 201, res.text
@@ -75,10 +85,14 @@ def _quotation(client, headers, name="Content Test School", client_type="school"
     project_id = _create_project(client, headers, client_id)
     project_sport_id = _add_project_sport(client, headers, project_id)
     _verified_cost_sheet(client, headers, project_id)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = _sent_estimate(client, headers, project_id, project_sport_id)
     option_id = estimate["options"][0]["id"]
     _approve_option(client, headers, estimate["id"], option_id)
     quotation = _released_quotation(client, headers, project_id, estimate["id"], option_id)
+    if clear_contact_after:
+        db_session.query(Client).filter(Client.id == client_id).update({"contact_name": None})
+        db_session.commit()
     if send:
         assert client.post(f"/quotations/{quotation['id']}/send", headers=headers).status_code == 200
     return client_id, project_id, quotation
@@ -171,7 +185,7 @@ def test_the_letter_block_prints_only_with_a_cover_note_and_uses_the_signatory_s
     assert "For NestaPrime Test Pvt Ltd" in text and "R. Patni" in text and "Director" in text
 
 
-def test_the_addressee_is_the_active_signatory_then_the_contact_then_nobody(client, director_user):
+def test_the_addressee_is_the_active_signatory_then_the_contact_then_nobody(client, director_user, db_session):
     headers = _director(client, director_user)
     client_id, _, quotation = _quotation(client, headers, contact_name="Mr. Contact Person")
     _set_cover_note(client, headers, quotation["id"])
@@ -188,7 +202,9 @@ def test_the_addressee_is_the_active_signatory_then_the_contact_then_nobody(clie
     assert res.status_code == 200, res.text
     assert "Kind attention: Mr. Contact Person" in _flat(_pdf(client, headers, quotation["id"]))
 
-    _, _, no_contact = _quotation(client, headers, name="No Contact School")
+    _, _, no_contact = _quotation(
+        client, headers, name="No Contact School", db_session=db_session, clear_contact_after=True
+    )
     _set_cover_note(client, headers, no_contact["id"])
     assert "Kind attention" not in _pdf(client, headers, no_contact["id"])
 
@@ -294,9 +310,11 @@ def test_the_draft_prompt_carries_the_set_facts_and_the_no_invention_rules(clien
         assert rule.lower() in prompt.lower(), rule
 
 
-def test_the_draft_prompt_leaves_out_facts_that_are_not_set(client, director_user, monkeypatch):
+def test_the_draft_prompt_leaves_out_facts_that_are_not_set(client, director_user, monkeypatch, db_session):
     headers = _director(client, director_user)
-    _, _, quotation = _quotation(client, headers, name="Sparse Facts School")
+    _, _, quotation = _quotation(
+        client, headers, name="Sparse Facts School", db_session=db_session, clear_contact_after=True
+    )
     prompt = _capture_draft(client, headers, quotation["id"], monkeypatch)["prompt"]
     for absent in ("Addressed to", "Flooring:", "Structure:", "Lighting:", "Scope:", "Warranty:"):
         assert absent not in prompt, absent

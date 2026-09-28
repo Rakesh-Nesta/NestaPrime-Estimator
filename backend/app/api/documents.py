@@ -26,12 +26,14 @@ from app.api.sports import (
 )
 from app.core.auth import require_roles
 from app.core import follow_up_sync
+from app.core.readiness import blocking_waivable_checks, check_client_identity, compute_waivable_checks
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client import Client
 from app.models.follow_up import FollowUpEntityType
 from app.models.opportunity import Opportunity, OpportunityStage
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus
+from app.models.readiness_exception import ReadinessDocumentType
 from app.models.vendor import Vendor
 from app.models.document import (
     ClientRejectionReason,
@@ -147,6 +149,48 @@ def _enforce_approval_evidence(
         db, current_user, doc_type.value, doc_id, "approval_evidence_waiver",
         old_value=None, new_value="waived", reason=waive_evidence_reason, request=request,
     )
+
+
+def _enforce_readiness(
+    db: Session, project_id: uuid.UUID, document_type: ReadinessDocumentType, document_id: uuid.UUID
+) -> None:
+    """WP7 (correction plan, 2026-09-28): called by send_estimate and release_quotation,
+    at the moment of the action itself -- never at document creation, and never blocking
+    the Documents screen's own load/draft/edit flows. Cost Sheet verification and
+    below-floor margin are deliberately NOT checked here -- both are already separate,
+    pre-existing gates elsewhere in this file (release_quotation's own needs_director
+    branch, mark_quotation_won's hard block), untouched by WP7.
+
+    The client-identity check is non-waivable -- no exception path, always a hard 422.
+    The three waivable checks (Site Survey, Scope, Sport) each block with 422 unless an
+    APPROVED ReadinessException already exists for this exact document -- see
+    app/api/readiness.py for how a Director records one directly or a PM's request gets
+    there via Director approval."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    client = db.query(Client).filter(Client.id == project.client_id).first() if project else None
+    identity = check_client_identity(client)
+    if not identity.passed:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Missing client identity information: {', '.join(identity.missing)} -- "
+            f"complete these in Leads & Clients before this can proceed",
+        )
+
+    blocking = blocking_waivable_checks(compute_waivable_checks(db, project, document_type, document_id))
+    if blocking:
+        labels = ", ".join(c.label for c in blocking)
+        pending = [c for c in blocking if c.exception is not None]
+        note = ""
+        if pending:
+            note = " (a request is already pending Director approval for: " + ", ".join(
+                c.label for c in pending
+            ) + ")"
+        raise HTTPException(
+            status_code=422,
+            detail=f"Not ready: {labels}{note} -- a PM/Director can record an exception via "
+            f"POST /readiness-exceptions, or complete the missing item directly",
+        )
+
 
 cost_sheets_router = APIRouter(tags=["cost-sheets"])
 estimates_router = APIRouter(tags=["estimates"])
@@ -1744,6 +1788,7 @@ def send_estimate(
             status_code=400,
             detail="Cost basis changed -- rebase required before this Estimate can be sent (M.2 rule 4)",
         )
+    _enforce_readiness(db, estimate.project_id, ReadinessDocumentType.ESTIMATE, estimate.id)
 
     validity_days = _get_setting_int(db, "estimate_validity_days", ESTIMATE_VALIDITY_DAYS_DEFAULT)
     estimate.status = EstimateStatus.SENT
@@ -2666,6 +2711,7 @@ def release_quotation(
 
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
+    _enforce_readiness(db, quotation.project_id, ReadinessDocumentType.QUOTATION, quotation.id)
     if client.overdue_flag:
         raise HTTPException(
             status_code=400,

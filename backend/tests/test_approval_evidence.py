@@ -29,9 +29,30 @@ def _sales_headers(client, db_session):
 
 
 def _create_client_record(client, headers, client_type="school"):
-    res = client.post("/clients", json={"name": "Evidence Client", "type": client_type}, headers=headers)
+    res = client.post(
+        "/clients",
+        json={"name": "Evidence Client", "type": client_type, "contact_name": "Test Contact", "phone": "9876543210"},
+        headers=headers,
+    )
     assert res.status_code == 201, res.text
     return res.json()["id"]
+
+
+def _satisfy_project_readiness(client, headers, project_id):
+    res = client.post(f"/projects/{project_id}/scope-items/confirm-empty", headers=headers)
+    assert res.status_code == 200, res.text
+
+    survey = client.post(f"/projects/{project_id}/site-surveys", json={}, headers=headers).json()
+    for i in range(4):
+        res = client.post(
+            "/attachments",
+            data={"doc_type": "site_survey", "doc_id": survey["id"], "tag": "photo"},
+            files={"file": (f"survey-photo-{i}.txt", b"photo", "text/plain")},
+            headers=headers,
+        )
+        assert res.status_code == 201, res.text
+    res = client.post(f"/site-surveys/{survey['id']}/complete", headers=headers)
+    assert res.status_code == 200, res.text
 
 
 def _create_project(client, headers, client_id):
@@ -165,6 +186,7 @@ def _sent_quotation(client, headers, client_type="school", cost_for_option=10000
         json={"estimate_id": estimate_id, "included_option_ids": [option_id]},
         headers=headers,
     ).json()
+    _satisfy_project_readiness(client, headers, project_id)
     client.post(f"/quotations/{quotation['id']}/release", headers=headers)
     client.post(f"/quotations/{quotation['id']}/send", headers=headers)
     return quotation["id"]

@@ -9,16 +9,20 @@ import {
   addCostSheetLine,
   addEstimateOption,
   addEstimateOptionAddon,
+  approveReadinessException,
   approveSkipRequest,
+  confirmEmptyScope,
   createCostSheet,
   createEstimate,
   createFastTrackQuotation,
   createQuotation,
+  createReadinessException,
   createSkipRequest,
   createWorkOrder,
   downloadEstimatePdfBlob,
   downloadQuotationPdfBlob,
   getL1View,
+  getProjectReadiness,
   getWorkOrder,
   listCostSheetLines,
   listCostSheets,
@@ -34,6 +38,7 @@ import {
   rebaseEstimate,
   rejectCostSheet,
   rejectQuotation,
+  rejectReadinessException,
   releaseQuotation,
   removeEstimateOption,
   removeEstimateOptionAddon,
@@ -110,7 +115,9 @@ function RejectForm({ onSubmit, onCancel }) {
   );
 }
 
-export default function Documents({ token, project, role, onBack, onOpenPayments }) {
+export default function Documents({
+  token, project, role, onBack, onOpenPayments, onOpenLeadsClients, onOpenScope, onOpenSiteSurvey,
+}) {
   const [projectSports, setProjectSports] = useState([]);
   const [sports, setSports] = useState([]);
   const [costSheets, setCostSheets] = useState([]);
@@ -221,6 +228,9 @@ export default function Documents({ token, project, role, onBack, onOpenPayments
             estimates={estimates}
             quotations={quotations}
             onAction={withErrorHandling}
+            onOpenLeadsClients={onOpenLeadsClients}
+            onOpenScope={onOpenScope}
+            onOpenSiteSurvey={onOpenSiteSurvey}
           />
 
           <QuotationPanel
@@ -235,6 +245,9 @@ export default function Documents({ token, project, role, onBack, onOpenPayments
             )}
             onAction={withErrorHandling}
             onOpenPayments={onOpenPayments}
+            onOpenLeadsClients={onOpenLeadsClients}
+            onOpenScope={onOpenScope}
+            onOpenSiteSurvey={onOpenSiteSurvey}
           />
         </>
       )}
@@ -628,7 +641,10 @@ function formatRs(value) {
   return `Rs ${Math.round(value).toLocaleString("en-IN")}`;
 }
 
-function EstimatePanel({ token, project, role, activeCostSheet, projectSports, sportsById, estimates, quotations, onAction }) {
+function EstimatePanel({
+  token, project, role, activeCostSheet, projectSports, sportsById, estimates, quotations, onAction,
+  onOpenLeadsClients, onOpenScope, onOpenSiteSurvey,
+}) {
   const [optionRows, setOptionRows] = useState([emptyOptionRow()]);
   const [addOptionFor, setAddOptionFor] = useState(null); // estimateId whose "add sport option" form is open
   const [addOptionRow, setAddOptionRow] = useState(emptyOptionRow());
@@ -779,6 +795,18 @@ function EstimatePanel({ token, project, role, activeCostSheet, projectSports, s
               </button>
             </div>
           </div>
+          {est.status === "draft" && (
+            <ReadinessChecklist
+              token={token}
+              projectId={project.id}
+              role={role}
+              documentType="estimate"
+              documentId={est.id}
+              onOpenLeadsClients={onOpenLeadsClients}
+              onOpenScope={onOpenScope}
+              onOpenSiteSurvey={onOpenSiteSurvey}
+            />
+          )}
           {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
           {openMessagesFor === est.id && <MessagesPanel token={token} docType="estimate" docId={est.id} />}
           {addOptionFor === est.id && (
@@ -1134,7 +1162,10 @@ function OptionAddons({ token, projectId, optionId }) {
   );
 }
 
-function QuotationPanel({ token, project, role, estimates, quotations, activeCostSheet, sportNames, onAction, onOpenPayments }) {
+function QuotationPanel({
+  token, project, role, estimates, quotations, activeCostSheet, sportNames, onAction, onOpenPayments,
+  onOpenLeadsClients, onOpenScope, onOpenSiteSurvey,
+}) {
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const [packageChoice, setPackageChoice] = useState({}); // project_sport_id -> option id (only needed when a sport has several approved packages)
   const [discountValue, setDiscountValue] = useState("");
@@ -1299,6 +1330,18 @@ function QuotationPanel({ token, project, role, estimates, quotations, activeCos
             </span>
             <span className="font-semibold">Rs {q.quotation_total.toLocaleString()}</span>
           </div>
+          {q.status === "draft" && (
+            <ReadinessChecklist
+              token={token}
+              projectId={project.id}
+              role={role}
+              documentType="quotation"
+              documentId={q.id}
+              onOpenLeadsClients={onOpenLeadsClients}
+              onOpenScope={onOpenScope}
+              onOpenSiteSurvey={onOpenSiteSurvey}
+            />
+          )}
           <div className="flex flex-wrap items-center gap-2 text-xs">
             {q.status === "draft" && (
               <button onClick={() => handleRelease(q.id)} className="text-gold hover:underline">
@@ -1777,6 +1820,145 @@ function quotationHint(estimates, quotations, canFastTrack) {
   if (live.some((q) => q.status === "lost")) return "Lost -- a new Quotation can be raised to re-bid.";
   if (live.every((q) => q.status === "expired")) return "Quotation expired -- raise a new one.";
   return null;
+}
+
+// WP7 (correction plan, 2026-09-28): the pre-flight checklist for sending an Estimate or
+// releasing a Quotation/Tender. Read-only preview -- the actual block happens server-side
+// at the moment of Send/Release; this just shows what that call would currently refuse,
+// with a link to fix it directly and (for the three waivable checks) a way to request or
+// record an exception instead.
+function ReadinessChecklist({
+  token, projectId, role, documentType, documentId, onOpenLeadsClients, onOpenScope, onOpenSiteSurvey,
+}) {
+  const [readiness, setReadiness] = useState(null);
+  const [error, setError] = useState("");
+  const [reasonDrafts, setReasonDrafts] = useState({}); // checkKey -> reason text
+  const [busyKey, setBusyKey] = useState(null);
+  const canRequest = role === "pm" || role === "director";
+  const canApprove = role === "director";
+
+  function load() {
+    getProjectReadiness(token, projectId, { documentType, documentId })
+      .then(setReadiness)
+      .catch((err) => setError(err.message));
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, projectId, documentType, documentId]);
+
+  if (error) return <p className="text-xs text-red-400">Readiness check failed to load: {error}</p>;
+  if (!readiness) return null;
+
+  const identityDone = readiness.client_identity_passed;
+  const failingChecks = readiness.checks.filter((c) => !c.passed);
+  if (identityDone && failingChecks.length === 0) return null; // nothing to show once everything's ready
+
+  async function runAction(key, fn) {
+    setBusyKey(key);
+    setError("");
+    try {
+      await fn();
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="border border-amber-500/30 bg-amber-500/10 rounded p-2 text-xs space-y-1.5">
+      <p className="text-amber-400 font-medium">Not ready to send/release:</p>
+      {!identityDone && (
+        <div className="flex items-center justify-between gap-2">
+          <span>
+            Missing client identity: {readiness.client_identity_missing.join(", ")} (not waivable)
+          </span>
+          {onOpenLeadsClients && (
+            <button onClick={onOpenLeadsClients} className="text-gold hover:underline shrink-0">
+              Fix in Leads &amp; Clients
+            </button>
+          )}
+        </div>
+      )}
+      {failingChecks.map((c) => {
+        const pending = c.exception?.status === "requested";
+        const correctionLink =
+          c.key === "site_survey" && onOpenSiteSurvey ? (
+            <button onClick={onOpenSiteSurvey} className="text-gold hover:underline shrink-0">
+              Go to Site Survey
+            </button>
+          ) : c.key === "scope" && onOpenScope ? (
+            <button onClick={onOpenScope} className="text-gold hover:underline shrink-0">
+              Go to Scope
+            </button>
+          ) : null;
+        return (
+          <div key={c.key} className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                {c.label}
+                {pending && <span className="text-text-secondary"> — pending Director approval</span>}
+              </span>
+              <div className="flex items-center gap-2">
+                {correctionLink}
+                {canApprove && pending && (
+                  <>
+                    <button
+                      disabled={busyKey === c.key}
+                      onClick={() => runAction(c.key, () => approveReadinessException(token, c.exception.id))}
+                      className="text-green-400 hover:underline shrink-0"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      disabled={busyKey === c.key}
+                      onClick={() =>
+                        runAction(c.key, () =>
+                          rejectReadinessException(token, c.exception.id, { reason: "Not accepted" })
+                        )
+                      }
+                      className="text-red-400 hover:underline shrink-0"
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            {canRequest && !pending && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder={role === "director" ? "Reason (recorded immediately)" : "Reason (needs Director approval)"}
+                  value={reasonDrafts[c.key] ?? ""}
+                  onChange={(e) => setReasonDrafts((d) => ({ ...d, [c.key]: e.target.value }))}
+                  className="flex-1 border border-border-dark rounded px-1.5 py-0.5 bg-surface text-text-primary"
+                />
+                <button
+                  disabled={busyKey === c.key || !(reasonDrafts[c.key] || "").trim()}
+                  onClick={() =>
+                    runAction(c.key, async () => {
+                      await createReadinessException(token, {
+                        document_type: documentType, document_id: documentId,
+                        check_key: c.key, reason: reasonDrafts[c.key].trim(),
+                      });
+                      setReasonDrafts((d) => ({ ...d, [c.key]: "" }));
+                    })
+                  }
+                  className="text-gold hover:underline shrink-0"
+                >
+                  {role === "director" ? "Record exception" : "Request exception"}
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function StageHint({ text }) {

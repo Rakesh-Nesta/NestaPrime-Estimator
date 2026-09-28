@@ -25,7 +25,12 @@ def _director_headers(client, director_user):
 
 
 def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(client, director_user, db_session):
-    from tests.test_work_orders import _add_project_sport, _create_client_record, _create_project
+    from tests.test_work_orders import (
+        _add_project_sport,
+        _create_client_record,
+        _create_project,
+        _satisfy_project_readiness,
+    )
 
     headers = _director_headers(client, director_user)
 
@@ -46,6 +51,7 @@ def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(cl
         f"/projects/{project_id}/cost-sheets", json={"cost_total": 500000}, headers=headers
     ).json()["id"]
     client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    _satisfy_project_readiness(client, headers, project_id)
     estimate = client.post(
         f"/projects/{project_id}/estimates",
         json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 500000}]},

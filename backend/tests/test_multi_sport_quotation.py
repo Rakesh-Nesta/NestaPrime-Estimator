@@ -13,6 +13,7 @@ from tests.test_quotations_admin import (
     _create_project,
     _login,
     _role_headers,
+    _satisfy_project_readiness,
     _verified_cost_sheet,
 )
 
@@ -32,6 +33,7 @@ def _project(client, headers, name="Multi Sport School", sports=("badminton",), 
     project_id = _create_project(client, headers, client_id)
     ps_ids = {key: _add_project_sport(client, headers, project_id, key) for key in sports}
     _verified_cost_sheet(client, headers, project_id, cost)
+    _satisfy_project_readiness(client, headers, project_id)
     return project_id, ps_ids
 
 
