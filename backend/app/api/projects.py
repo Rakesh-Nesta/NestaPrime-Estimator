@@ -21,6 +21,7 @@ from app.models.project import (
     Package,
     PowerAvailable,
     Project,
+    ProjectPhase,
     ProjectType,
     SiteAccess,
     SiteCondition,
@@ -136,6 +137,7 @@ class ProjectOut(BaseModel):
     tender_mode: bool
     is_calibration: bool
     opportunity_id: uuid.UUID | None
+    phase: ProjectPhase
     soil_test_required: bool = False  # derived, not stored — D.4; _to_out() sets the real value
 
     # D.4 site-prep triggers (B.2's worked examples), all derived — none
@@ -175,17 +177,23 @@ def create_project(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # Amendment 44 Phase C: validated up front so a rejected hand-off never
-    # leaves an orphan Project behind. Only a Won Opportunity already
-    # linked to *this* Client, and not already converted, may start one.
+    # WP6 (correction plan, 2026-09-28): "Start Project" now opens at Qualified, not Won
+    # -- a Project's Pre-sales phase covers exactly the period between qualifying an
+    # enquiry and a Quotation actually being won (see ProjectPhase's own docstring and
+    # documents.py's mark_quotation_won, which is what now confirms the project and
+    # closes the Opportunity as Won together). Still validated up front so a rejected
+    # hand-off never leaves an orphan Project behind, and still blocks a duplicate
+    # "Start Project" on the same Opportunity outright rather than silently returning
+    # the existing one -- the caller already has that Project's id via
+    # Opportunity.project_id once the first call succeeds.
     opportunity = None
     if payload.opportunity_id is not None:
         ownership.require_own_opportunity(db, current_user, payload.opportunity_id)
         opportunity = db.query(Opportunity).filter(Opportunity.id == payload.opportunity_id).first()
         if not opportunity:
             raise HTTPException(status_code=404, detail="Opportunity not found")
-        if opportunity.stage != OpportunityStage.WON:
-            raise HTTPException(status_code=400, detail="Only a Won Opportunity can start a Project")
+        if opportunity.stage != OpportunityStage.QUALIFIED:
+            raise HTTPException(status_code=400, detail="Only a Qualified Opportunity can start a Project")
         if opportunity.client_id != payload.client_id:
             raise HTTPException(
                 status_code=400,

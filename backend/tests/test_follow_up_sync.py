@@ -73,10 +73,13 @@ def test_rescheduling_an_opportunity_follow_up_updates_the_same_row_not_a_duplic
 
 
 def test_moving_an_opportunity_to_a_terminal_stage_completes_its_primary_follow_up(client, director_user):
+    """Lost, not Won: WP6 (tightened after review) refuses a direct PATCH straight to Won
+    unconditionally now (this Opportunity has no linked Project). Lost exercises the
+    identical TERMINAL_STAGES code branch the sync logic under test here runs through."""
     headers = _director_headers(client, director_user)
     opp = _create_opportunity(client, headers)
 
-    res = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    res = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "lost"}, headers=headers)
     assert res.status_code == 200, res.text
     assert res.json()["next_follow_up_date"] is None
 

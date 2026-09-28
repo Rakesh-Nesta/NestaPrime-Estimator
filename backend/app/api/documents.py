@@ -25,9 +25,12 @@ from app.api.sports import (
     project_structural_signoff_tier,
 )
 from app.core.auth import require_roles
+from app.core import follow_up_sync
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client import Client
+from app.models.follow_up import FollowUpEntityType
+from app.models.opportunity import Opportunity, OpportunityStage
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus
 from app.models.vendor import Vendor
 from app.models.document import (
@@ -46,7 +49,7 @@ from app.models.document import (
     WorkPackage,
 )
 from app.models.margin_policy import MarginPolicy
-from app.models.project import Package, Project, ProjectType
+from app.models.project import Package, Project, ProjectPhase, ProjectType
 from app.models.rate_item import LabourCategory, RateSource
 from app.models.regional_multiplier import RegionalMultiplier
 from app.models.setting import DocumentType, Override
@@ -2792,6 +2795,30 @@ def mark_quotation_won(
         raise HTTPException(status_code=400, detail="Cannot mark Won while the cost basis is unverified")
 
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
+
+    # WP6 (correction plan, 2026-09-28): marking a Quotation Won is what now confirms
+    # its Project and closes the linked Opportunity as Won, together, in this same
+    # transaction -- see ProjectPhase's own docstring. Both consistency checks below
+    # reject outright rather than silently resolving a state that has already diverged.
+    if project.phase == ProjectPhase.ABANDONED:
+        raise HTTPException(
+            status_code=409,
+            detail="This Project was already abandoned (its Opportunity was marked Lost) -- cannot mark a Quotation Won on it",
+        )
+    opportunity = (
+        db.query(Opportunity).filter(Opportunity.id == project.opportunity_id).first()
+        if project.opportunity_id is not None
+        else None
+    )
+    will_close_opportunity = opportunity is not None and opportunity.stage != OpportunityStage.WON
+    if opportunity is not None and opportunity.stage == OpportunityStage.LOST:
+        raise HTTPException(
+            status_code=409,
+            detail="This Project's Opportunity was already marked Lost -- cannot mark a Quotation Won on it",
+        )
+    if will_close_opportunity and follow_up_sync.follow_up_writes_locked(db):
+        raise HTTPException(status_code=423, detail=follow_up_sync.WRITES_LOCKED_DETAIL)
+
     require_formal = project.tender_mode or float(quotation.quotation_total) >= FORMAL_EVIDENCE_REQUIRED_ABOVE_RS
     _enforce_approval_evidence(
         db, DocumentType.QUOTATION, quotation_id, current_user, payload.waive_evidence_reason,
@@ -2812,6 +2839,21 @@ def mark_quotation_won(
         old_value=old_status.value, new_value=quotation.status.value,
         reason=payload.reason, request=request,
     )
+
+    project.phase = ProjectPhase.CONFIRMED
+
+    if will_close_opportunity:
+        follow_up_sync.set_primary_follow_up(
+            db, opportunity, FollowUpEntityType.OPPORTUNITY,
+            due_date=None, note=opportunity.follow_up_note, current_user=current_user,
+        )
+        old_stage = opportunity.stage
+        opportunity.stage = OpportunityStage.WON
+        write_audit_log_entry(
+            db, current_user, "opportunity", opportunity.id, "stage",
+            old_value=old_stage.value, new_value=opportunity.stage.value,
+            reason=f"Quotation {quotation.id} won", request=request,
+        )
 
     db.commit()
     db.refresh(quotation)

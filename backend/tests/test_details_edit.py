@@ -42,6 +42,62 @@ def _create_opportunity(client, headers, **overrides):
     return res.json()
 
 
+def _legitimately_won_opportunity(client, headers, lead_name="Won Lead"):
+    """WP6 (correction plan, 2026-09-28, tightened after review): the only route to Won is
+    Qualified -> Start Project -> Quotation marked Won -- a bare PATCH straight to Won is
+    refused unconditionally now. Builds the real chain, since this file's own test
+    specifically wants to prove detail-editing works at Won, not just any terminal stage."""
+    client_row = _create_client_record(client, headers, name=f"{lead_name} Client")
+    opp = _create_opportunity(client, headers, lead_name=lead_name, client_id=client_row["id"])
+    client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2099-01-01"},
+        headers=headers,
+    )
+    project = client.post(
+        "/projects",
+        json={
+            "client_id": client_row["id"], "opportunity_id": opp["id"], "city": "Mumbai",
+            "site_condition": "level", "soil_type": "normal", "building_status": "open_air",
+            "site_access": "good", "power_available": "yes", "water_available": True, "package": "standard",
+        },
+        headers=headers,
+    ).json()
+    sport_id = next(s["id"] for s in client.get("/sports", headers=headers).json() if s["key"] == "badminton")
+    project_sport_id = client.post(
+        f"/projects/{project['id']}/sports", json={"sport_id": sport_id, "building_status": "open_air"}, headers=headers
+    ).json()["id"]
+    cost_sheet_id = client.post(
+        f"/projects/{project['id']}/cost-sheets", json={"cost_total": 850000}, headers=headers
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    estimate = client.post(
+        f"/projects/{project['id']}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},
+        headers=headers,
+    ).json()
+    option_id = estimate["options"][0]["id"]
+    client.patch(
+        f"/estimates/{estimate['id']}/options/{option_id}/client-status",
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    quotation = client.post(
+        f"/projects/{project['id']}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [option_id]},
+        headers=headers,
+    ).json()
+    client.post(f"/quotations/{quotation['id']}/release", headers=headers)
+    client.post(f"/quotations/{quotation['id']}/send", headers=headers)
+    won = client.post(
+        f"/quotations/{quotation['id']}/mark-won",
+        json={"reason": "Best offer", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert won.status_code == 200, won.text
+    return client.get(f"/opportunities/{opp['id']}", headers=headers).json()
+
+
 def _client_audit(client, headers, client_id):
     res = client.get("/audit-log", params={"document_type": "client", "document_id": client_id}, headers=headers)
     assert res.status_code == 200, res.text
@@ -114,9 +170,8 @@ def test_lead_details_null_or_blank_clears_contact_fields(client, director_user)
 
 def test_lead_details_editable_at_any_stage_including_won_and_lost(client, director_user):
     headers = _director_headers(client, director_user)
-    won = _create_opportunity(client, headers, lead_name="Won Lead")
+    won = _legitimately_won_opportunity(client, headers, lead_name="Won Lead")
     lost = _create_opportunity(client, headers, lead_name="Lost Lead")
-    client.patch(f"/opportunities/{won['id']}/stage", json={"stage": "won"}, headers=headers)
     client.patch(f"/opportunities/{lost['id']}/stage", json={"stage": "lost", "lost_reason": "price"}, headers=headers)
 
     for opp, name in ((won, "Won Lead Fixed"), (lost, "Lost Lead Fixed")):

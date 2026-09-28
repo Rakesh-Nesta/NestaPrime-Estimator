@@ -73,6 +73,24 @@ class Package(str, enum.Enum):  # B.1 field #12
     PREMIUM = "premium"
 
 
+class ProjectPhase(str, enum.Enum):
+    """WP6 (correction plan, 2026-09-28): tracks the business milestone that governs when a
+    Project's Opportunity actually closes, separate from and never gating any of the
+    project's own screens (Sports/Scope/Survey/Documents all work identically in every
+    phase). PRESALES is the default for every Project (opportunity-linked or not) -- a
+    Project no longer waits for its Opportunity to be Won before it can start; that
+    changed with "Start Project" moving to the Qualified stage (see create_project).
+    CONFIRMED is set only by mark_quotation_won, which also closes the linked Opportunity
+    as Won in the same transaction -- Quotation acceptance is what confirms the project now,
+    not the other way around. ABANDONED is set only when a still-PRESALES Project's linked
+    Opportunity is independently moved to Lost (update_opportunity_stage) -- the project's
+    own records are kept, never deleted, simply out of the active pipeline."""
+
+    PRESALES = "presales"
+    CONFIRMED = "confirmed"
+    ABANDONED = "abandoned"
+
+
 class Project(Base):
     """Part O PROJECTS + Part B.1's setup fields (Screen 1, before sport
     selection). Field numbers in comments match B.1's own numbering."""
@@ -170,6 +188,12 @@ class Project(Base):
     # and Estimate -- one note per project (not per screen), passed through
     # to the Quotation PDF's "Special Remarks / T&C" section when non-empty.
     custom_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # WP6 (correction plan, 2026-09-28): see ProjectPhase's own docstring. Purely
+    # informational/consistency-tracking -- never gates any existing screen.
+    phase: Mapped[ProjectPhase] = mapped_column(
+        Enum(ProjectPhase, name="project_phase"), default=ProjectPhase.PRESALES, nullable=False
+    )
 
     # Amendment 28 Part B: marks validation/demo data (e.g. Note R1's own
     # Mathura/Noida/Bathinda projects) so it doesn't crowd the dashboard's

@@ -35,7 +35,10 @@ def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(cl
     opp = client.post(
         "/opportunities", json={"lead_name": "Harness lead", "next_follow_up_date": "2099-01-01"}, headers=headers
     ).json()
-    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    # Lost, not Won: WP6 (tightened after review) refuses a direct PATCH straight to Won
+    # unconditionally now -- this test only needs a closed Opportunity in the deletion
+    # chain, not specifically a Won one.
+    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "lost"}, headers=headers)
     client.patch(f"/opportunities/{opp['id']}/link-client", json={"client_id": doomed_client_id}, headers=headers)
     project_id = _create_project(client, headers, doomed_client_id)
     project_sport_id = _add_project_sport(client, headers, project_id)

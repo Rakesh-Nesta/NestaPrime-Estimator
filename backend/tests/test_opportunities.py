@@ -44,6 +44,65 @@ def _create_opportunity(client, headers, **overrides):
     return res.json()
 
 
+def _legitimately_won_opportunity(client, headers, lead_name="Test Lead"):
+    """WP6 (correction plan, 2026-09-28, tightened after review): the only route to Won is
+    now Qualified -> Start Project -> Quotation marked Won -- a bare PATCH straight to Won
+    is refused (409) unless that whole chain already happened. Builds the real chain so
+    tests that need a genuinely Won Opportunity (not just any terminal stage) still get
+    one, rather than weakening what they assert by substituting Lost."""
+    client_row = _create_client_record(client, headers, name=f"{lead_name} Client")
+    opp = _create_opportunity(client, headers, lead_name=lead_name, client_id=client_row["id"])
+    res = client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    project = client.post(
+        "/projects",
+        json={
+            "client_id": client_row["id"], "opportunity_id": opp["id"], "city": "Mumbai",
+            "site_condition": "level", "soil_type": "normal", "building_status": "open_air",
+            "site_access": "good", "power_available": "yes", "water_available": True, "package": "standard",
+        },
+        headers=headers,
+    ).json()
+    sport_id = next(s["id"] for s in client.get("/sports", headers=headers).json() if s["key"] == "badminton")
+    project_sport_id = client.post(
+        f"/projects/{project['id']}/sports", json={"sport_id": sport_id, "building_status": "open_air"}, headers=headers
+    ).json()["id"]
+    cost_sheet_id = client.post(
+        f"/projects/{project['id']}/cost-sheets", json={"cost_total": 850000}, headers=headers
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=headers)
+    estimate = client.post(
+        f"/projects/{project['id']}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 850000}]},
+        headers=headers,
+    ).json()
+    option_id = estimate["options"][0]["id"]
+    client.patch(
+        f"/estimates/{estimate['id']}/options/{option_id}/client-status",
+        json={"client_status": "approved", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    quotation = client.post(
+        f"/projects/{project['id']}/quotations",
+        json={"estimate_id": estimate["id"], "included_option_ids": [option_id]},
+        headers=headers,
+    ).json()
+    client.post(f"/quotations/{quotation['id']}/release", headers=headers)
+    client.post(f"/quotations/{quotation['id']}/send", headers=headers)
+    won = client.post(
+        f"/quotations/{quotation['id']}/mark-won",
+        json={"reason": "Best offer", "waive_evidence_reason": "test setup"},
+        headers=headers,
+    )
+    assert won.status_code == 200, won.text
+    return client.get(f"/opportunities/{opp['id']}", headers=headers).json()
+
+
 def test_add_enquiry_creates_lead_only_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
     row = _create_opportunity(client, headers, lead_name="Jane Doe", lead_phone="9990001111")
@@ -146,12 +205,14 @@ def test_stage_change_to_non_terminal_sets_the_new_follow_up_date(client, direct
 
 
 def test_stage_change_to_won_clears_the_follow_up_date(client, director_user):
+    """WP6, tightened after review: Won is only reachable via mark_quotation_won now, so
+    this exercises the real route (Qualified -> Project -> Quotation Won) rather than a
+    bare PATCH, which would now be refused (see
+    test_a_qualified_opportunity_with_no_project_cannot_be_marked_won_directly)."""
     headers = _director_headers(client, director_user)
-    row = _create_opportunity(client, headers)
-    res = client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "won"}, headers=headers)
-    assert res.status_code == 200, res.text
-    assert res.json()["stage"] == "won"
-    assert res.json()["next_follow_up_date"] is None
+    opp = _legitimately_won_opportunity(client, headers)
+    assert opp["stage"] == "won"
+    assert opp["next_follow_up_date"] is None
 
 
 def test_stage_change_to_lost_clears_the_date_and_records_the_reason(client, director_user):
@@ -210,9 +271,12 @@ def test_follow_up_endpoint_rejects_null_date(client, director_user):
 
 
 def test_follow_up_endpoint_blocked_on_a_closed_opportunity(client, director_user):
+    """Terminal-ness is what this checks (TERMINAL_STAGES membership) -- Lost exercises
+    the identical code path Won would, and is directly reachable via a bare PATCH (Won no
+    longer is, see test_a_qualified_opportunity_with_no_project_cannot_be_marked_won_directly)."""
     headers = _director_headers(client, director_user)
     row = _create_opportunity(client, headers)
-    client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "lost"}, headers=headers)
 
     res = client.patch(
         f"/opportunities/{row['id']}/follow-up", json={"next_follow_up_date": "2026-11-01"}, headers=headers
@@ -256,8 +320,7 @@ def test_list_filters_by_relationship_lead_vs_client(client, director_user):
 
 def test_list_filters_by_stage(client, director_user):
     headers = _director_headers(client, director_user)
-    row = _create_opportunity(client, headers, lead_name="Won Lead")
-    client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "won"}, headers=headers)
+    _legitimately_won_opportunity(client, headers, lead_name="Won Lead")
     _create_opportunity(client, headers, lead_name="New Lead")
 
     won = client.get("/opportunities", params={"stage": "won"}, headers=headers).json()
@@ -265,12 +328,18 @@ def test_list_filters_by_stage(client, director_user):
 
 
 def test_opportunity_stage_change_is_audit_logged(client, director_user):
-    """WP3 (correction plan, 2026-09-27): a stage change -- especially the
-    transition to Won/Lost, which the dashboard and Pipeline report both
-    read off -- is a significant business event and is now audit-logged."""
+    """WP3 (correction plan, 2026-09-27): a stage change -- especially the transition to
+    Won/Lost, which the dashboard and Pipeline report both read off -- is a significant
+    business event and is now audit-logged. Uses Lost, not Won, as its example: WP6
+    (tightened after review) refuses a direct PATCH straight to Won unconditionally (see
+    test_a_qualified_opportunity_with_no_project_cannot_be_marked_won_directly), so Won's
+    own audit-log coverage is exercised separately, via the real mark_quotation_won route
+    (test_marking_quotation_won_confirms_project_and_closes_linked_opportunity_as_won,
+    test_project_phase.py) -- the mechanism under test here (any stage change gets one
+    audit entry with old/new values) is identical regardless of which stage."""
     headers = _director_headers(client, director_user)
     row = _create_opportunity(client, headers)
-    client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "lost"}, headers=headers)
 
     entries = client.get(
         "/audit-log", params={"document_type": "opportunity", "document_id": row["id"]}, headers=headers
@@ -278,7 +347,7 @@ def test_opportunity_stage_change_is_audit_logged(client, director_user):
     stage_entries = [e for e in entries if e["field"] == "stage"]
     assert len(stage_entries) == 1
     assert stage_entries[0]["old_value"] == "new"
-    assert stage_entries[0]["new_value"] == "won"
+    assert stage_entries[0]["new_value"] == "lost"
 
 
 def test_opportunity_follow_up_edits_stay_out_of_the_audit_log(client, director_user):
@@ -300,7 +369,11 @@ def test_opportunity_follow_up_edits_stay_out_of_the_audit_log(client, director_
 
 
 # ---------------------------------------------------------------------------
-# Amendment 44 Phase C: Won -> Start Project hand-off
+# Amendment 44 Phase C / WP6 (correction plan, 2026-09-28): Qualified -> Start Project
+# hand-off. "Start Project" used to require a Won Opportunity; WP6 moves it to
+# Qualified -- see ProjectPhase's own docstring (app/models/project.py) and
+# mark_quotation_won (app/api/documents.py), which is what now confirms the Project
+# and closes the Opportunity as Won, together, once its Quotation actually wins.
 # ---------------------------------------------------------------------------
 
 _PROJECT_FIELDS = {
@@ -315,17 +388,21 @@ _PROJECT_FIELDS = {
 }
 
 
-def _won_linked_opportunity(client, headers):
+def _qualified_linked_opportunity(client, headers):
     client_row = _create_client_record(client, headers)
     opp = _create_opportunity(client, headers, client_id=client_row["id"])
-    res = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    res = client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        headers=headers,
+    )
     assert res.status_code == 200, res.text
     return client_row, res.json()
 
 
-def test_start_project_from_a_won_linked_opportunity(client, director_user):
+def test_start_project_from_a_qualified_linked_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
-    client_row, opp = _won_linked_opportunity(client, headers)
+    client_row, opp = _qualified_linked_opportunity(client, headers)
 
     res = client.post(
         "/projects",
@@ -335,12 +412,13 @@ def test_start_project_from_a_won_linked_opportunity(client, director_user):
     assert res.status_code == 201, res.text
     project = res.json()
     assert project["opportunity_id"] == opp["id"]
+    assert project["phase"] == "presales"
 
     back = client.get(f"/opportunities/{opp['id']}", headers=headers).json()
     assert back["project_id"] == project["id"]
 
 
-def test_start_project_rejects_a_non_won_opportunity(client, director_user):
+def test_start_project_rejects_a_non_qualified_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
     client_row = _create_client_record(client, headers)
     opp = _create_opportunity(client, headers, client_id=client_row["id"])  # still "new"
@@ -353,11 +431,31 @@ def test_start_project_rejects_a_non_won_opportunity(client, director_user):
     assert res.status_code == 400
 
 
+def test_a_qualified_opportunity_with_no_project_cannot_be_marked_won_directly(client, director_user):
+    """WP6, tightened after review: the only route to Won is Qualified -> Start Project ->
+    Quotation marked Won -- a bare Qualified Opportunity (no Project at all yet) trying to
+    skip straight to Won is refused (409), not the 200 an earlier version of this design
+    allowed. This is what test_start_project_rejects_a_won_opportunity used to test from
+    the other side (start a project on an already-Won opportunity) -- that scenario can no
+    longer be constructed at all now that reaching Won without a Project is itself
+    refused, so this replaces it with the real, current behaviour."""
+    headers = _director_headers(client, director_user)
+    _, opp = _qualified_linked_opportunity(client, headers)
+
+    won = client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    assert won.status_code == 409, won.text
+    assert client.get(f"/opportunities/{opp['id']}", headers=headers).json()["stage"] == "qualified"
+
+
 def test_start_project_rejects_a_lead_only_opportunity(client, director_user):
     headers = _director_headers(client, director_user)
     client_row = _create_client_record(client, headers)
     opp = _create_opportunity(client, headers)  # no client_id
-    client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "won"}, headers=headers)
+    client.patch(
+        f"/opportunities/{opp['id']}/stage",
+        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        headers=headers,
+    )
 
     res = client.post(
         "/projects",
@@ -369,7 +467,7 @@ def test_start_project_rejects_a_lead_only_opportunity(client, director_user):
 
 def test_start_project_rejects_a_client_mismatch(client, director_user):
     headers = _director_headers(client, director_user)
-    _, opp = _won_linked_opportunity(client, headers)
+    _, opp = _qualified_linked_opportunity(client, headers)
     other_client = _create_client_record(client, headers, name="Some Other Client")
 
     res = client.post(
@@ -382,7 +480,7 @@ def test_start_project_rejects_a_client_mismatch(client, director_user):
 
 def test_an_opportunity_can_only_start_one_project(client, director_user):
     headers = _director_headers(client, director_user)
-    client_row, opp = _won_linked_opportunity(client, headers)
+    client_row, opp = _qualified_linked_opportunity(client, headers)
     payload = {"client_id": client_row["id"], "opportunity_id": opp["id"], **_PROJECT_FIELDS}
 
     assert client.post("/projects", json=payload, headers=headers).status_code == 201
