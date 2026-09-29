@@ -32,6 +32,7 @@ from app.api import (
     lighting,
     message_templates,
     messages,
+    notifications,
     opportunities,
     ownership,
     overheads,
@@ -166,6 +167,7 @@ app.include_router(field_settings.field_settings_router)
 app.include_router(attachments.attachments_router)
 app.include_router(audit_log.audit_log_router)
 app.include_router(messages.messages_router)
+app.include_router(notifications.notifications_router)
 app.include_router(wa_gateway_webhook.wa_gateway_webhook_router)
 app.include_router(message_templates.message_templates_router)
 app.include_router(pdf_documents.pdf_documents_router)

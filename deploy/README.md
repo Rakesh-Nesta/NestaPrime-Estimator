@@ -406,6 +406,45 @@ backup, not just one:
 
 Record every drill -- pass or fail -- in [docs/ops/restore-drill-log.md](../docs/ops/restore-drill-log.md), the same "recurring, provably done" discipline Note R2 itself asks for.
 
+## Daily follow-up reminders (WP8)
+
+Same "no in-process scheduler" situation as the backup above -- an OS-level crontab entry
+runs `deploy/send_daily_reminders.sh`, which execs into the running `backend` container and
+invokes `scripts/send_daily_follow_up_reminders.py`. That script computes Asia/Kolkata time
+itself (via Python's `zoneinfo`, not the server's own OS timezone, which may not be IST) and
+only does real work inside the 09:00-09:30 IST window each day -- so the cron entry below
+runs it every 15 minutes and the script's own per-notification idempotency (unique on
+recipient + follow-up + kind + calendar day) makes that safe: nothing already sent today is
+ever sent again, and anything that failed or newly became due gets picked up by the next tick
+inside the same window.
+
+**One-time setup, on the server:**
+
+```bash
+chmod +x deploy/send_daily_reminders.sh
+crontab -e
+```
+
+Add:
+
+```cron
+*/15 8-10 * * * /home/ubuntu/NestaPrime-Estimator/deploy/send_daily_reminders.sh >> /home/ubuntu/nestaprime-backups/reminders.log 2>&1
+```
+
+The `8-10` hour range is deliberately wider than the actual 09:00-09:30 IST window and
+deliberately in the SERVER'S OWN clock, whatever timezone that turns out to be -- the script
+itself is the only thing that decides whether it's really 09:00-09:30 IST right now, so this
+line only needs to guarantee the script gets invoked *at some point* covering that window
+regardless of server TZ, not to compute the correct UTC offset by hand. Confirm the server's
+actual TZ with `date` before deploying, and widen the hour range further if it's unclear.
+
+A run's own summary (owners notified, escalations created, digest emails sent/failed) is
+printed to the log file above -- check it after the first real deploy, and periodically after
+that, the same "prove it, don't just assume it's running" discipline as the backup drill.
+Director/Admin can also check `GET /notifications/delivery-failures` in the app itself for any
+email that's exhausted its retries (5 attempts) and needs a human look (usually an SMTP
+config or a stale recipient address, not a code problem).
+
 ## What's deliberately not here yet
 
 - **HTTPS** -- serving plain HTTP on the IP directly; no domain name to get a TLS cert

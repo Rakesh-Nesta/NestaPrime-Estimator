@@ -2158,3 +2158,38 @@ export async function deleteFollowUp(token, followUpId) {
   });
   return handle(res);
 }
+
+// WP8 (correction plan, 2026-09-29): the in-app notification inbox.
+export async function listNotifications(token, { unreadOnly } = {}) {
+  const params = new URLSearchParams();
+  if (unreadOnly) params.set("unread_only", "true");
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/notifications${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function getUnreadNotificationCount(token) {
+  const res = await fetch(`${API_BASE}/notifications/unread-count`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function markNotificationRead(token, notificationId) {
+  const res = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function markAllNotificationsRead(token) {
+  const res = await fetch(`${API_BASE}/notifications/mark-all-read`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function listNotificationDeliveryFailures(token) {
+  const res = await fetch(`${API_BASE}/notifications/delivery-failures`, { headers: authHeaders(token) });
+  return handle(res);
+}
