@@ -4,8 +4,6 @@ An Admin has no business records, so the dashboard's counts and revenue are not 
 recent activity only -- who exists, who is locked or still on a temporary password, and the latest audit entries
 (with cost and margin values hidden for an Admin, in full for the Director)."""
 
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -34,7 +32,6 @@ def get_admin_overview(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("admin", "director")),
 ):
-    now = datetime.now(UTC).replace(tzinfo=None)
     users = db.query(User).all()
     by_role = {role.value: 0 for role in UserRole}
     for user in users:
@@ -44,7 +41,7 @@ def get_admin_overview(
     return AdminOverviewOut(
         active_users_by_role=by_role,
         inactive_users=sum(1 for u in users if not u.is_active),
-        locked_accounts=sum(1 for u in users if u.locked_until is not None and u.locked_until > now),
+        locked_accounts=sum(1 for u in users if u.is_locked),
         awaiting_password_change=sum(1 for u in users if u.is_active and u.must_change_password),
         recent_activity=[
             mask_for_role(AuditLogEntryOut.model_validate(entry), current_user.role.value) for entry in entries

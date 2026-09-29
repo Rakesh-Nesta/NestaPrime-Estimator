@@ -135,6 +135,11 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   const own = data.scope === "own";
   const salesTeam = data.sales_performance || null;
   const mine = (label) => (own ? `My ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label);
+  // Dashboard fix (2026-09-29 correction plan): the Follow-ups due tile's destination
+  // (GET /follow-ups with no filter) narrows a Sales user to their own rows unconditionally
+  // (follow_ups.py, not gated by the Amendment 60 switch the way `own` above is) -- so this one
+  // tile reads "My follow-ups due" for Sales regardless of `own`, not just when `own` is true.
+  const followupsDueLabel = role === "sales" ? "My follow-ups due" : mine("Follow-ups due");
   const nextMoves = clients ? dueFollowUps(clients, opportunities || []).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
 
   // Amendment 49 (Section 53): the drill-down behind "Pending quotations" --
@@ -148,7 +153,10 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       label: mine("Open opportunities"),
       value: summary.open_opportunities_count,
       target: canSeeList ? "opportunities" : null,
-      preset: {},
+      // Dashboard fix (2026-09-29 correction plan): this count is New + Contacted + Qualified
+      // (Won/Lost excluded, matching dashboard.py's own open_opportunities_count) -- the
+      // destination must land on that same filtered set, not the unfiltered list.
+      preset: { statusGroup: "open" },
       icon: FunnelIcon,
     },
     {
@@ -166,7 +174,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       icon: FolderIcon,
     },
     {
-      label: mine("Follow-ups due"),
+      label: followupsDueLabel,
       value: summary.followups_due_count,
       target: CAN_SEE_CLIENT_LIST.includes(role) ? "followups" : null,
       preset: {},
@@ -304,7 +312,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
           </h3>
             {canSeeList && (
               <button
-                onClick={() => onDrillDown("opportunities", {})}
+                onClick={() => onDrillDown("opportunities", { statusGroup: "open" })}
                 className="text-xs uppercase tracking-wider text-gold hover:text-gold-hover"
               >
                 View all →

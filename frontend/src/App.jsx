@@ -115,6 +115,11 @@ export default function App() {
     }
     // A search-prefilled Leads & Clients filter belongs to that one visit.
     if (target !== "clients_admin") setClientsSearch((c) => (c.text ? { text: "", nonce: c.nonce + 1 } : c));
+    // A drill-down preset (Dashboard tile, "View all", etc.) belongs to that one visit too -- a
+    // direct Sidebar/tab click straight to `target` must land unfiltered, not carry over whatever
+    // preset a previous handleDrillDown() call left behind. handleDrillDown() below re-applies its
+    // own preset immediately after this, in the same event handler, so that path is unaffected.
+    setDrillPreset({});
     setScreen(target);
     setNavMenuOpen(false);
   }
@@ -133,8 +138,11 @@ export default function App() {
   }
 
   function handleDrillDown(target, preset = {}) {
-    setDrillPreset(preset);
+    // goToTopLevel() itself clears drillPreset (a plain nav must land unfiltered) -- call it first,
+    // then apply this drill-down's own preset, so it isn't immediately wiped out. Both setState
+    // calls land in the same event handler and commit together.
     goToTopLevel(target);
+    setDrillPreset(preset);
   }
 
   function handleNewProject() {
@@ -278,7 +286,11 @@ export default function App() {
           </>
         )}
         {screen === "dashboard" && user.role === "admin" && (
-          <AdminOverview token={accessToken} onManageTeam={() => goToTopLevel("team_access")} />
+          <AdminOverview
+            token={accessToken}
+            onManageTeam={() => goToTopLevel("team_access")}
+            onOpenTeam={(preset) => handleDrillDown("team_access", preset)}
+          />
         )}
         {screen === "dashboard" && user.role !== "admin" && (
           <Dashboard
@@ -322,7 +334,13 @@ export default function App() {
           <MasterSettings token={accessToken} currentUser={user} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "team_access" && canOpen("team_access", user.role) && (
-          <TeamAccess token={accessToken} currentUser={user} onBack={() => setScreen(preNavScreen)} />
+          <TeamAccess
+            token={accessToken}
+            currentUser={user}
+            initialRoleFilter={drillPreset.role || ""}
+            initialStatusFilter={drillPreset.status || ""}
+            onBack={() => setScreen(preNavScreen)}
+          />
         )}
         {screen === "sports_scope_admin" && canOpen("sports_scope_admin", user.role) && (
           <SportsScopeAdmin token={accessToken} onBack={() => setScreen(preNavScreen)} />
@@ -368,7 +386,13 @@ export default function App() {
           <Help role={user.role} onBack={() => setScreen(preNavScreen)} />
         )}
         {screen === "opportunities" && (
-          <Opportunities token={accessToken} role={user.role} onBack={() => setScreen(preNavScreen)} onStartProject={handleStartProject} />
+          <Opportunities
+            token={accessToken}
+            role={user.role}
+            initialStatusGroup={drillPreset.statusGroup || ""}
+            onBack={() => setScreen(preNavScreen)}
+            onStartProject={handleStartProject}
+          />
         )}
         {screen === "followups" && (
           <FollowUps

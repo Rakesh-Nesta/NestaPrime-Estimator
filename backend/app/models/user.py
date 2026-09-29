@@ -65,3 +65,10 @@ class User(Base):
     # wouldn't be visible to both.
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime, default=None, nullable=True)
+
+    @property
+    def is_locked(self) -> bool:
+        """Same definition admin_overview.py's own locked_accounts count uses -- a plain property (not a
+        column) so both read it from one place. locked_until is stored naive; compare against a naive UTC
+        now the same way admin_overview.py already does, not datetime.now(UTC) directly."""
+        return self.locked_until is not None and self.locked_until > datetime.now(UTC).replace(tzinfo=None)

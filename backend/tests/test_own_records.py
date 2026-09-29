@@ -318,6 +318,28 @@ def test_with_the_switch_off_the_salespersons_dashboard_is_the_companys_as_befor
     assert client.get("/dashboard", headers=two_sales["a"]).json()["summary"]["open_projects_count"] >= 2
 
 
+def test_with_the_switch_off_a_salespersons_followups_due_count_is_still_only_their_own(client, two_sales):
+    """Dashboard fix (2026-09-29 correction plan): followups_due_count is scoped to the Sales user's own id
+    unconditionally -- unlike open_projects_count above (company-wide with the switch off), this one field
+    matches GET /follow-ups' own unconditional Sales narrowing (follow_ups.py's list_follow_ups), not the
+    Amendment 60 switch. Before this fix, with the switch off, this count was company-wide too -- so the
+    tile said e.g. "2" while clicking through (narrowed to just the Sales user's own, regardless of the
+    switch) showed a different, smaller number."""
+    today = str(date.today())
+    opp_a = client.post(
+        "/opportunities", json={"lead_name": "Due for A", "next_follow_up_date": today}, headers=two_sales["director"]
+    ).json()["id"]
+    opp_b = client.post(
+        "/opportunities", json={"lead_name": "Due for B", "next_follow_up_date": today}, headers=two_sales["director"]
+    ).json()["id"]
+    _give(client, two_sales["director"], "opportunity", opp_a, two_sales["ids"]["a"])
+    _give(client, two_sales["director"], "opportunity", opp_b, two_sales["ids"]["b"])
+
+    mine = client.get("/dashboard", headers=two_sales["a"]).json()
+    assert mine["scope"] == "company"  # the switch is off -- everything else here is company-wide
+    assert mine["summary"]["followups_due_count"] == 1  # but this field is still just A's own, not A's + B's
+
+
 # --- reports --------------------------------------------------------------------------------------------------
 
 

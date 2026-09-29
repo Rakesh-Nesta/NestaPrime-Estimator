@@ -13,6 +13,12 @@ import { DocumentIcon, FunnelIcon, SearchIcon, UsersIcon } from "./Icons";
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const TERMINAL_STAGES = ["won", "lost"];
 const STATUS_FILTERS = ["", ...STAGES];
+// Dashboard fix (2026-09-29 correction plan): the Dashboard's "Open opportunities" tile and the
+// Sales pipeline panel's own "View all" both count New + Contacted + Qualified (Won/Lost
+// excluded -- same definition dashboard.py's _summary() uses for open_opportunities_count). This
+// is a second, synthetic value for statusFilter (not one of STAGES) so both entry points can land
+// here pre-filtered to that same set instead of the unfiltered list.
+const OPEN_STAGES = ["new", "contacted", "qualified"];
 
 // Amendment 44 (Section E step 5): same small-local-duplicate style as
 // ClientsAdmin.jsx's own STATUS_PILL_STYLE.
@@ -57,12 +63,12 @@ const canEditDetails = (role) => ["sales", "pm", "director"].includes(role);
 // Redesign (2026-09-27, Director's request): same screen, same data and the same server calls -- presented
 // as a list with a slide-in details panel instead of stacked cards with every field editable inline. The
 // sidebar and header are untouched; only this screen's own content changed.
-export default function Opportunities({ token, role, onBack, onStartProject }) {
+export default function Opportunities({ token, role, onBack, onStartProject, initialStatusGroup }) {
   const [opportunities, setOpportunities] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [clients, setClients] = useState([]);
   const [relationship, setRelationship] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(initialStatusGroup === "open" ? "open" : "");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -146,7 +152,7 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
   const needle = search.trim().toLowerCase();
   const visible = opportunities.filter(
     (o) =>
-      (!statusFilter || o.stage === statusFilter) &&
+      (!statusFilter || (statusFilter === "open" ? OPEN_STAGES.includes(o.stage) : o.stage === statusFilter)) &&
       matchesSearch(needle, o.lead_name, o.lead_phone, o.lead_email, o.client_id && clientNameById[o.client_id])
   );
   const tabCounts = { "": opportunities.length };
@@ -165,6 +171,13 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
       icon: UsersIcon,
       active: relationship === "lead",
       onClick: () => { setStatusFilter(""); setRelationship("lead"); },
+    },
+    {
+      label: "Open opportunities",
+      value: opportunities.filter((o) => OPEN_STAGES.includes(o.stage)).length,
+      icon: FunnelIcon,
+      active: statusFilter === "open",
+      onClick: () => setStatusFilter(statusFilter === "open" ? "" : "open"),
     },
     {
       label: "Won",
@@ -202,7 +215,7 @@ export default function Opportunities({ token, role, onBack, onStartProject }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-5">
         {tiles.map((tile) => (
           <button
             key={tile.label}

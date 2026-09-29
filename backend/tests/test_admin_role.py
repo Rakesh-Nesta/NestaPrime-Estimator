@@ -213,6 +213,27 @@ def test_the_admin_overview_shows_people_and_masked_recent_activity(client, dire
     assert client.get("/admin/overview", headers=_pm(client, db_session)).status_code == 403
 
 
+def test_get_users_exposes_the_same_lockout_state_the_overviews_locked_accounts_tile_counts(client, director_user, db_session):
+    """Dashboard fix (2026-09-29 correction plan): GET /users now returns is_locked (User.is_locked,
+    Amendment 18) alongside every other row, matching the count admin_overview.py's locked_accounts already
+    used -- previously the People list had no way to show, or filter to, who is actually locked."""
+    from app.api.auth import LOGIN_ATTEMPT_THRESHOLD
+
+    director = _director_headers(client, director_user)
+    locked = client.post("/users", json=_user("sales", "locked-sales@test.local"), headers=director).json()
+    unlocked = client.post("/users", json=_user("sales", "unlocked-sales@test.local"), headers=director).json()
+    for _ in range(LOGIN_ATTEMPT_THRESHOLD):
+        client.post("/auth/login", data={"username": "locked-sales@test.local", "password": "wrong-password"})
+
+    admin = _admin(client, db_session)
+    rows = {row["id"]: row for row in client.get("/users", headers=admin).json()}
+    assert rows[locked["id"]]["is_locked"] is True
+    assert rows[unlocked["id"]]["is_locked"] is False
+
+    overview = client.get("/admin/overview", headers=admin).json()
+    assert overview["locked_accounts"] == sum(1 for row in rows.values() if row["is_locked"])
+
+
 # --- an Admin has no business surface ------------------------------------------------------------
 
 # Every route an Admin may reach, spelled out: adding one here is a decision, not a side effect.

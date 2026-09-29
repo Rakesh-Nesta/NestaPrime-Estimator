@@ -52,11 +52,16 @@ const TILE_STYLE = {
 
 const PAGE_SIZE = 8;
 
-function Tile({ tone, label, value, hint }) {
+// Dashboard fix (2026-09-29 correction plan): these tiles and the role cards below used to be plain,
+// non-interactive divs -- no missing handler was hiding behind them, there simply was no interaction at
+// all. onClick (when given) opens Team & Access -> People, pre-filtered to exactly what the tile or card
+// represents (AdminPeoplePanel's own roleFilter/statusFilter), the same "click a count, land on the
+// matching filtered records" pattern the business Dashboard uses for its own tiles.
+function Tile({ tone, label, value, hint, onClick }) {
   const style = TILE_STYLE[tone];
   const TileIcon = style.icon;
-  return (
-    <div className="bg-surface-raised border border-border-dark rounded-lg px-4 py-3 flex items-start gap-3">
+  const content = (
+    <>
       <span className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${style.bg} ${style.text}`}>
         <TileIcon className="w-4 h-4" />
       </span>
@@ -65,11 +70,21 @@ function Tile({ tone, label, value, hint }) {
         <p className="text-2xl font-semibold text-text-primary mt-0.5 tabular-nums">{value}</p>
         {hint && <p className="text-xs text-text-secondary mt-0.5">{hint}</p>}
       </div>
-    </div>
+    </>
+  );
+  return onClick ? (
+    <button
+      onClick={onClick}
+      className="text-left bg-surface-raised border border-border-dark rounded-lg px-4 py-3 flex items-start gap-3 hover:border-gold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+    >
+      {content}
+    </button>
+  ) : (
+    <div className="bg-surface-raised border border-border-dark rounded-lg px-4 py-3 flex items-start gap-3">{content}</div>
   );
 }
 
-export default function AdminOverview({ token, onManageTeam }) {
+export default function AdminOverview({ token, onManageTeam, onOpenTeam }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -149,10 +164,22 @@ export default function AdminOverview({ token, onManageTeam }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Tile tone="active" label="Active people" value={active} />
-        <Tile tone="inactive" label="Inactive" value={data.inactive_users} />
-        <Tile tone="locked" label="Locked out" value={data.locked_accounts} hint="Too many wrong passwords" />
-        <Tile tone="pending" label="Awaiting new password" value={data.awaiting_password_change} hint="Temporary password not yet changed" />
+        <Tile tone="active" label="Active people" value={active} onClick={onOpenTeam && (() => onOpenTeam({ status: "active" }))} />
+        <Tile tone="inactive" label="Inactive" value={data.inactive_users} onClick={onOpenTeam && (() => onOpenTeam({ status: "inactive" }))} />
+        <Tile
+          tone="locked"
+          label="Locked out"
+          value={data.locked_accounts}
+          hint="Too many wrong passwords"
+          onClick={onOpenTeam && (() => onOpenTeam({ status: "locked" }))}
+        />
+        <Tile
+          tone="pending"
+          label="Awaiting new password"
+          value={data.awaiting_password_change}
+          hint="Temporary password not yet changed"
+          onClick={onOpenTeam && (() => onOpenTeam({ status: "pending" }))}
+        />
       </div>
 
       <div className="bg-surface border border-border-dark rounded-lg p-5">
@@ -163,8 +190,8 @@ export default function AdminOverview({ token, onManageTeam }) {
           {roles.map((r) => {
             const style = ROLE_STYLE[r];
             const RoleIcon = style.icon;
-            return (
-              <div key={r} className="flex items-center gap-2.5 border border-border-dark rounded px-3 py-2 text-sm">
+            const cardContent = (
+              <>
                 <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${style.bg} ${style.text}`}>
                   <RoleIcon className="w-3.5 h-3.5" />
                 </span>
@@ -172,6 +199,19 @@ export default function AdminOverview({ token, onManageTeam }) {
                   <span className="block text-xs text-text-secondary truncate">{ROLE_LABELS[r]}</span>
                   <span className="block font-medium tabular-nums">{data.active_users_by_role[r]}</span>
                 </span>
+              </>
+            );
+            return onOpenTeam ? (
+              <button
+                key={r}
+                onClick={() => onOpenTeam({ role: r, status: "active" })}
+                className="flex items-center gap-2.5 border border-border-dark rounded px-3 py-2 text-sm text-left hover:border-gold hover:-translate-y-0.5 transition-all duration-250 ease-out"
+              >
+                {cardContent}
+              </button>
+            ) : (
+              <div key={r} className="flex items-center gap-2.5 border border-border-dark rounded px-3 py-2 text-sm">
+                {cardContent}
               </div>
             );
           })}

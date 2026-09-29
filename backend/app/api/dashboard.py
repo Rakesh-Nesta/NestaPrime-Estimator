@@ -111,10 +111,19 @@ class DashboardOut(BaseModel):
     recent_activity: list[AuditLogEntryOut] | None
 
 
-def _summary(db: Session, owner: uuid.UUID | None) -> DashboardSummary:
+def _summary(db: Session, owner: uuid.UUID | None, followups_owner: uuid.UUID | None) -> DashboardSummary:
     """The Overview's numbers -- for the whole company (owner None), or for one person's own records (Amendment 60,
     Section 63: a salesperson's dashboard is their own performance, never the company's, and the same function fills
-    the Director's per-salesperson table)."""
+    the Director's per-salesperson table).
+
+    followups_due_count uses its own, separate owner (followups_owner) rather than `owner`. Dashboard fix
+    (2026-09-29 correction plan): the "Follow-ups due" tile's destination (GET /follow-ups with no filter,
+    follow_ups.py's list_follow_ups) narrows a Sales user to their own rows UNCONDITIONALLY, regardless of the
+    Amendment 60 own-records switch -- but `owner` here follows that switch. With the switch off, that mismatch
+    made the tile count company-wide while the destination it linked to stayed Sales-narrowed underneath it (e.g.
+    tile said "2", the screen it opened showed "0"). get_dashboard() always passes the Sales user's own id as
+    followups_owner, matching the destination's own narrowing -- every other role's followups_owner still equals
+    `owner`, unchanged."""
     # Amendment 28 Part A: "closed" means *every* Quotation on the project
     # has reached Won/Lost, not just any -- a project with a newer,
     # currently-active Quotation is Open regardless of an older Lost one
@@ -183,9 +192,10 @@ def _summary(db: Session, owner: uuid.UUID | None) -> DashboardSummary:
         Opportunity.stage.notin_(list(TERMINAL_STAGES)),
     )
     stage_query = db.query(Opportunity.stage, func.count(Opportunity.id))
+    if followups_owner is not None:
+        client_followups = client_followups.filter(Client.owner_id == followups_owner)
+        opportunity_followups = opportunity_followups.filter(Opportunity.owner_id == followups_owner)
     if owner is not None:
-        client_followups = client_followups.filter(Client.owner_id == owner)
-        opportunity_followups = opportunity_followups.filter(Opportunity.owner_id == owner)
         stage_query = stage_query.filter(Opportunity.owner_id == owner)
     followups_due_count = client_followups.count() + opportunity_followups.count()
 
@@ -231,7 +241,7 @@ def _sales_performance(db: Session) -> list["SalespersonRowOut"]:
     """Amendment 60 item 6: one row per active salesperson, from the very same numbers their own dashboard shows."""
     rows = []
     for person in db.query(User).filter(User.role == UserRole.SALES, User.is_active.is_(True)).order_by(User.name).all():
-        s = _summary(db, person.id)
+        s = _summary(db, person.id, followups_owner=person.id)
         rows.append(
             SalespersonRowOut(
                 user_id=person.id,
@@ -255,7 +265,11 @@ def get_dashboard(
 ):
     # Amendment 60: a salesperson's dashboard (once the Director has switched own-records on) is their own numbers.
     owner = current_user.id if ownership.scoping_applies(db, current_user) else None
-    summary = _summary(db, owner)
+    # Dashboard fix (2026-09-29 correction plan): followups_due_count is scoped to the Sales user's own id
+    # unconditionally, matching list_follow_ups' own unconditional Sales narrowing (follow_ups.py) -- not gated by
+    # the Amendment 60 switch the way `owner` is above. See _summary()'s own docstring.
+    followups_owner = current_user.id if current_user.role == UserRole.SALES else owner
+    summary = _summary(db, owner, followups_owner=followups_owner)
 
     recent_query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
     if owner is not None:

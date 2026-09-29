@@ -16,7 +16,7 @@ const TABS = [
   { key: "owners", label: "Record owners", roles: ["director", "pm"] },
 ];
 
-export default function TeamAccess({ token, currentUser, onBack }) {
+export default function TeamAccess({ token, currentUser, onBack, initialRoleFilter, initialStatusFilter }) {
   const [tab, setTab] = useState("people");
   const isPm = currentUser?.role === "pm";
   const tabs = TABS.filter((t) => t.roles.includes(currentUser?.role));
@@ -53,7 +53,12 @@ export default function TeamAccess({ token, currentUser, onBack }) {
       </div>
 
       {tab === "people" && currentUser?.role === "admin" && (
-        <AdminPeoplePanel token={token} currentUser={currentUser} />
+        <AdminPeoplePanel
+          token={token}
+          currentUser={currentUser}
+          initialRoleFilter={initialRoleFilter}
+          initialStatusFilter={initialStatusFilter}
+        />
       )}
       {tab === "people" && currentUser?.role !== "admin" && (
         <UserManagementTab token={token} currentUser={currentUser} />
