@@ -340,6 +340,40 @@ def test_with_the_switch_off_a_salespersons_followups_due_count_is_still_only_th
     assert mine["summary"]["followups_due_count"] == 1  # but this field is still just A's own, not A's + B's
 
 
+def test_known_gap_reassigning_a_record_leaves_its_followup_owner_stale(client, two_sales):
+    """KNOWN GAP, reproduced deliberately -- NOT fixed here (correction plan, 2026-09-29 dashboard-fix
+    follow-up review): reassigning a Client's or Opportunity's owner (PATCH /ownership/{kind}/{id}, a real
+    Amendment 60 workflow) updates that record's own owner_id but does not update the owner_id already on its
+    open FollowUp row (no call anywhere in app/api/ownership.py touches the follow_ups table). The dashboard
+    tile above (Opportunity.owner_id-based, fixed) and GET /follow-ups' own unconditional Sales narrowing
+    (FollowUp.owner_id-based, unchanged) can then read two different owners for the same record -- the same
+    tile/destination mismatch shape the dashboard fix above closes for the switch-off case, reopened here by a
+    different, unrelated cause.
+
+    Left unresolved deliberately: this record's owner_explicitly_assigned is False (inherited from the parent
+    at creation, not an explicit specialist assignment) -- a real fix must reconcile only that case and must
+    never silently overwrite a FollowUp an explicit assignment intentionally left pointing elsewhere. It must
+    also narrow the dashboard to match GET /follow-ups' own visibility rules, never loosen GET /follow-ups to
+    match the dashboard. If this test starts failing, it means someone changed that behaviour -- update or
+    remove it as part of that fix, not by chance."""
+    today = str(date.today())
+    opp = client.post("/opportunities", json={"lead_name": "Reassigned mid-flight", "next_follow_up_date": today}, headers=two_sales["a"]).json()
+    follow_up_id = next(f["id"] for f in client.get("/follow-ups", headers=two_sales["a"]).json() if f["entity_id"] == opp["id"])
+    assert client.get("/follow-ups", headers=two_sales["a"]).json()[0]["owner_explicitly_assigned"] is False
+
+    _give(client, two_sales["director"], "opportunity", opp["id"], two_sales["ids"]["b"])  # A -> B
+
+    reassigned = client.get(f"/opportunities", headers=two_sales["director"]).json()
+    assert next(o for o in reassigned if o["id"] == opp["id"])["owner_id"] == two_sales["ids"]["b"]
+
+    stale_owner = next(f["owner_id"] for f in client.get("/follow-ups", headers=two_sales["director"]).json() if f["id"] == follow_up_id)
+    assert stale_owner == two_sales["ids"]["a"]  # unchanged -- this is the gap
+
+    a_sees_it = any(f["id"] == follow_up_id for f in client.get("/follow-ups", headers=two_sales["a"]).json())
+    b_sees_it = any(f["id"] == follow_up_id for f in client.get("/follow-ups", headers=two_sales["b"]).json())
+    assert a_sees_it is True and b_sees_it is False  # A's destination still shows it; B's tile now counts it but B's destination does not
+
+
 # --- reports --------------------------------------------------------------------------------------------------
 
 
