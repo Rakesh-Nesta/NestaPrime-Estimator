@@ -428,15 +428,20 @@ crontab -e
 Add:
 
 ```cron
-*/15 8-10 * * * /home/ubuntu/NestaPrime-Estimator/deploy/send_daily_reminders.sh >> /home/ubuntu/nestaprime-backups/reminders.log 2>&1
+*/15 * * * * /home/ubuntu/NestaPrime-Estimator/deploy/send_daily_reminders.sh >> /home/ubuntu/nestaprime-backups/reminders.log 2>&1
 ```
 
-The `8-10` hour range is deliberately wider than the actual 09:00-09:30 IST window and
-deliberately in the SERVER'S OWN clock, whatever timezone that turns out to be -- the script
-itself is the only thing that decides whether it's really 09:00-09:30 IST right now, so this
-line only needs to guarantee the script gets invoked *at some point* covering that window
-regardless of server TZ, not to compute the correct UTC offset by hand. Confirm the server's
-actual TZ with `date` before deploying, and widen the hour range further if it's unclear.
+Every 15 minutes, all day, every day -- not restricted to a server-clock hour range. An
+earlier version of this doc restricted the crontab to hours `8-10` in the server's own clock,
+reasoning that this would "cover the window regardless of server TZ" -- that reasoning was
+wrong: on a server whose clock runs UTC (the common case), `8-10` UTC is 13:30-16:00 IST,
+which never overlaps the real 09:00-09:30 IST window at all, so the script would silently
+never do real work. Running every 15 minutes removes any dependency on the server's
+timezone: the script itself is the only thing that decides whether it's really 09:00-09:30
+IST right now (see `_in_window` in the script), and an out-of-window tick returns before
+opening a database connection, so 96 invocations a day cost essentially nothing. Still worth
+confirming the server's actual TZ with `date` before deploying, purely so the log file's own
+timestamps make sense when read back later -- it no longer affects whether reminders send.
 
 A run's own summary (owners notified, escalations created, digest emails sent/failed) is
 printed to the log file above -- check it after the first real deploy, and periodically after
