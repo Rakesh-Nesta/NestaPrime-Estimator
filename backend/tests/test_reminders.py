@@ -10,6 +10,7 @@ import pytest
 from app.core.reminders import (
     MAX_EMAIL_ATTEMPTS,
     FOLLOW_UP_OVERDUE_ESCALATION_DAYS_DEFAULT,
+    preview_daily_reminders,
     run_daily_reminders,
 )
 from app.core.security import hash_password
@@ -407,3 +408,161 @@ def test_owner_with_no_email_still_gets_an_in_app_notification(client, director_
     note = db_session.query(Notification).filter(Notification.user_id == mobile_only.id).first()
     assert note is not None
     assert note.email_status == NotificationEmailStatus.PENDING
+
+
+# ---------------------------------------------------------------------------
+# preview_daily_reminders -- the read-only pre-flight check (writes nothing, sends nothing)
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_preview_reports_an_accessible_reminder_without_writing_anything(client, director_user, db_session):
+    headers = _director_headers(client, director_user)
+    pm = _pm_user(db_session, email="dryrun-owner@test.local", name="Dry Run Owner")
+    project_id = _project_for(client, headers, "Dry Run Client")
+    _project_follow_up(db_session, project_id, pm.id, director_user.id, date.today() - timedelta(days=1))
+
+    preview = preview_daily_reminders(db_session, date.today())
+
+    assert db_session.query(Notification).count() == 0  # the whole point of a dry run
+    assert preview.total_notifications == 1
+    row = next(r for r in preview.recipients if r.name == "Dry Run Owner")
+    assert row.reminder_count == 1
+    assert row.email == "dryrun-owner@test.local"
+    assert row.would_email is True
+    assert row.exhausted_count == 0
+
+
+def test_dry_run_preview_reports_access_mismatch_and_overdue_escalations_to_directors(client, director_user, db_session):
+    headers = _director_headers(client, director_user)
+    sales_owner = _pm_user(db_session, email="dryrun-mismatch-owner@test.local", name="Dry Run Mismatch Owner")
+    sales_owner.role = UserRole.SALES
+    db_session.commit()
+    specialist = _sales_user(db_session, email="dryrun-mismatch-specialist@test.local", name="Dry Run Specialist")
+
+    switch = client.put("/ownership/switch", json={"on": True}, headers=headers)
+    assert switch.status_code == 200, switch.text
+
+    from tests.test_quotations_admin import _login
+
+    sales_owner_headers = _login(client, sales_owner.email)
+    client_id = _create_client_record(client, sales_owner_headers, "Dry Run Mismatch Client")
+    project_id = _create_project(client, sales_owner_headers, client_id)
+    _project_follow_up(db_session, project_id, specialist.id, director_user.id, date.today() - timedelta(days=5))
+
+    preview = preview_daily_reminders(db_session, date.today())
+
+    assert db_session.query(Notification).count() == 0
+    director_row = next(r for r in preview.recipients if r.name == director_user.name)
+    assert director_row.access_mismatch_count == 1
+    assert director_row.overdue_escalation_count == 1  # 5 days overdue, past the default 3-day threshold
+    assert not any(r.name == "Dry Run Specialist" for r in preview.recipients)  # never previewed as a recipient
+
+    client.put("/ownership/switch", json={"on": False}, headers=headers)
+
+
+def test_dry_run_preview_shows_a_failed_send_as_still_retryable_not_zero(client, director_user, db_session, monkeypatch):
+    """The point of reusing the retry rule: an item that already exists but failed to send (and
+    is still under the cap) is NOT "nothing new" -- a real run would retry it, so the preview
+    must still count it, exactly the way it would understate reality if it only checked
+    existence."""
+    from app.core import reminders as reminders_module
+    from app.services.email_gateway import EmailGatewayError
+
+    monkeypatch.setattr(
+        reminders_module.email_gateway, "send_email",
+        lambda *a, **kw: (_ for _ in ()).throw(EmailGatewayError("simulated failure")),
+    )
+
+    headers = _director_headers(client, director_user)
+    pm = _pm_user(db_session, email="dryrun-retry@test.local", name="Dry Run Retry Owner")
+    project_id = _project_for(client, headers, "Dry Run Retry Client")
+    _project_follow_up(db_session, project_id, pm.id, director_user.id, date.today() - timedelta(days=1))
+
+    run_daily_reminders(db_session, date.today())  # real run, send fails, attempts=1 (< cap)
+
+    preview = preview_daily_reminders(db_session, date.today())
+    row = next(r for r in preview.recipients if r.name == "Dry Run Retry Owner")
+    assert row.reminder_count == 1  # still due to be retried, correctly NOT reported as zero
+    assert row.exhausted_count == 0
+
+
+def test_dry_run_preview_shows_zero_once_actually_sent(client, director_user, db_session, monkeypatch):
+    from app.core import reminders as reminders_module
+
+    monkeypatch.setattr(reminders_module.email_gateway, "send_email", lambda *a, **kw: None)
+
+    headers = _director_headers(client, director_user)
+    pm = _pm_user(db_session, email="dryrun-sent@test.local", name="Dry Run Sent Owner")
+    project_id = _project_for(client, headers, "Dry Run Sent Client")
+    _project_follow_up(db_session, project_id, pm.id, director_user.id, date.today() - timedelta(days=1))
+
+    run_daily_reminders(db_session, date.today())  # real run, send succeeds
+
+    preview = preview_daily_reminders(db_session, date.today())
+    assert not any(r.name == "Dry Run Sent Owner" for r in preview.recipients)  # nothing left to do
+
+
+def test_dry_run_preview_reports_exhausted_items_separately_and_stops_counting_them_as_pending(
+    client, director_user, db_session, monkeypatch
+):
+    from app.core import reminders as reminders_module
+    from app.services.email_gateway import EmailGatewayError
+
+    monkeypatch.setattr(
+        reminders_module.email_gateway, "send_email",
+        lambda *a, **kw: (_ for _ in ()).throw(EmailGatewayError("simulated failure")),
+    )
+
+    headers = _director_headers(client, director_user)
+    pm = _pm_user(db_session, email="dryrun-exhausted@test.local", name="Dry Run Exhausted Owner")
+    project_id = _project_for(client, headers, "Dry Run Exhausted Client")
+    _project_follow_up(db_session, project_id, pm.id, director_user.id, date.today() - timedelta(days=1))
+
+    for _ in range(MAX_EMAIL_ATTEMPTS):
+        run_daily_reminders(db_session, date.today())  # exhausts the retry cap for real
+
+    preview = preview_daily_reminders(db_session, date.today())
+    row = next(r for r in preview.recipients if r.name == "Dry Run Exhausted Owner")
+    assert row.exhausted_count == 1
+    assert row.reminder_count == 0  # will NOT be retried this run -- must not be counted as pending
+    assert row.total == 0  # exhausted items are a separate bucket, not part of "would be emailed"
+
+
+def test_dry_run_preview_empty_when_nothing_is_due(client, director_user, db_session):
+    preview = preview_daily_reminders(db_session, date.today())
+    assert preview.recipients == []
+    assert preview.total_notifications == 0
+
+
+def test_dry_run_preview_makes_no_database_changes_at_all(client, director_user, db_session, monkeypatch):
+    """Not just "no new rows" -- an existing row's read status, email status and retry counter
+    must all come out byte-for-byte identical, since preview_daily_reminders must never touch a
+    row it looks at, only read it."""
+    from app.core import reminders as reminders_module
+    from app.services.email_gateway import EmailGatewayError
+
+    monkeypatch.setattr(
+        reminders_module.email_gateway, "send_email",
+        lambda *a, **kw: (_ for _ in ()).throw(EmailGatewayError("simulated failure")),
+    )
+
+    headers = _director_headers(client, director_user)
+    pm = _pm_user(db_session, email="dryrun-untouched@test.local", name="Dry Run Untouched Owner")
+    project_id = _project_for(client, headers, "Dry Run Untouched Client")
+    _project_follow_up(db_session, project_id, pm.id, director_user.id, date.today() - timedelta(days=1))
+
+    run_daily_reminders(db_session, date.today())  # creates one real, FAILED, attempts=1 row
+    before = db_session.query(Notification).order_by(Notification.id).all()
+    snapshot = [
+        (n.id, n.read_at, n.email_status, n.email_attempts, n.email_last_error, n.email_sent_at) for n in before
+    ]
+    assert len(snapshot) == 1
+
+    preview_daily_reminders(db_session, date.today())
+
+    after = db_session.query(Notification).order_by(Notification.id).all()
+    after_snapshot = [
+        (n.id, n.read_at, n.email_status, n.email_attempts, n.email_last_error, n.email_sent_at) for n in after
+    ]
+    assert after_snapshot == snapshot
+    assert len(after) == 1  # no new row either

@@ -71,6 +71,43 @@ class ReminderRunResult:
     skipped_owners_no_email: list[str] = field(default_factory=list)
 
 
+@dataclass
+class ReminderPreviewRecipient:
+    """One recipient's slice of what a real run would do right now. reminder_count,
+    access_mismatch_count and overdue_escalation_count each count items that WOULD be included
+    in this run's digest email -- a brand-new item, or an existing one still under the retry cap
+    -- exactly matching _send_digest's own to_send filter. exhausted_count is the separate,
+    non-overlapping bucket of items that exist for this recipient but have already hit
+    MAX_EMAIL_ATTEMPTS: this run will NOT retry them (they surface in the delivery-failures view
+    instead), so they are never added into the three counts above."""
+
+    name: str
+    email: str | None
+    reminder_count: int = 0
+    access_mismatch_count: int = 0
+    overdue_escalation_count: int = 0
+    exhausted_count: int = 0
+    would_email: bool = True  # False when this recipient has eligible items but no email on file
+
+    @property
+    def total(self) -> int:
+        return self.reminder_count + self.access_mismatch_count + self.overdue_escalation_count
+
+
+@dataclass
+class ReminderPreview:
+    as_of: date
+    recipients: list[ReminderPreviewRecipient] = field(default_factory=list)
+
+    @property
+    def total_notifications(self) -> int:
+        return sum(r.total for r in self.recipients)
+
+    @property
+    def total_exhausted(self) -> int:
+        return sum(r.exhausted_count for r in self.recipients)
+
+
 def _escalation_threshold_days(db: Session) -> int:
     raw = get_current_setting_value(db, FOLLOW_UP_OVERDUE_ESCALATION_DAYS_KEY)
     if raw is None:
@@ -148,6 +185,117 @@ def _get_or_create_notification(
             .first()
         )
         return existing, False
+
+
+def _notification_outcome(
+    db: Session, *, user_id: uuid.UUID, follow_up_id: uuid.UUID, kind: NotificationKind, notification_date: date,
+) -> str:
+    """Read-only classification of what this run would do with one (user, follow-up, kind, date)
+    slot, used only by preview_daily_reminders below, which must never write a row or send an
+    email. Mirrors the two real decision points exactly, so the preview can't drift from them:
+    _get_or_create_notification's own existence check (dedup), and _send_digest's own to_send
+    filter (retry cap) -- both read here, neither written to.
+
+    Returns "new" (no row yet -- would be created and included in the digest), "retry"
+    (row exists, not yet SENT, still under MAX_EMAIL_ATTEMPTS -- would be re-attempted and
+    included in the digest), "exhausted" (row exists, not SENT, already at the attempt cap --
+    already visible in delivery-failures, will NOT be retried this run), or "sent" (row exists
+    and already delivered -- nothing left to do)."""
+    existing = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id, Notification.follow_up_id == follow_up_id,
+            Notification.kind == kind, Notification.notification_date == notification_date,
+        )
+        .first()
+    )
+    if existing is None:
+        return "new"
+    if existing.email_status == NotificationEmailStatus.SENT:
+        return "sent"
+    if existing.email_attempts >= MAX_EMAIL_ATTEMPTS:
+        return "exhausted"
+    return "retry"
+
+
+def preview_daily_reminders(db: Session, today_ist: date) -> ReminderPreview:
+    """Read-only pre-flight check for a launch or ops review: reuses run_daily_reminders's own
+    selection query, owner grouping, access-check (follow_up_entities.check_follow_up_access),
+    overdue-threshold logic, deduplication rule and retry-cap rule exactly, so this can never
+    drift from what a real run would decide -- but it never calls db.add, db.commit or
+    email_gateway.send_email anywhere in its body (verified in tests by asserting the
+    Notification table is untouched, byte for byte, before and after).
+
+    Answers "who would this notify right now, how many items each, and does anything sit
+    exhausted in the delivery-failures view" before the reminder cron is ever installed, or
+    before a manual --force run. This reflects conditions at the moment it is called: due dates,
+    ownership and settings can all change before the next real run actually fires, so it is a
+    snapshot, not a guarantee -- re-run it immediately before acting on it for anything time-
+    sensitive."""
+    preview = ReminderPreview(as_of=today_ist)
+    by_recipient: dict[uuid.UUID, ReminderPreviewRecipient] = {}
+
+    def _bucket(user: User) -> ReminderPreviewRecipient:
+        if user.id not in by_recipient:
+            by_recipient[user.id] = ReminderPreviewRecipient(name=user.name, email=user.email, would_email=bool(user.email))
+        return by_recipient[user.id]
+
+    def _apply(user: User, kind: NotificationKind, follow_up_id: uuid.UUID, attr: str) -> None:
+        outcome = _notification_outcome(
+            db, user_id=user.id, follow_up_id=follow_up_id, kind=kind, notification_date=today_ist,
+        )
+        if outcome in ("new", "retry"):
+            row = _bucket(user)
+            setattr(row, attr, getattr(row, attr) + 1)
+        elif outcome == "exhausted":
+            _bucket(user).exhausted_count += 1
+        # "sent": nothing left to preview for this slot.
+
+    due_or_overdue = (
+        db.query(FollowUp)
+        .filter(FollowUp.status.notin_(TERMINAL_FOLLOW_UP_STATUSES))
+        .filter(FollowUp.due_date <= today_ist)
+        .filter(FollowUp.owner_id.isnot(None))
+        .all()
+    )
+    by_owner: dict[uuid.UUID, list[FollowUp]] = defaultdict(list)
+    for fu in due_or_overdue:
+        by_owner[fu.owner_id].append(fu)
+
+    active_directors = db.query(User).filter(User.role == UserRole.DIRECTOR, User.is_active.is_(True)).all()
+
+    for owner_id, follow_ups in by_owner.items():
+        owner = db.query(User).filter(User.id == owner_id).first()
+        if owner is None or not owner.is_active:
+            continue
+
+        accessible, mismatched = [], []
+        for fu in follow_ups:
+            try:
+                follow_up_entities.check_follow_up_access(db, owner, fu.entity_type, fu.entity_id, need="read")
+                accessible.append(fu)
+            except HTTPException:
+                mismatched.append(fu)
+
+        for fu in accessible:
+            _apply(owner, NotificationKind.FOLLOW_UP_REMINDER, fu.id, "reminder_count")
+
+        for fu in mismatched:
+            for director in active_directors:
+                _apply(director, NotificationKind.ACCESS_MISMATCH_ESCALATION, fu.id, "access_mismatch_count")
+
+    threshold_days = _escalation_threshold_days(db)
+    for fu in due_or_overdue:
+        if (today_ist - fu.due_date).days < threshold_days:
+            continue
+        for director in active_directors:
+            _apply(director, NotificationKind.FOLLOW_UP_OVERDUE_ESCALATION, fu.id, "overdue_escalation_count")
+
+    preview.recipients = sorted(
+        (r for r in by_recipient.values() if r.total > 0 or r.exhausted_count > 0),
+        key=lambda r: (r.total, r.exhausted_count), reverse=True,
+    )
+    return preview
 
 
 def _send_digest(db: Session, recipient: User, notifications: list[Notification], subject: str, intro: str) -> bool | None:
