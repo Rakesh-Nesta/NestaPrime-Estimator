@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { changePassword, getCurrentUser, getProject, login } from "./api";
+import { changePassword, getCurrentUser, getProject, getUnreadNotificationCount, login } from "./api";
 import AllEstimates from "./AllEstimates";
 import AllProjects from "./AllProjects";
 import AdminOverview from "./AdminOverview";
@@ -14,6 +14,7 @@ import Education from "./Education";
 import FollowUps from "./FollowUps";
 import Help from "./Help";
 import MasterSettings from "./MasterSettings";
+import NotificationInbox from "./NotificationInbox";
 import Opportunities from "./Opportunities";
 import Payments from "./Payments";
 import PriceRequests from "./PriceRequests";
@@ -47,6 +48,10 @@ export default function App() {
   const [screen, setScreen] = useState("dashboard"); // "dashboard" | "sports" | "scope" | "rates" | "pricing" | ...
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
+  // WP8: the header bell's own unread count -- refetched on login, on an interval, and
+  // whenever the user navigates away from the notifications screen itself (covers reads
+  // made there without needing NotificationInbox to reach back up into this state).
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   // Amendment 12 (Section 11): a Dashboard tile drill-down carries a preset
   // filter (e.g. { status: "open" }, { statusGroup: "pending" }) into
   // whichever list screen it targets.
@@ -78,6 +83,18 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [user]);
 
+  useEffect(() => {
+    if (!user || !accessToken) return undefined;
+    function refresh() {
+      getUnreadNotificationCount(accessToken)
+        .then((r) => setUnreadNotifications(r.unread))
+        .catch(() => {}); // a transient failure here shouldn't surface as a page-level error
+    }
+    refresh();
+    const interval = setInterval(refresh, 60000);
+    return () => clearInterval(interval);
+  }, [user, accessToken, screen]);
+
   const TOP_LEVEL_SCREENS = [
     "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
     "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help",
@@ -87,6 +104,8 @@ export default function App() {
     "opportunities", "followups", "payments",
     // Amendment 51: the real Team & Access screen (was Master Settings).
     "team_access",
+    // WP8: the in-app notification inbox.
+    "notifications",
   ];
   const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents"];
 
@@ -217,9 +236,18 @@ export default function App() {
           </p>
           <div className="flex items-center gap-4">
           <LiveClock name={user.name} />
-          <span title="No live notifications yet" className="text-text-secondary/60">
+          <button
+            onClick={() => goToTopLevel("notifications")}
+            title={unreadNotifications > 0 ? `${unreadNotifications} unread notification(s)` : "Notifications"}
+            className="relative text-text-secondary/60 hover:text-gold"
+          >
             <BellIcon className="w-4 h-4" />
-          </span>
+            {unreadNotifications > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-gold text-base text-[9px] font-bold flex items-center justify-center leading-none">
+                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+              </span>
+            )}
+          </button>
           <span className="w-7 h-7 rounded-full bg-surface-raised border border-border-dark flex items-center justify-center text-text-primary font-heading font-bold text-[11px]">
             {user.name
               .split(" ")
@@ -350,6 +378,9 @@ export default function App() {
             onBack={() => setScreen(preNavScreen)}
             onOpenLeadsClients={() => goToTopLevel("clients_admin")}
           />
+        )}
+        {screen === "notifications" && (
+          <NotificationInbox token={accessToken} role={user.role} />
         )}
         {screen === "payments" && ["pm", "director", "ca_tax"].includes(user.role) && (
           <Payments

@@ -234,6 +234,8 @@ ADMIN_ROUTES = {
     ("PATCH", "/message-templates/{template_id}"),
     ("GET", "/field-settings"),
     ("PATCH", "/field-settings/{field_key}"),
+    # WP8 (correction plan): visible delivery failures, Director/Admin only.
+    ("GET", "/notifications/delivery-failures"),
 }
 
 

@@ -31,6 +31,10 @@ export const SCREEN_ROLES = {
   // Amendment 59: a pure calculator, but not an Admin's business -- listed so the open-by-default rule below
   // does not hand it to the seventh role.
   calculator: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"],
+  // WP8 (correction plan): GET /notifications is scoped to the caller's own inbox, so every
+  // role that exists gets it -- listed anyway so this open-to-all decision is explicit, not
+  // just the default falling through.
+  notifications: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin"],
 };
 
 export function canOpen(screen, role) {
