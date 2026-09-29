@@ -1,20 +1,38 @@
 import { useEffect, useRef, useState } from "react";
-import { getDashboard, listClients, listOpportunities } from "./api";
+import { getDashboard, listClients, listFollowUps, listOpportunities, listProjects } from "./api";
 import { CalendarIcon, ChartIcon, ClockIcon, DocumentIcon, FolderIcon, FunnelIcon, UsersIcon } from "./Icons";
 import { formatRsWhole } from "./money";
 import { CollectionsPanel, PaymentsOverdueTile } from "./OverviewPayments";
 
-// Small local duplicate of FollowUps.jsx's own due-date merge/sort (same
-// pattern ClientsAdmin.jsx's STATUS_PILL_STYLE comment already documents)
-// -- Clients (Amendment 43) and Opportunities (Amendment 44 Phase D) share
-// one queue. Won/Lost Opportunities carry no date, so drop out naturally.
-function dueFollowUps(clients, opportunities) {
+// Non-terminal FollowUp statuses (app/models/follow_up.py's own TERMINAL_FOLLOW_UP_STATUSES,
+// mirrored here -- a completed/cancelled row is done, same as the old legacy-column version of
+// this panel where clearing the date removed it from view).
+const OPEN_FOLLOW_UP_STATUSES = ["open", "in_progress", "waiting"];
+
+// Dashboard fix (2026-09-29 correction plan, panel follow-up): this used to read GET /clients +
+// GET /opportunities and compute due dates from their legacy next_follow_up_date columns --
+// independently of the fix that made the "Follow-ups due" tile and the /follow-ups destination
+// share one visibility rule (app.core.follow_up_entities.visible_follow_ups). That left a THIRD,
+// unsynchronised surface: after a reassignment, this panel could still show a lead to its
+// previous owner even once the tile and destination had already moved on. Reading GET
+// /follow-ups instead applies that exact same shared rule (per-viewer, per-row
+// check_follow_up_access) -- the panel can no longer expose a record its own destination
+// wouldn't. Every entity type is now possible here, not just Client/Opportunity (Project
+// follow-ups included, matching the cascade fix's own extension to Project) -- projectNames
+// resolves Project by its project_no the same way clientNames/opportunityNames already do for
+// their kinds; any other entity type falls back to its own type name rather than a lookup this
+// preview isn't worth fetching five more list endpoints for.
+function dueFollowUps(followUps, clientNames, opportunityNames, projectNames) {
   const today = new Date().toISOString().slice(0, 10);
-  return [
-    ...clients.map((c) => ({ id: c.id, kind: "client", name: c.name, next_follow_up_date: c.next_follow_up_date })),
-    ...opportunities.map((o) => ({ id: o.id, kind: "opportunity", name: o.lead_name, next_follow_up_date: o.next_follow_up_date })),
-  ]
-    .filter((i) => i.next_follow_up_date)
+  const NAMES = { client: clientNames, opportunity: opportunityNames, project: projectNames };
+  return followUps
+    .filter((f) => OPEN_FOLLOW_UP_STATUSES.includes(f.status))
+    .map((f) => ({
+      id: f.id,
+      kind: f.entity_type,
+      name: (NAMES[f.entity_type] || {})[f.entity_id] || f.entity_type.replace(/_/g, " "),
+      next_follow_up_date: f.due_date,
+    }))
     .sort((a, b) => a.next_follow_up_date.localeCompare(b.next_follow_up_date))
     .map((i) => ({
       ...i,
@@ -83,25 +101,27 @@ function CountUpValue({ value }) {
   return <>{animated}</>;
 }
 
-// Amendment 43 (Section E step 4): "Your next moves" reuses the same
-// GET /clients + dueFollowUps() filter FollowUps.jsx uses for the full
-// screen, capped to a short preview -- same due/overdue set, not a
-// separate computation.
+// "Your next moves" reuses GET /follow-ups' own no-filter listing, the exact same
+// visible_follow_ups() rule behind the "Follow-ups due" tile and the /follow-ups destination
+// screen (dashboard panel fix, 2026-09-29 correction plan) -- capped to a short preview, same
+// due/overdue/upcoming set, not a separate computation.
 const NEXT_MOVES_PREVIEW_LIMIT = 5;
 
-// GET /clients (clients.py) is gated to sales/pm/director/procurement --
-// narrower than Dashboard's own gate, which also admits site_engineer and
-// ca_tax. Those two roles can see the real followups_due_count (it comes
-// from GET /dashboard, which they can call) but not the per-client
-// breakdown, same existing gap the "Leads & Clients" nav item already has
-// for those roles. Fetched separately from the dashboard summary so a 403
-// here never breaks the rest of the page.
+// GET /clients and GET /opportunities (gated to sales/pm/director/procurement) are fetched only
+// to resolve an entity_id to a display name for "Your next moves" -- same reason FollowUps.jsx
+// fetches them (see its own comment). GET /follow-ups and GET /projects have no such gate (all
+// six Dashboard-visible roles, including site_engineer/ca_tax, can call both), so those two are
+// fetched for everyone: the panel is no longer hidden from site_engineer/ca_tax the way it used
+// to be when it depended on GET /clients -- their own dashboard tile already used the same
+// visibility rule this panel now shares.
 const CAN_SEE_CLIENT_LIST = ["sales", "pm", "director", "procurement"];
 
 export default function Dashboard({ token, role, onOpenProject, onNewProject, onDrillDown }) {
   const [data, setData] = useState(null);
   const [clients, setClients] = useState(null);
   const [opportunities, setOpportunities] = useState(null);
+  const [projects, setProjects] = useState(null);
+  const [followUps, setFollowUps] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -118,6 +138,12 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
         .then(setOpportunities)
         .catch(() => setOpportunities(null));
     }
+    listProjects(token)
+      .then(setProjects)
+      .catch(() => setProjects(null));
+    listFollowUps(token)
+      .then(setFollowUps)
+      .catch(() => setFollowUps(null));
   }, [token, role]);
 
   if (loading) {
@@ -140,7 +166,12 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   // (follow_ups.py, not gated by the Amendment 60 switch the way `own` above is) -- so this one
   // tile reads "My follow-ups due" for Sales regardless of `own`, not just when `own` is true.
   const followupsDueLabel = role === "sales" ? "My follow-ups due" : mine("Follow-ups due");
-  const nextMoves = clients ? dueFollowUps(clients, opportunities || []).slice(0, NEXT_MOVES_PREVIEW_LIMIT) : null;
+  const clientNames = Object.fromEntries((clients || []).map((c) => [c.id, c.name]));
+  const opportunityNames = Object.fromEntries((opportunities || []).map((o) => [o.id, o.lead_name]));
+  const projectNames = Object.fromEntries((projects || []).map((p) => [p.id, `Project ${p.project_no}`]));
+  const nextMoves = followUps
+    ? dueFollowUps(followUps, clientNames, opportunityNames, projectNames).slice(0, NEXT_MOVES_PREVIEW_LIMIT)
+    : null;
 
   // Amendment 49 (Section 53): the drill-down behind "Pending quotations" --
   // the Quotations screen -- is open to Sales, PM and Director (the API
@@ -443,13 +474,13 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
             <CalendarIcon className="w-4 h-4 text-gold" /> Your next moves
           </h3>
           {nextMoves === null ? (
-            <p className="text-sm text-text-secondary">Follow-up details aren't available for your role.</p>
+            <p className="text-sm text-text-secondary">Loading…</p>
           ) : nextMoves.length === 0 ? (
             <div className="text-center py-6 space-y-3">
               <div className="mx-auto w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center">
                 <CalendarIcon className="w-6 h-6 text-gold" />
               </div>
-              <p className="text-sm text-text-secondary">No client follow-ups due right now.</p>
+              <p className="text-sm text-text-secondary">No follow-ups due right now.</p>
             </div>
           ) : (
             <ul className="divide-y divide-border-dark">
@@ -457,8 +488,10 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
                 <li key={`${c.kind}-${c.id}`} className="py-2 flex items-center justify-between gap-2">
                   <span className="text-sm text-text-primary truncate min-w-0">
                     {c.name}
-                    {c.kind === "opportunity" && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-text-secondary">lead</span>
+                    {c.kind !== "client" && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wider text-text-secondary">
+                        {c.kind === "opportunity" ? "lead" : c.kind.replace(/_/g, " ")}
+                      </span>
                     )}
                   </span>
                   <span className={`text-xs shrink-0 ${c.status === "overdue" ? "text-red-400" : "text-text-secondary"}`}>
