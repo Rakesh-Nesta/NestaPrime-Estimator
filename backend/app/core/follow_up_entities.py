@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core import ownership
 from app.models.client import Client
 from app.models.document import CostSheet, Estimate, Quotation
-from app.models.follow_up import FollowUpEntityType
+from app.models.follow_up import FollowUp, FollowUpEntityType, FollowUpStatus
 from app.models.opportunity import Opportunity
 from app.models.price_request import PriceRequest
 from app.models.project import Project
@@ -148,3 +148,39 @@ def check_follow_up_access(
         raise HTTPException(status_code=404, detail=f"{entity_type.value.replace('_', ' ').title()} not found")
 
     return resolved
+
+
+def visible_follow_ups(
+    db: Session, viewing_user, *, owner_id: uuid.UUID | None = None, status: FollowUpStatus | None = None
+) -> list[FollowUp]:
+    """The single "which FollowUp rows can viewing_user actually see" rule, shared between GET
+    /follow-ups' own org-wide and owner-scoped listings (follow_ups.py::list_follow_ups) and the
+    dashboard's followups_due_count (correction plan, 2026-09-29) -- extracted so the two can
+    never independently drift out of agreement again, the way followups_due_count's earlier,
+    separate Client/Opportunity-column-based computation once did.
+
+    With owner_id given, narrows to that owner's rows outright ("my follow-ups"). Otherwise, a
+    Sales viewer is always narrowed to their own rows -- unconditionally, regardless of the
+    Amendment 60 own-records switch, the same rule list_follow_ups has enforced since WP5 --
+    and every other role sees the full candidate set. Either way, every surviving row is then
+    re-checked individually via check_follow_up_access: a row's owner_id and its entity's own
+    current access gate can diverge (an explicitly assigned specialist, or a parent reassigned
+    away from whoever the row still names), so passing the owner/role filter above is necessary
+    but never sufficient on its own."""
+    query = db.query(FollowUp)
+    if owner_id is not None:
+        query = query.filter(FollowUp.owner_id == owner_id)
+    elif viewing_user.role.value == "sales":
+        query = query.filter(FollowUp.owner_id == viewing_user.id)
+    if status is not None:
+        query = query.filter(FollowUp.status == status)
+    rows = query.order_by(FollowUp.due_date.asc()).all()
+
+    visible = []
+    for row in rows:
+        try:
+            check_follow_up_access(db, viewing_user, row.entity_type, row.entity_id, need="read")
+        except HTTPException:
+            continue
+        visible.append(row)
+    return visible

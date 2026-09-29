@@ -7,13 +7,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import AuditLogEntryOut
-from app.core import ownership
+from app.core import follow_up_entities, ownership
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.audit_log import AuditLogEntry
 from app.models.client import Client
 from app.models.document import Estimate, EstimateStatus, Quotation, QuotationStatus
-from app.models.opportunity import TERMINAL_STAGES, Opportunity, OpportunityStage
+from app.models.follow_up import TERMINAL_FOLLOW_UP_STATUSES
+from app.models.opportunity import Opportunity, OpportunityStage
 from app.models.project import Project
 from app.models.user import User, UserRole
 from app.services import payments as payments_service
@@ -111,19 +112,23 @@ class DashboardOut(BaseModel):
     recent_activity: list[AuditLogEntryOut] | None
 
 
-def _summary(db: Session, owner: uuid.UUID | None, followups_owner: uuid.UUID | None) -> DashboardSummary:
+def _summary(db: Session, owner: uuid.UUID | None, followups_viewer: User) -> DashboardSummary:
     """The Overview's numbers -- for the whole company (owner None), or for one person's own records (Amendment 60,
     Section 63: a salesperson's dashboard is their own performance, never the company's, and the same function fills
     the Director's per-salesperson table).
 
-    followups_due_count uses its own, separate owner (followups_owner) rather than `owner`. Dashboard fix
-    (2026-09-29 correction plan): the "Follow-ups due" tile's destination (GET /follow-ups with no filter,
-    follow_ups.py's list_follow_ups) narrows a Sales user to their own rows UNCONDITIONALLY, regardless of the
-    Amendment 60 own-records switch -- but `owner` here follows that switch. With the switch off, that mismatch
-    made the tile count company-wide while the destination it linked to stayed Sales-narrowed underneath it (e.g.
-    tile said "2", the screen it opened showed "0"). get_dashboard() always passes the Sales user's own id as
-    followups_owner, matching the destination's own narrowing -- every other role's followups_owner still equals
-    `owner`, unchanged."""
+    followups_due_count is derived from app.core.follow_up_entities.visible_follow_ups(db, followups_viewer) --
+    the exact same shared visibility rule GET /follow-ups' own no-filter listing uses (correction plan,
+    2026-09-29) -- rather than the legacy Client/Opportunity.next_follow_up_date columns filtered by `owner`.
+    Two earlier, independent bugs both traced back to that legacy computation not actually matching the
+    destination screen's own rules: (1) it ignored the Amendment 60 switch's effect on the destination's
+    unconditional Sales narrowing, and (2) even once scoped correctly by owner_id, it never re-checked whether
+    the viewer could still actually open the record (an explicitly assigned specialist, or a follow-up whose
+    owner_id has drifted from its parent's current owner after a reassignment) -- the same access check the
+    destination list has always applied per row. Passing the real viewer through directly, rather than a bare
+    owner id, means the two can no longer independently drift: get_dashboard() passes current_user (whatever
+    that role is); _sales_performance() passes each salesperson being summarised, not the Director browsing
+    their table, so each row still reflects what that salesperson would see, not what the Director would."""
     # Amendment 28 Part A: "closed" means *every* Quotation on the project
     # has reached Won/Lost, not just any -- a project with a newer,
     # currently-active Quotation is Open regardless of an older Lost one
@@ -178,26 +183,18 @@ def _summary(db: Session, owner: uuid.UUID | None, followups_owner: uuid.UUID | 
     # Amendment 43 (Section E step 4): "due" includes due-today, not just
     # strictly overdue -- matches the overdue-red convention Amendment 42's
     # Client Admin follow-up row already uses (< today, not <= today, shown
-    # red; today itself is "due" rather than "overdue").
-    # Amendment 44 Phase D: Opportunities count too, so the number matches
-    # the combined Follow-ups screen. Won/Lost carry a null date by
-    # construction, but are excluded explicitly rather than relied on.
+    # red; today itself is "due" rather than "overdue"). Terminal-status rows
+    # (completed/cancelled) are excluded the same way TERMINAL_FOLLOW_UP_STATUSES
+    # excludes them everywhere else this model is queried.
     today = date.today()
-    client_followups = db.query(Client).filter(
-        Client.next_follow_up_date.isnot(None), Client.next_follow_up_date <= today
-    )
-    opportunity_followups = db.query(Opportunity).filter(
-        Opportunity.next_follow_up_date.isnot(None),
-        Opportunity.next_follow_up_date <= today,
-        Opportunity.stage.notin_(list(TERMINAL_STAGES)),
-    )
     stage_query = db.query(Opportunity.stage, func.count(Opportunity.id))
-    if followups_owner is not None:
-        client_followups = client_followups.filter(Client.owner_id == followups_owner)
-        opportunity_followups = opportunity_followups.filter(Opportunity.owner_id == followups_owner)
     if owner is not None:
         stage_query = stage_query.filter(Opportunity.owner_id == owner)
-    followups_due_count = client_followups.count() + opportunity_followups.count()
+    followups_due_count = sum(
+        1
+        for f in follow_up_entities.visible_follow_ups(db, followups_viewer)
+        if f.status not in TERMINAL_FOLLOW_UP_STATUSES and f.due_date <= today
+    )
 
     stage_counts = dict(stage_query.group_by(Opportunity.stage).all())
     opportunities_new_count = stage_counts.get(OpportunityStage.NEW, 0)
@@ -241,7 +238,7 @@ def _sales_performance(db: Session) -> list["SalespersonRowOut"]:
     """Amendment 60 item 6: one row per active salesperson, from the very same numbers their own dashboard shows."""
     rows = []
     for person in db.query(User).filter(User.role == UserRole.SALES, User.is_active.is_(True)).order_by(User.name).all():
-        s = _summary(db, person.id, followups_owner=person.id)
+        s = _summary(db, person.id, followups_viewer=person)
         rows.append(
             SalespersonRowOut(
                 user_id=person.id,
@@ -265,11 +262,9 @@ def get_dashboard(
 ):
     # Amendment 60: a salesperson's dashboard (once the Director has switched own-records on) is their own numbers.
     owner = current_user.id if ownership.scoping_applies(db, current_user) else None
-    # Dashboard fix (2026-09-29 correction plan): followups_due_count is scoped to the Sales user's own id
-    # unconditionally, matching list_follow_ups' own unconditional Sales narrowing (follow_ups.py) -- not gated by
-    # the Amendment 60 switch the way `owner` is above. See _summary()'s own docstring.
-    followups_owner = current_user.id if current_user.role == UserRole.SALES else owner
-    summary = _summary(db, owner, followups_owner=followups_owner)
+    # followups_due_count always reflects current_user's own visible_follow_ups() result (see _summary()'s own
+    # docstring) -- a Sales user is narrowed to their own rows by that shared rule regardless of `owner` above.
+    summary = _summary(db, owner, followups_viewer=current_user)
 
     recent_query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
     if owner is not None:
