@@ -717,7 +717,7 @@ function DetailsPanel({
     setSaving(true);
     try {
       if (isNewClient) await onCreateClient(values);
-      else if (isNewLead) await onCreateEnquiry({ lead_name: values.name, lead_phone: values.phone, lead_email: values.email, next_follow_up_date: values.followUpDate, notes: values.notes });
+      else if (isNewLead) await onCreateEnquiry({ lead_name: values.name, lead_phone: values.phone, lead_email: values.email, next_follow_up_date: values.followUpDate, notes: values.notes, source: values.source });
       else if (isClient) await onSaveClient(client, values);
       else await onSaveLead(lead, values);
     } catch (err) {
