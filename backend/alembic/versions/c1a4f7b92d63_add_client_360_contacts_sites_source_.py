@@ -92,7 +92,7 @@ def downgrade() -> None:
         'opportunities.source': bind.execute(sa.text("SELECT COUNT(*) FROM opportunities WHERE source IS NOT NULL")).scalar(),
         'projects.site_id': bind.execute(sa.text("SELECT COUNT(*) FROM projects WHERE site_id IS NOT NULL")).scalar(),
     }
-    populated = {**{f"table:{k}" for k, v in table_counts.items() if v}, **{f"column:{k}" for k, v in column_counts.items() if v}}
+    populated = {f"table:{k}" for k, v in table_counts.items() if v} | {f"column:{k}" for k, v in column_counts.items() if v}
     if populated:
         raise RuntimeError(
             "Refusing to roll back P2 (Client 360): real data would be lost. "
