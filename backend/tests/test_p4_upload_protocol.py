@@ -354,12 +354,15 @@ def test_crash_after_commit_before_temp_cleanup_leaves_receipt_and_file_both_int
     assert db_session.get(Attachment, new_attachment.id) is not None
 
 
-def test_cleanup_reconstructs_an_orphan_across_a_fresh_db_session_with_no_shared_state(
+def test_cleanup_reconstructs_an_orphan_using_a_fresh_session_object(
     client, director_user, db_session,
 ):
-    """The exact scenario named in review: a wholly separate Session -- no Python-level reference
-    to anything the 'crashed' call above held, only a bare id -- must still find and safely remove the
-    orphan using only what the database durably recorded."""
+    """A fresh Session object (its own identity map, its own connection) -- no Python-level
+    reference to anything the 'crashed' call above held, only a bare id -- must still find and
+    safely remove the orphan using only what the database durably recorded. This proves the
+    reconstruction logic itself is correct; it does NOT prove cross-process independence (same
+    Python process, same module-level state) -- see the dedicated subprocess test below for that
+    literal claim."""
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)
     current_user = _director(db_session)
@@ -403,6 +406,67 @@ def test_cleanup_reconstructs_an_orphan_across_a_fresh_db_session_with_no_shared
     from pathlib import Path
 
     assert Path(real.storage_path).exists()
+
+
+def test_cleanup_reconstructs_an_orphan_across_a_real_separate_process(client, director_user, db_session):
+    """The literal claim: a genuinely separate OS process -- no shared Python interpreter, no
+    shared module state, no shared identity map, started fresh -- invoking the real, deployable
+    cleanup script (scripts/cleanup_attachment_upload_sessions.py), pointed at the test database
+    only via DATABASE_URL, must find and safely remove the orphan using nothing but what the
+    database durably recorded."""
+    import os
+    import subprocess
+    import sys
+
+    from tests.conftest import TEST_DATABASE_URL
+
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+    current_user = _director(db_session)
+    session = _start_session(db_session, current_user, doc_id=uuid.UUID(cost_sheet_id))
+    _upload_all_chunks(db_session, session)
+    token = core.start_completion(db_session, session.id)
+    assembled = core.assemble_and_validate(db_session, session.id, token)
+
+    final_path = core.final_attachment_path(session.doc_type, session.doc_id, session.filename, session.id, token)
+    os.replace(assembled, final_path)
+
+    past = datetime.now(UTC) - timedelta(minutes=10)
+    db_session.query(AttachmentUploadSession).filter(AttachmentUploadSession.id == session.id).update(
+        {"last_activity_at": past}
+    )
+    db_session.commit()
+    core.recover_stuck_sessions(db_session, now=datetime.now(UTC))  # supersedes the attempt
+    assert final_path.exists()
+
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ)
+    env["DATABASE_URL"] = TEST_DATABASE_URL  # the database this test's own writes are visible in
+    # ATTACHMENT_STORAGE_ROOT: the subprocess gets its own fresh Settings instance, which never
+    # sees the isolated_attachment_storage fixture's in-process tmp_path redirect -- without this,
+    # the subprocess computes a DIFFERENT (default) storage root and correctly finds nothing at
+    # the wrong path, which would prove nothing about the real reconstruction logic.
+    env["ATTACHMENT_STORAGE_ROOT"] = core.settings.attachment_storage_root
+    env["PYTHONPATH"] = backend_dir
+
+    # --dry-run first: prove detection without mutation, from the real script, in the real process.
+    preview = subprocess.run(
+        [sys.executable, "scripts/cleanup_attachment_upload_sessions.py", "--dry-run"],
+        cwd=backend_dir, env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert preview.returncode == 0, preview.stderr
+    preview_line = next(l for l in preview.stdout.splitlines() if "Orphaned final-path files" in l)
+    assert preview_line.rstrip().endswith("1"), preview.stdout
+    assert final_path.exists()  # dry-run: still there
+
+    real_run = subprocess.run(
+        [sys.executable, "scripts/cleanup_attachment_upload_sessions.py"],
+        cwd=backend_dir, env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert real_run.returncode == 0, real_run.stderr
+    real_line = next(l for l in real_run.stdout.splitlines() if "Orphaned final-path files" in l)
+    assert real_line.rstrip().endswith("1"), real_run.stdout
+    assert not final_path.exists()  # actually removed, by a process that shared nothing with this one
 
 
 # ---------------------------------------------------------------------------
@@ -690,6 +754,11 @@ def test_lost_success_response_retry_is_idempotent(client, director_user, db_ses
 
 
 def test_reauthorization_refuses_a_different_user_on_every_session_endpoint(client, director_user, db_session):
+    """Proves SESSION-OWNERSHIP enforcement (created_by_id) -- a user who never created this
+    session at all. This is necessary but not sufficient: it does not prove the original
+    uploader loses access once the underlying DOCUMENT's ownership changes out from under them
+    -- see test_reauthorization_refuses_the_original_uploader_after_project_reassignment for
+    that distinct claim."""
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)
     session = _start_session_http(client, headers, "cost_sheet", cost_sheet_id)
@@ -712,6 +781,79 @@ def test_reauthorization_refuses_a_different_user_on_every_session_endpoint(clie
     # a retry against an already-completed session is not exempt either
     res = client.post(f"/attachments/upload-sessions/{session['id']}/complete", headers=other_headers)
     assert res.status_code == 403, res.text
+
+
+def test_reauthorization_refuses_the_original_uploader_after_project_reassignment(client, director_user, db_session):
+    """Case 20's actual claim: reassign the parent Project mid-session (Amendment 60 scoping ON)
+    -- the ORIGINAL uploader, who still owns the SESSION row itself (created_by_id unchanged),
+    must be refused on chunk-upload, resume-inspection, and a retry against an already-completed
+    session, once they no longer own the document's project. Session ownership alone is not
+    authorization; the target document's current access is re-checked independently, every time."""
+    from tests.test_quotations_admin import _add_project_sport, _create_client_record, _create_project, _role_headers
+
+    director = _director_headers(client, director_user)
+    assert client.put("/ownership/switch", json={"on": True}, headers=director).status_code == 200
+
+    sales_a = _role_headers(client, db_session, UserRole.SALES, "sales-a-reassign@test.local")
+    sales_b = _role_headers(client, db_session, UserRole.SALES, "sales-b-reassign@test.local")
+    a_id = client.get("/auth/me", headers=sales_a).json()["id"]
+    b_id = client.get("/auth/me", headers=sales_b).json()["id"]
+
+    # Director builds the world, then hands it to Sales A -- same established pattern as
+    # test_own_records.py's own _give/_world helpers.
+    client_id = _create_client_record(client, director, "Reassignment Test Client")
+    project_id = _create_project(client, director, client_id)
+    project_sport_id = _add_project_sport(client, director, project_id, "box_cricket")
+    cost_sheet_id = client.post(
+        f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=director
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=director)
+    estimate_id = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=director,
+    ).json()["id"]
+    give = client.patch(f"/ownership/client/{client_id}", json={"owner_id": a_id, "cascade": True}, headers=director)
+    assert give.status_code == 200, give.text  # the project follows the client
+
+    # Scenario 1: reassignment mid-session, before completion. Sales A starts a session and
+    # writes one chunk while they still own it.
+    session = _start_session_http(client, sales_a, "estimate", estimate_id)
+    res = client.post(
+        f"/attachments/upload-sessions/{session['id']}/chunks/0",
+        files={"file": ("chunk", CONTENT[:30], "application/octet-stream")}, headers=sales_a,
+    )
+    assert res.status_code == 200 and res.json()["promoted"], res.text
+
+    # Reassign the client (and cascaded project) away from A, to B.
+    reassign = client.patch(f"/ownership/client/{client_id}", json={"owner_id": b_id, "cascade": True}, headers=director)
+    assert reassign.status_code == 200, reassign.text
+
+    # A (still created_by_id on the session) is now refused everywhere on this session.
+    res = client.get(f"/attachments/upload-sessions/{session['id']}", headers=sales_a)
+    assert res.status_code == 404, res.text  # Amendment 60's concealed NOT_FOUND, not 403
+    res = client.get(f"/attachments/upload-sessions/{session['id']}/status", headers=sales_a)
+    assert res.status_code == 404, res.text
+    res = client.post(
+        f"/attachments/upload-sessions/{session['id']}/chunks/1",
+        files={"file": ("chunk", CONTENT[30:60], "application/octet-stream")}, headers=sales_a,
+    )
+    assert res.status_code == 404, res.text
+    res = client.post(f"/attachments/upload-sessions/{session['id']}/complete", headers=sales_a)
+    assert res.status_code == 404, res.text
+
+    # Scenario 2: reassignment AFTER completion -- a retry against an already-completed session
+    # is not exempt. Give the project back to A, let them complete a fresh session normally,
+    # THEN reassign away, THEN retry /complete.
+    client.patch(f"/ownership/client/{client_id}", json={"owner_id": a_id, "cascade": True}, headers=director)
+    session2 = _start_session_http(client, sales_a, "estimate", estimate_id)
+    _upload_all_chunks_http(client, sales_a, session2["id"])
+    complete_res = client.post(f"/attachments/upload-sessions/{session2['id']}/complete", headers=sales_a)
+    assert complete_res.status_code == 200, complete_res.text
+
+    client.patch(f"/ownership/client/{client_id}", json={"owner_id": b_id, "cascade": True}, headers=director)
+    retry_res = client.post(f"/attachments/upload-sessions/{session2['id']}/complete", headers=sales_a)
+    assert retry_res.status_code == 404, retry_res.text  # refused, not the cached receipt
 
 
 def test_cleanup_cannot_race_an_active_session(client, director_user, db_session):

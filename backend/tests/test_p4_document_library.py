@@ -174,6 +174,38 @@ def test_historical_versions_never_surface_in_search(client, director_user):
     assert old["id"] not in ids
 
 
+def test_price_request_attachments_searchable_globally_for_roles_with_unconditional_access(
+    client, director_user, db_session,
+):
+    """PriceRequest has no project_id and no reliable indirect Project link (P2 correction plan)
+    -- that constrains the JOIN, not who may search it. PRICE_REQUEST_ROLES (pm/director/
+    procurement) are never ownership-scoped (SCOPED_ROLES is sales-only), so today, via the
+    ordinary attachment endpoints, all three already see every price_request attachment
+    unconditionally. Search must preserve that, not silently narrow it to zero results."""
+    from tests.test_vendor_price_requests import _create_price_request, _create_rate_item, _create_vendor
+
+    headers = _director_headers(client, director_user)
+    rate_item_id = _create_rate_item(client, headers)
+    vendor_id = _create_vendor(client, headers)
+    pr = _create_price_request(client, headers, rate_item_id, vendor_id)
+
+    res = _upload(client, headers, "price_request", pr["id"], "vendor_quote", filename="pricequote123.pdf")
+    assert res.status_code == 201, res.text
+
+    res = client.get("/attachments/search", params={"q": "pricequote123"}, headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["total"] == 1
+    assert body["items"][0]["doc_type"] == "price_request"
+
+    # Sales is excluded -- not because of this search feature, but because Sales was never in
+    # PRICE_REQUEST_ROLES to begin with (the role gate, unrelated to the project-join question).
+    sales_headers = _sales_headers(client, db_session)
+    res = client.get("/attachments/search", params={"q": "pricequote123"}, headers=sales_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["total"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Section 5: review and marketing-reuse approval
 # ---------------------------------------------------------------------------

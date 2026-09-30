@@ -8,7 +8,8 @@ excluded doc_type contributes no branch to the union at all, not a branch that's
 down to zero rows. total is computed on the fully-filtered union, before pagination -- the same
 total=q.count()-before-.limit() shape search.py's own group functions already use."""
 
-from sqlalchemy import String, literal
+from sqlalchemy import String, cast, literal, null
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from app.api.attachments import _DOC_TABLE, _roles_for
@@ -23,14 +24,7 @@ from app.models.technical_bid_checklist import TechnicalBidChecklistItem
 from app.models.work_order import WorkOrder
 
 # EstimateOption has no project_id of its own -- only its parent Estimate does (same nuance
-# ownership.project_id_for_document already carries for this one doc_type). PRICE_REQUEST is
-# deliberately absent: PriceRequest has no project_id column and no reliable indirect link exists
-# (PriceRequestItem.rate_item_id only references the shared rate-master catalog used across many
-# projects' Cost Sheets) -- an already-documented gap in this codebase (P2 correction plan), not
-# something P4 can resolve. It is excluded from search's permitted branches below, not merely
-# left unjoinable and crashing -- the same real gap already means ownership.
-# project_id_for_document has no "price_request" entry either, so a scoped Sales user already
-# cannot see price_request attachments today regardless of this search feature.
+# ownership.project_id_for_document already carries for this one doc_type).
 _DIRECT_PROJECT_MODELS = {
     DocumentType.COST_SHEET: CostSheet,
     DocumentType.ESTIMATE: Estimate,
@@ -40,7 +34,18 @@ _DIRECT_PROJECT_MODELS = {
     DocumentType.SITE_SURVEY: SiteSurvey,
     DocumentType.PROJECT_STAGE: ProjectConstructionStage,
 }
-_SEARCHABLE_DOC_TYPES = frozenset(_DIRECT_PROJECT_MODELS) | {DocumentType.ESTIMATE_OPTION}
+# PRICE_REQUEST has no project-joined branch: PriceRequest has no project_id column and no
+# reliable indirect link exists (PriceRequestItem.rate_item_id only references the shared
+# rate-master catalog used across many projects' Cost Sheets) -- an already-documented gap in
+# this codebase (P2 correction plan), not something P4 can resolve. That gap constrains the JOIN,
+# not who may search it: PRICE_REQUEST_ROLES is (pm, director, procurement), and SCOPED_ROLES is
+# (sales,) only -- none of the three roles that can see price_request attachments is ever
+# ownership-scoped, so today, via the ordinary list/upload/download endpoints, all three already
+# see every price_request attachment unconditionally, with no project-based restriction at all.
+# Correctly preserving that (not silently narrowing it) means this branch is searched globally,
+# with no Project join and no owner_id to filter on -- never omitted outright, which would have
+# been a real, unintended scope reduction for roles who currently have full access.
+_SEARCHABLE_DOC_TYPES = frozenset(_DIRECT_PROJECT_MODELS) | {DocumentType.ESTIMATE_OPTION, DocumentType.PRICE_REQUEST}
 
 
 def _branch_for(db: Session, doc_type: DocumentType, query_text: str | None, requested_doc_type: DocumentType | None):
@@ -56,6 +61,19 @@ def _branch_for(db: Session, doc_type: DocumentType, query_text: str | None, req
             .join(model, Attachment.doc_id == model.id)
             .join(Estimate, model.estimate_id == Estimate.id)
             .join(Project, Estimate.project_id == Project.id)
+        )
+    elif doc_type == DocumentType.PRICE_REQUEST:
+        # No Project join is possible (see _SEARCHABLE_DOC_TYPES's own note) -- searched globally,
+        # matching the unconditional access PM/Director/Procurement already have today. owner_id
+        # is a typed NULL: if a future role that IS ownership-scoped were ever added to
+        # PRICE_REQUEST_ROLES, "NULL == current_user.id" is always false, so scoping_applies would
+        # conservatively exclude every row here rather than accidentally leaking one -- never the
+        # unsafe direction.
+        q = db.query(
+            Attachment.id.label("attachment_id"),
+            literal(doc_type.value, type_=String).label("doc_type"),
+            cast(null(), UUID(as_uuid=True)).label("project_id"),
+            cast(null(), UUID(as_uuid=True)).label("owner_id"),
         )
     else:
         project_model = _DIRECT_PROJECT_MODELS[doc_type]
