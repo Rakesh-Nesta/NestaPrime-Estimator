@@ -286,6 +286,34 @@ def _set_owner(db, request, current_user, kind, record, new_owner, reason=None) 
         reason=reason, request=request,
     )
     _cascade_inherited_follow_ups(db, kind, record.id, new_owner)
+    if kind == "opportunity" and new_owner is not None and getattr(record, "source", None) == "indiamart":
+        _notify_import_lead_assigned(db, record, new_owner)
+
+
+def _notify_import_lead_assigned(db, opportunity, new_owner_id) -> None:
+    """P3 contract, Section 7: assigning an imported lead out of the unassigned queue notifies
+    the new owner -- confirmed absent before this change (Section 0: no Notification(...) is
+    constructed anywhere in this file). In-app only by construction (Section 0, revision 3): this
+    creates a Notification directly, never touching app/core/reminders.py's own gathering logic,
+    so it can never reach _send_digest's email loop. Reuses the real FollowUp Process already
+    created for this Opportunity (Section 5) as the notification's own dedup key, via the same
+    _get_or_create_notification idempotent-insert helper reminders.py itself uses."""
+    from app.core import follow_up_sync
+
+    follow_up = follow_up_sync._find_open_primary(db, FollowUpEntityType.OPPORTUNITY, opportunity.id)
+    if follow_up is None:
+        return  # nothing to notify about without a real FollowUp to link to
+    _get_or_create_notification(
+        db,
+        user_id=new_owner_id,
+        follow_up_id=follow_up.id,
+        kind=NotificationKind.IMPORT_LEAD_ASSIGNED,
+        notification_date=date.today(),
+        title="An imported lead was assigned to you",
+        body=f"{opportunity.lead_name} (enquired {opportunity.created_at:%d %b %Y}) is now yours to follow up.",
+        entity_type=FollowUpEntityType.OPPORTUNITY,
+        entity_id=opportunity.id,
+    )
 
 
 @ownership_router.patch("/{kind}/{record_id}", response_model=KindTotals)

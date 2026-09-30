@@ -1,12 +1,14 @@
 import { useState } from "react";
 import {
   CalendarIcon,
+  ChartIcon,
   ClockIcon,
   DocumentIcon,
   FolderIcon,
   FunnelIcon,
   GridIcon,
   SearchIcon,
+  TargetIcon,
   UsersIcon,
 } from "./Icons";
 import { canOpen } from "./navAccess";
@@ -147,6 +149,9 @@ export default function Sidebar({
   // reopening Leads & Clients/Opportunities (canSeeRelationships, unchanged) for either role --
   // no permission changed here, just a working path that already existed now being shown.
   const canSeeFollowups = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"].includes(user.role);
+  // P3 contract, Section 8/9.
+  const canSeeMarketplaceOps = canOpen("marketplace_imports_ops", user.role);
+  const canSeeMarketingDashboard = canOpen("marketing_dashboard", user.role);
 
   // P1: named groups (Master Plan Reconciliation Section 5) around the exact same items, same
   // onClick targets, same per-role visibility as before -- a re-skin, not a rebuild. Marketing,
@@ -167,12 +172,17 @@ export default function Sidebar({
     },
     {
       label: "Growth",
-      items: canSeeRelationships
-        ? [
-            { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
-            { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
-          ]
-        : [],
+      items: [
+        ...(canSeeRelationships
+          ? [
+              { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
+              { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
+            ]
+          : []),
+        ...(canSeeMarketingDashboard
+          ? [{ key: "marketing_dashboard", label: "Marketing", onClick: () => go("marketing_dashboard"), icon: TargetIcon }]
+          : []),
+      ],
     },
     {
       label: "Commercial",
@@ -182,9 +192,9 @@ export default function Sidebar({
     },
     {
       label: "Delivery",
-      items: isAdmin
-        ? []
-        : [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }],
+      items: canOpen("projects_admin", user.role)
+        ? [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }]
+        : [],
     },
     {
       // Amendment 50 (Section 54): a real header now, shown only to the roles that can open it
@@ -199,9 +209,14 @@ export default function Sidebar({
     },
     {
       label: "Oversight",
-      items: showTeamAccess
-        ? [{ key: "team_access", label: "Team & Access", onClick: () => go("team_access"), icon: UsersIcon }]
-        : [],
+      items: [
+        ...(canSeeMarketplaceOps
+          ? [{ key: "marketplace_imports_ops", label: "Lead imports", onClick: () => go("marketplace_imports_ops"), icon: ChartIcon }]
+          : []),
+        ...(showTeamAccess
+          ? [{ key: "team_access", label: "Team & Access", onClick: () => go("team_access"), icon: UsersIcon }]
+          : []),
+      ],
     },
   ].filter((group) => group.items.length > 0);
 

@@ -34,7 +34,20 @@ export const SCREEN_ROLES = {
   // WP8 (correction plan): GET /notifications is scoped to the caller's own inbox, so every
   // role that exists gets it -- listed anyway so this open-to-all decision is explicit, not
   // just the default falling through.
-  notifications: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin"],
+  notifications: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin", "marketing"],
+  // P3 contract, Section 8: GET /marketplace-imports/* -- matches the ledger's own read-access
+  // gate exactly (PM/Director only).
+  marketplace_imports_ops: ["pm", "director"],
+  // P3 contract, Section 9: GET /marketplace-imports/marketing/dashboard -- Marketing is added
+  // to this one screen's gate and nowhere else; PM/Director can also see their own aggregates.
+  marketing_dashboard: ["pm", "director", "marketing"],
+  // P3 correction (2026-09-30): the Sidebar's "Delivery" group used to show Projects to every
+  // non-Admin role unconditionally, which silently included Marketing too once that role
+  // existed -- the same "open by default" hazard the calculator comment above already names,
+  // just not caught for this screen until Marketing could actually click through and get a
+  // real 403 (LIST_ROLES, GET /projects, app/api/projects.py) -- confirmed directly against the
+  // live backend, not inferred, before this fix. Matches LIST_ROLES exactly.
+  projects_admin: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"],
 };
 
 export function canOpen(screen, role) {

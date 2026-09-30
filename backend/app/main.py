@@ -34,6 +34,7 @@ from app.api import (
     hubs,
     hvac,
     lighting,
+    marketplace_imports,
     message_templates,
     messages,
     notifications,
@@ -120,6 +121,7 @@ app.include_router(client_sites.router)
 app.include_router(client_duplicates.router)
 app.include_router(client_messages.router)
 app.include_router(opportunities.router)
+app.include_router(marketplace_imports.router)
 app.include_router(company.router)
 app.include_router(dashboard.router)
 app.include_router(projects.router)

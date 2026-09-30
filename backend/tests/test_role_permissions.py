@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.main import app
 from app.models.user import User, UserRole
 
-ALL_ROLES = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin"]  # Amendment 59: a seventh role
+ALL_ROLES = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin", "marketing"]  # Amendment 59 + P3
 
 
 def _login(client, email, password="TestPass!1"):
@@ -125,7 +125,9 @@ def test_known_gates_match_the_code(client, director_user):
         ("POST", "/projects"): ["sales", "pm", "director"],
         ("GET", "/opportunities"): ["sales", "pm", "director", "procurement"],
         ("PATCH", "/clients/{client_id}"): ["director"],  # client flags are Director-only
-        ("GET", "/dashboard"): [r for r in ALL_ROLES if r != "admin"],  # an Admin has no business dashboard (Amendment 59)
+        # An Admin has no business dashboard (Amendment 59); Marketing wasn't added to it either
+        # (P3 contract, Section 9: never added to any existing role-gate tuple by default).
+        ("GET", "/dashboard"): [r for r in ALL_ROLES if r not in ("admin", "marketing")],
         ("GET", "/role-permissions"): ["director", "admin"],  # Amendment 59
     }
     for key, roles in expected.items():

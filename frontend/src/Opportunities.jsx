@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import {
+  getOpportunityImportDetail,
   linkOpportunityClient,
   listClients,
   listOpportunities,
+  listPossibleClientMatches,
   updateOpportunityDetails,
   updateOpportunityFollowUp,
   updateOpportunityNotes,
   updateOpportunityStage,
 } from "./api";
 import { DocumentIcon, FunnelIcon, SearchIcon, UsersIcon } from "./Icons";
+import OwnerControl, { CAN_ASSIGN_OWNERS, useOwners } from "./OwnerControl";
 
 const STAGES = ["new", "contacted", "qualified", "won", "lost"];
 const TERMINAL_STAGES = ["won", "lost"];
@@ -85,6 +88,7 @@ export default function Opportunities({ token, role, onBack, onStartProject, ini
   const [linkPicks, setLinkPicks] = useState({});
   const [loadFailed, setLoadFailed] = useState(false);
   const [autoSelectDone, setAutoSelectDone] = useState(false);
+  const owners = useOwners(token, role);
 
   function load() {
     return listOpportunities(token, { relationship: relationship || undefined }).then(setOpportunities);
@@ -372,6 +376,10 @@ export default function Opportunities({ token, role, onBack, onStartProject, ini
             onSaveDetails={(values) => saveDetails(selected, values)}
             onStartProject={onStartProject}
             onClose={() => setSelectedId(null)}
+            token={token}
+            role={role}
+            owners={owners}
+            onOwnerChanged={load}
           />
         )}
       </div>
@@ -379,8 +387,55 @@ export default function Opportunities({ token, role, onBack, onStartProject, ini
   );
 }
 
+// P3 contract, Section 5/7: buyer detail (durable, survives retention purge) and possible-client
+// matches for an unlinked imported lead -- reachable by anyone who can already open this
+// Opportunity (same READ_ROLES the Opportunity itself has), not a grant of ledger access.
+function ImportedLeadSection({ opportunity: o, token }) {
+  const [detail, setDetail] = useState(null);
+  const [matches, setMatches] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (o.source !== "indiamart") return;
+    getOpportunityImportDetail(token, o.id).then(setDetail).catch((err) => setError(err.message));
+    if (!o.client_id) {
+      listPossibleClientMatches(token, o.id).then(setMatches).catch(() => setMatches([]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, o.id, o.source, o.client_id]);
+
+  if (o.source !== "indiamart") return null;
+
+  return (
+    <div className="border-t border-border-dark pt-3 space-y-3">
+      <p className="text-xs font-medium text-text-secondary">IndiaMART enquiry</p>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      {detail && (
+        <div className="text-xs text-text-secondary space-y-0.5">
+          {detail.sender_company && <p>Company: <span className="text-text-primary">{detail.sender_company}</span></p>}
+          {(detail.sender_city || detail.sender_address) && (
+            <p>Location: <span className="text-text-primary">{[detail.sender_address, detail.sender_city].filter(Boolean).join(", ")}</span></p>
+          )}
+          {detail.enquiry_time && <p>Enquired: <span className="text-text-primary">{new Date(detail.enquiry_time).toLocaleString()}</span></p>}
+        </div>
+      )}
+      {matches && matches.length > 0 && (
+        <div>
+          <p className="text-xs text-amber-400 mb-1">Possible existing client match:</p>
+          {matches.map((m) => (
+            <p key={m.client_id} className="text-xs text-text-primary">
+              {m.name} <span className="text-text-secondary">(matched by {m.matched_field})</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OpportunityPanel({
   opportunity: o, clients, clientNameById, linkPick, onLinkPickChange, onLinkClient, onSave, onSaveDetails, onStartProject, onClose,
+  token, role, owners, onOwnerChanged,
 }) {
   const [values, setValues] = useState({
     name: o.lead_name,
@@ -443,6 +498,12 @@ function OpportunityPanel({
           ✕
         </button>
       </div>
+
+      {CAN_ASSIGN_OWNERS.includes(role) && (
+        <OwnerControl token={token} kind="opportunity" recordId={o.id} ownerId={o.owner_id} owners={owners} onChanged={onOwnerChanged} />
+      )}
+
+      <ImportedLeadSection opportunity={o} token={token} />
 
       <div>
         <label className={labelClass}>Name</label>
