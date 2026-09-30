@@ -71,6 +71,12 @@ class Opportunity(Base):
     # audit-logged, same convention as follow_up_note.
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # P2 (Client 360 contract): the channel this enquiry came through -- independent of
+    # Client.source (where the relationship itself began). Set at creation; editable afterward
+    # by sales/pm/director, following this Opportunity's own existing WRITE_ROLES precedent
+    # (deliberately not Client.source's Director/PM-only restriction). Nullable, never backfilled.
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     # Set once "Start Project" (item 6 of the spec) creates a Project from
     # a Won, Client-linked Opportunity -- lets Quotations trace back to the
     # Opportunity that produced them (build index step 8) via

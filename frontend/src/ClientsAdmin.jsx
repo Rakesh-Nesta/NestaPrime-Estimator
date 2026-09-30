@@ -128,7 +128,7 @@ function Toggle({ checked, onChange, disabled, label, hint }) {
 // Redesign (2026-09-27, Director's request): same screen, same data and the same server calls --
 // presented as a list with a slide-in details panel instead of stacked cards with inline forms. The
 // sidebar and header are untouched; only this screen's own content changed.
-export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onBack, initialSearch = "" }) {
+export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onOpenClient, onBack, initialSearch = "" }) {
   const [clients, setClients] = useState([]);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -529,6 +529,14 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
                       <span className="text-xs text-text-secondary capitalize">{c.type.replace("_", " ")}</span>
                     </span>
                     <span className="flex items-center gap-2 shrink-0">
+                      {onOpenClient && (
+                        <button
+                          onClick={() => onOpenClient(c.id)}
+                          className="text-xs border border-gold rounded px-2.5 py-1 text-gold hover:bg-gold/10"
+                        >
+                          Client 360 →
+                        </button>
+                      )}
                       <button
                         onClick={() => toggleProjects(c.id)}
                         className="text-xs border border-border-dark rounded px-2.5 py-1 text-text-secondary hover:text-text-primary hover:bg-surface-raised"

@@ -77,6 +77,9 @@ class ClientCreate(BaseModel):
     # from follow_up_note (next-reminder-specific) -- same role as
     # Project.custom_notes ("+ Add Note").
     notes: str | None = None
+    # P2 (Client 360 contract): where this relationship first began. Optional; set once here,
+    # editable afterward only via PATCH /clients/{id}/source (PM/Director only, audited).
+    source: str | None = Field(default=None, max_length=20)
 
 
 class ClientFlagsUpdate(BaseModel):
@@ -135,6 +138,7 @@ class ClientOut(BaseModel):
     next_follow_up_date: date | None
     follow_up_note: str | None
     notes: str | None
+    source: str | None = None  # P2
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -142,6 +146,10 @@ class ClientOut(BaseModel):
 class ClientTypeDefaultsOut(BaseModel):
     package: Package | None
     payment_terms: str | None
+
+
+class ClientSourceUpdate(BaseModel):
+    source: str | None = Field(default=None, max_length=20)
 
 
 # Client creation isn't itemised in M.4's matrix, but it's the natural
@@ -376,6 +384,33 @@ def update_client_details(
             value = getattr(payload, field)
             cleaned = value.strip() if value is not None else ""
             setattr(client, field, cleaned or None)
+
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+@router.patch("/{client_id}/source", response_model=ClientOut)
+def update_client_source(
+    client_id: uuid.UUID,
+    payload: ClientSourceUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    # P2 (Client 360 contract, approved business decision): correcting a Client's original
+    # source after creation is PM/Director only -- narrower than every other Client-write
+    # endpoint (sales/pm/director), a deliberate new restriction, not derived from precedent.
+    current_user=Depends(require_roles("pm", "director")),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    if client.source != payload.source:
+        write_audit_log_entry(
+            db, current_user, "client", client.id, "source",
+            old_value=client.source, new_value=payload.source, request=request,
+        )
+    client.source = payload.source
 
     db.commit()
     db.refresh(client)
