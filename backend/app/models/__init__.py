@@ -1,5 +1,11 @@
 from app.models.accessory_catalog_item import AccessoryCatalogItem  # noqa: F401
 from app.models.attachment import Attachment, AttachmentTag, ApprovalStrength  # noqa: F401
+from app.models.attachment_upload_session import (  # noqa: F401
+    AttachmentUploadChunk,
+    AttachmentUploadSession,
+    ChunkStatus,
+    UploadSessionStatus,
+)
 from app.models.client import Client, ClientType  # noqa: F401
 from app.models.client_contact import ClientContact  # noqa: F401
 from app.models.client_signatory import ClientSignatory  # noqa: F401
@@ -56,6 +62,7 @@ from app.models.project import (  # noqa: F401
     SoilType,
     UnitSystem,
 )
+from app.models.project_construction_stage import ProjectConstructionStage, StageStatus  # noqa: F401
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus  # noqa: F401
 from app.models.readiness_exception import (  # noqa: F401
     ReadinessCheckKey,

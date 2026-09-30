@@ -11,6 +11,7 @@ from app.api.field_settings import get_field_state
 from app.core import ownership
 from app.core.auth import require_roles
 from app.core.db_retry import create_with_retry
+from app.core.project_stages import seed_stages_for_project
 from app.db.session import get_db
 from app.models.client import Client, ClientType
 from app.models.client_site import ClientSite
@@ -309,6 +310,11 @@ def create_project(
         opportunity.project_id = project.id
         db.commit()
         db.refresh(project)
+
+    # P4 contract v7, Section 3: every new project gets one stage row per ConstructionPhase value,
+    # right away -- no read-only request ever creates one as a side effect. Existing projects were
+    # backfilled once, migration-time (509d1202ac03).
+    seed_stages_for_project(db, project.id)
 
     # WP3 (correction plan, 2026-09-27): project creation had no audit entry at all.
     write_audit_log_entry(

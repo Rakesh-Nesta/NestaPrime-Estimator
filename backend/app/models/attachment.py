@@ -96,3 +96,39 @@ class Attachment(Base):
     superseded_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("attachments.id"), nullable=True
     )
+
+    # P4 contract v7, Section 3: client-reported capture time, stored as UTC after client-side
+    # conversion (a timezone-less EXIF timestamp is interpreted as IST before that conversion --
+    # matching WP8's own Asia/Kolkata precedent, never trusting an ambient device timezone).
+    # Neither column is ever read by any authorization or business-logic decision -- display-only,
+    # explicitly labelled unverified in the UI regardless of source.
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    captured_at_source: Mapped[str | None] = mapped_column(String(10), nullable=True)  # exif | manual | unknown
+
+    # P4 contract v7, Section 5: ordinary internal review -- independent of, and repeatable
+    # alongside, marketing-reuse approval below. Both actions additionally require the same
+    # document-access check as every other action, not the role gate in isolation.
+    review_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # pending | approved | rejected
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # P4 contract v7, Section 5: marketing-reuse approval -- a second, independent flag set (never
+    # inherited by a later supersede, Section 5's own acceptance case). Repeatable: a fresh
+    # approval after a revocation overwrites the approved_at/_by_id pair and clears the revoked
+    # pair, since it supersedes the old revocation; the full approve/revoke/approve history lives
+    # in the audit log, never reconstructable from these columns alone.
+    marketing_reuse_approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    marketing_reuse_approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    marketing_reuse_revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    marketing_reuse_revoked_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
+    # P4 contract v7, Section 6: reserved schema hook for a future derivative/thumbnail pipeline.
+    # Never written by anything in this contract -- derivative generation stays out of scope
+    # (Section 9).
+    derived_from_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attachments.id"), nullable=True
+    )

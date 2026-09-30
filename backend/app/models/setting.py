@@ -43,6 +43,11 @@ class DocumentType(str, enum.Enum):
     # sport+package combination), not the whole Estimate, so it needs its
     # own doc_type rather than riding ESTIMATE's.
     ESTIMATE_OPTION = "estimate_option"
+    # P4 contract v7, Section 3: a project's own construction stage (e.g. "Flooring done, evidence
+    # attached") rides this same generic Attachment system -- doc_id is a
+    # project_construction_stages.id, not the Project itself, so a stage's own evidence stays
+    # scoped to that one phase.
+    PROJECT_STAGE = "project_stage"
 
 
 class Setting(Base):

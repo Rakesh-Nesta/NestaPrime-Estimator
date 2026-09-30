@@ -11,6 +11,7 @@ from app.api import (
     admin_overview,
     athletics,
     attachments,
+    attachment_uploads,
     audit_log,
     auth,
     client_contacts,
@@ -49,6 +50,7 @@ from app.api import (
     price_requests,
     pricing,
     project_overview,
+    project_stages,
     projects,
     purchase_orders,
     quotations_admin,
@@ -175,6 +177,8 @@ app.include_router(package_contents.router)
 app.include_router(exports.exports_router)
 app.include_router(field_settings.field_settings_router)
 app.include_router(attachments.attachments_router)
+app.include_router(attachment_uploads.upload_sessions_router)
+app.include_router(project_stages.stage_router)
 app.include_router(audit_log.audit_log_router)
 app.include_router(messages.messages_router)
 app.include_router(notifications.notifications_router)

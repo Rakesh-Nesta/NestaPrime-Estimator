@@ -48,6 +48,8 @@ COVERED_PATH_PARAMS = frozenset(
         "attachment_id",
         "report_id",
         "work_order_id",
+        "stage_id",  # P4 contract v7
+        "session_id",  # P4 contract v7
     }
 )
 UNSCOPED_PATH_PARAMS = frozenset({"client_type"})
@@ -74,6 +76,7 @@ def scoping_applies(db: Session, user: User) -> bool:
 def project_id_for_document(db: Session, doc_type: str, doc_id: uuid.UUID) -> uuid.UUID | None:
     """The project a generic document reference (attachments, messages) belongs to, or None if it has none."""
     from app.models.document import CostSheet, Estimate, EstimateOption, Quotation
+    from app.models.project_construction_stage import ProjectConstructionStage
     from app.models.site_survey import SiteSurvey
     from app.models.technical_bid_checklist import TechnicalBidChecklistItem
     from app.models.work_order import WorkOrder
@@ -89,6 +92,7 @@ def project_id_for_document(db: Session, doc_type: str, doc_id: uuid.UUID) -> uu
         "work_order": WorkOrder,
         "technical_bid_checklist_item": TechnicalBidChecklistItem,
         "site_survey": SiteSurvey,
+        "project_stage": ProjectConstructionStage,  # P4 contract v7, Section 2/3
     }.get(doc_type)
     if model is None:
         return None
@@ -214,6 +218,16 @@ def _resolve_owner_ok(db: Session, user: User, key: str, value: uuid.UUID) -> bo
         option = db.get(EstimateOption, addon.estimate_option_id) if addon else None
         estimate = db.get(Estimate, option.estimate_id) if option else None
         return estimate is not None and may_see_project(db, user, estimate.project_id)
+    if key == "stage_id":  # P4 contract v7, Section 3
+        from app.models.project_construction_stage import ProjectConstructionStage
+
+        stage = db.get(ProjectConstructionStage, value)
+        return stage is not None and may_see_project(db, user, stage.project_id)
+    if key == "session_id":  # P4 contract v7, Section 4
+        from app.models.attachment_upload_session import AttachmentUploadSession
+
+        session = db.get(AttachmentUploadSession, value)
+        return session is not None and may_see_document(db, user, session.doc_type, session.doc_id)
     return True  # a parameter this rule does not cover is not silently treated as hidden; the test guards new ones
 
 
