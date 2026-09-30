@@ -28,6 +28,12 @@ const CARD_STYLE = {
 export default function Payments({ token, role, initialFilter = "", onOpenProject, onOpenProjects, onBack }) {
   const [rows, setRows] = useState([]);
   const [tab, setTab] = useState(initialFilter === "overdue" ? "overdue" : "all");
+  // P1 acceptance fix (correction plan, 2026-09-30): see Opportunities.jsx's own comment on this
+  // same pattern -- useState's initial value only applies on first mount, so landing here twice
+  // without an intervening remount (App.jsx's screen key unchanged) needs this to actually reset.
+  useEffect(() => {
+    setTab(initialFilter === "overdue" ? "overdue" : "all");
+  }, [initialFilter]);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState(null);
   const [terms, setTerms] = useState({}); // work_order_id -> client's payment terms text

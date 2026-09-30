@@ -138,32 +138,72 @@ export default function Sidebar({
   // permission error, so they no longer see it (same idea as Team & Access
   // being hidden from Sales).
   const canSeeRelationships = ["sales", "pm", "director", "procurement"].includes(user.role);
+  // P1 (correction plan, 2026-09-30): Follow-ups used to share canSeeRelationships above, hiding
+  // it from site_engineer/ca_tax entirely -- correct when it was written (GET /clients, which the
+  // screen also called unconditionally, 403'd for them and broke the whole load), no longer
+  // correct since #273's role-scope fix (fe6b466) made FollowUps.jsx degrade gracefully instead
+  // of failing outright, and GET /follow-ups itself has never gated either role out. Split into
+  // its own flag so this nav item now matches what the screen actually supports, without
+  // reopening Leads & Clients/Opportunities (canSeeRelationships, unchanged) for either role --
+  // no permission changed here, just a working path that already existed now being shown.
+  const canSeeFollowups = ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"].includes(user.role);
 
-  const primaryItems = [
-    { key: "dashboard", label: "Overview", onClick: () => go("dashboard"), icon: GridIcon },
-    ...(canSeeRelationships
-      ? [
-          { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
-          { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
-        ]
-      : []),
-    ...(canSeeQuotations
-      ? [{ key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon }]
-      : []),
-    ...(isAdmin
-      ? []
-      : [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }]),
-    // Amendment 50 (Section 54): a real header now, shown only to the roles
-    // that can open it (PM/Director write, CA/Tax reads) -- as Amendment 46
-    // did for Leads & Clients, so nobody gets an item that can only refuse them.
-    ...(canSeePayments
-      ? [{ key: "payments", label: "Payments", onClick: () => go("payments"), icon: CalendarIcon }]
-      : []),
-    ...(canSeeRelationships
-      ? [{ key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon }]
-      : []),
-    ...(showTeamAccess ? [{ key: "team_access", label: "Team & Access", onClick: () => go("team_access"), icon: UsersIcon }] : []),
-  ];
+  // P1: named groups (Master Plan Reconciliation Section 5) around the exact same items, same
+  // onClick targets, same per-role visibility as before -- a re-skin, not a rebuild. Marketing,
+  // Enquiry Inbox and every other group member the Master Plan proposes but this codebase doesn't
+  // yet build are deliberately absent (design-only, not shown in production nav per Director
+  // decision). "More" below is unchanged and un-renamed -- its own two subsections don't map
+  // cleanly onto one of these six groups apiece, so forcing them in would misrepresent what's
+  // there rather than clarify it.
+  const primaryGroups = [
+    {
+      label: "Workspace",
+      items: [
+        { key: "dashboard", label: "Overview", onClick: () => go("dashboard"), icon: GridIcon },
+        ...(canSeeFollowups
+          ? [{ key: "followups", label: "Follow-ups", onClick: () => go("followups"), icon: ClockIcon }]
+          : []),
+      ],
+    },
+    {
+      label: "Growth",
+      items: canSeeRelationships
+        ? [
+            { key: "clients_admin", label: "Leads & Clients", onClick: () => go("clients_admin"), icon: UsersIcon },
+            { key: "opportunities", label: "Opportunities", onClick: () => go("opportunities"), icon: FunnelIcon },
+          ]
+        : [],
+    },
+    {
+      label: "Commercial",
+      items: canSeeQuotations
+        ? [{ key: "__quotations", label: "Quotations", onClick: onQuotationsClick, matchKeys: ["quotations_admin"], icon: DocumentIcon }]
+        : [],
+    },
+    {
+      label: "Delivery",
+      items: isAdmin
+        ? []
+        : [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }],
+    },
+    {
+      // Amendment 50 (Section 54): a real header now, shown only to the roles that can open it
+      // (PM/Director write, CA/Tax reads) -- as Amendment 46 did for Leads & Clients, so nobody
+      // gets an item that can only refuse them. P1 clarification: this label is a navigation
+      // grouping only -- it does not add invoicing or payment-management rights CA/Tax doesn't
+      // already have (still read-only for them, unchanged from today).
+      label: "Finance",
+      items: canSeePayments
+        ? [{ key: "payments", label: "Payments", onClick: () => go("payments"), icon: CalendarIcon }]
+        : [],
+    },
+    {
+      label: "Oversight",
+      items: showTeamAccess
+        ? [{ key: "team_access", label: "Team & Access", onClick: () => go("team_access"), icon: UsersIcon }]
+        : [],
+    },
+  ].filter((group) => group.items.length > 0);
 
   const sidebarBody = (
     <div className="flex flex-col h-full">
@@ -205,16 +245,21 @@ export default function Sidebar({
       )}
 
       <nav className="flex-1 overflow-y-auto px-2 space-y-1 pt-1">
-        {primaryItems.map((item) => (
-          <NavLink
-            key={item.key}
-            label={item.label}
-            badge={item.badge}
-            muted={item.muted}
-            icon={item.icon}
-            active={screen === item.key || (item.matchKeys || []).includes(screen)}
-            onClick={item.onClick}
-          />
+        {primaryGroups.map((group) => (
+          <div key={group.label} className="pb-1">
+            <p className="text-[10px] uppercase tracking-wider text-text-secondary/50 px-3 pt-2 pb-1">{group.label}</p>
+            {group.items.map((item) => (
+              <NavLink
+                key={item.key}
+                label={item.label}
+                badge={item.badge}
+                muted={item.muted}
+                icon={item.icon}
+                active={screen === item.key || (item.matchKeys || []).includes(screen)}
+                onClick={item.onClick}
+              />
+            ))}
+          </div>
         ))}
 
         <div className="pt-2 mt-2 border-t border-border-dark">

@@ -136,6 +136,12 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
   const [error, setError] = useState("");
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState(initialSearch);
+  // P1 acceptance fix (correction plan, 2026-09-30): see Opportunities.jsx's own comment on this
+  // same pattern -- useState's initial value only applies on first mount, so landing here twice
+  // without an intervening remount (App.jsx's screen key unchanged) needs this to actually reset.
+  useEffect(() => {
+    setSearch(initialSearch);
+  }, [initialSearch]);
   const [ownerFilter, setOwnerFilter] = useState("");
   const [panel, setPanel] = useState(null); // null | {mode:"new-client"|"new-lead"} | {mode:"edit-client"|"edit-lead", id}
   const [autoSelectDone, setAutoSelectDone] = useState(false);

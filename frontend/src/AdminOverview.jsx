@@ -138,7 +138,9 @@ export default function AdminOverview({ token, onManageTeam, onOpenTeam }) {
     <div className="max-w-[1400px] mx-auto mt-6 mb-10 px-4 sm:px-6 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-text-secondary">Workspace / Overview</p>
+          {/* P1 (Master Plan Reconciliation Section 5, Director-approved header table, 2026-09-30):
+              Admin's own role header, re-skin only -- same screen, same data, same permissions. */}
+          <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / People & Access</p>
           <div className="flex flex-wrap items-center gap-2 mt-1">
             <GridIcon className="w-5 h-5 text-gold shrink-0" />
             <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl">Admin overview</h2>
