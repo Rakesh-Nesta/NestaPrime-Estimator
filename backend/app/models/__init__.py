@@ -1,9 +1,12 @@
 from app.models.accessory_catalog_item import AccessoryCatalogItem  # noqa: F401
 from app.models.attachment import Attachment, AttachmentTag, ApprovalStrength  # noqa: F401
 from app.models.client import Client, ClientType  # noqa: F401
+from app.models.client_contact import ClientContact  # noqa: F401
 from app.models.client_signatory import ClientSignatory  # noqa: F401
+from app.models.client_site import ClientSite  # noqa: F401
 from app.models.company_logo import CompanyLogo  # noqa: F401
 from app.models.construction_sequence_step import ConstructionPhase, ConstructionSequenceStep  # noqa: F401
+from app.models.duplicate_client_pair import DismissedDuplicatePair  # noqa: F401
 from app.models.flooring_guide import FlooringGuide  # noqa: F401
 from app.models.follow_up import (  # noqa: F401
     FollowUp,

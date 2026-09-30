@@ -39,6 +39,9 @@ class OpportunityCreate(BaseModel):
     # Amendment 45 (Section 51): a general free-text catch-all, distinct
     # from next_follow_up_date/follow-up note -- same role as Client.notes.
     notes: str | None = None
+    # P2 (Client 360 contract): the channel this enquiry came through. Optional; editable
+    # afterward via PATCH /opportunities/{id}/source, same WRITE_ROLES as this endpoint.
+    source: str | None = None
 
 
 class OpportunityStageUpdate(BaseModel):
@@ -97,8 +100,13 @@ class OpportunityOut(BaseModel):
     notes: str | None
     project_id: uuid.UUID | None
     created_by_id: uuid.UUID
+    source: str | None = None  # P2
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OpportunitySourceUpdate(BaseModel):
+    source: str | None = None
 
 
 @router.post("", response_model=OpportunityOut, status_code=201)
@@ -348,6 +356,33 @@ def update_opportunity_details(
         opportunity.lead_phone = _clean_optional(payload.lead_phone)
     if "lead_email" in sent:
         opportunity.lead_email = _clean_optional(payload.lead_email)
+    db.commit()
+    db.refresh(opportunity)
+    return opportunity
+
+
+@router.patch("/{opportunity_id}/source", response_model=OpportunityOut)
+def update_opportunity_source(
+    opportunity_id: uuid.UUID,
+    payload: OpportunitySourceUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    # P2 (Client 360 contract): deliberately the SAME role gate as every other Opportunity
+    # write, not Client.source's Director/PM-only restriction -- follows this endpoint's own
+    # existing precedent rather than copying a rule proposed for a different entity.
+    current_user=Depends(require_roles(*WRITE_ROLES)),
+):
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    if opportunity.source != payload.source:
+        write_audit_log_entry(
+            db, current_user, "opportunity", opportunity.id, "source",
+            old_value=opportunity.source, new_value=payload.source, request=request,
+        )
+    opportunity.source = payload.source
+
     db.commit()
     db.refresh(opportunity)
     return opportunity

@@ -5,6 +5,7 @@ import AllProjects from "./AllProjects";
 import AdminOverview from "./AdminOverview";
 import AllQuotations from "./AllQuotations";
 import AuditLogView from "./AuditLogView";
+import ClientDetail from "./ClientDetail";
 import ClientsAdmin from "./ClientsAdmin";
 import CrossSellAdmin from "./CrossSellAdmin";
 import CustomNotesPanel from "./CustomNotesPanel";
@@ -45,6 +46,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeProject, setActiveProject] = useState(null);
+  // P2 (Client 360 contract): the client currently shown on the Client 360 screen.
+  const [activeClientId, setActiveClientId] = useState(null);
   const [screen, setScreen] = useState("dashboard"); // "dashboard" | "sports" | "scope" | "rates" | "pricing" | ...
   const [preNavScreen, setPreNavScreen] = useState("dashboard");
   const [navMenuOpen, setNavMenuOpen] = useState(false);
@@ -96,7 +99,7 @@ export default function App() {
   }, [user, accessToken, screen]);
 
   const TOP_LEVEL_SCREENS = [
-    "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin",
+    "dashboard", "rates", "pricing", "settings", "reports", "sports_scope_admin", "clients_admin", "client_detail",
     "audit_log", "quotations_admin", "price_requests", "vendors_admin", "cross_sell_admin", "help",
     "projects_admin", "estimates_admin", "calculator", "education",
     // Follow-ups got its real screen in Amendment 43; Opportunities got its
@@ -157,6 +160,11 @@ export default function App() {
     setScreen("sports");
   }
 
+  function handleOpenClient(clientId) {
+    setActiveClientId(clientId);
+    setScreen("client_detail");
+  }
+
   async function handleOpenProject(projectId) {
     setClientsSearch((c) => (c.text ? { text: "", nonce: c.nonce + 1 } : c));
     try {
@@ -190,6 +198,7 @@ export default function App() {
     setEmail("");
     setPassword("");
     setActiveProject(null);
+    setActiveClientId(null);
     setStartFrom(null);
     setScreen("dashboard");
     setPreNavScreen("dashboard");
@@ -367,7 +376,17 @@ export default function App() {
             role={user.role}
             onOpenProject={handleOpenProject}
             onOpenOpportunities={() => goToTopLevel("opportunities")}
+            onOpenClient={handleOpenClient}
             onBack={() => setScreen(preNavScreen)}
+          />
+        )}
+        {screen === "client_detail" && activeClientId && (
+          <ClientDetail
+            token={accessToken}
+            role={user.role}
+            clientId={activeClientId}
+            onOpenProject={handleOpenProject}
+            onBack={() => goToTopLevel("clients_admin")}
           />
         )}
         {screen === "price_requests" && canOpen("price_requests", user.role) && (

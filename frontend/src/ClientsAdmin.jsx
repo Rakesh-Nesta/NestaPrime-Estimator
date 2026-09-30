@@ -11,6 +11,7 @@ import {
   updateClientFollowUp,
   updateClientNotes,
   updateOpportunityDetails,
+  updateOpportunitySource,
 } from "./api";
 import { BellIcon, FunnelIcon, GridIcon, SearchIcon, UsersIcon } from "./Icons";
 import OwnerControl, { CAN_ASSIGN_OWNERS, ownerLabel, useOwners } from "./OwnerControl";
@@ -128,7 +129,7 @@ function Toggle({ checked, onChange, disabled, label, hint }) {
 // Redesign (2026-09-27, Director's request): same screen, same data and the same server calls --
 // presented as a list with a slide-in details panel instead of stacked cards with inline forms. The
 // sidebar and header are untouched; only this screen's own content changed.
-export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onBack, initialSearch = "" }) {
+export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportunities, onOpenClient, onBack, initialSearch = "" }) {
   const [clients, setClients] = useState([]);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -231,6 +232,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
       lead_email: values.lead_email || null,
       next_follow_up_date: values.next_follow_up_date,
       notes: values.notes || null,
+      source: values.source || null,
     });
     if (tab === "clients") setTab("leads");
     closePanel();
@@ -276,6 +278,12 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
       lead_phone: values.phone || null,
       lead_email: values.email || null,
     });
+    // P2 (Client 360 contract): Opportunity.source follows this Opportunity's own existing
+    // write-role precedent -- editable by whoever can already reach this panel, not restricted
+    // like Client.source. Audited server-side.
+    if (values.source !== (lead.source || "")) {
+      await updateOpportunitySource(token, lead.id, { source: values.source || null });
+    }
     closePanel();
     await load();
   }
@@ -479,6 +487,7 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
                     </div>
                     <p className="text-xs text-text-secondary break-words">
                       {[o.lead_phone, o.lead_email].filter(Boolean).join(" · ") || "No contact details yet"}
+                      {o.source && <> · Source: {o.source}</>}
                     </p>
                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                       {canAssign && (
@@ -529,6 +538,14 @@ export default function ClientsAdmin({ token, role, onOpenProject, onOpenOpportu
                       <span className="text-xs text-text-secondary capitalize">{c.type.replace("_", " ")}</span>
                     </span>
                     <span className="flex items-center gap-2 shrink-0">
+                      {onOpenClient && (
+                        <button
+                          onClick={() => onOpenClient(c.id)}
+                          className="text-xs border border-gold rounded px-2.5 py-1 text-gold hover:bg-gold/10"
+                        >
+                          Client 360 →
+                        </button>
+                      )}
                       <button
                         onClick={() => toggleProjects(c.id)}
                         className="text-xs border border-border-dark rounded px-2.5 py-1 text-text-secondary hover:text-text-primary hover:bg-surface-raised"
@@ -667,6 +684,9 @@ function DetailsPanel({
     email: client?.email ?? lead?.lead_email ?? "",
     city: client?.city ?? "",
     notes: client?.notes ?? "",
+    // P2 (Client 360 contract): the enquiry's own source -- distinct from Client.source, edited
+    // separately on Client 360. Only relevant to the lead/opportunity branch of this form.
+    source: lead?.source ?? "",
     followUpDate: client?.next_follow_up_date ?? (isNewLead ? defaultEnquiryFollowUpDate() : ""),
     followUpNote: client?.follow_up_note ?? "",
     whatsapp_opt_in: client?.whatsapp_opt_in ?? true,
@@ -697,7 +717,7 @@ function DetailsPanel({
     setSaving(true);
     try {
       if (isNewClient) await onCreateClient(values);
-      else if (isNewLead) await onCreateEnquiry({ lead_name: values.name, lead_phone: values.phone, lead_email: values.email, next_follow_up_date: values.followUpDate, notes: values.notes });
+      else if (isNewLead) await onCreateEnquiry({ lead_name: values.name, lead_phone: values.phone, lead_email: values.email, next_follow_up_date: values.followUpDate, notes: values.notes, source: values.source });
       else if (isClient) await onSaveClient(client, values);
       else await onSaveLead(lead, values);
     } catch (err) {
@@ -786,6 +806,18 @@ function DetailsPanel({
         <div>
           <label className={labelClass}>City (optional)</label>
           <input maxLength={100} value={values.city} onChange={(e) => setField("city", e.target.value)} className={inputClass} />
+        </div>
+      )}
+      {!isClient && (
+        <div>
+          <label className={labelClass}>Source (optional)</label>
+          <input
+            maxLength={20}
+            placeholder="e.g. referral, website, IndiaMART"
+            value={values.source}
+            onChange={(e) => setField("source", e.target.value)}
+            className={inputClass}
+          />
         </div>
       )}
 

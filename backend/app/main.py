@@ -13,7 +13,11 @@ from app.api import (
     attachments,
     audit_log,
     auth,
+    client_contacts,
+    client_duplicates,
+    client_messages,
     client_signatories,
+    client_sites,
     clients,
     company,
     construction_sequence,
@@ -111,6 +115,10 @@ app.include_router(ownership.ownership_router)
 app.include_router(users.users_router)
 app.include_router(clients.router)
 app.include_router(client_signatories.client_signatories_router)
+app.include_router(client_contacts.router)
+app.include_router(client_sites.router)
+app.include_router(client_duplicates.router)
+app.include_router(client_messages.router)
 app.include_router(opportunities.router)
 app.include_router(company.router)
 app.include_router(dashboard.router)

@@ -98,6 +98,12 @@ class Client(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
     )
 
+    # P2 (Client 360 contract): where the relationship itself first began. Set at creation by
+    # whoever creates the client; editable afterward by PM/Director only, audited -- a proposed
+    # rule the contract's Section 0 explicitly labels as new, not derived from existing
+    # precedent. Nullable, never backfilled on existing rows.
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), nullable=False
     )

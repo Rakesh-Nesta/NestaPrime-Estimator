@@ -126,6 +126,117 @@ export async function updateClientSignatory(token, clientId, signatoryId, payloa
   return handle(res);
 }
 
+export async function getClient(token, clientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function updateClientSource(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/source`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateOpportunitySource(token, opportunityId, payload) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/source`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+// P2 (Client 360 contract): Contacts.
+export async function listClientContacts(token, clientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/contacts`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createClientContact(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/contacts`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateClientContact(token, clientId, contactId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/contacts/${contactId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+// P2: Sites.
+export async function listClientSites(token, clientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/sites`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function createClientSite(token, clientId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/sites`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateClientSite(token, clientId, siteId, payload) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/sites/${siteId}`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function updateProjectSite(token, projectId, payload) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/site`, {
+    method: "PATCH",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+// P2: Communication tab.
+export async function listClientMessages(token, clientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/messages`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+// P2: duplicate suggestions.
+export async function listClientDuplicates(token, clientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/duplicates`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function dismissClientDuplicate(token, clientId, otherClientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/duplicates/dismiss`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ other_client_id: otherClientId }),
+  });
+  return handle(res);
+}
+
+export async function restoreClientDuplicate(token, clientId, otherClientId) {
+  const res = await fetch(`${API_BASE}/clients/${clientId}/duplicates/restore`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ other_client_id: otherClientId }),
+  });
+  if (!res.ok && res.status !== 204) return handle(res);
+  return null;
+}
+
 export async function createProject(token, payload) {
   const res = await fetch(`${API_BASE}/projects`, {
     method: "POST",

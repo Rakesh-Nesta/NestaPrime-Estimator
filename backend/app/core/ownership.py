@@ -43,6 +43,8 @@ COVERED_PATH_PARAMS = frozenset(
         "selection_id",
         "project_sport_id",
         "signatory_id",
+        "contact_id",  # P2 (Client 360 contract)
+        "site_id",  # P2 (Client 360 contract)
         "attachment_id",
         "report_id",
         "work_order_id",
@@ -155,7 +157,9 @@ def _resolve_owner_ok(db: Session, user: User, key: str, value: uuid.UUID) -> bo
     """Does the record named by this path parameter belong to `user` (through its project or client)?"""
     from app.models.attachment import Attachment
     from app.models.client import Client
+    from app.models.client_contact import ClientContact
     from app.models.client_signatory import ClientSignatory
+    from app.models.client_site import ClientSite
     from app.models.document import CostSheet, Estimate, EstimateOption, EstimateOptionAddon, Quotation
     from app.models.opportunity import Opportunity
     from app.models.report import Report
@@ -173,6 +177,14 @@ def _resolve_owner_ok(db: Session, user: User, key: str, value: uuid.UUID) -> bo
     if key == "signatory_id":
         signatory = db.get(ClientSignatory, value)
         client = db.get(Client, signatory.client_id) if signatory else None
+        return client is not None and client.owner_id == user.id
+    if key == "contact_id":
+        contact = db.get(ClientContact, value)
+        client = db.get(Client, contact.client_id) if contact else None
+        return client is not None and client.owner_id == user.id
+    if key == "site_id":
+        site = db.get(ClientSite, value)
+        client = db.get(Client, site.client_id) if site else None
         return client is not None and client.owner_id == user.id
     if key == "report_id":
         report = db.get(Report, value)

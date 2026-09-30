@@ -119,6 +119,15 @@ class Project(Base):
     site_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     site_state_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
 
+    # P2 (Client 360 contract): provenance metadata, not a live reference -- selecting a Site
+    # copies its city/site_address/site_state_code into the fields above once, at that moment.
+    # A later edit to the Site's own address never retroactively changes this Project; re-
+    # selecting a Site (an explicit action, PATCH /projects/{id}/site) re-copies on purpose.
+    # Nullable, additive: every pre-P2 project keeps showing its own inline fields, zero backfill.
+    site_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("client_sites.id"), nullable=True
+    )
+
     # #4 Distance from nearest NestaPrime hub (km). hub_id records WHICH
     # hub (Part O HUBS) the PM measured from; distance_km is still the
     # manual km entry itself (M.4a item 5) — PIN-code lookup is a Phase 7

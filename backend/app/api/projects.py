@@ -13,6 +13,7 @@ from app.core.auth import require_roles
 from app.core.db_retry import create_with_retry
 from app.db.session import get_db
 from app.models.client import Client, ClientType
+from app.models.client_site import ClientSite
 from app.models.document import Quotation, QuotationStatus
 from app.models.hub import Hub
 from app.models.opportunity import Opportunity, OpportunityStage
@@ -66,6 +67,12 @@ class ProjectCreate(BaseModel):
     city: str
     site_address: str | None = None
     site_state_code: str | None = None
+    # P2 (Client 360 contract): optional. When given, the server copies this Site's own
+    # address fields into city/site_address/site_state_code below -- overriding whatever this
+    # payload separately sent for them -- rather than trusting the client to have copied it
+    # correctly itself (the same "server never trusts the client alone" discipline the
+    # Site<->Project cross-client check already uses).
+    site_id: uuid.UUID | None = None
     hub_id: uuid.UUID | None = None
     # Bounds match each column's actual NUMERIC(precision, scale) on the
     # Project model -- without these, a value the column can't hold
@@ -119,6 +126,8 @@ class ProjectOut(BaseModel):
     project_type: ProjectType
     city: str
     site_address: str | None
+    site_state_code: str | None = None
+    site_id: uuid.UUID | None = None  # P2 -- provenance metadata, not a live reference (see model docstring)
     hub_id: uuid.UUID | None
     distance_km: float | None
     site_condition: SiteCondition
@@ -227,6 +236,21 @@ def create_project(
     if payload.hub_id is not None and not db.query(Hub).filter(Hub.id == payload.hub_id).first():
         raise HTTPException(status_code=404, detail="Hub not found")
 
+    # P2 (Client 360 contract): a selected Site must belong to this Project's own Client --
+    # checked explicitly, never assumed from a picker that merely offers same-client sites.
+    # A cross-client mismatch is a 400 (this caller explicitly named both ids themselves, so
+    # there's no existence to conceal, unlike a nested-record lookup by URL) -- a missing
+    # site_id entirely is still a plain 404. Copy-on-select: the Site's own address fields are
+    # copied in now, overriding whatever city/site_address/site_state_code this payload
+    # separately carried -- the server never trusts the client to have copied it correctly.
+    site = None
+    if payload.site_id is not None:
+        site = db.query(ClientSite).filter(ClientSite.id == payload.site_id).first()
+        if site is None:
+            raise HTTPException(status_code=404, detail="Site not found")
+        if site.client_id != payload.client_id:
+            raise HTTPException(status_code=400, detail="This Site does not belong to this Project's Client")
+
     if (
         payload.existing_building_clear_height_ft is not None
         and payload.building_status != BuildingStatus.EXISTING_BUILDING
@@ -262,6 +286,12 @@ def create_project(
         # collision re-reads the now-updated row set and computes a
         # genuinely new project_no, rather than retrying with the same
         # doomed-to-collide value.
+        fields = payload.model_dump(exclude={"package", "owner_id"})
+        if site is not None:
+            # P2: copy-on-select -- the Site's own address, not whatever this payload sent.
+            fields["city"] = site.city
+            fields["site_address"] = site.site_address
+            fields["site_state_code"] = site.site_state_code
         project = Project(
             project_no=_generate_project_no(db),
             # B.2: Client = Government auto-switches Tender Mode on — not a
@@ -269,7 +299,7 @@ def create_project(
             tender_mode=(client.type == ClientType.GOVERNMENT),
             package=package,
             owner_id=owner_id,
-            **payload.model_dump(exclude={"package", "owner_id"}),
+            **fields,
         )
         db.add(project)
         return project
@@ -387,6 +417,58 @@ def list_projects(
             )
         )
     return out
+
+
+class ProjectSiteUpdate(BaseModel):
+    site_id: uuid.UUID | None = None
+
+
+@router.patch("/{project_id}/site", response_model=ProjectOut)
+def update_project_site(
+    project_id: uuid.UUID,
+    payload: ProjectSiteUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("sales", "pm", "director")),
+):
+    """P2 (Client 360 contract): re-selecting a Site (an explicit action) re-copies its address
+    into this Project, overwriting whatever is there now -- on purpose. A later edit to the
+    Site's own address alone, without this endpoint being called again, never changes this
+    Project. Setting site_id to null clears the linkage only; it does not erase the address
+    fields already copied in."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if payload.site_id is None:
+        if project.site_id is not None:
+            write_audit_log_entry(
+                db, current_user, "project", project.id, "site_id",
+                old_value=str(project.site_id), new_value=None, request=request,
+            )
+        project.site_id = None
+        db.commit()
+        db.refresh(project)
+        return _to_out(project)
+
+    site = db.query(ClientSite).filter(ClientSite.id == payload.site_id).first()
+    if site is None:
+        raise HTTPException(status_code=404, detail="Site not found")
+    if site.client_id != project.client_id:
+        raise HTTPException(status_code=400, detail="This Site does not belong to this Project's Client")
+
+    old_site_id = project.site_id
+    project.site_id = site.id
+    project.city = site.city
+    project.site_address = site.site_address
+    project.site_state_code = site.site_state_code
+    write_audit_log_entry(
+        db, current_user, "project", project.id, "site_id",
+        old_value=str(old_site_id) if old_site_id else None, new_value=str(site.id), request=request,
+    )
+    db.commit()
+    db.refresh(project)
+    return _to_out(project)
 
 
 class ProjectNotesUpdate(BaseModel):
