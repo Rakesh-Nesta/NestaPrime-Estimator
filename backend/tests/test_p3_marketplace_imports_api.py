@@ -68,14 +68,55 @@ def test_operational_screen_refuses_sales_case_new(client, director_user, db_ses
 
 
 def test_operational_screen_refuses_marketing_case_new(client, director_user, db_session):
+    """Not just the ledger's own summary counts -- every operational control (verify-key, retry,
+    backfill, the raw ledger list) and every existing business endpoint must independently refuse
+    Marketing, proving the new role's access is genuinely limited to its one aggregation
+    endpoint, not merely that a hardcoded role-list assertion happens to match."""
     marketing_headers = _marketing_headers(client, db_session)
     for path, method in [
         ("/marketplace-imports/connection-health", "get"),
         ("/marketplace-imports/summary", "get"),
+        ("/marketplace-imports", "get"),
         ("/marketplace-imports/verify-key", "post"),
+        ("/marketplace-imports/backfill", "post"),
     ]:
         res = _call(client, method, path, marketing_headers)
-        assert res.status_code == 403, f"{path} should refuse Marketing, got {res.status_code}"
+        assert res.status_code == 403, f"{path} should refuse Marketing, got {res.status_code}: {res.text}"
+
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    res = client.post(f"/marketplace-imports/{fake_id}/retry", headers=marketing_headers)
+    assert res.status_code == 403, res.text
+
+
+def test_marketing_refused_buyer_detail_and_client_match_endpoints_case_new(client, director_user, db_session):
+    """Section 5/7's Opportunity-scoped endpoints (import-detail, possible-client-matches) use
+    the existing READ_ROLES tuple, which was never extended to include Marketing -- confirmed
+    directly here, not inferred from the aggregation endpoint's own separate gate."""
+    from app.core import marketplace_imports as mi
+
+    opp_id = _import_one(db_session)
+    marketing_headers = _marketing_headers(client, db_session, email="marketing-buyer-detail@test.local")
+    res1 = client.get(f"/opportunities/{opp_id}/import-detail", headers=marketing_headers)
+    assert res1.status_code == 403, res1.text
+    res2 = client.get(f"/opportunities/{opp_id}/possible-client-matches", headers=marketing_headers)
+    assert res2.status_code == 403, res2.text
+    res3 = client.get(f"/opportunities/{opp_id}", headers=marketing_headers)
+    assert res3.status_code == 403, res3.text
+
+
+def test_raw_payload_is_never_returned_by_any_endpoint_case_new(client, director_user, db_session):
+    """Explicit, positive proof (not an absence-of-evidence argument): the ledger list endpoint
+    -- the one place PM/Director can read details about a captured lead -- exposes status/reason/
+    retry metadata but never the raw_payload blob itself, for any role, including PM/Director
+    who otherwise have full ledger read access."""
+    _import_one(db_session)
+    headers = _director_headers(client, director_user)
+    res = client.get("/marketplace-imports", headers=headers)
+    assert res.status_code == 200
+    for row in res.json():
+        assert "raw_payload" not in row
+    assert "raw_payload" not in res.text
+    assert "QUERY_MESSAGE" not in res.text  # a raw-payload field name that would only leak via the blob itself
 
 
 def test_operational_screen_allows_pm_and_director(client, director_user, db_session):
