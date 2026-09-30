@@ -116,6 +116,20 @@ const NEXT_MOVES_PREVIEW_LIMIT = 5;
 // visibility rule this panel now shares.
 const CAN_SEE_CLIENT_LIST = ["sales", "pm", "director", "procurement"];
 
+// P1 (Master Plan Reconciliation Section 5, Director-approved header table, 2026-09-30): each
+// role's dashboard gets its own identity instead of the same generic "Business overview." for
+// everyone. Re-skin only -- the data, filters and permissions beneath each header are exactly
+// what they were before; Admin's own header lives in AdminOverview.jsx, not here, since Admin
+// never renders this component.
+const ROLE_HEADERS = {
+  sales: "Sales & Client Growth",
+  pm: "Project Delivery",
+  director: "Business Command Centre",
+  procurement: "Procurement & Supply",
+  site_engineer: "Site Execution & Evidence",
+  ca_tax: "Finance & Collections",
+};
+
 export default function Dashboard({ token, role, onOpenProject, onNewProject, onDrillDown }) {
   const [data, setData] = useState(null);
   const [clients, setClients] = useState(null);
@@ -179,6 +193,11 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
   // roles still see the count, just not a live link into it.
   const canSeeList = CAN_SEE_CLIENT_LIST.includes(role);
   const canSeeQuotations = ["sales", "pm", "director"].includes(role);
+  // P1 (correction plan, 2026-09-30): Follow-ups' own destination (Sidebar.jsx, same fix) is now
+  // usable by site_engineer/ca_tax too, since #273's role-scope fix (fe6b466). The tile's own
+  // count already reflected their real visible_follow_ups() total before this -- only the
+  // clickable link and the tab strip entry were needlessly narrower than the data already was.
+  const canSeeFollowups = [...CAN_SEE_CLIENT_LIST, "site_engineer", "ca_tax"].includes(role);
   const realTiles = [
     {
       label: mine("Open opportunities"),
@@ -207,7 +226,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
     {
       label: followupsDueLabel,
       value: summary.followups_due_count,
-      target: CAN_SEE_CLIENT_LIST.includes(role) ? "followups" : null,
+      target: canSeeFollowups ? "followups" : null,
       preset: {},
       icon: ClockIcon,
     },
@@ -233,7 +252,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
     ...(["pm", "director", "ca_tax"].includes(role)
       ? [{ key: "payments", label: "Payments", onClick: () => onDrillDown("payments", {}) }]
       : []),
-    ...(canSeeList ? [{ key: "followups", label: "Follow-ups", onClick: () => onDrillDown("followups", {}) }] : []),
+    ...(canSeeFollowups ? [{ key: "followups", label: "Follow-ups", onClick: () => onDrillDown("followups", {}) }] : []),
   ];
 
   return (
@@ -241,7 +260,7 @@ export default function Dashboard({ token, role, onOpenProject, onNewProject, on
       <div className="rise" style={{ "--d": "0.05s" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / Customer Relationships</p>
+            <p className="text-xs uppercase tracking-wide text-text-secondary">NestaPrime / {ROLE_HEADERS[role] || "Overview"}</p>
             <h2 className="font-heading font-bold text-text-primary text-2xl sm:text-3xl mt-1">
               {own ? "My overview." : "Business overview."}
             </h2>
