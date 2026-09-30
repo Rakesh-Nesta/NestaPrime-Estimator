@@ -69,6 +69,16 @@ export default function Opportunities({ token, role, onBack, onStartProject, ini
   const [clients, setClients] = useState([]);
   const [relationship, setRelationship] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatusGroup === "open" ? "open" : "");
+  // P1 acceptance fix (correction plan, 2026-09-30): useState's initial-value argument only ever
+  // applies on this component's first mount. Landing here twice in a row while already on this
+  // screen (e.g. drilling in via the dashboard's "Open opportunities" tile, then a plain
+  // Opportunities nav click) re-renders the SAME instance with a new initialStatusGroup prop --
+  // App.jsx's screen key doesn't change, so React never remounts it -- and without this, the
+  // stale filter from the first visit silently stuck around instead of resetting. Only fires when
+  // the prop's own value actually changes, so it never fights a manual filter click in between.
+  useEffect(() => {
+    setStatusFilter(initialStatusGroup === "open" ? "open" : "");
+  }, [initialStatusGroup]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

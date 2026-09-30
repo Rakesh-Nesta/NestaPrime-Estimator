@@ -49,6 +49,15 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
   const [statusFilter, setStatusFilter] = useState(
     initialStatusFilter && ["active", "inactive", "pending", "locked"].includes(initialStatusFilter) ? initialStatusFilter : "all"
   );
+  // P1 acceptance fix (correction plan, 2026-09-30): see Opportunities.jsx's own comment on this
+  // same pattern -- useState's initial value only applies on first mount, so landing here twice
+  // without an intervening remount (App.jsx's screen key unchanged) needs this to actually reset.
+  useEffect(() => {
+    setRoleFilter(initialRoleFilter && ALL_ROLES.includes(initialRoleFilter) ? initialRoleFilter : "all");
+    setStatusFilter(
+      initialStatusFilter && ["active", "inactive", "pending", "locked"].includes(initialStatusFilter) ? initialStatusFilter : "all"
+    );
+  }, [initialRoleFilter, initialStatusFilter]);
 
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState(emptyUserForm());

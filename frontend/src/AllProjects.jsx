@@ -60,6 +60,12 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
   const canAssign = CAN_ASSIGN_OWNERS.includes(role);
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(initialStatus);
+  // P1 acceptance fix (correction plan, 2026-09-30): see Opportunities.jsx's own comment on this
+  // same pattern -- useState's initial value only applies on first mount, so landing here twice
+  // without an intervening remount (App.jsx's screen key unchanged) needs this to actually reset.
+  useEffect(() => {
+    setStatus(initialStatus);
+  }, [initialStatus]);
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("");
   const [selectedId, setSelectedId] = useState(null);

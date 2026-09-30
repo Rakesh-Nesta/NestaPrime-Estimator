@@ -80,6 +80,12 @@ export default function AllQuotations({
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState("");
   const [statusGroup, setStatusGroup] = useState(initialStatusGroup);
+  // P1 acceptance fix (correction plan, 2026-09-30): see Opportunities.jsx's own comment on this
+  // same pattern -- useState's initial value only applies on first mount, so landing here twice
+  // without an intervening remount (App.jsx's screen key unchanged) needs this to actually reset.
+  useEffect(() => {
+    setStatusGroup(initialStatusGroup);
+  }, [initialStatusGroup]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
