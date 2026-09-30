@@ -53,5 +53,13 @@ class Settings(BaseSettings):
     smtp_from_address: str = ""
     smtp_use_tls: bool = True
 
+    # P3 contract (Section 6): IndiaMART's glusr_crm_key Pull API key -- a secret in the query
+    # string itself, never a header, never logged. Same "blank = not configured, fail fast"
+    # discipline as wa-gateway/telegram/Anthropic/SMTP above -- app/core/marketplace_pull.py
+    # treats an empty value as "not configured," and the app/config.py-level pattern (not the
+    # DB-backed Settings table) is deliberate: this value is too sensitive for an admin-editable
+    # table that was never designed to hold it (P3 Section 0's own correction).
+    indiamart_pull_api_key: str = ""
+
 
 settings = Settings()

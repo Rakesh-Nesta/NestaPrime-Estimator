@@ -12,7 +12,10 @@ from app.db.base import Base
 class UserRole(str, enum.Enum):
     """The six roles fixed in the blueprint (Part O USERS / ROLES, M.4), plus ADMIN (Amendment 59, Section 62):
     the person who runs the system -- people, access, technical settings -- without approving, pricing or seeing
-    cost and margin. Not one of the blueprint's six; added at the Director's instruction."""
+    cost and margin. Not one of the blueprint's six; added at the Director's instruction.
+
+    MARKETING (P3 contract, Section 9) is added by the same additive pattern as ADMIN: never added to
+    any existing role-gate tuple by default, scoped to its own new aggregate-only dashboard endpoint."""
 
     SALES = "sales"
     PM = "pm"
@@ -21,6 +24,7 @@ class UserRole(str, enum.Enum):
     SITE_ENGINEER = "site_engineer"
     CA_TAX = "ca_tax"
     ADMIN = "admin"
+    MARKETING = "marketing"
 
 
 class User(Base):

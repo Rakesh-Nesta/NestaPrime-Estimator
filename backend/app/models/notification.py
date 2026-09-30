@@ -32,6 +32,13 @@ class NotificationKind(str, enum.Enum):
     # sent to the assignee themselves, since that would be exactly the "unusable link" this
     # is meant to avoid.
     ACCESS_MISMATCH_ESCALATION = "access_mismatch_escalation"
+    # P3 contract (Section 7): to the new owner, when an imported lead is assigned out of the
+    # unassigned queue. To Directors: the IndiaMART Pull key has expired/been rejected
+    # (Section 3/8). Both are created entirely outside app/core/reminders.py's own code path, so
+    # they are in-app-only by construction (Section 0, revision 3) -- reminders.py's _send_digest
+    # is only ever called with lists run_daily_reminders builds itself for the three kinds above.
+    IMPORT_LEAD_ASSIGNED = "import_lead_assigned"
+    IMPORT_KEY_EXPIRED = "import_key_expired"
 
 
 class NotificationEmailStatus(str, enum.Enum):

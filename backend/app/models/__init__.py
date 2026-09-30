@@ -31,6 +31,13 @@ from app.models.document import (  # noqa: F401
 from app.models.hub import Hub  # noqa: F401
 from app.models.lighting_standard import LightingLuxStandard, SportPoleCount  # noqa: F401
 from app.models.margin_policy import MarginPolicy  # noqa: F401
+from app.models.marketplace_lead_import import (  # noqa: F401
+    MarketplaceApiRateGate,
+    MarketplaceLeadImport,
+    MarketplaceLeadImportDuplicateDelivery,
+    MarketplaceLeadImportStatus,
+    MarketplacePullCheckpoint,
+)
 from app.models.message import Message, MessageChannel, MessageStatus  # noqa: F401
 from app.models.message_template import MessageTemplate, WhatsappTemplateStatus  # noqa: F401
 from app.models.netting_grade import NettingGrade  # noqa: F401
