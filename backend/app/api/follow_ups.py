@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
-from app.core.follow_up_entities import check_follow_up_access, resolve_entity
+from app.core.follow_up_entities import check_follow_up_access, resolve_entity, visible_follow_ups
 from app.core.follow_up_sync import WRITES_LOCKED_DETAIL, follow_up_writes_locked, mirror_legacy_columns
 from app.db.session import get_db
 from app.models.follow_up import (
@@ -203,50 +203,34 @@ def list_follow_ups(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    per_row_check = True
     if entity_type is not None and entity_id is not None:
         check_follow_up_access(db, current_user, entity_type, entity_id, need="read")
         query = db.query(FollowUp).filter(FollowUp.entity_type == entity_type, FollowUp.entity_id == entity_id)
-        per_row_check = False
-    elif owner_id is not None:
+        if status is not None:
+            query = query.filter(FollowUp.status == status)
+        rows = query.order_by(FollowUp.due_date.asc()).all()
+        return [_to_out(row) for row in rows]
+
+    if owner_id is not None:
         # "My follow-ups": every row this user is entitled to see across every entity
         # type, narrowed to one owner. A Sales user may only ask for their own id here --
         # this list intentionally does not become a way to browse everyone else's
         # follow-ups one owner at a time.
         if current_user.role.value == "sales" and owner_id != current_user.id:
             raise HTTPException(status_code=403, detail="Sales may only list their own follow-ups")
-        query = db.query(FollowUp).filter(FollowUp.owner_id == owner_id)
-    else:
-        # WP5 integration: the central Follow-ups screen's org-wide view -- no filter at
-        # all means "everything this user is entitled to see". A Sales user is ALWAYS
-        # narrowed to their own here -- unlike list_opportunities/list_clients, this is
-        # not conditional on the Director's own-records switch (Amendment 60): browsing
-        # every other Sales rep's follow-up notes org-wide in one screen is a bigger
-        # exposure than seeing an unowned record in a filtered list, so this list stays
-        # narrow for Sales regardless of that switch's state. Every other role sees the
-        # full set, still re-checked per row below.
-        query = db.query(FollowUp)
-        if current_user.role.value == "sales":
-            query = query.filter(FollowUp.owner_id == current_user.id)
+        rows = visible_follow_ups(db, current_user, owner_id=owner_id, status=status)
+        return [_to_out(row) for row in rows]
 
-    if status is not None:
-        query = query.filter(FollowUp.status == status)
-    rows = query.order_by(FollowUp.due_date.asc()).all()
-
-    if per_row_check:
-        # Re-check access per row rather than trusting the owner_id/no-filter query alone,
-        # since a follow-up's current owner and its entity's own permission gate can
-        # diverge (an explicitly-assigned specialist may not otherwise have write access to
-        # the parent record) -- read access on the entity is still required to see it here.
-        visible = []
-        for row in rows:
-            try:
-                check_follow_up_access(db, current_user, row.entity_type, row.entity_id, need="read")
-            except HTTPException:
-                continue
-            visible.append(row)
-        rows = visible
-
+    # WP5 integration: the central Follow-ups screen's org-wide view -- no filter at
+    # all means "everything this user is entitled to see". A Sales user is ALWAYS
+    # narrowed to their own here -- unlike list_opportunities/list_clients, this is
+    # not conditional on the Director's own-records switch (Amendment 60): browsing
+    # every other Sales rep's follow-up notes org-wide in one screen is a bigger
+    # exposure than seeing an unowned record in a filtered list, so this list stays
+    # narrow for Sales regardless of that switch's state. Every other role sees the
+    # full set, still re-checked per row (visible_follow_ups, shared with the
+    # dashboard's own followups_due_count -- correction plan, 2026-09-29).
+    rows = visible_follow_ups(db, current_user, status=status)
     return [_to_out(row) for row in rows]
 
 

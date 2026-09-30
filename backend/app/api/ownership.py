@@ -14,15 +14,110 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.api.settings import get_current_setting_value
+from app.core import follow_up_entities
+from app.core import follow_up_sync
 from app.core import ownership
 from app.core.auth import require_roles
+from app.core.reminders import _get_or_create_notification, resolve_entity_label
 from app.db.session import get_db
 from app.models.client import Client
 from app.models.document import Quotation
+from app.models.follow_up import TERMINAL_FOLLOW_UP_STATUSES, FollowUp, FollowUpEntityType
+from app.models.notification import NotificationKind
 from app.models.opportunity import Opportunity
 from app.models.project import Project
 from app.models.setting import Setting, SettingScope
 from app.models.user import User, UserRole
+
+# Dashboard-fix follow-up (correction plan, 2026-09-29): a Client, Opportunity or Project
+# reassignment carries its record's own open, inherited FollowUp rows along with it. "Inherited"
+# is the FollowUp model's own distinction (see FollowUp.owner_explicitly_assigned's docstring): a
+# row nobody deliberately pointed elsewhere just reflects whoever currently owns the parent. An
+# explicitly assigned specialist's row is never touched here -- same rule the model's own
+# docstring already stated before this cascade existed to enforce it. Completed/cancelled rows
+# are historical record and are not touched either way. Project IS covered: FollowUpEntityType.PROJECT
+# is a real, used entity type (project_overview.py, follow_up_entities.py's own resolve_entity,
+# reminders.py); create_follow_up (app/api/follow_ups.py) defaults a manually created Project
+# follow-up's owner_id from the Project's own current owner_id the same uniform way it does for
+# Client/Opportunity, so the inherited-vs-explicit rule already governs Project follow-ups today
+# and reassignment must honour it the same way. follow_up_sync.py's mirror_legacy_columns being
+# CLIENT/OPPORTUNITY-only is unrelated -- that mirrors the FollowUp table back onto the two legacy
+# next_follow_up_date columns Project never had, not whether Project follow-ups exist or cascade.
+_FOLLOW_UP_ENTITY_TYPE = {
+    "client": FollowUpEntityType.CLIENT,
+    "opportunity": FollowUpEntityType.OPPORTUNITY,
+    "project": FollowUpEntityType.PROJECT,
+}
+
+
+def _flag_specialist_access_mismatches(db: Session, entity_type: FollowUpEntityType, entity_id: uuid.UUID) -> None:
+    """The explicit assignments _cascade_inherited_follow_ups deliberately left alone can still be
+    broken by the same reassignment: an explicitly assigned specialist's own read access to the
+    parent (check_follow_up_access) is resolved fresh each time, from the parent's CURRENT owner
+    and the Amendment 60 switch -- so a parent reassignment can silently strand a specialist who
+    could open their follow-up a moment ago and can't now. Flags it immediately, the same way (and
+    to the same Directors, via the same idempotent, deduplicated notification) reminders.py's own
+    daily run already flags any due-or-overdue access mismatch -- reused here, not reimplemented,
+    so a still-future-dated one doesn't have to wait for its due date before anyone finds out."""
+    active_directors = db.query(User).filter(User.role == UserRole.DIRECTOR, User.is_active.is_(True)).all()
+    if not active_directors:
+        return
+    explicit_open = (
+        db.query(FollowUp)
+        .filter(
+            FollowUp.entity_type == entity_type,
+            FollowUp.entity_id == entity_id,
+            FollowUp.status.notin_(TERMINAL_FOLLOW_UP_STATUSES),
+            FollowUp.owner_explicitly_assigned.is_(True),
+            FollowUp.owner_id.isnot(None),
+        )
+        .all()
+    )
+    today = date.today()
+    for fu in explicit_open:
+        owner = db.query(User).filter(User.id == fu.owner_id).first()
+        if owner is None or not owner.is_active:
+            continue
+        try:
+            follow_up_entities.check_follow_up_access(db, owner, fu.entity_type, fu.entity_id, need="read")
+            continue  # still fine -- nothing to flag
+        except HTTPException as exc:
+            reason = (
+                "Amendment 60's own-records setting restricting it to the record's owner"
+                if exc.status_code == 404
+                else f"{owner.role.value}'s role has no read access to this kind of record at all"
+            )
+        label = resolve_entity_label(db, fu.entity_type, fu.entity_id)
+        contact = owner.email or owner.mobile or "no contact on file"
+        for director in active_directors:
+            _get_or_create_notification(
+                db, user_id=director.id, follow_up_id=fu.id, kind=NotificationKind.ACCESS_MISMATCH_ESCALATION,
+                notification_date=today,
+                title=f"Access mismatch: {owner.name} cannot open their own follow-up",
+                body=(
+                    f"{owner.name} ({contact}) is assigned \"{fu.next_action}\" on {label}, due "
+                    f"{fu.due_date.isoformat()}, but does not currently have access to open it "
+                    f"(likely {reason} -- this record was just reassigned). Not emailed to them -- "
+                    f"review the assignment or ownership directly."
+                ),
+                entity_type=fu.entity_type, entity_id=fu.entity_id,
+            )
+
+
+def _cascade_inherited_follow_ups(db: Session, kind: str, entity_id: uuid.UUID, new_owner: uuid.UUID | None) -> None:
+    entity_type = _FOLLOW_UP_ENTITY_TYPE.get(kind)
+    if entity_type is None or follow_up_sync.follow_up_writes_locked(db):
+        return
+    open_inherited = db.query(FollowUp).filter(
+        FollowUp.entity_type == entity_type,
+        FollowUp.entity_id == entity_id,
+        FollowUp.status.notin_(TERMINAL_FOLLOW_UP_STATUSES),
+        FollowUp.owner_explicitly_assigned.is_(False),
+    )
+    for follow_up in open_inherited.all():
+        follow_up.owner_id = new_owner
+    _flag_specialist_access_mismatches(db, entity_type, entity_id)
+
 
 ownership_router = APIRouter(prefix="/ownership", tags=["ownership"])
 
@@ -190,6 +285,7 @@ def _set_owner(db, request, current_user, kind, record, new_owner, reason=None) 
         old_value=_name(db, old, names) or "(unassigned)", new_value=_name(db, new_owner, names) or "(unassigned)",
         reason=reason, request=request,
     )
+    _cascade_inherited_follow_ups(db, kind, record.id, new_owner)
 
 
 @ownership_router.patch("/{kind}/{record_id}", response_model=KindTotals)

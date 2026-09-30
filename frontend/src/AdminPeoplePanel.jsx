@@ -38,15 +38,17 @@ function Tile({ icon: TileIcon, tone, label, value }) {
   );
 }
 
-export default function AdminPeoplePanel({ token, currentUser }) {
+export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter, initialStatusFilter }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [ownerNote, setOwnerNote] = useState("");
 
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState(initialRoleFilter && ALL_ROLES.includes(initialRoleFilter) ? initialRoleFilter : "all");
+  const [statusFilter, setStatusFilter] = useState(
+    initialStatusFilter && ["active", "inactive", "pending", "locked"].includes(initialStatusFilter) ? initialStatusFilter : "all"
+  );
 
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState(emptyUserForm());
@@ -126,6 +128,7 @@ export default function AdminPeoplePanel({ token, currentUser }) {
       active: users.filter((u) => u.is_active).length,
       inactive: users.filter((u) => !u.is_active).length,
       pending: users.filter((u) => u.is_active && u.must_change_password).length,
+      locked: users.filter((u) => u.is_locked).length,
     }),
     [users]
   );
@@ -136,6 +139,7 @@ export default function AdminPeoplePanel({ token, currentUser }) {
     if (statusFilter === "active" && !u.is_active) return false;
     if (statusFilter === "inactive" && u.is_active) return false;
     if (statusFilter === "pending" && !(u.is_active && u.must_change_password)) return false;
+    if (statusFilter === "locked" && !u.is_locked) return false;
     if (!needle) return true;
     return `${u.name} ${u.email}`.toLowerCase().includes(needle);
   });
@@ -146,10 +150,11 @@ export default function AdminPeoplePanel({ token, currentUser }) {
     <div className="bg-surface shadow rounded-lg p-6 space-y-4">
       <h3 className="text-sm font-semibold text-text-secondary">People</h3>
 
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         <Tile icon={UsersIcon} tone={{ bg: "bg-gold/15", text: "text-gold" }} label="Total users" value={totals.total} />
         <Tile icon={ShieldIcon} tone={{ bg: "bg-green-500/15", text: "text-green-400" }} label="Active" value={totals.active} />
         <Tile icon={UsersIcon} tone={{ bg: "bg-slate-500/15", text: "text-slate-400" }} label="Inactive" value={totals.inactive} />
+        <Tile icon={LockIcon} tone={{ bg: "bg-red-500/15", text: "text-red-400" }} label="Locked out" value={totals.locked} />
         <Tile icon={ClockIcon} tone={{ bg: "bg-amber-500/15", text: "text-amber-400" }} label="Password change pending" value={totals.pending} />
       </div>
 
@@ -190,6 +195,7 @@ export default function AdminPeoplePanel({ token, currentUser }) {
           <option value="all">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
+          <option value="locked">Locked out</option>
           <option value="pending">Password change pending</option>
         </select>
       </div>
@@ -239,6 +245,11 @@ export default function AdminPeoplePanel({ token, currentUser }) {
                     >
                       {u.is_active ? "Active" : "Inactive"}
                     </span>
+                    {u.is_locked && (
+                      <span className="ml-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider rounded-full px-2 py-0.5 bg-red-500/15 text-red-400">
+                        <LockIcon className="w-3 h-3" /> Locked
+                      </span>
+                    )}
                   </td>
                   <td className="px-1 py-2.5 whitespace-nowrap">
                     {u.must_change_password ? (

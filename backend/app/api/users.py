@@ -86,6 +86,10 @@ class UserOut(BaseModel):
     role: UserRole
     is_active: bool
     must_change_password: bool
+    # Dashboard fix (2026-09-29 correction plan): exposes the same lockout state the Admin Overview's
+    # "Locked out" tile already counts (User.is_locked, Amendment 18) so the People list can actually be
+    # filtered down to them -- this list previously had no way to show who is locked at all.
+    is_locked: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

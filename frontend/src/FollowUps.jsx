@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
-import { listClients, listOpportunities, listFollowUps, updateFollowUp } from "./api";
+import { listClients, listOpportunities, listProjects, listFollowUps, updateFollowUp } from "./api";
 import { CalendarIcon, ClockIcon } from "./Icons";
 import { CAN_ASSIGN_OWNERS, ownerLabel, useOwners } from "./OwnerControl";
+
+// Same list Dashboard.jsx uses for its own GET /clients gate -- the "Go to Leads & Clients"
+// empty-state suggestion only makes sense, and only avoids a further 403, for a role that can
+// actually open that screen.
+const CAN_SEE_CLIENT_LIST = ["sales", "pm", "director", "procurement"];
 
 // Amendment 43 (Section E step 4) built this as an org-wide Client queue.
 // Amendment 44 Phase D folds Opportunities into the same queue (a telecaller
@@ -20,8 +25,9 @@ import { CAN_ASSIGN_OWNERS, ownerLabel, useOwners } from "./OwnerControl";
 // screen shows up here immediately. listClients/listOpportunities are still
 // fetched, but only to resolve an entity_id to a display name -- the shared
 // API itself has no denormalised name field.
-function mergeFollowUps(followUps, clientNames, opportunityNames, onlyMine, userId) {
+function mergeFollowUps(followUps, clientNames, opportunityNames, projectNames, onlyMine, userId) {
   const today = new Date().toISOString().slice(0, 10);
+  const NAMES = { client: clientNames, opportunity: opportunityNames, project: projectNames };
   // A completed/cancelled follow-up is done -- it drops off this queue rather
   // than cluttering "upcoming" forever, same as the old system where clearing
   // the date removed it from view.
@@ -33,7 +39,14 @@ function mergeFollowUps(followUps, clientNames, opportunityNames, onlyMine, user
       id: f.id,
       kind: f.entity_type,
       entityId: f.entity_id,
-      name: (f.entity_type === "client" ? clientNames : opportunityNames)[f.entity_id] || "Unknown record",
+      // Dashboard panel fix (2026-09-29 correction plan, role-scope review): a role like
+      // site_engineer/ca_tax never gets a client/opportunity name map at all (GET /clients is
+      // gated narrower than this screen), but the server-side visible_follow_ups() rule these
+      // rows already went through never returns a Client/Opportunity row to them in the first
+      // place -- clientNames/opportunityNames only being consulted for rows that DO have one is
+      // what makes the fallback below safe rather than a silent "Unknown record" for a type this
+      // screen simply hasn't fetched a name for yet.
+      name: (NAMES[f.entity_type] || {})[f.entity_id] || f.entity_type.replace(/_/g, " "),
       date: f.due_date,
       note: f.next_action,
       ownerId: f.owner_id,
@@ -86,6 +99,7 @@ function Toggle({ checked, onChange, label }) {
 export default function FollowUps({ token, userId, role, onBack, onOpenLeadsClients }) {
   const [clients, setClients] = useState([]);
   const [opportunities, setOpportunities] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -96,10 +110,24 @@ export default function FollowUps({ token, userId, role, onBack, onOpenLeadsClie
   const owners = useOwners(token, role);
   const canReassign = CAN_ASSIGN_OWNERS.includes(role);
 
+  // Role-scope review (2026-09-29 correction plan): GET /clients and GET /opportunities are
+  // gated to sales/pm/director/procurement -- narrower than who can reach this screen (any role
+  // GET /follow-ups itself admits, e.g. site_engineer/ca_tax on their own Project follow-ups).
+  // Both are now called only for a role that can actually use them (same CAN_SEE_CLIENT_LIST
+  // gate Dashboard.jsx already applies to its own identical fetch), rather than firing a request
+  // guaranteed to 403 and catching it -- the corresponding name map just stays empty, which is
+  // safe: the server-side visible_follow_ups() rule behind listFollowUps below never returns a
+  // Client/Opportunity row to a role that can't read Client/Opportunity in the first place, so an
+  // empty clientNames/opportunityNames is never actually consulted for a row this screen renders.
+  // Before this fix, an unconditional Promise.all failed the ENTIRE load (setLoadFailed(true)) on
+  // that 403 even though GET /follow-ups itself would have succeeded -- the real cause of Site
+  // Engineer/CA-Tax having backend follow-up access but no working screen for it.
   function reload() {
+    const canSeeClients = CAN_SEE_CLIENT_LIST.includes(role);
     return Promise.all([
-      listClients(token).then(setClients),
-      listOpportunities(token).then(setOpportunities),
+      canSeeClients ? listClients(token).then(setClients) : Promise.resolve(setClients([])),
+      canSeeClients ? listOpportunities(token).then(setOpportunities) : Promise.resolve(setOpportunities([])),
+      listProjects(token).then(setProjects),
       listFollowUps(token).then(setFollowUps),
     ]);
   }
@@ -163,7 +191,8 @@ export default function FollowUps({ token, userId, role, onBack, onOpenLeadsClie
 
   const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
   const opportunityNames = Object.fromEntries(opportunities.map((o) => [o.id, o.lead_name]));
-  const allItems = mergeFollowUps(followUps, clientNames, opportunityNames, onlyMine, userId);
+  const projectNames = Object.fromEntries(projects.map((p) => [p.id, `Project ${p.project_no}`]));
+  const allItems = mergeFollowUps(followUps, clientNames, opportunityNames, projectNames, onlyMine, userId);
   const items = statusTab ? allItems.filter((i) => i.status === statusTab) : allItems;
   const tabCounts = {
     "": allItems.length,
@@ -254,10 +283,10 @@ export default function FollowUps({ token, userId, role, onBack, onOpenLeadsClie
             <p className="text-sm text-text-secondary mt-1">
               {statusTab || onlyMine
                 ? "Nothing matches these filters right now."
-                : "No client or lead has an open follow-up. Set one in Leads & Clients to see it here."}
+                : "No open follow-up here right now."}
             </p>
           </div>
-          {onOpenLeadsClients && (
+          {onOpenLeadsClients && CAN_SEE_CLIENT_LIST.includes(role) && (
             <button
               onClick={onOpenLeadsClients}
               className="bg-gold text-base text-sm rounded px-5 py-2.5 font-semibold hover:bg-gold-hover"
@@ -296,7 +325,7 @@ export default function FollowUps({ token, userId, role, onBack, onOpenLeadsClie
                 <p className="font-medium text-text-primary break-words">
                   {c.name}
                   <span className="ml-2 text-[10px] uppercase tracking-wider text-text-secondary">
-                    {c.kind === "client" ? "client" : "lead"}
+                    {c.kind === "client" ? "client" : c.kind === "opportunity" ? "lead" : c.kind.replace(/_/g, " ")}
                   </span>
                 </p>
                 {c.note && <p className="text-xs text-text-secondary truncate">{c.note}</p>}
