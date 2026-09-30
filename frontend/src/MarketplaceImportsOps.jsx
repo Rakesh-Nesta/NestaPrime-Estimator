@@ -101,6 +101,16 @@ export default function MarketplaceImportsOps({ token }) {
     try {
       const chunks = await runMarketplaceBackfill(token, { rangeStart: backfillStart, rangeEnd: backfillEnd });
       setBackfillResult(chunks);
+      // The shared rate gate (Section 3) means a wide range can genuinely only complete one
+      // chunk per real 5-minute window -- a stopped-early result is not a failure, it's a
+      // resumable pause. Advance "From" to exactly where this run left off, so the same
+      // "Run backfill" click resumes correctly a few minutes later without the operator having
+      // to read the chunk list and do the date math themselves.
+      const lastRan = [...chunks].reverse().find((c) => c.ran);
+      const stoppedEarly = chunks.length > 0 && !chunks[chunks.length - 1].ran;
+      if (stoppedEarly && lastRan) {
+        setBackfillStart(lastRan.window_end.slice(0, 16));
+      }
       load();
     } catch (err) {
       setError(err.message);
@@ -243,6 +253,12 @@ export default function MarketplaceImportsOps({ token }) {
                 {chunk.ran ? `${chunk.captured} captured, ${chunk.quarantined} quarantined, ${chunk.duplicates} duplicate` : `stopped (${chunk.reason})`}
               </p>
             ))}
+            {!backfillResult[backfillResult.length - 1]?.ran && (
+              <p className="text-amber-400">
+                Rate-limited for now -- "From" has been advanced to where this run left off. Click "Run backfill"
+                again in a few minutes to continue.
+              </p>
+            )}
           </div>
         )}
       </div>
