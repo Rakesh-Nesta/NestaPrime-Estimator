@@ -192,9 +192,9 @@ export default function Sidebar({
     },
     {
       label: "Delivery",
-      items: isAdmin
-        ? []
-        : [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }],
+      items: canOpen("projects_admin", user.role)
+        ? [{ key: "projects_admin", label: "Projects", onClick: () => go("projects_admin"), icon: FolderIcon }]
+        : [],
     },
     {
       // Amendment 50 (Section 54): a real header now, shown only to the roles that can open it
