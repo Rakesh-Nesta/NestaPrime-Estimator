@@ -14,6 +14,8 @@ import Documents from "./Documents";
 import Education from "./Education";
 import FollowUps from "./FollowUps";
 import Help from "./Help";
+import MarketingDashboard from "./MarketingDashboard";
+import MarketplaceImportsOps from "./MarketplaceImportsOps";
 import MasterSettings from "./MasterSettings";
 import NotificationInbox from "./NotificationInbox";
 import Opportunities from "./Opportunities";
@@ -109,6 +111,8 @@ export default function App() {
     "team_access",
     // WP8: the in-app notification inbox.
     "notifications",
+    // P3 contract, Section 8/9.
+    "marketplace_imports_ops", "marketing_dashboard",
   ];
   const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents"];
 
@@ -424,6 +428,12 @@ export default function App() {
         )}
         {screen === "notifications" && (
           <NotificationInbox token={accessToken} role={user.role} />
+        )}
+        {screen === "marketplace_imports_ops" && canOpen("marketplace_imports_ops", user.role) && (
+          <MarketplaceImportsOps token={accessToken} />
+        )}
+        {screen === "marketing_dashboard" && canOpen("marketing_dashboard", user.role) && (
+          <MarketingDashboard token={accessToken} />
         )}
         {screen === "payments" && ["pm", "director", "ca_tax"].includes(user.role) && (
           <Payments

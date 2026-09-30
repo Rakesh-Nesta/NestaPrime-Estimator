@@ -290,10 +290,12 @@ export async function createOpportunity(token, payload) {
   return handle(res);
 }
 
-export async function listOpportunities(token, { stage, relationship } = {}) {
+export async function listOpportunities(token, { stage, relationship, source, unassigned } = {}) {
   const params = new URLSearchParams();
   if (stage) params.set("stage", stage);
   if (relationship) params.set("relationship", relationship);
+  if (source) params.set("source", source);
+  if (unassigned) params.set("unassigned", "true");
   const qs = params.toString();
   const res = await fetch(`${API_BASE}/opportunities${qs ? `?${qs}` : ""}`, { headers: authHeaders(token) });
   return handle(res);
@@ -2302,5 +2304,59 @@ export async function markAllNotificationsRead(token) {
 
 export async function listNotificationDeliveryFailures(token) {
   const res = await fetch(`${API_BASE}/notifications/delivery-failures`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+// P3 (IndiaMART Intake & Marketing Starter contract): Section 5/7 Opportunity extensions.
+export async function getOpportunityImportDetail(token, opportunityId) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/import-detail`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listPossibleClientMatches(token, opportunityId) {
+  const res = await fetch(`${API_BASE}/opportunities/${opportunityId}/possible-client-matches`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+// P3: Section 8 operational screen (PM/Director only).
+export async function getMarketplaceConnectionHealth(token) {
+  const res = await fetch(`${API_BASE}/marketplace-imports/connection-health`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function getMarketplaceImportsSummary(token) {
+  const res = await fetch(`${API_BASE}/marketplace-imports/summary`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function listMarketplaceImports(token, status) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await fetch(`${API_BASE}/marketplace-imports${qs}`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function verifyMarketplaceKey(token) {
+  const res = await fetch(`${API_BASE}/marketplace-imports/verify-key`, { method: "POST", headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function retryMarketplaceImport(token, ledgerRowId) {
+  const res = await fetch(`${API_BASE}/marketplace-imports/${ledgerRowId}/retry`, { method: "POST", headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function runMarketplaceBackfill(token, { rangeStart, rangeEnd }) {
+  const res = await fetch(`${API_BASE}/marketplace-imports/backfill`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ range_start: rangeStart, range_end: rangeEnd }),
+  });
+  return handle(res);
+}
+
+// P3: Section 9 Marketing Phase A aggregate dashboard.
+export async function getMarketingDashboard(token, { periodStart, periodEnd }) {
+  const params = new URLSearchParams({ period_start: periodStart, period_end: periodEnd });
+  const res = await fetch(`${API_BASE}/marketplace-imports/marketing/dashboard?${params}`, { headers: authHeaders(token) });
   return handle(res);
 }

@@ -1,8 +1,10 @@
+import re
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
@@ -11,6 +13,7 @@ from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.client import Client
 from app.models.follow_up import FollowUpEntityType
+from app.models.marketplace_lead_import import MarketplaceLeadImport
 from app.models.opportunity import TERMINAL_STAGES, Opportunity, OpportunityStage
 from app.models.project import Project, ProjectPhase
 
@@ -147,12 +150,22 @@ def create_opportunity(
 def list_opportunities(
     stage: OpportunityStage | None = None,
     relationship: str | None = None,
+    source: str | None = None,
+    unassigned: bool = False,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*READ_ROLES)),
 ):
     """relationship=lead -> client_id is null; relationship=client ->
     client_id is set. Matches the CRM reference's All/Leads/Clients tabs
-    the Design input names."""
+    the Design input names.
+
+    source/unassigned (P3 contract, Section 7): the unassigned-imports queue reuses this same
+    endpoint rather than a new screen, with owner_id IS NULL AND source='indiamart' -- Amendment
+    60's own existing scoping already makes this the right default for who can see it: a scoped
+    Sales user's owner_id==self filter can never match an unassigned (owner_id IS NULL) row, so
+    only PM/Director (never scoped) see this queue at all, matching owner_id's own established
+    "NULL means unassigned -- visible to PM and Director only" convention. When unassigned=True,
+    sorts oldest-first (queue order), not the newest-first default."""
     query = db.query(Opportunity)
     if ownership.scoping_applies(db, current_user):
         query = query.filter(Opportunity.owner_id == current_user.id)
@@ -162,6 +175,11 @@ def list_opportunities(
         query = query.filter(Opportunity.client_id.is_(None))
     elif relationship == "client":
         query = query.filter(Opportunity.client_id.isnot(None))
+    if source is not None:
+        query = query.filter(Opportunity.source == source)
+    if unassigned:
+        query = query.filter(Opportunity.owner_id.is_(None))
+        return query.order_by(Opportunity.created_at.asc()).all()
     return query.order_by(Opportunity.created_at.desc()).all()
 
 
@@ -403,3 +421,102 @@ def update_opportunity_notes(
     db.commit()
     db.refresh(opportunity)
     return opportunity
+
+
+# --- P3 contract, Section 5/7 -----------------------------------------------------------------
+
+
+class ImportDetailOut(BaseModel):
+    sender_company: str | None
+    sender_address: str | None
+    sender_city: str | None
+    sender_state: str | None
+    sender_pincode: str | None
+    sender_country_iso: str | None
+    query_type: str | None
+    enquiry_time: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/{opportunity_id}/import-detail", response_model=ImportDetailOut)
+def get_opportunity_import_detail(
+    opportunity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    """P3 contract, Section 5: reachable buyer detail for a Sales rep who can already open this
+    Opportunity -- gated by the exact same read access the Opportunity itself already has
+    (READ_ROLES, plus Amendment 60 scoping via the already-covered opportunity_id path param).
+    Reads only the durable ledger columns, never raw_payload, so this keeps working after the
+    90-day retention purge, not just before it. Not a grant of ledger access (Section 2's
+    PM/Director-only gate on the ledger table itself is unaffected)."""
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity or opportunity.source != "indiamart":
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    ledger_row = db.query(MarketplaceLeadImport).filter(MarketplaceLeadImport.opportunity_id == opportunity_id).first()
+    if not ledger_row:
+        raise HTTPException(status_code=404, detail="No import record linked to this Opportunity")
+    return ledger_row
+
+
+class ClientMatchOut(BaseModel):
+    client_id: uuid.UUID
+    name: str
+    matched_field: str  # "phone" | "email" | "name"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+MAX_CLIENT_MATCHES = 5
+
+
+@router.get("/{opportunity_id}/possible-client-matches", response_model=list[ClientMatchOut])
+def list_possible_client_matches(
+    opportunity_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*READ_ROLES)),
+):
+    """P3 contract, Section 7: the reverse direction of P2's own Client-to-Client duplicate
+    suggestion (client_duplicates.py) -- matches from an unlinked Opportunity's own
+    lead_phone/lead_email/lead_name against Client, since list_duplicate_candidates itself needs
+    an existing client_id and 404s without one (verified directly, Section 0). Same normalized-
+    exact phone/email + substring name matching, not a new algorithm; run through the same
+    Amendment 60 scoping any Client list already has for this viewer, so an inaccessible client
+    can never surface as a suggestion. Shown for any unlinked Opportunity, not IndiaMART-specific."""
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    if opportunity.client_id is not None:
+        return []
+
+    email = (opportunity.lead_email or "").strip().lower()
+    digits = re.sub(r"[^0-9]", "", opportunity.lead_phone or "")[-10:]
+    name = (opportunity.lead_name or "").strip().lower()
+    conditions = []
+    if email:
+        conditions.append(func.lower(Client.email) == email)
+    if len(digits) >= 7:
+        conditions.append(func.regexp_replace(Client.phone, "[^0-9]", "", "g").like(f"%{digits}"))
+    if name:
+        conditions.append(func.lower(Client.name).like(f"%{name}%"))
+    if not conditions:
+        return []
+
+    query = db.query(Client).filter(or_(*conditions))
+    if ownership.scoping_applies(db, current_user):
+        query = query.filter(Client.owner_id == current_user.id)
+
+    results: list[ClientMatchOut] = []
+    for candidate in query.order_by(Client.name).limit(50).all():
+        matched_field = "name"
+        c_email = (candidate.email or "").strip().lower()
+        c_digits = re.sub(r"[^0-9]", "", candidate.phone or "")[-10:]
+        if email and c_email == email:
+            matched_field = "email"
+        elif digits and len(digits) >= 7 and c_digits.endswith(digits):
+            matched_field = "phone"
+        results.append(ClientMatchOut(client_id=candidate.id, name=candidate.name, matched_field=matched_field))
+        if len(results) >= MAX_CLIENT_MATCHES:
+            break
+    return results

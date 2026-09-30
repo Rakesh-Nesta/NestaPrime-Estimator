@@ -34,7 +34,13 @@ export const SCREEN_ROLES = {
   // WP8 (correction plan): GET /notifications is scoped to the caller's own inbox, so every
   // role that exists gets it -- listed anyway so this open-to-all decision is explicit, not
   // just the default falling through.
-  notifications: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin"],
+  notifications: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin", "marketing"],
+  // P3 contract, Section 8: GET /marketplace-imports/* -- matches the ledger's own read-access
+  // gate exactly (PM/Director only).
+  marketplace_imports_ops: ["pm", "director"],
+  // P3 contract, Section 9: GET /marketplace-imports/marketing/dashboard -- Marketing is added
+  // to this one screen's gate and nowhere else; PM/Director can also see their own aggregates.
+  marketing_dashboard: ["pm", "director", "marketing"],
 };
 
 export function canOpen(screen, role) {

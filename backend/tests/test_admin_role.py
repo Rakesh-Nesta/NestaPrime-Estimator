@@ -285,10 +285,10 @@ def test_an_admin_is_refused_every_business_screen(client, director_user, db_ses
     assert client.request(method, path, headers=admin).status_code in (403, 404, 405), path
 
 
-def test_the_role_table_lists_seven_roles(client, director_user):
+def test_the_role_table_lists_eight_roles(client, director_user):
     director = _director_headers(client, director_user)
     table = client.get("/role-permissions", headers=director).json()
-    assert table["roles"] == ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin"]
+    assert table["roles"] == ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax", "admin", "marketing"]
 
 
 def test_an_admin_can_also_read_the_role_table_but_a_pm_cannot(client, director_user, db_session):
