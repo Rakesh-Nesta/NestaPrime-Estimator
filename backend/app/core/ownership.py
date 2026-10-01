@@ -51,6 +51,12 @@ COVERED_PATH_PARAMS = frozenset(
         "stage_id",  # P4 contract v7
         "session_id",  # P4 contract v7
         "doc_id",  # P4 contract v7 -- resolved against its sibling `doc_type` path param
+        # P5 contract revision 7: each new id resolves to its owning project (see _resolve_owner_ok).
+        "agreement_id",
+        "team_member_id",
+        "milestone_id",
+        "task_id",
+        "site_issue_id",
     }
 )
 # `doc_type` is a plain value (which table doc_id names), not a record; `chunk_index` is a bare
@@ -79,6 +85,7 @@ def scoping_applies(db: Session, user: User) -> bool:
 def project_id_for_document(db: Session, doc_type: str, doc_id: uuid.UUID) -> uuid.UUID | None:
     """The project a generic document reference (attachments, messages) belongs to, or None if it has none."""
     from app.models.document import CostSheet, Estimate, EstimateOption, Quotation
+    from app.models.p5 import Agreement, ProjectSiteIssue
     from app.models.project_construction_stage import ProjectConstructionStage
     from app.models.site_survey import SiteSurvey
     from app.models.technical_bid_checklist import TechnicalBidChecklistItem
@@ -96,6 +103,8 @@ def project_id_for_document(db: Session, doc_type: str, doc_id: uuid.UUID) -> uu
         "technical_bid_checklist_item": TechnicalBidChecklistItem,
         "site_survey": SiteSurvey,
         "project_stage": ProjectConstructionStage,  # P4 contract v7, Section 2/3
+        "agreement": Agreement,  # P5 contract revision 7
+        "site_issue": ProjectSiteIssue,  # P5 contract revision 7
     }.get(doc_type)
     if model is None:
         return None
@@ -120,7 +129,20 @@ def may_see_document(db: Session, user: User, doc_type: str, doc_id: uuid.UUID) 
     return may_see_project(db, user, project_id_for_document(db, doc_type, doc_id))
 
 
+def _require_p5_document_membership(db: Session, user: User, doc_type, doc_id: uuid.UUID) -> None:
+    """P5 contract revision 7 (proposed policy, not existing precedent): a Site Engineer reaches a site
+    issue's files only as an active member of that issue's project. PM/Director stay global."""
+    if doc_type != "site_issue" or user.role != UserRole.SITE_ENGINEER:
+        return
+    from app.core import p5
+
+    project_id = project_id_for_document(db, "site_issue", doc_id)
+    if project_id is None or p5.is_active_team_member(db, project_id, user.id) is None:
+        raise HTTPException(status_code=403, detail="You are not on this project's team")
+
+
 def require_visible_document(db: Session, user: User, doc_type: str, doc_id: uuid.UUID) -> None:
+    _require_p5_document_membership(db, user, doc_type, doc_id)
     if scoping_applies(db, user) and not may_see_document(db, user, doc_type, doc_id):
         raise HTTPException(status_code=404, detail=NOT_FOUND)
 
@@ -226,6 +248,18 @@ def _resolve_owner_ok(db: Session, user: User, key: str, value: uuid.UUID) -> bo
 
         stage = db.get(ProjectConstructionStage, value)
         return stage is not None and may_see_project(db, user, stage.project_id)
+    if key in ("agreement_id", "team_member_id", "milestone_id", "task_id", "site_issue_id"):  # P5 revision 7
+        from app.models.p5 import Agreement, ProjectMilestone, ProjectSiteIssue, ProjectTask, ProjectTeamMember
+
+        model = {
+            "agreement_id": Agreement,
+            "team_member_id": ProjectTeamMember,
+            "milestone_id": ProjectMilestone,
+            "task_id": ProjectTask,
+            "site_issue_id": ProjectSiteIssue,
+        }[key]
+        row = db.get(model, value)
+        return row is not None and may_see_project(db, user, row.project_id)
     if key == "session_id":  # P4 contract v7, Section 4
         from app.models.attachment_upload_session import AttachmentUploadSession
 

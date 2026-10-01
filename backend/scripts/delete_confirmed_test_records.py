@@ -36,6 +36,14 @@ from app.models.document import (
 from app.models.message import Message
 from app.models.opportunity import Opportunity
 from app.models.project import Project
+from app.models.p5 import (
+    Agreement,
+    ProjectExecutionAuthorization,
+    ProjectMilestone,
+    ProjectSiteIssue,
+    ProjectTask,
+    ProjectTeamMember,
+)
 from app.models.project_construction_stage import ProjectConstructionStage
 from app.models.rate_history import RateHistory
 from app.models.scope_item import ProjectScopeItem
@@ -130,6 +138,19 @@ def run(db: Session, confirm: bool) -> None:
     stages = db.query(ProjectConstructionStage).filter(ProjectConstructionStage.project_id.in_(project_ids)).all() \
         if project_ids else []
     stage_ids = _ids(stages)
+    # P5: agreements, execution authorizations, team members, milestones, tasks and site issues all
+    # reference projects/quotations/work orders/attachments with no cascade.
+    agreements = db.query(Agreement).filter(Agreement.project_id.in_(project_ids)).all() if project_ids else []
+    agreement_ids = _ids(agreements)
+    authorizations = (
+        db.query(ProjectExecutionAuthorization).filter(ProjectExecutionAuthorization.project_id.in_(project_ids)).all()
+        if project_ids else []
+    )
+    team_members = db.query(ProjectTeamMember).filter(ProjectTeamMember.project_id.in_(project_ids)).all()         if project_ids else []
+    tasks = db.query(ProjectTask).filter(ProjectTask.project_id.in_(project_ids)).all() if project_ids else []
+    milestones = db.query(ProjectMilestone).filter(ProjectMilestone.project_id.in_(project_ids)).all()         if project_ids else []
+    site_issues = db.query(ProjectSiteIssue).filter(ProjectSiteIssue.project_id.in_(project_ids)).all()         if project_ids else []
+    site_issue_ids = _ids(site_issues)
 
     # Every document id a doc_type/doc_id attachment or message could point at, across all of the above.
     doc_ids_by_type = {
@@ -141,6 +162,8 @@ def run(db: Session, confirm: bool) -> None:
         DocumentType.TECHNICAL_BID_CHECKLIST_ITEM: checklist_item_ids,
         DocumentType.SITE_SURVEY: site_survey_ids,
         DocumentType.PROJECT_STAGE: stage_ids,
+        DocumentType.AGREEMENT: agreement_ids,
+        DocumentType.SITE_ISSUE: site_issue_ids,
     }
     attachments = [
         a
@@ -183,6 +206,10 @@ def run(db: Session, confirm: bool) -> None:
     print(f"Purchase orders:         {len(purchase_orders)}")
     print(f"Construction stages:     {len(stages)}")
     print(f"Upload sessions:         {len(upload_sessions)}")
+    print(f"Agreements:              {len(agreements)}")
+    print(f"Execution authorizations:{len(authorizations)}")
+    print(f"Team members:            {len(team_members)}")
+    print(f"Milestones/tasks/issues: {len(milestones)}/{len(tasks)}/{len(site_issues)}")
 
     if not confirm:
         print("\nDry run only -- nothing deleted. Re-run with --confirm to actually delete.")
@@ -191,6 +218,28 @@ def run(db: Session, confirm: bool) -> None:
     # 1. Messages first -- a Message can point at an Attachment.
     for m in messages:
         db.delete(m)
+    db.flush()
+
+    # 1b. P5 rows, children before parents: tasks (-> team members, milestones), authorizations
+    # (-> agreements), agreements (-> attachments, itself via supersedes_id), then the rest. All of
+    # these must go before the attachments / work orders / quotations / projects they reference.
+    for t in tasks:
+        db.delete(t)
+    db.flush()
+    for a in authorizations:
+        db.delete(a)
+    db.flush()
+    for ag in agreements:
+        ag.supersedes_id = None
+    db.flush()
+    for ag in agreements:
+        db.delete(ag)
+    for m in team_members:
+        db.delete(m)
+    for ms in milestones:
+        db.delete(ms)
+    for si in site_issues:
+        db.delete(si)
     db.flush()
 
     # 2. Upload-session chunks, then the sessions themselves (their resulting_attachment_id FK

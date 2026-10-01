@@ -81,3 +81,12 @@ from app.models.tender_details import TenderCompetitorBid, TenderDetails  # noqa
 from app.models.user import User, UserRole  # noqa: F401
 from app.models.vehicle_class import VehicleClass  # noqa: F401
 from app.models.vendor import Vendor  # noqa: F401
+from app.models.p5 import (  # noqa: F401
+    Agreement,
+    P5MigrationMarker,
+    ProjectExecutionAuthorization,
+    ProjectMilestone,
+    ProjectSiteIssue,
+    ProjectTask,
+    ProjectTeamMember,
+)

@@ -42,6 +42,7 @@ from app.api import (
     opportunities,
     ownership,
     overheads,
+    p5,
     package_contents,
     payments,
     pdf_documents,
@@ -198,6 +199,7 @@ app.include_router(role_permissions.router)
 app.include_router(search.router)
 app.include_router(skip_requests.skip_requests_router)
 app.include_router(readiness.readiness_router)
+app.include_router(p5.p5_router)
 app.include_router(education.education_router)
 
 

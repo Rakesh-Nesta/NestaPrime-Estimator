@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from sqlalchemy.orm import Session
 
-from app.api.attachments import ALL_ATTACHMENT_ROLES, AttachmentOut, _require_doc_type_role
+from app.api.attachments import ALL_ATTACHMENT_ROLES, AttachmentOut, _require_doc_type_role, require_agreement_write
 from app.core import attachment_upload as upload_core
 from app.core import ownership
 from app.core.auth import require_roles
@@ -73,6 +73,7 @@ def start_upload_session(
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
 ):
     _require_doc_type_role(db, body.doc_type, current_user)
+    require_agreement_write(body.doc_type, current_user)
     ownership.require_visible_document(db, current_user, body.doc_type.value, body.doc_id)
     try:
         session = upload_core.start_session(

@@ -1,3 +1,4 @@
+from tests.p5_helpers import create_work_order
 """Local-only check for scripts/delete_confirmed_test_records.py -- never runs in CI, never touches
 production. Builds one client with a full real record chain (enquiry, project, cost sheet, estimate,
 option, quotation, work order, an attachment, a message) through the real API, points the script at that
@@ -74,7 +75,7 @@ def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(cl
         f"/quotations/{quotation_id}/mark-won", json={"reason": "test", "waive_evidence_reason": "test setup"},
         headers=headers,
     )
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
     att = client.post(
         "/attachments",
         data={"doc_type": "work_order", "doc_id": work_order["id"], "tag": "signed_document"},

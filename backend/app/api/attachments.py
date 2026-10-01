@@ -13,6 +13,7 @@ from app.api.audit_log import write_audit_log_entry
 from app.api.documents import _document_no, _rate_blind_mode_on
 from app.config import settings
 from app.core import ownership
+from app.core import p5_agreements
 from app.core.auth import require_roles
 from app.core.project_stages import advance_stage_on_evidence_upload
 from app.db.session import get_db
@@ -20,6 +21,7 @@ from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client_signatory import ClientSignatory
 from app.models.document import CostSheet, CostSheetStatus, Estimate, EstimateOption, EstimateStatus, Quotation
 from app.models.message import Message, MessageChannel, MessageStatus
+from app.models.p5 import Agreement, ProjectSiteIssue
 from app.models.price_request import PriceRequest
 from app.models.project import Project
 from app.models.project_construction_stage import ProjectConstructionStage
@@ -53,6 +55,13 @@ SITE_SURVEY_ROLES = ("site_engineer", "pm", "director")
 # named separately since the two represent different concepts that could diverge later, matching
 # this codebase's own convention of naming each gate even where tuples currently coincide.
 STAGE_ROLES = ("site_engineer", "pm", "director")
+# P5 contract revision 7, Section 4.1: the signed Agreement document can repeat the Quotation's
+# commercial terms, so it follows the Quotation's own role tuple rather than the broader attachment
+# default (Procurement/Site Engineer team members see Agreement STATUS metadata, never the file).
+# Writes (uploading/superseding Agreement files) are narrower still: PM/Director only.
+AGREEMENT_ROLES = ("sales", "pm", "director")
+AGREEMENT_WRITE_ROLES = ("pm", "director")
+SITE_ISSUE_ROLES = ("site_engineer", "pm", "director")
 # The router-level Depends() below is deliberately a coarse "is this an
 # authenticated business role at all" gate covering every role any
 # doc_type ever grants access to (everyone except CA/Tax, who has no
@@ -98,6 +107,8 @@ _DOC_TABLE = {
     DocumentType.PRICE_REQUEST: PriceRequest,
     DocumentType.SITE_SURVEY: SiteSurvey,
     DocumentType.PROJECT_STAGE: ProjectConstructionStage,  # P4 contract v7
+    DocumentType.AGREEMENT: Agreement,  # P5 contract revision 7
+    DocumentType.SITE_ISSUE: ProjectSiteIssue,  # P5 contract revision 7
 }
 
 _COST_VISIBILITY_DOC_TYPES = (
@@ -114,6 +125,10 @@ def _roles_for(doc_type: DocumentType) -> tuple[str, ...]:
         return SITE_SURVEY_ROLES
     if doc_type == DocumentType.PROJECT_STAGE:
         return STAGE_ROLES
+    if doc_type == DocumentType.AGREEMENT:
+        return AGREEMENT_ROLES
+    if doc_type == DocumentType.SITE_ISSUE:
+        return SITE_ISSUE_ROLES
     return COST_ROLES if doc_type in _COST_VISIBILITY_DOC_TYPES else DOCUMENT_ROLES
 
 
@@ -134,6 +149,12 @@ def _require_doc_type_role(db: Session, doc_type: DocumentType, current_user) ->
             status_code=403,
             detail=f"Role '{current_user.role.value}' cannot manage attachments on a {doc_type.value}",
         )
+
+
+def require_agreement_write(doc_type, current_user) -> None:
+    """P5: uploading or superseding a file on an Agreement is a PM/Director action (Sales is read-only)."""
+    if doc_type == DocumentType.AGREEMENT and current_user.role.value not in AGREEMENT_WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Only a PM or Director can change an Agreement's files")
 
 
 def _get_document_or_404(db: Session, doc_type: DocumentType, doc_id: uuid.UUID):
@@ -461,6 +482,7 @@ async def upload_attachment(
     are optional and, when given on an approval_evidence attachment, are
     checked against Part O CLIENT_SIGNATORIES (see _validate_signatory_if_given)."""
     _require_doc_type_role(db, doc_type, current_user)
+    require_agreement_write(doc_type, current_user)
     ownership.require_visible_document(db, current_user, doc_type.value, doc_id)  # Amendment 60
     _get_document_or_404(db, doc_type, doc_id)
     attachment = await _store_upload(
@@ -531,6 +553,10 @@ async def supersede_attachment(
     ownership.require_visible_document(db, current_user, old.doc_type, old.doc_id)  # Amendment 60
     if old.superseded_by_id is not None:
         raise HTTPException(status_code=400, detail="This attachment has already been superseded")
+    require_agreement_write(old.doc_type, current_user)
+    # P5 contract revision 7, Section 4.1: refuse to supersede recorded signing evidence, serialized
+    # against signature recording under the shared lock order (Agreement lock first, Attachment last).
+    old = p5_agreements.guard_attachment_supersede(db, old)
 
     new = await _store_upload(
         db, request, current_user, old.doc_type, old.doc_id,
@@ -652,6 +678,8 @@ def approve_marketing_reuse(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
+    if attachment.doc_type == DocumentType.AGREEMENT:
+        raise HTTPException(status_code=409, detail="A signed Agreement is not marketing material")
     attachment.marketing_reuse_approved_at = datetime.now(UTC)
     attachment.marketing_reuse_approved_by_id = current_user.id
     attachment.marketing_reuse_revoked_at = None

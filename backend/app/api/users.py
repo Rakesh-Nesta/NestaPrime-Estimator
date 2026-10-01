@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
+from app.core import p5
 from app.core.auth import require_roles
 from app.core.identifiers import InvalidMobileNumber, normalize_mobile
 from app.core.security import MIN_PASSWORD_LENGTH, hash_password, password_problem
@@ -224,6 +225,23 @@ def update_user(
                 detail="Cannot deactivate this user -- they are the last active Director",
             )
 
+    # P5 contract revision 7, Section 4.4: a deactivation, or a role change away from site_engineer, can
+    # silently remove a project's last eligible Site Engineer. Discover candidate projects broadly,
+    # lock them (and the User rows) in the shared order, revalidate, then -- after the change below --
+    # recompute eligibility under those locks and invalidate any authorization left without one.
+    deactivating = payload.is_active is False and user.is_active
+    leaving_site_engineer = (
+        payload.role is not None and payload.role != user.role and user.role == UserRole.SITE_ENGINEER
+    )
+    account_change_projects: list = []
+    if deactivating or leaving_site_engineer:
+        account_change_projects = p5.lock_for_account_change(db, user.id)
+    elif (payload.is_active is not None and payload.is_active != user.is_active) or (
+        payload.role is not None and payload.role != user.role
+    ):
+        p5.lock_users(db, [user.id])  # reactivation / other role change: the User row only (level 6)
+    account_change_reason = "Site Engineer account deactivated" if deactivating else "Site Engineer role changed"
+
     if payload.role is not None and payload.role != user.role:
         if user.role == UserRole.ADMIN and payload.role != UserRole.ADMIN:
             if _active_admin_count(db, exclude_id=user.id) == 0:
@@ -294,6 +312,9 @@ def update_user(
                 old_value=user.mobile, new_value=new_mobile, request=request,
             )
             user.mobile = new_mobile
+
+    if account_change_projects:
+        p5.finalize_account_change(db, account_change_projects, account_change_reason, current_user, request)
 
     db.commit()
     db.refresh(user)

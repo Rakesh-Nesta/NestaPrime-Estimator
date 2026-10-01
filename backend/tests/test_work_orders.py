@@ -1,6 +1,7 @@
 import io
 
 from app.core.security import hash_password
+from tests.p5_helpers import create_work_order
 from app.models.user import User, UserRole
 
 
@@ -151,7 +152,7 @@ def test_work_order_created_once_quotation_is_won(client, director_user):
     headers = _director_headers(client, director_user)
     project_id, quotation_id = _won_quotation(client, headers)
 
-    res = client.post(f"/quotations/{quotation_id}/work-order", headers=headers)
+    res = create_work_order(client, headers, quotation_id)
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["project_id"] == project_id
@@ -163,7 +164,7 @@ def test_work_order_created_once_quotation_is_won(client, director_user):
 def test_work_order_cannot_be_created_twice_for_same_quotation(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    client.post(f"/quotations/{quotation_id}/work-order", headers=headers)
+    create_work_order(client, headers, quotation_id)
 
     res = client.post(f"/quotations/{quotation_id}/work-order", headers=headers)
     assert res.status_code == 400
@@ -172,7 +173,7 @@ def test_work_order_cannot_be_created_twice_for_same_quotation(client, director_
 def test_get_work_order_for_quotation(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    created = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    created = create_work_order(client, headers, quotation_id).json()
 
     res = client.get(f"/quotations/{quotation_id}/work-order", headers=headers)
     assert res.status_code == 200
@@ -196,7 +197,7 @@ def test_sales_cannot_create_or_read_work_orders(client, director_user, db_sessi
     sales_headers = _sales_headers(client, db_session)
     assert client.post(f"/quotations/{quotation_id}/work-order", headers=sales_headers).status_code == 403
 
-    client.post(f"/quotations/{quotation_id}/work-order", headers=director_headers)
+    create_work_order(client, director_headers, quotation_id)
     assert client.get(f"/quotations/{quotation_id}/work-order", headers=sales_headers).status_code == 403
 
 
@@ -208,7 +209,7 @@ def test_sales_cannot_create_or_read_work_orders(client, director_user, db_sessi
 def test_work_order_status_moves_forward_awarded_to_in_progress_to_completed(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
 
     res = client.patch(f"/work-orders/{work_order['id']}", json={"status": "in_progress"}, headers=headers)
     assert res.status_code == 200, res.text
@@ -222,7 +223,7 @@ def test_work_order_status_moves_forward_awarded_to_in_progress_to_completed(cli
 def test_work_order_status_cannot_skip_in_progress(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
 
     res = client.patch(f"/work-orders/{work_order['id']}", json={"status": "completed"}, headers=headers)
     assert res.status_code == 400
@@ -231,7 +232,7 @@ def test_work_order_status_cannot_skip_in_progress(client, director_user):
 def test_work_order_status_cannot_move_backward(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
     client.patch(f"/work-orders/{work_order['id']}", json={"status": "in_progress"}, headers=headers)
 
     res = client.patch(f"/work-orders/{work_order['id']}", json={"status": "awarded"}, headers=headers)
@@ -241,7 +242,7 @@ def test_work_order_status_cannot_move_backward(client, director_user):
 def test_work_order_status_cannot_change_once_completed(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
     client.patch(f"/work-orders/{work_order['id']}", json={"status": "in_progress"}, headers=headers)
     client.patch(f"/work-orders/{work_order['id']}", json={"status": "completed"}, headers=headers)
 
@@ -266,7 +267,7 @@ def test_work_order_not_found_404s(client, director_user):
 def test_add_and_list_payment_entries(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
 
     res1 = client.post(
         f"/work-orders/{work_order['id']}/payment-entries",
@@ -303,7 +304,7 @@ def test_payment_entry_can_record_gst_tds_withheld(client, director_user):
     recorded alongside the amount actually received."""
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
 
     res = client.post(
         f"/work-orders/{work_order['id']}/payment-entries",
@@ -320,7 +321,7 @@ def test_payment_entry_can_record_gst_tds_withheld(client, director_user):
 def test_payment_entry_amount_must_be_positive(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
 
     res = client.post(
         f"/work-orders/{work_order['id']}/payment-entries",
@@ -343,7 +344,7 @@ def test_payment_entries_for_unknown_work_order_404(client, director_user):
 def test_sales_cannot_add_payment_entries(client, director_user, db_session):
     director_headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, director_headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=director_headers).json()
+    work_order = create_work_order(client, director_headers, quotation_id).json()
 
     sales_headers = _sales_headers(client, db_session)
     res = client.post(
@@ -362,7 +363,7 @@ def test_sales_cannot_add_payment_entries(client, director_user, db_session):
 def test_client_work_order_can_be_attached_via_the_generic_attachment_system(client, director_user):
     headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation_id).json()
 
     res = client.post(
         "/attachments",
@@ -381,7 +382,7 @@ def test_client_work_order_can_be_attached_via_the_generic_attachment_system(cli
 def test_sales_cannot_attach_to_a_work_order(client, director_user, db_session):
     director_headers = _director_headers(client, director_user)
     _, quotation_id = _won_quotation(client, director_headers)
-    work_order = client.post(f"/quotations/{quotation_id}/work-order", headers=director_headers).json()
+    work_order = create_work_order(client, director_headers, quotation_id).json()
 
     sales_headers = _sales_headers(client, db_session)
     res = client.post(

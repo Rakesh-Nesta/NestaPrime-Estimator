@@ -48,6 +48,10 @@ class DocumentType(str, enum.Enum):
     # project_construction_stages.id, not the Project itself, so a stage's own evidence stays
     # scoped to that one phase.
     PROJECT_STAGE = "project_stage"
+    # P5 contract revision 7: the signed Agreement document, and a site issue's photo, ride the same
+    # generic Attachment system. SQLAlchemy stores the member NAME on the Postgres enum.
+    AGREEMENT = "agreement"
+    SITE_ISSUE = "site_issue"
 
 
 class Setting(Base):
