@@ -76,12 +76,15 @@ def test_each_role_receives_only_the_kinds_it_can_read(client, director_user, db
     headers = _director(client, director_user)
     _quotation_for_new_project(client, headers, "Kinds Test School")
 
+    # P4 contract v7: an "attachment" group is appended last for every role in
+    # ALL_ATTACHMENT_ROLES ("sales", "pm", "director", "procurement", "site_engineer") --
+    # ca_tax is deliberately excluded, matching the gate attachments.py itself enforces.
     expected = {
-        "director": ["client", "lead", "project", "quotation"],
-        "sales": ["client", "lead", "project", "quotation"],
-        "pm": ["client", "lead", "project", "quotation"],
-        "procurement": ["client", "lead", "project"],
-        "site_engineer": ["project"],
+        "director": ["client", "lead", "project", "quotation", "attachment"],
+        "sales": ["client", "lead", "project", "quotation", "attachment"],
+        "pm": ["client", "lead", "project", "quotation", "attachment"],
+        "procurement": ["client", "lead", "project", "attachment"],
+        "site_engineer": ["project", "attachment"],
         "ca_tax": ["project"],
     }
     for role, kinds in expected.items():
@@ -264,7 +267,9 @@ def test_exact_matches_come_first_then_prefix_then_the_rest(client, director_use
 def test_nothing_matching_returns_empty_groups_not_an_error(client, director_user):
     headers = _director(client, director_user)
     body = _search(client, headers, "zzzz-no-such-thing")
-    assert [g["total"] for g in body["groups"]] == [0, 0, 0, 0]
+    # P4 contract v7: a 5th group (Attachments) is appended for roles with unconditional
+    # attachment access -- director is one, so 5 empty groups, not 4, is correct here.
+    assert [g["total"] for g in body["groups"]] == [0, 0, 0, 0, 0]
     assert all(g["items"] == [] for g in body["groups"])
 
 

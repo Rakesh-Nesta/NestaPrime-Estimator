@@ -110,19 +110,158 @@ def test_lineage_grouping_with_multiple_independent_lineages(client, director_us
     assert [row["id"] for row in b_chain] == [b1["id"]]
 
 
-def test_download_authorization_follows_reassignment_for_old_and_new_versions(client, director_user, db_session):
-    headers = _director_headers(client, director_user)
-    cost_sheet_id, project_id = _draft_cost_sheet(client, headers)
-    a1 = _upload(client, headers, "cost_sheet", cost_sheet_id, "soil_report").json()
-    a2 = _supersede(client, headers, a1["id"]).json()
+def test_lineages_authorization_follows_reassignment(client, director_user, db_session):
+    """Direct cross-owner refusal test for GET /attachments/{doc_type}/{doc_id}/lineages --
+    exercises BOTH the endpoint's own inline ownership.require_visible_document call AND the
+    global enforce_own_records middleware's doc_id branch (app/core/ownership.py), which resolves
+    doc_id against its sibling doc_type path param. Added because test_own_records.py's generic
+    two-sales walk cannot build a doc_id/doc_type pair itself and has to skip these routes --
+    this test is what actually proves the reassignment-refusal behaviour for them, same as the
+    download/supersede tests above do for their own routes."""
+    from tests.test_quotations_admin import _add_project_sport, _create_client_record, _create_project, _role_headers
 
-    # Both versions downloadable by a director regardless of ownership scoping specifics here --
-    # the real reassignment-following behaviour is already covered by require_visible_document's
-    # own existing test coverage (traced in the P4 contract's own Section 1). This asserts the
-    # new lineage endpoint doesn't bypass that check.
+    director = _director_headers(client, director_user)
+    assert client.put("/ownership/switch", json={"on": True}, headers=director).status_code == 200
+
+    sales_a = _role_headers(client, db_session, UserRole.SALES, "sales-a-lineages-reassign@test.local")
+    sales_b = _role_headers(client, db_session, UserRole.SALES, "sales-b-lineages-reassign@test.local")
+    a_id = client.get("/auth/me", headers=sales_a).json()["id"]
+    b_id = client.get("/auth/me", headers=sales_b).json()["id"]
+
+    client_id = _create_client_record(client, director, "Lineages Reassignment Client")
+    project_id = _create_project(client, director, client_id)
+    project_sport_id = _add_project_sport(client, director, project_id, "box_cricket")
+    cost_sheet_id = client.post(
+        f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=director
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=director)
+    estimate_id = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=director,
+    ).json()["id"]
+    client.patch(f"/ownership/client/{client_id}", json={"owner_id": a_id, "cascade": True}, headers=director)
+
+    up = _upload(client, sales_a, "estimate", estimate_id, "product_image")
+    assert up.status_code == 201, up.text
+
+    res = client.get(f"/attachments/estimate/{estimate_id}/lineages", headers=sales_a)
+    assert res.status_code == 200, res.text  # A still owns it
+
+    client.patch(f"/ownership/client/{client_id}", json={"owner_id": b_id, "cascade": True}, headers=director)
+
+    res = client.get(f"/attachments/estimate/{estimate_id}/lineages", headers=sales_a)
+    assert res.status_code == 404, res.text  # Amendment 60's concealed NOT_FOUND, not 403
+
+    res = client.get(f"/attachments/estimate/{estimate_id}/lineages", headers=sales_b)
+    assert res.status_code == 200, res.text  # B, the new owner, can see it
+
+
+def test_download_authorization_follows_reassignment_for_old_and_new_versions(client, director_user, db_session):
+    """Case 2's actual claim: once the parent Client (and its cascaded Project) is reassigned
+    away from Sales A to Sales B, A loses download access to BOTH the original (superseded) and
+    the current version of an attachment uploaded against that project -- not just the current
+    one -- and B gains it. A session id or attachment id alone is never sufficient; the document's
+    current ownership is what's checked, same contract as Case 20's upload-session coverage."""
+    from tests.test_quotations_admin import _add_project_sport, _create_client_record, _create_project, _role_headers
+
+    director = _director_headers(client, director_user)
+    assert client.put("/ownership/switch", json={"on": True}, headers=director).status_code == 200
+
+    sales_a = _role_headers(client, db_session, UserRole.SALES, "sales-a-dl-reassign@test.local")
+    sales_b = _role_headers(client, db_session, UserRole.SALES, "sales-b-dl-reassign@test.local")
+    a_id = client.get("/auth/me", headers=sales_a).json()["id"]
+    b_id = client.get("/auth/me", headers=sales_b).json()["id"]
+
+    # estimate, not cost_sheet -- Sales needs rate-blind mode on to attach to a Cost Sheet (a
+    # separate, pre-existing business rule unrelated to ownership), same choice Case 20's own
+    # upload-session reassignment test made.
+    client_id = _create_client_record(client, director, "Download Reassignment Client")
+    project_id = _create_project(client, director, client_id)
+    project_sport_id = _add_project_sport(client, director, project_id, "box_cricket")
+    cost_sheet_id = client.post(
+        f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=director
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=director)
+    estimate_id = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=director,
+    ).json()["id"]
+    give = client.patch(f"/ownership/client/{client_id}", json={"owner_id": a_id, "cascade": True}, headers=director)
+    assert give.status_code == 200, give.text  # the project (and estimate) follow the client
+
+    up1 = _upload(client, sales_a, "estimate", estimate_id, "product_image")
+    assert up1.status_code == 201, up1.text
+    a1 = up1.json()
+    sup1 = _supersede(client, sales_a, a1["id"])
+    assert sup1.status_code == 201, sup1.text
+    a2 = sup1.json()
+
+    # While A still owns it, both versions are downloadable.
     for att_id in (a1["id"], a2["id"]):
-        res = client.get(f"/attachments/{att_id}/download", headers=headers)
-        assert res.status_code == 200
+        res = client.get(f"/attachments/{att_id}/download", headers=sales_a)
+        assert res.status_code == 200, res.text
+
+    reassign = client.patch(f"/ownership/client/{client_id}", json={"owner_id": b_id, "cascade": True}, headers=director)
+    assert reassign.status_code == 200, reassign.text
+
+    # A is now refused on BOTH versions -- the old (superseded) one is not exempt just because
+    # it's no longer current.
+    for att_id in (a1["id"], a2["id"]):
+        res = client.get(f"/attachments/{att_id}/download", headers=sales_a)
+        assert res.status_code == 404, res.text  # Amendment 60's concealed NOT_FOUND, not 403
+
+    # B, the new owner, can download both.
+    for att_id in (a1["id"], a2["id"]):
+        res = client.get(f"/attachments/{att_id}/download", headers=sales_b)
+        assert res.status_code == 200, res.text
+
+
+def test_supersede_authorization_follows_reassignment(client, director_user, db_session):
+    """Found while closing Case 2: supersede_attachment had no ownership.require_visible_document
+    call at all (only the role gate) -- A kept the ability to supersede an attachment on a project
+    reassigned away from them. Fixed in app/api/attachments.py; this proves A is refused and B,
+    the new owner, can supersede normally."""
+    from tests.test_quotations_admin import _add_project_sport, _create_client_record, _create_project, _role_headers
+
+    director = _director_headers(client, director_user)
+    assert client.put("/ownership/switch", json={"on": True}, headers=director).status_code == 200
+
+    sales_a = _role_headers(client, db_session, UserRole.SALES, "sales-a-supersede-reassign@test.local")
+    sales_b = _role_headers(client, db_session, UserRole.SALES, "sales-b-supersede-reassign@test.local")
+    a_id = client.get("/auth/me", headers=sales_a).json()["id"]
+    b_id = client.get("/auth/me", headers=sales_b).json()["id"]
+
+    client_id = _create_client_record(client, director, "Supersede Reassignment Client")
+    project_id = _create_project(client, director, client_id)
+    project_sport_id = _add_project_sport(client, director, project_id, "box_cricket")
+    cost_sheet_id = client.post(
+        f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=director
+    ).json()["id"]
+    client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=director)
+    estimate_id = client.post(
+        f"/projects/{project_id}/estimates",
+        json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+        headers=director,
+    ).json()["id"]
+    client.patch(f"/ownership/client/{client_id}", json={"owner_id": a_id, "cascade": True}, headers=director)
+
+    up1 = _upload(client, sales_a, "estimate", estimate_id, "product_image")
+    assert up1.status_code == 201, up1.text
+    a1 = up1.json()
+
+    client.patch(f"/ownership/client/{client_id}", json={"owner_id": b_id, "cascade": True}, headers=director)
+
+    res = client.post(
+        f"/attachments/{a1['id']}/supersede", files={"file": ("v2.txt", b"v2 content", "text/plain")}, headers=sales_a,
+    )
+    assert res.status_code == 404, res.text  # A no longer owns the project; concealed NOT_FOUND
+
+    res = client.post(
+        f"/attachments/{a1['id']}/supersede", files={"file": ("v2.txt", b"v2 content", "text/plain")}, headers=sales_b,
+    )
+    assert res.status_code == 201, res.text  # B, the new owner, can supersede normally
 
 
 # ---------------------------------------------------------------------------

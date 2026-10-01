@@ -733,6 +733,52 @@ def _upload_all_chunks_http(client, headers, session_id, content=CONTENT, chunk_
         assert res.json()["promoted"], res.text
 
 
+def test_session_responses_echo_the_authoritative_chunk_size(client, director_user, db_session):
+    """The client proposes a chunk_size at start; the server's own record of it (not the
+    client's local constant) is what every later slicing/indexing decision must use, especially
+    on resume -- both the start response and the status response must carry it."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+    session = _start_session_http(client, headers, "cost_sheet", cost_sheet_id, declared_size=70, chunk_size=30)
+    assert session["chunk_size"] == 30
+
+    status = client.get(f"/attachments/upload-sessions/{session['id']}/status", headers=headers)
+    assert status.status_code == 200, status.text
+    assert status.json()["chunk_size"] == 30
+
+
+def test_final_partial_chunk_is_computed_from_the_authoritative_chunk_size(client, director_user, db_session):
+    """declared_size=70, chunk_size=30 -> chunks of 30/30/10. The last chunk's expected size is
+    declared_size - chunk_size*(total_chunks-1), not chunk_size itself -- confirm a correctly
+    sized final partial chunk is accepted and an incorrectly sized one (chunk_size-sized) is not."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+    session = _start_session_http(client, headers, "cost_sheet", cost_sheet_id, declared_size=70, chunk_size=30)
+    assert session["total_chunks"] == 3
+
+    for index, size in ((0, 30), (1, 30)):
+        res = client.post(
+            f"/attachments/upload-sessions/{session['id']}/chunks/{index}",
+            files={"file": ("chunk", CONTENT[index * 30:(index + 1) * 30], "application/octet-stream")},
+            headers=headers,
+        )
+        assert res.status_code == 200 and res.json()["promoted"], res.text
+
+    # Wrong: sending chunk_size (30) bytes for the final index, instead of the true remainder (10).
+    wrong = client.post(
+        f"/attachments/upload-sessions/{session['id']}/chunks/2",
+        files={"file": ("chunk", b"X" * 30, "application/octet-stream")}, headers=headers,
+    )
+    assert wrong.status_code == 422, wrong.text
+
+    # Right: the true remainder (10 bytes).
+    right = client.post(
+        f"/attachments/upload-sessions/{session['id']}/chunks/2",
+        files={"file": ("chunk", CONTENT[60:70], "application/octet-stream")}, headers=headers,
+    )
+    assert right.status_code == 200 and right.json()["promoted"], right.text
+
+
 def test_lost_success_response_retry_is_idempotent(client, director_user, db_session):
     headers = _director_headers(client, director_user)
     cost_sheet_id = _draft_cost_sheet(client, headers)

@@ -39,6 +39,7 @@ class SessionOut(BaseModel):
     doc_type: str
     doc_id: uuid.UUID
     status: str
+    chunk_size: int
     total_chunks: int
     completion_attempt: int
     resulting_attachment_id: uuid.UUID | None

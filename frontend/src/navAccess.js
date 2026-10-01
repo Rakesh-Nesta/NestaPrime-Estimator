@@ -48,6 +48,10 @@ export const SCREEN_ROLES = {
   // real 403 (LIST_ROLES, GET /projects, app/api/projects.py) -- confirmed directly against the
   // live backend, not inferred, before this fix. Matches LIST_ROLES exactly.
   projects_admin: ["sales", "pm", "director", "procurement", "site_engineer", "ca_tax"],
+  // P4 contract v7, Section 3/7: stage evidence follows the same gate as its own backend
+  // STAGE_ROLES (attachments.py) -- upload/view/submit is site_engineer/pm/director; review
+  // itself is further narrowed to pm/director inside the screen and re-enforced by the backend.
+  stage_evidence: ["site_engineer", "pm", "director"],
 };
 
 export function canOpen(screen, role) {

@@ -145,6 +145,7 @@ def session_status(db: Session, session: AttachmentUploadSession) -> dict:
     return {
         "id": session.id,
         "status": session.status,
+        "chunk_size": session.chunk_size,
         "total_chunks": session.total_chunks,
         "written_chunk_indexes": sorted(row[0] for row in written),
         "resulting_attachment_id": session.resulting_attachment_id,

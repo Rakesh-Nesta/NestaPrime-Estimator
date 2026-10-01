@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from app.api.attachments import ALL_ATTACHMENT_ROLES
 from app.api.clients import READ_ROLES as CLIENT_READ_ROLES
 from app.api.documents import _effective_quotation_status
 from app.api.opportunities import READ_ROLES as OPPORTUNITY_READ_ROLES
@@ -230,6 +231,28 @@ def _quotations(db: Session, query: str, owner_id: uuid.UUID | None = None) -> S
     return SearchGroupOut(kind="quotation", label="Quotations", total=total, items=items)
 
 
+def _attachments(db: Session, query: str, current_user) -> SearchGroupOut:
+    """P4 contract v7, Section 2: reuses attachment_search.search_attachments exactly --
+    its own permitted-branches-before-union role gate and ownership filter, never
+    re-implemented here. Capped at GROUP_LIMIT, same shape as every other group.
+    project_id is resolved per result (at most GROUP_LIMIT calls) via the same
+    ownership.project_id_for_document every other authorization check already uses, so
+    QuickSearch can open straight to the right project -- PriceRequest attachments (no
+    resolvable project) simply carry no project_id, same as this codebase's existing gap."""
+    from app.core.attachment_search import search_attachments
+
+    result = search_attachments(db, current_user, query, None, GROUP_LIMIT, 0)
+    items = [
+        SearchItemOut(
+            kind="attachment", id=a.id, primary=a.original_filename,
+            secondary=_joined([_title(a.doc_type), _title(a.tag)]),
+            project_id=ownership.project_id_for_document(db, a.doc_type.value, a.doc_id),
+        )
+        for a in result["items"]
+    ]
+    return SearchGroupOut(kind="attachment", label="Attachments", total=result["total"], items=items)
+
+
 @router.get("", response_model=SearchOut)
 def global_search(
     q: str,
@@ -257,4 +280,6 @@ def global_search(
         groups.append(_projects(db, query, owner))
     if role in QUOTATION_LIST_ROLES:
         groups.append(_quotations(db, query, owner))
+    if role in ALL_ATTACHMENT_ROLES:
+        groups.append(_attachments(db, query, current_user))
     return SearchOut(query=query, limit=GROUP_LIMIT, groups=groups)

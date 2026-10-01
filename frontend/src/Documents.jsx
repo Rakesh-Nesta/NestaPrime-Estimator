@@ -464,7 +464,7 @@ function CostSheetPanel({ token, project, role, costSheets, skipRequests, estima
               onCancel={() => setRejectFormFor(null)}
             />
           )}
-          {openAttachmentsFor === cs.id && <AttachmentsPanel token={token} docType="cost_sheet" docId={cs.id} />}
+          {openAttachmentsFor === cs.id && <AttachmentsPanel token={token} docType="cost_sheet" docId={cs.id} role={role} />}
           {openMessagesFor === cs.id && <MessagesPanel token={token} docType="cost_sheet" docId={cs.id} />}
           {openLinesFor === cs.id && <RateBlindLinesPanel token={token} costSheetId={cs.id} role={role} />}
         </div>
@@ -807,7 +807,7 @@ function EstimatePanel({
               onOpenSiteSurvey={onOpenSiteSurvey}
             />
           )}
-          {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} />}
+          {openAttachmentsFor === est.id && <AttachmentsPanel token={token} docType="estimate" docId={est.id} role={role} />}
           {openMessagesFor === est.id && <MessagesPanel token={token} docType="estimate" docId={est.id} />}
           {addOptionFor === est.id && (
             <div className="bg-surface-raised rounded px-3 py-2 space-y-2 text-xs">
@@ -967,7 +967,7 @@ function EstimatePanel({
                 </div>
               </div>
               {openOptionAttachmentsFor === opt.id && (
-                <AttachmentsPanel token={token} docType="estimate_option" docId={opt.id} />
+                <AttachmentsPanel token={token} docType="estimate_option" docId={opt.id} role={role} />
               )}
               {openOptionAddonsFor === opt.id && (
                 <OptionAddons token={token} projectId={project.id} optionId={opt.id} />
@@ -1513,7 +1513,7 @@ function QuotationPanel({
           {openCoverNoteFor === q.id && (
             <CoverNotePanel token={token} quotation={q} onSaved={handleCoverNoteSaved} />
           )}
-          {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} />}
+          {openAttachmentsFor === q.id && <AttachmentsPanel token={token} docType="quotation" docId={q.id} role={role} />}
           {openMessagesFor === q.id && <MessagesPanel token={token} docType="quotation" docId={q.id} />}
           {q.status === "won" && role !== "sales" && (
             <WorkOrderPanel
@@ -1721,7 +1721,7 @@ function WorkOrderPanel({ token, quotationId, canEditPayments, onOpenPayments })
               {showAttachments ? "Hide work order document" : "Work order document"}
             </button>
           </div>
-          {showAttachments && <AttachmentsPanel token={token} docType="work_order" docId={workOrder.id} />}
+          {showAttachments && <AttachmentsPanel token={token} docType="work_order" docId={workOrder.id} role={role} />}
 
           <div className="space-y-2 border-t border-border-dark pt-2">
             <div className="flex flex-wrap items-center justify-between gap-2">

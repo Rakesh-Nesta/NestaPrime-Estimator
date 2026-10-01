@@ -327,7 +327,8 @@ def _trigger_structural_design_rebase(
                         status=MessageStatus.RECORDED,
                     )
                 )
-    db.commit()
+    # No commit here -- same convention as write_audit_log_entry and _advance_stage_if_applicable;
+    # the caller's own single commit covers this function's writes too, in the same transaction.
 
 
 def _advance_stage_if_applicable(db: Session, doc_type: DocumentType, doc_id: uuid.UUID) -> None:
@@ -342,6 +343,22 @@ def _advance_stage_if_applicable(db: Session, doc_type: DocumentType, doc_id: uu
         advance_stage_on_evidence_upload(db, stage)
 
 
+def _parse_captured_at(raw: str | None) -> datetime | None:
+    """P4 contract v7, Section 3: a timezone-less capture timestamp is interpreted as IST
+    (Asia/Kolkata) before conversion to UTC for storage -- matching this codebase's own
+    established precedent for exactly this problem (WP8's reminder scheduler self-computing
+    Asia/Kolkata rather than trusting an ambient timezone). A browser's <input type=datetime-local>
+    sends exactly this shape: a plain wall-clock string with no offset."""
+    if not raw:
+        return None
+    from zoneinfo import ZoneInfo
+
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+    return parsed.astimezone(UTC).replace(tzinfo=None)
+
+
 async def _store_upload(
     db: Session,
     request: Request,
@@ -354,6 +371,8 @@ async def _store_upload(
     version: int,
     signatory_name: str | None = None,
     signatory_designation: str | None = None,
+    captured_at: str | None = None,
+    captured_at_source: str | None = None,
 ) -> Attachment:
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_BYTES:
@@ -390,9 +409,19 @@ async def _store_upload(
         uploaded_by_id=current_user.id,
         ip_address=request.client.host if request.client else None,
         version=version,
+        captured_at=_parse_captured_at(captured_at),
+        # Neither column is ever read by any authorization or business-logic decision --
+        # display-only, explicitly labelled unverified in the UI regardless of source. A browser
+        # upload has no EXIF-reading capability, so an unlabelled capture time defaults to
+        # "manual" -- never silently implied to be machine-verified.
+        captured_at_source=(captured_at_source or ("manual" if captured_at else None)),
     )
     db.add(attachment)
-    db.commit()
+    db.flush()  # assigns attachment.id within THIS transaction, without ending it -- the caller
+    # (upload_attachment / supersede_attachment) does the one commit that covers the Attachment
+    # row, _trigger_structural_design_rebase's side effects, and the stage-advance/audit entries
+    # together, so a failure partway through never leaves evidence committed with a stale stage
+    # or a missing audit entry.
     db.refresh(attachment)
 
     _trigger_structural_design_rebase(db, request, current_user, doc_type, doc_id, tag)
@@ -408,6 +437,8 @@ async def upload_attachment(
     approval_strength: ApprovalStrength | None = Form(None),
     signatory_name: str | None = Form(None),
     signatory_designation: str | None = Form(None),
+    captured_at: str | None = Form(None),
+    captured_at_source: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
@@ -422,8 +453,10 @@ async def upload_attachment(
     attachment = await _store_upload(
         db, request, current_user, doc_type, doc_id, tag, approval_strength, file, version=1,
         signatory_name=signatory_name, signatory_designation=signatory_designation,
+        captured_at=captured_at, captured_at_source=captured_at_source,
     )
     _advance_stage_if_applicable(db, doc_type, doc_id)
+    db.commit()
     return attachment
 
 
@@ -453,6 +486,7 @@ def download_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     _require_doc_type_role(db, attachment.doc_type, current_user)
+    ownership.require_visible_document(db, current_user, attachment.doc_type, attachment.doc_id)  # Amendment 60
 
     path = Path(attachment.storage_path)
     if not path.exists():
@@ -468,6 +502,8 @@ async def supersede_attachment(
     approval_strength: ApprovalStrength | None = Form(None),
     signatory_name: str | None = Form(None),
     signatory_designation: str | None = Form(None),
+    captured_at: str | None = Form(None),
+    captured_at_source: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
@@ -479,6 +515,7 @@ async def supersede_attachment(
     if not old:
         raise HTTPException(status_code=404, detail="Attachment not found")
     _require_doc_type_role(db, old.doc_type, current_user)
+    ownership.require_visible_document(db, current_user, old.doc_type, old.doc_id)  # Amendment 60
     if old.superseded_by_id is not None:
         raise HTTPException(status_code=400, detail="This attachment has already been superseded")
 
@@ -488,6 +525,7 @@ async def supersede_attachment(
         file, version=old.version + 1,
         signatory_name=signatory_name if signatory_name is not None else old.signatory_name,
         signatory_designation=signatory_designation if signatory_designation is not None else old.signatory_designation,
+        captured_at=captured_at, captured_at_source=captured_at_source,
     )
     old.superseded_by_id = new.id
     _advance_stage_if_applicable(db, old.doc_type, old.doc_id)

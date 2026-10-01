@@ -47,8 +47,10 @@ function PendingItemRow({ item, navigators }) {
   );
 }
 
+const STAGE_EVIDENCE_ROLES = ["site_engineer", "pm", "director"];
+
 export default function ProjectOverview({
-  token, project, role, onOpenSports, onOpenScope, onOpenSiteSurvey, onOpenDocuments, onOpenFollowUps,
+  token, project, role, onOpenSports, onOpenScope, onOpenSiteSurvey, onOpenDocuments, onOpenFollowUps, onOpenStages,
 }) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -203,6 +205,9 @@ export default function ProjectOverview({
         <button onClick={onOpenScope} className="text-gold hover:underline">Scope &rarr;</button>
         <button onClick={onOpenSiteSurvey} className="text-gold hover:underline">Site Survey &rarr;</button>
         <button onClick={onOpenDocuments} className="text-gold hover:underline">Documents &rarr;</button>
+        {STAGE_EVIDENCE_ROLES.includes(role) && (
+          <button onClick={onOpenStages} className="text-gold hover:underline">Stage Evidence &rarr;</button>
+        )}
       </div>
     </div>
   );

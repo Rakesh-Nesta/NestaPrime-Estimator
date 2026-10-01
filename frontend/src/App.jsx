@@ -23,6 +23,7 @@ import Payments from "./Payments";
 import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
 import ProjectOverview from "./ProjectOverview";
+import StageEvidence from "./StageEvidence";
 import ProjectSetup from "./ProjectSetup";
 import QuickSearch from "./QuickSearch";
 import RateSheet from "./RateSheet";
@@ -114,7 +115,7 @@ export default function App() {
     // P3 contract, Section 8/9.
     "marketplace_imports_ops", "marketing_dashboard",
   ];
-  const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents"];
+  const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents", "stage_evidence"];
 
   function goToTopLevel(target) {
     if (!TOP_LEVEL_SCREENS.includes(screen)) {
@@ -136,6 +137,16 @@ export default function App() {
   // search box (there is no per-record view or deep link).
   function handleOpenSearchResult(item) {
     setSearchOpen(false);
+    if (item.kind === "attachment") {
+      // P4: an attachment result lands on the project's Documents tab directly (more useful
+      // than bare Overview) when a project is resolvable; a price_request attachment has none
+      // (PriceRequest has no project_id -- a documented, pre-existing gap) and is a dead end for
+      // now rather than being mistaken for a client-name search.
+      if (item.project_id) {
+        handleOpenProject(item.project_id).then(() => setScreen("documents"));
+      }
+      return;
+    }
     if (item.project_id) {
       handleOpenProject(item.project_id);
     } else {
@@ -467,6 +478,7 @@ export default function App() {
             onOpenSiteSurvey={() => setScreen("site_survey")}
             onOpenDocuments={() => setScreen("documents")}
             onOpenFollowUps={() => goToTopLevel("followups")}
+            onOpenStages={() => setScreen("stage_evidence")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (
@@ -514,6 +526,15 @@ export default function App() {
             onOpenScope={() => setScreen("scope")}
             onOpenSiteSurvey={() => setScreen("site_survey")}
             onBack={() => setScreen("scope")}
+          />
+        )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "stage_evidence" &&
+          canOpen("stage_evidence", user.role) && (
+          <StageEvidence
+            token={accessToken}
+            project={activeProject}
+            role={user.role}
+            onBack={() => setScreen("overview")}
           />
         )}
         </main>

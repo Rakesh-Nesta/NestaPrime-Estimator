@@ -184,7 +184,16 @@ def test_every_route_a_salesperson_can_reach_refuses_someone_elses_record_with_4
             leaks.append(f"{method} {path} -> {theirs.status_code} {theirs.text[:80]}")
     assert checked > 40, checked  # the walk really covers the surface
     assert not leaks, "A salesperson reached someone else's record:\n" + "\n".join(leaks)
-    assert skipped <= {"row_id", "work_order_id", "signatory_id", "report_id"}, skipped  # cannot be built here
+    assert skipped <= {
+        "row_id", "work_order_id", "signatory_id", "report_id",
+        # P4 contract v7: doc_id/doc_type (lineages) and session_id/chunk_index (upload sessions)
+        # need a real stage/session lifecycle this generic two-sales world doesn't build -- the
+        # live reassignment-refusal behaviour for these routes is covered directly by the P4
+        # test files instead (e.g. test_reauthorization_refuses_the_original_uploader_after_
+        # project_reassignment, test_download_authorization_follows_reassignment_for_old_and_
+        # new_versions).
+        "doc_id", "doc_type", "session_id", "chunk_index",
+    }, skipped  # cannot be built here
 
 
 def test_a_missing_id_and_someone_elses_id_answer_identically(client, two_sales):

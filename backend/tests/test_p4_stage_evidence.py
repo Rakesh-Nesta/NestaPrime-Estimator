@@ -1,5 +1,7 @@
 """P4 contract v7, Section 3: stage evidence capture."""
 
+import pytest
+
 from app.core.project_stages import CONSTRUCTION_PHASES
 from app.core.security import hash_password
 from app.models.user import User, UserRole
@@ -204,3 +206,43 @@ def test_site_engineer_can_upload_and_submit_but_not_review(client, director_use
 
     res = client.post(f"/stages/{stage['id']}/review", json={"action": "approve"}, headers=se_headers)
     assert res.status_code == 403, res.text  # review is PM/Director only
+
+
+def test_upload_and_stage_advance_commit_or_roll_back_together(client, director_user, db_session, monkeypatch):
+    """Atomicity review finding: _store_upload used to call db.commit() on its own, permanently
+    storing the Attachment row BEFORE _advance_stage_if_applicable ever ran -- so a failure in
+    between left evidence on disk and in the DB against a stage whose status never moved, and
+    with no audit entry for the transition. Both now share exactly one commit (the endpoint's
+    own, at the very end), so a failure anywhere in between must roll back the Attachment insert
+    together with the stage mutation -- never one without the other."""
+    import app.api.attachments as attachments_module
+    from app.models.attachment import Attachment
+
+    headers = _director_headers(client, director_user)
+    project_id = _create_project(client, headers)
+    phase = CONSTRUCTION_PHASES[0]
+    stage = _get_stage(client, headers, project_id, phase)
+
+    def _boom(db, stage):
+        raise RuntimeError("forced failure between the Attachment insert and the stage commit")
+
+    monkeypatch.setattr(attachments_module, "advance_stage_on_evidence_upload", _boom)
+
+    with pytest.raises(RuntimeError):
+        _upload_stage_evidence(client, headers, stage["id"])
+
+    # Production's real get_db() rolls back on close() when an exception propagates (see
+    # app/db/session.py) -- the test client's dependency-override keeps the session open across
+    # requests instead (so later assertions in a test can use it), so roll back explicitly here
+    # to reproduce exactly what close() would have done in production.
+    db_session.rollback()
+
+    remaining = (
+        db_session.query(Attachment)
+        .filter(Attachment.doc_type == "project_stage", Attachment.doc_id == stage["id"])
+        .all()
+    )
+    assert remaining == []  # the Attachment insert was rolled back too, not left orphaned
+
+    after = _get_stage(client, headers, project_id, phase)
+    assert after["status"] == "not_started"  # the stage mutation never persisted either

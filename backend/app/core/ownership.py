@@ -50,9 +50,12 @@ COVERED_PATH_PARAMS = frozenset(
         "work_order_id",
         "stage_id",  # P4 contract v7
         "session_id",  # P4 contract v7
+        "doc_id",  # P4 contract v7 -- resolved against its sibling `doc_type` path param
     }
 )
-UNSCOPED_PATH_PARAMS = frozenset({"client_type"})
+# `doc_type` is a plain value (which table doc_id names), not a record; `chunk_index` is a bare
+# integer offset into a session's chunks, never an id of its own -- both P4 contract v7.
+UNSCOPED_PATH_PARAMS = frozenset({"client_type", "doc_type", "chunk_index"})
 
 
 def switch_is_on(db: Session) -> bool:
@@ -262,5 +265,12 @@ def enforce_own_records(request: Request, db: Session = Depends(get_db)) -> None
             value = uuid.UUID(str(request.path_params[key]))
         except ValueError:
             continue  # not an id: the route's own validation answers 422
+        if key == "doc_id":
+            # Resolved against its sibling `doc_type` path param (e.g. /attachments/{doc_type}/
+            # {doc_id}/lineages) -- doc_type alone carries no record, so it is not itself covered.
+            doc_type = request.path_params.get("doc_type")
+            if doc_type is None or not may_see_document(db, user, str(doc_type), value):
+                raise HTTPException(status_code=404, detail=NOT_FOUND)
+            continue
         if not _resolve_owner_ok(db, user, key, value):
             raise HTTPException(status_code=404, detail=NOT_FOUND)
