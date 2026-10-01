@@ -1,7 +1,7 @@
 import hashlib
 import re
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -14,6 +14,7 @@ from app.api.documents import _document_no, _rate_blind_mode_on
 from app.config import settings
 from app.core import ownership
 from app.core.auth import require_roles
+from app.core.project_stages import advance_stage_on_evidence_upload
 from app.db.session import get_db
 from app.models.attachment import ApprovalStrength, Attachment, AttachmentTag
 from app.models.client_signatory import ClientSignatory
@@ -21,6 +22,7 @@ from app.models.document import CostSheet, CostSheetStatus, Estimate, EstimateOp
 from app.models.message import Message, MessageChannel, MessageStatus
 from app.models.price_request import PriceRequest
 from app.models.project import Project
+from app.models.project_construction_stage import ProjectConstructionStage
 from app.models.setting import DocumentType
 from app.models.site_survey import SiteSurvey
 from app.models.technical_bid_checklist import TechnicalBidChecklistItem
@@ -47,6 +49,10 @@ PRICE_REQUEST_ROLES = ("pm", "director", "procurement")
 # "photos (min 4)"), plus PM/Director oversight. No Sales/Procurement row
 # in A.3 for this duty.
 SITE_SURVEY_ROLES = ("site_engineer", "pm", "director")
+# P4 contract v7, Section 3/7: stage evidence photos follow the same set as Site Survey's own --
+# named separately since the two represent different concepts that could diverge later, matching
+# this codebase's own convention of naming each gate even where tuples currently coincide.
+STAGE_ROLES = ("site_engineer", "pm", "director")
 # The router-level Depends() below is deliberately a coarse "is this an
 # authenticated business role at all" gate covering every role any
 # doc_type ever grants access to (everyone except CA/Tax, who has no
@@ -91,6 +97,7 @@ _DOC_TABLE = {
     DocumentType.TECHNICAL_BID_CHECKLIST_ITEM: TechnicalBidChecklistItem,
     DocumentType.PRICE_REQUEST: PriceRequest,
     DocumentType.SITE_SURVEY: SiteSurvey,
+    DocumentType.PROJECT_STAGE: ProjectConstructionStage,  # P4 contract v7
 }
 
 _COST_VISIBILITY_DOC_TYPES = (
@@ -105,6 +112,8 @@ def _roles_for(doc_type: DocumentType) -> tuple[str, ...]:
         return PRICE_REQUEST_ROLES
     if doc_type == DocumentType.SITE_SURVEY:
         return SITE_SURVEY_ROLES
+    if doc_type == DocumentType.PROJECT_STAGE:
+        return STAGE_ROLES
     return COST_ROLES if doc_type in _COST_VISIBILITY_DOC_TYPES else DOCUMENT_ROLES
 
 
@@ -227,6 +236,18 @@ class AttachmentOut(BaseModel):
     version: int
     superseded_by_id: uuid.UUID | None
 
+    # P4 contract v7
+    captured_at: datetime | None = None
+    captured_at_source: str | None = None
+    review_status: str | None = None
+    reviewed_by_id: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    marketing_reuse_approved_at: datetime | None = None
+    marketing_reuse_approved_by_id: uuid.UUID | None = None
+    marketing_reuse_revoked_at: datetime | None = None
+    marketing_reuse_revoked_by_id: uuid.UUID | None = None
+    derived_from_id: uuid.UUID | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -306,7 +327,49 @@ def _trigger_structural_design_rebase(
                         status=MessageStatus.RECORDED,
                     )
                 )
-    db.commit()
+    # No commit here -- same convention as write_audit_log_entry and _advance_stage_if_applicable;
+    # the caller's own single commit covers this function's writes too, in the same transaction.
+
+
+def _advance_stage_if_applicable(
+    db: Session, doc_type: DocumentType, doc_id: uuid.UUID, current_user, request: Request
+) -> None:
+    """P4 contract v7, Section 3: the not_started/rejected->in_progress and reviewed->
+    evidence_submitted transitions are a side effect of a successful upload/supersede against a
+    stage -- never of a read, and never for any other doc_type. Does not commit; the caller's own
+    db.commit() covers this too, same convention as write_audit_log_entry. A reviewed->
+    evidence_submitted invalidation is itself audit-logged here (Section 8 case 9) -- the write
+    happens at this layer, not inside advance_stage_on_evidence_upload, since that function lives
+    in app/core and current_user/request are only available to its caller here in app/api."""
+    if doc_type != DocumentType.PROJECT_STAGE:
+        return
+    stage = db.query(ProjectConstructionStage).filter(ProjectConstructionStage.id == doc_id).first()
+    if stage is None:
+        return
+    old_status = stage.status
+    invalidated_review = advance_stage_on_evidence_upload(db, stage)
+    if invalidated_review:
+        write_audit_log_entry(
+            db, current_user, "project_stage", stage.id, "status",
+            old_value=old_status, new_value=stage.status,
+            reason="New evidence uploaded after review -- prior sign-off invalidated", request=request,
+        )
+
+
+def _parse_captured_at(raw: str | None) -> datetime | None:
+    """P4 contract v7, Section 3: a timezone-less capture timestamp is interpreted as IST
+    (Asia/Kolkata) before conversion to UTC for storage -- matching this codebase's own
+    established precedent for exactly this problem (WP8's reminder scheduler self-computing
+    Asia/Kolkata rather than trusting an ambient timezone). A browser's <input type=datetime-local>
+    sends exactly this shape: a plain wall-clock string with no offset."""
+    if not raw:
+        return None
+    from zoneinfo import ZoneInfo
+
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+    return parsed.astimezone(UTC).replace(tzinfo=None)
 
 
 async def _store_upload(
@@ -321,6 +384,8 @@ async def _store_upload(
     version: int,
     signatory_name: str | None = None,
     signatory_designation: str | None = None,
+    captured_at: str | None = None,
+    captured_at_source: str | None = None,
 ) -> Attachment:
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_BYTES:
@@ -357,9 +422,19 @@ async def _store_upload(
         uploaded_by_id=current_user.id,
         ip_address=request.client.host if request.client else None,
         version=version,
+        captured_at=_parse_captured_at(captured_at),
+        # Neither column is ever read by any authorization or business-logic decision --
+        # display-only, explicitly labelled unverified in the UI regardless of source. A browser
+        # upload has no EXIF-reading capability, so an unlabelled capture time defaults to
+        # "manual" -- never silently implied to be machine-verified.
+        captured_at_source=(captured_at_source or ("manual" if captured_at else None)),
     )
     db.add(attachment)
-    db.commit()
+    db.flush()  # assigns attachment.id within THIS transaction, without ending it -- the caller
+    # (upload_attachment / supersede_attachment) does the one commit that covers the Attachment
+    # row, _trigger_structural_design_rebase's side effects, and the stage-advance/audit entries
+    # together, so a failure partway through never leaves evidence committed with a stale stage
+    # or a missing audit entry.
     db.refresh(attachment)
 
     _trigger_structural_design_rebase(db, request, current_user, doc_type, doc_id, tag)
@@ -375,6 +450,8 @@ async def upload_attachment(
     approval_strength: ApprovalStrength | None = Form(None),
     signatory_name: str | None = Form(None),
     signatory_designation: str | None = Form(None),
+    captured_at: str | None = Form(None),
+    captured_at_source: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
@@ -386,10 +463,14 @@ async def upload_attachment(
     _require_doc_type_role(db, doc_type, current_user)
     ownership.require_visible_document(db, current_user, doc_type.value, doc_id)  # Amendment 60
     _get_document_or_404(db, doc_type, doc_id)
-    return await _store_upload(
+    attachment = await _store_upload(
         db, request, current_user, doc_type, doc_id, tag, approval_strength, file, version=1,
         signatory_name=signatory_name, signatory_designation=signatory_designation,
+        captured_at=captured_at, captured_at_source=captured_at_source,
     )
+    _advance_stage_if_applicable(db, doc_type, doc_id, current_user, request)
+    db.commit()
+    return attachment
 
 
 @attachments_router.get("", response_model=list[AttachmentOut])
@@ -418,6 +499,7 @@ def download_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     _require_doc_type_role(db, attachment.doc_type, current_user)
+    ownership.require_visible_document(db, current_user, attachment.doc_type, attachment.doc_id)  # Amendment 60
 
     path = Path(attachment.storage_path)
     if not path.exists():
@@ -433,6 +515,8 @@ async def supersede_attachment(
     approval_strength: ApprovalStrength | None = Form(None),
     signatory_name: str | None = Form(None),
     signatory_designation: str | None = Form(None),
+    captured_at: str | None = Form(None),
+    captured_at_source: str | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
@@ -444,6 +528,7 @@ async def supersede_attachment(
     if not old:
         raise HTTPException(status_code=404, detail="Attachment not found")
     _require_doc_type_role(db, old.doc_type, current_user)
+    ownership.require_visible_document(db, current_user, old.doc_type, old.doc_id)  # Amendment 60
     if old.superseded_by_id is not None:
         raise HTTPException(status_code=400, detail="This attachment has already been superseded")
 
@@ -453,7 +538,143 @@ async def supersede_attachment(
         file, version=old.version + 1,
         signatory_name=signatory_name if signatory_name is not None else old.signatory_name,
         signatory_designation=signatory_designation if signatory_designation is not None else old.signatory_designation,
+        captured_at=captured_at, captured_at_source=captured_at_source,
     )
     old.superseded_by_id = new.id
+    _advance_stage_if_applicable(db, old.doc_type, old.doc_id, current_user, request)
     db.commit()
     return new
+
+
+# --- P4 contract v7, Section 1: document version history -------------------------------------
+
+
+@attachments_router.get("/{doc_type}/{doc_id}/lineages", response_model=list[list[AttachmentOut]])
+def attachment_lineages(
+    doc_type: DocumentType,
+    doc_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
+):
+    """Stored links run older -> newer (old.superseded_by_id points at its replacement); a
+    head's own superseded_by_id is always NULL, so reconstructing history from the current
+    version is a reverse lookup, never a forward walk from the head."""
+    _require_doc_type_role(db, doc_type, current_user)
+    ownership.require_visible_document(db, current_user, doc_type.value, doc_id)  # Amendment 60
+    rows = (
+        db.query(Attachment)
+        .filter(Attachment.doc_type == doc_type, Attachment.doc_id == doc_id)
+        .order_by(Attachment.version)
+        .all()
+    )
+    predecessor_of = {row.superseded_by_id: row for row in rows if row.superseded_by_id is not None}
+    heads = [row for row in rows if row.superseded_by_id is None]
+
+    lineages = []
+    for head in heads:
+        chain = [head]
+        current = head
+        while current.id in predecessor_of:
+            current = predecessor_of[current.id]
+            chain.append(current)
+        lineages.append(list(reversed(chain)))  # oldest-first, ending at head
+    return lineages
+
+
+# --- P4 contract v7, Section 2: search across attachments -------------------------------------
+
+
+class AttachmentSearchResultOut(BaseModel):
+    total: int
+    items: list[AttachmentOut]
+
+
+@attachments_router.get("/search", response_model=AttachmentSearchResultOut)
+def search_attachments_endpoint(
+    q: str | None = None,
+    doc_type: DocumentType | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*ALL_ATTACHMENT_ROLES)),
+):
+    """Current-version-only (superseded rows never surface here). No autocomplete/suggestion
+    endpoint exists, deliberately -- the exact "hidden filenames leak via suggestions" risk this
+    contract closed by never creating that surface at all."""
+    from app.core.attachment_search import search_attachments
+
+    limit = max(1, min(limit, 100))
+    result = search_attachments(db, current_user, q, doc_type, limit, offset)
+    return result
+
+
+# --- P4 contract v7, Section 5: review and marketing-reuse approval ---------------------------
+
+
+class ReviewIn(BaseModel):
+    status: str  # "approved" | "rejected"
+
+
+@attachments_router.post("/{attachment_id}/review", response_model=AttachmentOut)
+def review_attachment(
+    attachment_id: uuid.UUID,
+    body: ReviewIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("pm", "director")),
+):
+    """Repeatable, not one-way: a PM/Director may re-review an attachment at any time -- this
+    simply overwrites review_status/reviewed_by_id/reviewed_at again. Requires the same
+    document-access check as every other action, not the role gate in isolation."""
+    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
+    if body.status not in ("approved", "rejected"):
+        raise HTTPException(status_code=422, detail="status must be 'approved' or 'rejected'")
+    attachment.review_status = body.status
+    attachment.reviewed_by_id = current_user.id
+    attachment.reviewed_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+@attachments_router.post("/{attachment_id}/marketing-reuse/approve", response_model=AttachmentOut)
+def approve_marketing_reuse(
+    attachment_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("pm", "director")),
+):
+    """Repeatable: a fresh approval after a revocation overwrites approved_at/_by_id and clears
+    the revoked pair, since it supersedes the old revocation -- the full approve/revoke/approve
+    history lives in the audit log, never reconstructable from these columns alone."""
+    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
+    attachment.marketing_reuse_approved_at = datetime.now(UTC)
+    attachment.marketing_reuse_approved_by_id = current_user.id
+    attachment.marketing_reuse_revoked_at = None
+    attachment.marketing_reuse_revoked_by_id = None
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
+@attachments_router.post("/{attachment_id}/marketing-reuse/revoke", response_model=AttachmentOut)
+def revoke_marketing_reuse(
+    attachment_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("pm", "director")),
+):
+    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
+    if attachment.marketing_reuse_approved_at is None:
+        raise HTTPException(status_code=400, detail="This attachment has no active marketing-reuse approval to revoke")
+    attachment.marketing_reuse_revoked_at = datetime.now(UTC)
+    attachment.marketing_reuse_revoked_by_id = current_user.id
+    db.commit()
+    db.refresh(attachment)
+    return attachment

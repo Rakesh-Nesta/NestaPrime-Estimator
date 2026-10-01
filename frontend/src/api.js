@@ -1879,7 +1879,7 @@ export async function updateMessageTemplate(token, templateId, payload) {
   return handle(res);
 }
 
-export async function uploadAttachment(token, { docType, docId, tag, approvalStrength, signatoryName, signatoryDesignation, file }) {
+export async function uploadAttachment(token, { docType, docId, tag, approvalStrength, signatoryName, signatoryDesignation, capturedAt, capturedAtSource, file }) {
   const formData = new FormData();
   formData.append("doc_type", docType);
   formData.append("doc_id", docId);
@@ -1887,6 +1887,8 @@ export async function uploadAttachment(token, { docType, docId, tag, approvalStr
   if (approvalStrength) formData.append("approval_strength", approvalStrength);
   if (signatoryName) formData.append("signatory_name", signatoryName);
   if (signatoryDesignation) formData.append("signatory_designation", signatoryDesignation);
+  if (capturedAt) formData.append("captured_at", capturedAt);
+  if (capturedAtSource) formData.append("captured_at_source", capturedAtSource);
   formData.append("file", file);
   const res = await fetch(`${API_BASE}/attachments`, {
     method: "POST",
@@ -2003,6 +2005,98 @@ export async function supersedeAttachment(token, attachmentId, { tag, approvalSt
     method: "POST",
     headers: authHeaders(token),
     body: formData,
+  });
+  return handle(res);
+}
+
+// --- P4 (document library and engineer evidence) ---------------------------------------------
+
+export async function getAttachmentLineages(token, docType, docId) {
+  const res = await fetch(`${API_BASE}/attachments/${docType}/${docId}/lineages`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function searchAttachments(token, q, { docType, limit = 20, offset = 0, signal } = {}) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (q) params.set("q", q);
+  if (docType) params.set("doc_type", docType);
+  const res = await fetch(`${API_BASE}/attachments/search?${params}`, { headers: authHeaders(token), signal });
+  return handle(res);
+}
+
+export async function reviewAttachment(token, attachmentId, status) {
+  const res = await fetch(`${API_BASE}/attachments/${attachmentId}/review`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return handle(res);
+}
+
+export async function approveMarketingReuse(token, attachmentId) {
+  const res = await fetch(`${API_BASE}/attachments/${attachmentId}/marketing-reuse/approve`, {
+    method: "POST", headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function revokeMarketingReuse(token, attachmentId) {
+  const res = await fetch(`${API_BASE}/attachments/${attachmentId}/marketing-reuse/revoke`, {
+    method: "POST", headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function listProjectStages(token, projectId) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/stages`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function submitStage(token, stageId) {
+  const res = await fetch(`${API_BASE}/stages/${stageId}/submit`, { method: "POST", headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function reviewStage(token, stageId, { action, rejectionReason }) {
+  const res = await fetch(`${API_BASE}/stages/${stageId}/review`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ action, rejection_reason: rejectionReason }),
+  });
+  return handle(res);
+}
+
+// Chunked/resumable upload (P4 contract v7, Section 4). Four calls, matching the backend's own
+// four-endpoint session lifecycle -- never assume a single "upload" call for a large file.
+export async function startUploadSession(token, { docType, docId, filename, declaredSize, declaredSha256, chunkSize }) {
+  const res = await fetch(`${API_BASE}/attachments/upload-sessions`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      doc_type: docType, doc_id: docId, filename, declared_size: declaredSize,
+      declared_sha256: declaredSha256, chunk_size: chunkSize,
+    }),
+  });
+  return handle(res);
+}
+
+export async function getUploadSessionStatus(token, sessionId) {
+  const res = await fetch(`${API_BASE}/attachments/upload-sessions/${sessionId}/status`, { headers: authHeaders(token) });
+  return handle(res);
+}
+
+export async function uploadSessionChunk(token, sessionId, chunkIndex, chunkBlob) {
+  const formData = new FormData();
+  formData.append("file", chunkBlob, "chunk");
+  const res = await fetch(`${API_BASE}/attachments/upload-sessions/${sessionId}/chunks/${chunkIndex}`, {
+    method: "POST", headers: authHeaders(token), body: formData,
+  });
+  return handle(res);
+}
+
+export async function completeUploadSession(token, sessionId) {
+  const res = await fetch(`${API_BASE}/attachments/upload-sessions/${sessionId}/complete`, {
+    method: "POST", headers: authHeaders(token),
   });
   return handle(res);
 }

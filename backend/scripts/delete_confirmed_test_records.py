@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.attachment import Attachment
+from app.models.attachment_upload_session import AttachmentUploadChunk, AttachmentUploadSession
 from app.models.client import Client
 from app.models.client_signatory import ClientSignatory
 from app.models.document import (
@@ -35,6 +36,7 @@ from app.models.document import (
 from app.models.message import Message
 from app.models.opportunity import Opportunity
 from app.models.project import Project
+from app.models.project_construction_stage import ProjectConstructionStage
 from app.models.rate_history import RateHistory
 from app.models.scope_item import ProjectScopeItem
 from app.models.setting import DocumentType
@@ -123,6 +125,11 @@ def run(db: Session, confirm: bool) -> None:
         .all()
     )
     opportunity_ids = _ids(opportunities)
+    # P4: every new project is seeded with 6 construction-stage rows (seed_stages_for_project) --
+    # these reference project_id with no cascade, so a project can't be deleted while any remain.
+    stages = db.query(ProjectConstructionStage).filter(ProjectConstructionStage.project_id.in_(project_ids)).all() \
+        if project_ids else []
+    stage_ids = _ids(stages)
 
     # Every document id a doc_type/doc_id attachment or message could point at, across all of the above.
     doc_ids_by_type = {
@@ -133,6 +140,7 @@ def run(db: Session, confirm: bool) -> None:
         DocumentType.WORK_ORDER: work_order_ids,
         DocumentType.TECHNICAL_BID_CHECKLIST_ITEM: checklist_item_ids,
         DocumentType.SITE_SURVEY: site_survey_ids,
+        DocumentType.PROJECT_STAGE: stage_ids,
     }
     attachments = [
         a
@@ -145,6 +153,18 @@ def run(db: Session, confirm: bool) -> None:
         for m in db.query(Message).filter(Message.doc_type.in_(list(doc_ids_by_type.keys()))).all()
         if m.doc_id in set(doc_ids_by_type.get(m.doc_type, []))
     ]
+    # Upload sessions (P4) have a doc_type/doc_id pair of their own (a plain String column, not
+    # the Enum type Attachment/Message use -- compared against doc_type.value, not the member
+    # itself) AND a resulting_attachment_id FK straight to attachments.id: a completed session
+    # still pointing at one of the attachments above would block deleting it, same FK-violation
+    # shape as the project_construction_stages gap this script was already missing.
+    doc_values_by_type = {dt.value: ids for dt, ids in doc_ids_by_type.items()}
+    upload_sessions = [
+        s
+        for s in db.query(AttachmentUploadSession).filter(AttachmentUploadSession.doc_type.in_(doc_values_by_type.keys())).all()
+        if s.doc_id in set(doc_values_by_type.get(s.doc_type, [])) or s.resulting_attachment_id in set(attachment_ids)
+    ]
+    upload_session_ids = _ids(upload_sessions)
 
     print(f"Clients:                 {len(clients)}")
     for c in clients:
@@ -161,6 +181,8 @@ def run(db: Session, confirm: bool) -> None:
     print(f"Tender details:          {len(tender_details)}")
     print(f"Technical bid items:     {len(checklist_items)}")
     print(f"Purchase orders:         {len(purchase_orders)}")
+    print(f"Construction stages:     {len(stages)}")
+    print(f"Upload sessions:         {len(upload_sessions)}")
 
     if not confirm:
         print("\nDry run only -- nothing deleted. Re-run with --confirm to actually delete.")
@@ -171,7 +193,16 @@ def run(db: Session, confirm: bool) -> None:
         db.delete(m)
     db.flush()
 
-    # 2. Break the Attachment self-reference (superseded_by_id), then delete Attachments.
+    # 2. Upload-session chunks, then the sessions themselves (their resulting_attachment_id FK
+    # would otherwise block deleting an Attachment below), then break the Attachment
+    # self-reference (superseded_by_id), then delete Attachments.
+    if upload_session_ids:
+        db.query(AttachmentUploadChunk).filter(AttachmentUploadChunk.session_id.in_(upload_session_ids)).delete(
+            synchronize_session=False
+        )
+    for s in upload_sessions:
+        db.delete(s)
+    db.flush()
     for a in attachments:
         a.superseded_by_id = None
     db.flush()
@@ -247,6 +278,9 @@ def run(db: Session, confirm: bool) -> None:
         db.query(ProjectScopeItem).filter(ProjectScopeItem.project_id.in_(project_ids)).delete(synchronize_session=False)
         db.query(RateHistory).filter(RateHistory.project_id.in_(project_ids)).delete(synchronize_session=False)
         db.query(ProjectSport).filter(ProjectSport.project_id.in_(project_ids)).delete(synchronize_session=False)
+        db.query(ProjectConstructionStage).filter(ProjectConstructionStage.project_id.in_(project_ids)).delete(
+            synchronize_session=False
+        )
     db.flush()
 
     # 9. Break the Project<->Opportunity cross-link, delete enquiries, then projects, then signatories/clients.

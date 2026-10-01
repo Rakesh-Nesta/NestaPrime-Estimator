@@ -131,7 +131,7 @@ function SurveyCard({ token, survey, onChanged }) {
         </button>
       )}
 
-      <AttachmentsPanel token={token} docType="site_survey" docId={survey.id} />
+      <AttachmentsPanel token={token} docType="site_survey" docId={survey.id} role={role} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary">
         <span>

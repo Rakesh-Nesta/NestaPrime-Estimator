@@ -133,6 +133,74 @@ def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(cl
     assert db_session.query(Estimate).filter(Estimate.id == uuid.UUID(safe_estimate["id"])).first() is not None
 
 
+def test_deletes_a_completed_upload_session_and_its_stages_without_fk_error(client, director_user, db_session):
+    """Found while auditing the script for P4's new FK paths: project_construction_stages (every
+    project now seeds 6 of them) and attachment_upload_sessions.resulting_attachment_id (a
+    completed chunked upload points straight at an Attachment row) can each block a delete with
+    the same kind of FK violation the stages gap already caused once. This drives a real chunked
+    upload to completion against the doomed project's own cost sheet, then confirms --confirm
+    still deletes cleanly and the session/chunks/stages are all gone afterward."""
+    import hashlib
+
+    from tests.test_work_orders import _create_client_record, _create_project
+    from app.models.attachment_upload_session import AttachmentUploadChunk, AttachmentUploadSession
+    from app.models.project import Project
+    from app.models.project_construction_stage import ProjectConstructionStage
+
+    headers = _director_headers(client, director_user)
+    doomed_client_id = _create_client_record(client, headers, name="Upload Session Delete Test (delete me)")
+    project_id = _create_project(client, headers, doomed_client_id)
+    cost_sheet_id = client.post(
+        f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=headers
+    ).json()["id"]
+
+    content = b"A" * 30 + b"B" * 10  # 2 chunks of 30/10 against chunk_size=30
+    sha = hashlib.sha256(content).hexdigest()
+    session = client.post(
+        "/attachments/upload-sessions",
+        json={
+            "doc_type": "cost_sheet", "doc_id": cost_sheet_id, "filename": "evidence.bin",
+            "declared_size": len(content), "declared_sha256": sha, "chunk_size": 30,
+        },
+        headers=headers,
+    ).json()
+    for index, start in enumerate((0, 30)):
+        res = client.post(
+            f"/attachments/upload-sessions/{session['id']}/chunks/{index}",
+            files={"file": ("chunk", content[start:start + 30], "application/octet-stream")},
+            headers=headers,
+        )
+        assert res.status_code == 200, res.text
+    complete = client.post(f"/attachments/upload-sessions/{session['id']}/complete", headers=headers)
+    assert complete.status_code == 200, complete.text
+    resulting_attachment_id = complete.json()["id"]
+
+    assert db_session.query(AttachmentUploadSession).filter(
+        AttachmentUploadSession.id == uuid.UUID(session["id"])
+    ).first() is not None
+    assert db_session.query(ProjectConstructionStage).filter(
+        ProjectConstructionStage.project_id == uuid.UUID(project_id)
+    ).count() == 6
+
+    module = _load_script()
+    module.CLIENT_IDS = [doomed_client_id]
+    module.run(db_session, confirm=True)
+
+    assert db_session.query(Project).filter(Project.id == uuid.UUID(project_id)).first() is None
+    assert db_session.query(AttachmentUploadSession).filter(
+        AttachmentUploadSession.id == uuid.UUID(session["id"])
+    ).first() is None
+    assert db_session.query(AttachmentUploadChunk).filter(
+        AttachmentUploadChunk.session_id == uuid.UUID(session["id"])
+    ).count() == 0
+    assert db_session.query(ProjectConstructionStage).filter(
+        ProjectConstructionStage.project_id == uuid.UUID(project_id)
+    ).count() == 0
+    from app.models.attachment import Attachment
+
+    assert db_session.query(Attachment).filter(Attachment.id == uuid.UUID(resulting_attachment_id)).first() is None
+
+
 def test_refuses_to_run_if_an_id_is_not_found(db_session):
     module = _load_script()
     module.CLIENT_IDS = [str(uuid.uuid4())]
