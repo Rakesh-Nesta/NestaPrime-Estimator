@@ -45,8 +45,14 @@ _after_discovery_hook = None
 # --------------------------------------------------------------------------- locks
 
 
+def _uuids(ids) -> list:
+    """Normalize to UUID objects so str and UUID ids can never be mixed in one sort (the sort IS the
+    lock order's 'ascending id' rule)."""
+    return sorted({i if isinstance(i, uuid.UUID) else uuid.UUID(str(i)) for i in ids if i is not None})
+
+
 def _lock_rows(db: Session, model, ids) -> list:
-    ids = sorted({i for i in ids if i is not None})
+    ids = _uuids(ids)
     if not ids:
         return []
     stmt = (
@@ -81,7 +87,7 @@ def lock_attachment(db: Session, attachment_id) -> Attachment | None:
 
 
 def lock_authorizations(db: Session, quotation_ids) -> list[ProjectExecutionAuthorization]:
-    qids = sorted({q for q in quotation_ids if q is not None})
+    qids = _uuids(quotation_ids)
     if not qids:
         return []
     stmt = (
@@ -98,7 +104,7 @@ def lock_authorizations(db: Session, quotation_ids) -> list[ProjectExecutionAuth
 
 
 def lock_active_team(db: Session, project_ids) -> list[ProjectTeamMember]:
-    pids = sorted({p for p in project_ids if p is not None})
+    pids = _uuids(project_ids)
     if not pids:
         return []
     stmt = (
@@ -139,6 +145,7 @@ def lock_quotation_scope(
 ) -> LockedScope:
     """Levels 1-4 for one quotation (and 5-6 when with_team: the eligibility read). An unlocked read of
     the quotation finds its project; everything is then re-read under the locks."""
+    quotation_id = quotation_id if isinstance(quotation_id, uuid.UUID) else uuid.UUID(str(quotation_id))
     probe = db.get(Quotation, quotation_id)
     if probe is None:
         raise HTTPException(status_code=404, detail="Quotation not found")
@@ -161,7 +168,7 @@ def lock_project_scope(db: Session, project_ids, *, user_ids=()) -> None:
     """Levels 1-6 for a project-scoped mutation (team assignment/removal, account change): Projects, then
     the Quotations/Agreements/Authorizations reachable from those projects' valid authorizations, then
     TeamMember rows, then User rows (the changing/assigned users plus every relied-upon engineer)."""
-    pids = sorted({p for p in project_ids if p is not None})
+    pids = _uuids(project_ids)
     lock_projects(db, pids)
     if pids:
         rows = db.execute(
