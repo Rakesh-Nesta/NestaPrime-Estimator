@@ -701,3 +701,44 @@ def test_execution_context_lets_team_members_find_the_won_quotation_without_seei
     assert manager_view["work_order_id"] and manager_view["work_order_status"] == "awarded"
     for role in ("admin", "marketing", "ca_tax"):
         assert client.get(f"/projects/{pid}/execution-context", headers=user_headers(client, make_user(db_session, role))).status_code == 403
+
+
+# ---------------------------------------------------------------- AC-27 (part): role-permissions lists every P5 route with no manual registration
+
+
+def test_role_permissions_lists_every_p5_route_under_its_real_gate_with_no_registration(client, director_user):
+    from tests.test_role_permissions import _fetch, _gated_lookup
+
+    lookup = _gated_lookup(_fetch(client, director_user))
+    view = ["sales", "pm", "director", "procurement", "site_engineer"]
+    manage = ["pm", "director"]
+    expected = {
+        ("POST", "/quotations/{quotation_id}/agreement"): manage,
+        ("GET", "/quotations/{quotation_id}/agreement"): view,
+        ("GET", "/quotations/{quotation_id}/agreements"): view,
+        ("GET", "/agreements/{agreement_id}"): view,
+        ("POST", "/agreements/{agreement_id}/client-sign"): manage,
+        ("POST", "/agreements/{agreement_id}/execute"): ["director"],
+        ("POST", "/agreements/{agreement_id}/void"): ["director"],
+        ("POST", "/agreements/{agreement_id}/supersede"): ["director"],
+        ("GET", "/quotations/{quotation_id}/execution-readiness"): manage,
+        ("POST", "/quotations/{quotation_id}/execution-authorization"): manage,
+        ("GET", "/quotations/{quotation_id}/execution-authorizations"): manage,
+        ("GET", "/projects/{project_id}/execution-context"): view,
+        ("GET", "/projects/{project_id}/team"): view,
+        ("POST", "/projects/{project_id}/team"): manage,
+        ("DELETE", "/projects/{project_id}/team/{team_member_id}"): manage,
+        ("GET", "/projects/{project_id}/milestones"): view,
+        ("POST", "/projects/{project_id}/milestones"): manage,
+        ("PATCH", "/milestones/{milestone_id}"): manage,
+        ("GET", "/projects/{project_id}/tasks"): view,
+        ("POST", "/projects/{project_id}/tasks"): manage,
+        ("PATCH", "/tasks/{task_id}"): ["pm", "director", "procurement", "site_engineer"],
+        ("GET", "/projects/{project_id}/site-issues"): view,
+        ("POST", "/projects/{project_id}/site-issues"): ["pm", "director", "site_engineer"],
+        ("PATCH", "/site-issues/{site_issue_id}"): manage,
+    }
+    for key, roles in expected.items():
+        assert key in lookup, f"{key} is not listed"
+        assert lookup[key][0] == roles, f"{key}: {lookup[key][0]} != {roles}"
+        assert not {"admin", "marketing", "ca_tax"} & set(lookup[key][0]), key  # none of these roles reach P5
