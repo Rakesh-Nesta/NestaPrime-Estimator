@@ -3,7 +3,7 @@ order from app.core.p5 (Project -> Quotation -> Agreement -> Authorization -> ..
 leaves committing to the caller, so each mutation and its audit entry land in one transaction."""
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import HTTPException, Request
 from sqlalchemy import select
@@ -97,7 +97,9 @@ def record_client_signature(
     if agreement.status != AgreementStatus.DRAFTED:
         raise HTTPException(status_code=409, detail=f"Only a drafted Agreement can be client-signed (status: {agreement.status})")
     project = scope.project
-    if signed_on > datetime.now(UTC).date():
+    # One day of tolerance: the date comes from a person's local calendar, which can be a day AHEAD of UTC
+    # (e.g. India, UTC+5:30, between 00:00 and 05:30 local). A strict UTC comparison would refuse "today".
+    if signed_on > datetime.now(UTC).date() + timedelta(days=1):
         raise HTTPException(status_code=422, detail="The signing date cannot be in the future")
 
     signatory = db.get(ClientSignatory, signatory_id)

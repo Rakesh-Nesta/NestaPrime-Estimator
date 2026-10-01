@@ -255,3 +255,6 @@ class P5MigrationMarker(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     deployed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    # Same CHECK the migration creates, so ORM-built (test) and Alembic-built schemas agree.
+    __table_args__ = (CheckConstraint("id = 1", name="ck_p5_migration_marker_single_row"),)
