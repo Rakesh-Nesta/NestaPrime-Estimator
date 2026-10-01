@@ -13,6 +13,8 @@ import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.core import attachment_upload as core
 from app.core.security import hash_password
 from app.models.attachment import Attachment
@@ -539,14 +541,21 @@ def test_chunk_promotion_and_completion_never_deadlock(client, director_user, db
         attempt = core.claim_chunk(db_session, session.id, index)
         core.write_and_promote_chunk(db_session, session.id, index, attempt, CONTENT[index * 30:(index + 1) * 30])
     db_session.commit()
+    # Captured once, before any thread starts: db_session.commit() expires `session`'s
+    # attributes, and re-reading session.id from two background threads afterward races on the
+    # SAME non-thread-safe Session object's own refresh-on-access -- a real, pre-existing bug in
+    # this test (its sibling test_cleanup_cannot_race_an_active_session already avoids it this
+    # same way), caught via ObjectDeletedError once a faster/slower connection-acquisition path
+    # changed the race's timing.
+    session_id = session.id
 
     results = {}
 
     def _try_chunk_promotion():
         s = TestingSessionLocal()
         try:
-            attempt = core.claim_chunk(s, session.id, 2)
-            results["chunk"] = core.write_and_promote_chunk(s, session.id, 2, attempt, CONTENT[60:70])
+            attempt = core.claim_chunk(s, session_id, 2)
+            results["chunk"] = core.write_and_promote_chunk(s, session_id, 2, attempt, CONTENT[60:70])
         except core.UploadProtocolError as exc:
             results["chunk"] = {"error": exc.status_code}
         finally:
@@ -555,7 +564,7 @@ def test_chunk_promotion_and_completion_never_deadlock(client, director_user, db
     def _try_completion():
         s = TestingSessionLocal()
         try:
-            results["completion"] = core.start_completion(s, session.id)
+            results["completion"] = core.start_completion(s, session_id)
         except core.UploadProtocolError as exc:
             results["completion"] = {"error": exc.status_code}
         finally:
@@ -957,3 +966,43 @@ def test_cleanup_cannot_race_an_active_session(client, director_user, db_session
             assert results["chunk"].get("promoted") is True
     finally:
         fresh.close()
+
+
+def test_claim_chunk_409_survives_the_row_vanishing_right_after_rollback(client, director_user, db_session, monkeypatch):
+    """Deterministic version of the race the test above exercises only probabilistically.
+    claim_chunk's status-mismatch branch used to call db.rollback() -- expiring session's
+    attributes and releasing the row lock just taken -- and only THEN build its 409 message by
+    reading session.status/total_chunks. A row deleted by someone else in that exact window
+    (e.g. cleanup purging this same abandoned session) made that read raise ObjectDeletedError
+    instead of the clean 409 this function means to return. Fixed by capturing both values
+    before the rollback (app/core/attachment_upload.py). Forces the exact window deterministically
+    by deleting the row, via a second real connection, from inside a wrapped rollback() call --
+    no thread timing involved, so this either always catches a regression or never does."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+    current_user = _director(db_session)
+    session = _start_session(db_session, current_user, doc_id=uuid.UUID(cost_sheet_id))
+    session_id = session.id
+    # Not 'uploading' -- forces claim_chunk's status-mismatch branch (the one with the fixed
+    # read-after-rollback), not its session-is-None branch.
+    db_session.query(AttachmentUploadSession).filter(AttachmentUploadSession.id == session_id).update(
+        {"status": "failed"}
+    )
+    db_session.commit()
+
+    real_rollback = db_session.rollback
+
+    def _rollback_then_delete_via_a_second_connection():
+        real_rollback()
+        other = TestingSessionLocal()
+        try:
+            other.query(AttachmentUploadSession).filter(AttachmentUploadSession.id == session_id).delete()
+            other.commit()
+        finally:
+            other.close()
+
+    monkeypatch.setattr(db_session, "rollback", _rollback_then_delete_via_a_second_connection)
+
+    with pytest.raises(core.UploadProtocolError) as exc_info:
+        core.claim_chunk(db_session, session_id, 0)
+    assert exc_info.value.status_code == 409

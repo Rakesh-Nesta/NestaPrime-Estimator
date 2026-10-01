@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.db.base import Base
@@ -35,7 +36,16 @@ from app.seed_data import (
 # in a separate database so they never touch real data.
 TEST_DATABASE_URL = settings.database_url.rsplit("/", 1)[0] + "/nestaprime_estimator_test"
 
-engine = create_engine(TEST_DATABASE_URL)
+# NullPool, test-engine-only: db_session drops and recreates the whole schema (including
+# Postgres ENUM types, e.g. sport_category) on every single test. A pooled connection that
+# survives across that boundary can carry a psycopg3-cached type OID for a now-dropped-and-
+# recreated enum, which Postgres then refuses ("cache lookup failed for type <OID>") -- or, for
+# the same reason, a stale cached plan ("cached plan must not change result type"). NullPool
+# opens a brand new physical connection on every checkout, so no connection ever lives across a
+# drop/recreate cycle. Production's own engine (app/db/session.py) is untouched -- it never
+# drops or recreates schema at runtime, so this failure mode cannot occur there, and its pooling
+# is deliberately left alone.
+engine = create_engine(TEST_DATABASE_URL, poolclass=NullPool)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

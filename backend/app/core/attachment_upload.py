@@ -167,12 +167,18 @@ def claim_chunk(db: Session, session_id: uuid.UUID, chunk_index: int) -> int:
     if session is None:
         db.rollback()
         raise UploadProtocolError(404, "Upload session not found")
-    if session.status != UploadSessionStatus.UPLOADING.value:
+    # Captured before any rollback below: db.rollback() expires session's attributes AND releases
+    # the row lock just taken above, so a concurrent purge of this same (abandoned) session could
+    # delete the row in that exact window -- reading session.status/total_chunks straight into an
+    # f-string AFTER rollback would then raise ObjectDeletedError instead of the clean 409/422
+    # this function means to return (caught for real by test_cleanup_cannot_race_an_active_session).
+    status, total_chunks = session.status, session.total_chunks
+    if status != UploadSessionStatus.UPLOADING.value:
         db.rollback()
-        raise UploadProtocolError(409, f"Session is '{session.status}' -- chunk writes are only accepted while uploading")
-    if not (0 <= chunk_index < session.total_chunks):
+        raise UploadProtocolError(409, f"Session is '{status}' -- chunk writes are only accepted while uploading")
+    if not (0 <= chunk_index < total_chunks):
         db.rollback()
-        raise UploadProtocolError(422, f"chunk_index must be in [0, {session.total_chunks})")
+        raise UploadProtocolError(422, f"chunk_index must be in [0, {total_chunks})")
 
     chunk = db.execute(
         select(AttachmentUploadChunk)
@@ -253,18 +259,22 @@ def start_completion(db: Session, session_id: uuid.UUID) -> int:
     if session is None:
         db.rollback()
         raise UploadProtocolError(404, "Upload session not found")
-    if session.status == UploadSessionStatus.COMPLETED.value:
+    # Captured before any rollback below -- same reason as claim_chunk: rollback expires
+    # session's attributes and releases the lock just taken, so reading them afterward can race
+    # a concurrent purge of this session into an unhandled ObjectDeletedError instead of a 409.
+    status, total_chunks = session.status, session.total_chunks
+    if status == UploadSessionStatus.COMPLETED.value:
         db.rollback()
         raise UploadProtocolError(200, "already completed")  # caller special-cases this
-    if session.status != UploadSessionStatus.UPLOADING.value:
+    if status != UploadSessionStatus.UPLOADING.value:
         db.rollback()
-        raise UploadProtocolError(409, f"Session is '{session.status}' -- cannot start completion")
+        raise UploadProtocolError(409, f"Session is '{status}' -- cannot start completion")
 
     chunks = db.query(AttachmentUploadChunk).filter(AttachmentUploadChunk.session_id == session_id).all()
     written = {c.chunk_index for c in chunks if c.status == ChunkStatus.WRITTEN.value}
-    if len(written) != session.total_chunks:
+    if len(written) != total_chunks:
         db.rollback()
-        missing = session.total_chunks - len(written)
+        missing = total_chunks - len(written)
         raise UploadProtocolError(409, f"{missing} chunk(s) not yet written -- retry once every chunk is confirmed")
 
     session.status = UploadSessionStatus.COMPLETING.value
