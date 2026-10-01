@@ -6,15 +6,14 @@ Engineer is new, proposed policy (not existing precedent) and applies only to th
 
 import uuid
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
-from app.core import ownership, p5
+from app.core import p5
 from app.core import p5_agreements as agreements_core
 from app.core.auth import require_roles
 from app.db.session import get_db
@@ -739,7 +738,7 @@ def update_site_issue(
         if body.status == SiteIssueStatus.RESOLVED:
             issue.resolution_reason = body.resolution_reason
             issue.resolved_by_id = current_user.id
-            issue.resolved_at = datetime.utcnow()
+            issue.resolved_at = datetime.now(UTC)
         db.commit()
     db.refresh(issue)
     return issue

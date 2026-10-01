@@ -379,6 +379,42 @@ def _follow_up_pending_items(db: Session, project: Project, opportunity: Opportu
     return items
 
 
+def _task_pending_items(db: Session, project: Project, current_user) -> list[PendingItemOut]:
+    """P5 contract revision 7, Section 2.7: the Master Plan's own named integration point ("P5/P7/P8 add
+    tasks ... as those modules become available"). A task assigned to the viewer's own active team
+    membership appears here; PM/Director additionally see this project's tasks that were un-assigned
+    by a team-member removal. No cross-project task inbox is proposed."""
+    from app.core import p5
+    from app.models.p5 import ProjectTask, TaskStatus
+
+    items: list[PendingItemOut] = []
+    member = p5.is_active_team_member(db, project.id, current_user.id)
+    if member is not None:
+        for task in (
+            db.query(ProjectTask)
+            .filter(ProjectTask.assigned_to_id == member.id, ProjectTask.status != TaskStatus.DONE)
+            .order_by(ProjectTask.created_at, ProjectTask.id)
+            .all()
+        ):
+            items.append(PendingItemOut(
+                source="task", label=task.title, waiting_on="us", due_date=task.due_date,
+                screen="execution", document_id=task.id,
+            ))
+    if current_user.role.value in ("pm", "director"):
+        for task in (
+            db.query(ProjectTask)
+            .filter(ProjectTask.project_id == project.id, ProjectTask.needs_reassignment.is_(True),
+                    ProjectTask.status != TaskStatus.DONE)
+            .order_by(ProjectTask.created_at, ProjectTask.id)
+            .all()
+        ):
+            items.append(PendingItemOut(
+                source="task", label=f"Needs reassignment: {task.title}", waiting_on="us",
+                due_date=task.due_date, screen="execution", document_id=task.id,
+            ))
+    return items
+
+
 def _readiness_gaps(db: Session, project: Project, client: Client | None) -> ReadinessGapsOut:
     identity = check_client_identity(client)
     # No specific document in view on this screen -- document_id=None previews the checks the
@@ -470,6 +506,7 @@ def get_project_overview(
             pending_items.append(quotation_item)
         pending_items.extend(_pending_readiness_exceptions(db, live_estimates, live_quotations))
     pending_items.extend(_follow_up_pending_items(db, project, opportunity, current_user))
+    pending_items.extend(_task_pending_items(db, project, current_user))
 
     readiness_visible = current_user.role.value in READINESS_VIEW_ROLES
     readiness = _readiness_gaps(db, project, client) if readiness_visible else None

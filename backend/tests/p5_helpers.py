@@ -13,6 +13,25 @@ def login(client, email, password=PASSWORD):
     return {"Authorization": f"Bearer {res.json()['access_token']}"}
 
 
+def make_user(db_session, role, name=None, active=True):
+    """A directly-inserted user who can log in (no forced password change), unlike create_user_via_api."""
+    from app.core.security import hash_password
+    from app.models.user import User, UserRole
+
+    user = User(
+        name=name or f"P5 {role}", email=f"{role}-{uuid.uuid4().hex[:8]}@p5.test",
+        hashed_password=hash_password(PASSWORD), role=UserRole(role), is_active=active,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+def user_headers(client, user):
+    return login(client, user.email)
+
+
 def create_user_via_api(client, director_headers, role, name=None):
     email = f"{role}-{uuid.uuid4().hex[:8]}@p5.test"
     res = client.post(
@@ -98,11 +117,12 @@ def authorize(client, headers, quotation_id):
     return client.post(f"/quotations/{quotation_id}/execution-authorization", headers=headers)
 
 
-def make_execution_ready(client, headers, quotation_id):
-    """The whole prerequisite chain for creating a Work Order. Returns a dict of the created records."""
+def make_execution_ready(client, headers, quotation_id, engineer=None):
+    """The whole prerequisite chain for creating a Work Order. Returns a dict of the created records.
+    `engineer` (a dict with an "id") lets a test supply a user who can actually log in."""
     project_id, client_id = quotation_project(client, headers, quotation_id)
     agreement = execute_agreement(client, headers, quotation_id, client_id)
-    engineer, member = staff_site_engineer(client, headers, project_id)
+    engineer, member = staff_site_engineer(client, headers, project_id, user=engineer)
     res = authorize(client, headers, quotation_id)
     assert res.status_code == 200, res.text
     return {
