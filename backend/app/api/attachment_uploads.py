@@ -16,10 +16,8 @@ from app.api.attachments import ALL_ATTACHMENT_ROLES, AttachmentOut, _require_do
 from app.core import attachment_upload as upload_core
 from app.core import ownership
 from app.core.auth import require_roles
-from app.core.project_stages import advance_stage_on_evidence_upload
 from app.db.session import get_db
 from app.models.attachment_upload_session import AttachmentUploadSession
-from app.models.project_construction_stage import ProjectConstructionStage
 from app.models.setting import DocumentType
 
 upload_sessions_router = APIRouter(prefix="/attachments/upload-sessions", tags=["attachment-uploads"])
@@ -158,13 +156,12 @@ def complete_upload_session(
 
     try:
         assembled_path = upload_core.assemble_and_validate(db, session_id, attempt_token)
-        attachment = upload_core.finalize_completion(db, session_id, attempt_token, assembled_path, current_user)
+        # The stage-advance transition and its audit entry (Section 8 case 9) now happen INSIDE
+        # finalize_completion, in the same fenced transaction as the Attachment insert and the
+        # session's own completed-status update -- a stage/audit failure rolls back all of it
+        # together, not just the stage change on its own.
+        attachment = upload_core.finalize_completion(db, session_id, attempt_token, assembled_path, current_user, request)
     except upload_core.UploadProtocolError as exc:
         _to_raise(exc)
 
-    if DocumentType(session.doc_type) == DocumentType.PROJECT_STAGE:
-        stage = db.query(ProjectConstructionStage).filter(ProjectConstructionStage.id == session.doc_id).first()
-        if stage is not None:
-            advance_stage_on_evidence_upload(db, stage)
-            db.commit()
     return attachment

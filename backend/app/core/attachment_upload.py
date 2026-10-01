@@ -312,14 +312,17 @@ def assemble_and_validate(db: Session, session_id: uuid.UUID, attempt_token: int
 
 
 def finalize_completion(
-    db: Session, session_id: uuid.UUID, attempt_token: int, assembled_path: Path, current_user,
+    db: Session, session_id: uuid.UUID, attempt_token: int, assembled_path: Path, current_user, request=None,
 ) -> Attachment:
     """Finalization steps 2-4: lock the session, re-check status='completing' AND the exact
     token, place the assembled file at its deterministic final path (an atomic rename -- cheap,
-    since assembly already happened), then commit the Attachment row and the fenced session
-    update TOGETHER, one transaction. A fence failure rolls back the whole transaction, including
-    the Attachment insert -- the file already renamed to its final path is left on disk,
-    unreferenced, and becomes cleanup's job, never the database's (Section 0.A, revision 7)."""
+    since assembly already happened), then commit the Attachment row, the stage-advance
+    transition and its audit entry (Section 8 case 9), and the fenced session update ALL
+    TOGETHER, one transaction. A fence failure rolls back the whole transaction, including the
+    Attachment insert and any stage/audit change -- the file already renamed to its final path is
+    left on disk, unreferenced, and becomes cleanup's job, never the database's (Section 0.A,
+    revision 7). request may be None (direct test callers that don't go through a real HTTP
+    request) -- write_audit_log_entry already accepts that."""
     session = db.execute(
         select(AttachmentUploadSession).where(AttachmentUploadSession.id == session_id).with_for_update()
     ).scalar_one_or_none()
@@ -334,7 +337,7 @@ def finalize_completion(
     final_path = final_attachment_path(session.doc_type, session.doc_id, session.filename, session.id, attempt_token)
     os.replace(assembled_path, final_path)  # step 3 -- the file now exists at its final path
 
-    from app.api.attachments import _safe_filename
+    from app.api.attachments import _advance_stage_if_applicable, _safe_filename
     from app.models.setting import DocumentType
 
     new_attachment = Attachment(
@@ -365,8 +368,12 @@ def finalize_completion(
     if updated == 0:
         db.rollback()  # the file stays at final_path -- unreferenced, cleanup's job (below)
         raise UploadProtocolError(409, "This completion attempt was superseded before it could finish")
-    db.commit()
 
+    # Same transaction, before the commit below -- a stage/audit failure here rolls back the
+    # Attachment insert and the fenced session update too, never leaving one without the others.
+    _advance_stage_if_applicable(db, DocumentType(session.doc_type), session.doc_id, current_user, request)
+
+    db.commit()
     # step 5: only now, after the commit above has actually succeeded, clean up temp files.
     purge_session_temp_files(db, session_id)
     return new_attachment

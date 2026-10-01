@@ -1058,3 +1058,190 @@ def test_claim_chunk_409_survives_the_row_vanishing_right_after_rollback(client,
     with pytest.raises(core.UploadProtocolError) as exc_info:
         core.claim_chunk(db_session, session_id, 0)
     assert exc_info.value.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Section 8 case 9 (resumable-completion path): the stage-advance transition and its audit
+# entry now live inside finalize_completion itself, in the same fenced transaction as the
+# Attachment insert and the session's completed-status update. Tested through the real
+# POST /attachments/upload-sessions/{id}/complete endpoint, not core.finalize_completion
+# called directly -- the ordinary-upload path's atomicity was already proven this way
+# (test_upload_and_stage_advance_commit_or_roll_back_together); the existing direct-call tests
+# above don't exercise doc_type=project_stage at all, so they prove nothing about this path.
+# ---------------------------------------------------------------------------
+
+
+def _reviewed_stage(client, headers):
+    """A project with its first stage driven all the way to 'reviewed', via the real ordinary-
+    upload/submit/review endpoints -- the precondition every test below starts from."""
+    client_id = _create_client_record(client, headers)
+    project_id = _create_project(client, headers, client_id)
+    stages = client.get(f"/projects/{project_id}/stages", headers=headers).json()
+    stage_id = sorted(stages, key=lambda s: s["phase"])[0]["id"]
+    up = client.post(
+        "/attachments", data={"doc_type": "project_stage", "doc_id": stage_id, "tag": "photo"},
+        files={"file": ("first.jpg", b"first evidence", "image/jpeg")}, headers=headers,
+    )
+    assert up.status_code == 201, up.text
+    sub = client.post(f"/stages/{stage_id}/submit", headers=headers)
+    assert sub.status_code == 200, sub.text
+    rev = client.post(f"/stages/{stage_id}/review", json={"action": "approve"}, headers=headers)
+    assert rev.status_code == 200, rev.text
+    assert rev.json()["status"] == "reviewed"
+    return stage_id
+
+
+def test_resumable_completion_invalidates_a_review_and_audits_the_uploader(client, director_user, db_session):
+    """Success case, through the real endpoint: completing a chunked upload against an
+    already-reviewed stage moves it back to evidence_submitted and records exactly one new audit
+    entry naming the real uploader as actor and the real old/new status."""
+    from app.models.audit_log import AuditLogEntry
+
+    headers = _director_headers(client, director_user)
+    director_id = client.get("/auth/me", headers=headers).json()["id"]
+    stage_id = _reviewed_stage(client, headers)
+
+    before = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage_id))
+        .count()
+    )
+
+    session = _start_session_http(client, headers, "project_stage", stage_id)
+    _upload_all_chunks_http(client, headers, session["id"])
+    complete = client.post(f"/attachments/upload-sessions/{session['id']}/complete", headers=headers)
+    assert complete.status_code == 200, complete.text
+    assert complete.json()["doc_id"] == stage_id
+
+    entries = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage_id))
+        .order_by(AuditLogEntry.timestamp)
+        .all()
+    )
+    assert len(entries) == before + 1
+    newest = entries[-1]
+    assert newest.user_id == uuid.UUID(director_id)  # the uploader, recorded as actor
+    assert newest.field == "status"
+    assert newest.old_value == "reviewed"
+    assert newest.new_value == "evidence_submitted"
+
+
+def test_resumable_completion_stage_audit_failure_rolls_back_everything(client, director_user, db_session, monkeypatch):
+    """Injected failure, through the real endpoint: if writing the audit entry raises, the
+    Attachment insert, the stage-status change, and the session's completed-status update must
+    ALL roll back together -- never a partial result. The file already renamed to its final path
+    is left behind, exactly as an orphan from any other fence/crash case would be, reconciled by
+    the existing fenced cleanup sweep (Section 4), not by the database."""
+    from app.models.audit_log import AuditLogEntry
+    from app.models.attachment import Attachment
+
+    headers = _director_headers(client, director_user)
+    stage_id = _reviewed_stage(client, headers)
+
+    audit_before = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage_id))
+        .count()
+    )
+
+    session = _start_session_http(client, headers, "project_stage", stage_id)
+    _upload_all_chunks_http(client, headers, session["id"])
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("forced failure writing the audit entry")
+
+    monkeypatch.setattr("app.api.attachments.write_audit_log_entry", _boom)
+
+    with pytest.raises(RuntimeError):
+        client.post(f"/attachments/upload-sessions/{session['id']}/complete", headers=headers)
+
+    # Same reasoning as test_upload_and_stage_advance_commit_or_roll_back_together and
+    # test_claim_chunk_409_survives_the_row_vanishing_right_after_rollback: production's real
+    # get_db() rolls back on close() when an exception propagates; the test client's
+    # dependency-override keeps the session open instead, so roll back explicitly here.
+    db_session.rollback()
+
+    session_row = (
+        db_session.query(AttachmentUploadSession).filter(AttachmentUploadSession.id == uuid.UUID(session["id"])).first()
+    )
+    assert session_row.status != "completed"  # the fenced session update rolled back too
+    assert session_row.resulting_attachment_id is None
+
+    from app.models.project_construction_stage import ProjectConstructionStage
+
+    stage_row = db_session.query(ProjectConstructionStage).filter(ProjectConstructionStage.id == uuid.UUID(stage_id)).first()
+    assert stage_row.status == "reviewed"  # unchanged -- the stage-advance rolled back too
+
+    assert db_session.query(Attachment).filter(Attachment.doc_id == uuid.UUID(stage_id)).count() == 1  # only the original upload
+    audit_after = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage_id))
+        .count()
+    )
+    assert audit_after == audit_before  # no new audit entry survived the rollback
+
+    # The final-path file itself (step 3 already ran before the audit write in step 4's own
+    # transaction) is a real, expected orphan -- not the database's problem, cleanup's.
+    final_path = core.final_attachment_path(
+        "project_stage", uuid.UUID(stage_id), "evidence.bin", uuid.UUID(session["id"]), 1,
+    )
+    assert final_path.exists()
+
+
+def test_resumable_completion_stale_worker_rejection_leaves_stage_and_audit_untouched(client, director_user, db_session):
+    """Retained/extended stale-worker case, now against a project_stage target specifically (the
+    existing stale-worker tests above use a cost_sheet, so they prove nothing about the stage/
+    audit side-effect at all): a completion attempt rejected by the fence (session no longer
+    'completing', or a stale token) must leave the stage's status and its audit trail exactly as
+    they were -- the rejection happens before finalize_completion's fenced update, so its own
+    stage-advance+audit step (inside that same transaction) never runs at all."""
+    from app.models.audit_log import AuditLogEntry
+    from app.models.project_construction_stage import ProjectConstructionStage
+
+    headers = _director_headers(client, director_user)
+    current_user = _director(db_session)
+    stage_id = _reviewed_stage(client, headers)
+
+    audit_before = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage_id))
+        .count()
+    )
+
+    # The real HTTP endpoint has no way to express "the ORIGINAL worker's own, now-superseded
+    # token" -- POST .../complete always acts on the session's CURRENT token, server-side; a
+    # second real call after recovery resets status back to 'uploading' would simply succeed as
+    # a brand new legitimate attempt, not reproduce a stale worker at all. Reproducing the actual
+    # hazard requires holding onto the old token value and presenting it directly, exactly like
+    # the existing test_recovered_worker_refused_before_any_new_completion_attempt_begins above
+    # (which this is a project_stage-specific variant of) -- there is no other way to simulate it.
+    session = _start_session_http(client, headers, "project_stage", stage_id)
+    _upload_all_chunks_http(client, headers, session["id"])
+    from app.models.attachment_upload_session import AttachmentUploadSession as S
+
+    row = db_session.query(S).filter(S.id == uuid.UUID(session["id"])).first()
+    token_n = core.start_completion(db_session, row.id)
+    assembled_n = core.assemble_and_validate(db_session, row.id, token_n)
+
+    past = datetime.now(UTC) - timedelta(minutes=10)
+    db_session.query(S).filter(S.id == row.id).update({"last_activity_at": past})
+    db_session.commit()
+    core.recover_stuck_sessions(db_session, now=datetime.now(UTC))
+    db_session.refresh(row)
+    assert row.status == "uploading"
+    assert row.completion_attempt == token_n + 1
+
+    # The original (stale, token N) worker's own completion attempt is refused by the fence.
+    with pytest.raises(core.UploadProtocolError) as exc_info:
+        core.finalize_completion(db_session, row.id, token_n, assembled_n, current_user)
+    assert exc_info.value.status_code == 409
+
+    stage_row = db_session.query(ProjectConstructionStage).filter(ProjectConstructionStage.id == uuid.UUID(stage_id)).first()
+    assert stage_row.status == "reviewed"  # untouched
+    audit_after = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage_id))
+        .count()
+    )
+    assert audit_after == audit_before  # no audit entry for a rejected attempt
