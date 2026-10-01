@@ -331,16 +331,29 @@ def _trigger_structural_design_rebase(
     # the caller's own single commit covers this function's writes too, in the same transaction.
 
 
-def _advance_stage_if_applicable(db: Session, doc_type: DocumentType, doc_id: uuid.UUID) -> None:
+def _advance_stage_if_applicable(
+    db: Session, doc_type: DocumentType, doc_id: uuid.UUID, current_user, request: Request
+) -> None:
     """P4 contract v7, Section 3: the not_started/rejected->in_progress and reviewed->
     evidence_submitted transitions are a side effect of a successful upload/supersede against a
     stage -- never of a read, and never for any other doc_type. Does not commit; the caller's own
-    db.commit() covers this too, same convention as write_audit_log_entry."""
+    db.commit() covers this too, same convention as write_audit_log_entry. A reviewed->
+    evidence_submitted invalidation is itself audit-logged here (Section 8 case 9) -- the write
+    happens at this layer, not inside advance_stage_on_evidence_upload, since that function lives
+    in app/core and current_user/request are only available to its caller here in app/api."""
     if doc_type != DocumentType.PROJECT_STAGE:
         return
     stage = db.query(ProjectConstructionStage).filter(ProjectConstructionStage.id == doc_id).first()
-    if stage is not None:
-        advance_stage_on_evidence_upload(db, stage)
+    if stage is None:
+        return
+    old_status = stage.status
+    invalidated_review = advance_stage_on_evidence_upload(db, stage)
+    if invalidated_review:
+        write_audit_log_entry(
+            db, current_user, "project_stage", stage.id, "status",
+            old_value=old_status, new_value=stage.status,
+            reason="New evidence uploaded after review -- prior sign-off invalidated", request=request,
+        )
 
 
 def _parse_captured_at(raw: str | None) -> datetime | None:
@@ -455,7 +468,7 @@ async def upload_attachment(
         signatory_name=signatory_name, signatory_designation=signatory_designation,
         captured_at=captured_at, captured_at_source=captured_at_source,
     )
-    _advance_stage_if_applicable(db, doc_type, doc_id)
+    _advance_stage_if_applicable(db, doc_type, doc_id, current_user, request)
     db.commit()
     return attachment
 
@@ -528,7 +541,7 @@ async def supersede_attachment(
         captured_at=captured_at, captured_at_source=captured_at_source,
     )
     old.superseded_by_id = new.id
-    _advance_stage_if_applicable(db, old.doc_type, old.doc_id)
+    _advance_stage_if_applicable(db, old.doc_type, old.doc_id, current_user, request)
     db.commit()
     return new
 

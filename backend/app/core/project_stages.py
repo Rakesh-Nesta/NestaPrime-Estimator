@@ -35,19 +35,26 @@ def seed_stages_for_project(db: Session, project_id: uuid.UUID) -> None:
         db.add(ProjectConstructionStage(project_id=project_id, phase=phase, status=StageStatus.NOT_STARTED.value))
 
 
-def advance_stage_on_evidence_upload(db: Session, stage: ProjectConstructionStage) -> None:
+def advance_stage_on_evidence_upload(db: Session, stage: ProjectConstructionStage) -> bool:
     """Called after a successful Attachment upload/supersede against a stage (attachments.py).
     not_started/rejected both move to in_progress (a rejected stage's resubmission path);
     reviewed moves back to evidence_submitted (a stale sign-off is never left in place);
     in_progress/evidence_submitted are left exactly as they are -- more evidence arriving while
-    already mid-flight or already pending review changes nothing about the stage's own status."""
+    already mid-flight or already pending review changes nothing about the stage's own status.
+    Returns True exactly when the reviewed->evidence_submitted invalidation fired, so the caller
+    (which holds current_user/request, not available in this module) can audit-log it -- P4
+    contract v7, Section 8 case 9 requires this specific transition be audited, same as the
+    explicit submit/review actions already are in app/api/project_stages.py."""
     if stage.status in (StageStatus.NOT_STARTED.value, StageStatus.REJECTED.value):
         if stage.status == StageStatus.NOT_STARTED.value:
             stage.started_at = datetime.now(UTC)
         stage.status = StageStatus.IN_PROGRESS.value
+        return False
     elif stage.status == StageStatus.REVIEWED.value:
         stage.status = StageStatus.EVIDENCE_SUBMITTED.value
         stage.evidence_submitted_at = datetime.now(UTC)
+        return True
+    return False
 
 
 def has_current_evidence(db: Session, stage_id: uuid.UUID) -> bool:

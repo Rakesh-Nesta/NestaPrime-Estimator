@@ -282,6 +282,57 @@ def test_search_total_reflects_every_authorized_match_not_the_page_length(client
     assert body["total"] == 5
 
 
+def test_total_excludes_unauthorized_matches_at_the_contracts_own_scale(client, director_user, db_session):
+    """Section 8 case 3's own exact scenario: 30 authorized matches and 10 unauthorized ones
+    (Amendment 60 scoping on), search with limit=10. Expected: exactly 10 rows returned,
+    total=30 -- proving total comes from the fully-authorized, fully-filtered set, not merely
+    decoupled from the page length (already covered above) and not merely excluding an entire
+    role-excluded doc_type (also already covered above) -- here the unauthorized matches are the
+    SAME doc_type, same role, excluded purely by ownership."""
+    from tests.test_quotations_admin import _add_project_sport, _create_client_record, _create_project, _role_headers
+
+    director = _director_headers(client, director_user)
+    assert client.put("/ownership/switch", json={"on": True}, headers=director).status_code == 200
+
+    sales_a = _role_headers(client, db_session, UserRole.SALES, "sales-a-total-scale@test.local")
+    sales_b = _role_headers(client, db_session, UserRole.SALES, "sales-b-total-scale@test.local")
+    a_id = client.get("/auth/me", headers=sales_a).json()["id"]
+    b_id = client.get("/auth/me", headers=sales_b).json()["id"]
+
+    def _project_owned_by(owner_id, label):
+        client_id = _create_client_record(client, director, f"Total-Scale {label} Client")
+        project_id = _create_project(client, director, client_id)
+        project_sport_id = _add_project_sport(client, director, project_id, "box_cricket")
+        cost_sheet_id = client.post(
+            f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=director
+        ).json()["id"]
+        client.post(f"/cost-sheets/{cost_sheet_id}/verify", headers=director)
+        estimate_id = client.post(
+            f"/projects/{project_id}/estimates",
+            json={"options": [{"project_sport_id": project_sport_id, "package": "standard", "cost_for_option": 100000}]},
+            headers=director,
+        ).json()["id"]
+        give = client.patch(f"/ownership/client/{client_id}", json={"owner_id": owner_id, "cascade": True}, headers=director)
+        assert give.status_code == 200, give.text
+        return estimate_id
+
+    authorized_estimate_id = _project_owned_by(a_id, "Authorized")
+    unauthorized_estimate_id = _project_owned_by(b_id, "Unauthorized")
+
+    for i in range(30):
+        res = _upload(client, sales_a, "estimate", authorized_estimate_id, "product_image", filename=f"scopetest{i}.jpg")
+        assert res.status_code == 201, res.text
+    for i in range(10):
+        res = _upload(client, sales_b, "estimate", unauthorized_estimate_id, "product_image", filename=f"scopetest-b{i}.jpg")
+        assert res.status_code == 201, res.text
+
+    res = client.get("/attachments/search", params={"q": "scopetest", "limit": 10}, headers=sales_a)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["items"]) == 10
+    assert body["total"] == 30  # not 40 -- the 10 unauthorized matches never entered the count
+
+
 def test_role_excluded_doc_type_never_contributes_a_branch_to_search(client, director_user, db_session):
     headers = _director_headers(client, director_user)
     client_id = _create_client_record(client, headers)

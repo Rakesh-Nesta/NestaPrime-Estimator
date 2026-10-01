@@ -1,5 +1,7 @@
 """P4 contract v7, Section 3: stage evidence capture."""
 
+import uuid
+
 import pytest
 
 from app.core.project_stages import CONSTRUCTION_PHASES
@@ -173,6 +175,50 @@ def test_new_evidence_invalidates_a_prior_review(client, director_user):
     assert res.status_code == 201, res.text
     stage = _get_stage(client, headers, project_id, phase)
     assert stage["status"] == "evidence_submitted"  # a stale sign-off is never left in place
+
+
+def test_new_evidence_invalidating_a_review_writes_an_audit_entry(client, director_user, db_session):
+    """Section 8 case 9's own wording: 'New evidence invalidates prior review, with audit.' The
+    status-transition half was already covered above; this is the audit half, found missing on
+    inspection -- advance_stage_on_evidence_upload never called write_audit_log_entry at all.
+    Fixed in app/api/attachments.py (_advance_stage_if_applicable now writes the entry, since
+    current_user/request aren't available inside app/core/project_stages.py)."""
+    from app.models.audit_log import AuditLogEntry
+
+    headers = _director_headers(client, director_user)
+    project_id = _create_project(client, headers)
+    phase = CONSTRUCTION_PHASES[0]
+    stage = _get_stage(client, headers, project_id, phase)
+    _upload_stage_evidence(client, headers, stage["id"])
+    stage = _get_stage(client, headers, project_id, phase)
+    client.post(f"/stages/{stage['id']}/submit", headers=headers)
+    client.post(f"/stages/{stage['id']}/review", json={"action": "approve"}, headers=headers)
+    stage = _get_stage(client, headers, project_id, phase)
+    assert stage["status"] == "reviewed"
+
+    before_count = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage["id"]))
+        .count()
+    )
+
+    res = _upload_stage_evidence(client, headers, stage["id"], filename="new-evidence.jpg")
+    assert res.status_code == 201, res.text
+    stage = _get_stage(client, headers, project_id, phase)
+    assert stage["status"] == "evidence_submitted"
+
+    entries = (
+        db_session.query(AuditLogEntry)
+        .filter(AuditLogEntry.document_type == "project_stage", AuditLogEntry.document_id == uuid.UUID(stage["id"]))
+        .order_by(AuditLogEntry.timestamp)
+        .all()
+    )
+    assert len(entries) == before_count + 1, "expected exactly one new audit entry for the invalidation"
+    newest = entries[-1]
+    assert newest.field == "status"
+    assert newest.old_value == "reviewed"
+    assert newest.new_value == "evidence_submitted"
+    assert newest.reason and "invalidated" in newest.reason.lower()
 
 
 # ---------------------------------------------------------------------------

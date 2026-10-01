@@ -12,6 +12,7 @@ import hashlib
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -354,6 +355,57 @@ def test_crash_after_commit_before_temp_cleanup_leaves_receipt_and_file_both_int
     # the receipt and the real file are completely untouched
     assert final_path.exists()
     assert db_session.get(Attachment, new_attachment.id) is not None
+
+
+def test_completed_session_cleanup_is_retryable_and_a_safe_no_op_on_repetition(client, director_user, db_session):
+    """Section 8 case 23's own wording, as its own dedicated test rather than folded into the
+    crash test above: a completed session's temp files are removed, temp_files_purged_at is set,
+    the receipt (Attachment row) and the real final file are both preserved throughout, and
+    running cleanup again afterward changes nothing further -- the second call finds zero
+    eligible sessions (temp_files_purged_at is no longer NULL) and purges nothing, not merely
+    'doesn't error'."""
+    headers = _director_headers(client, director_user)
+    cost_sheet_id = _draft_cost_sheet(client, headers)
+    current_user = _director(db_session)
+    session = _start_session(db_session, current_user, doc_id=uuid.UUID(cost_sheet_id))
+    _upload_all_chunks(db_session, session)
+    token = core.start_completion(db_session, session.id)
+    assembled = core.assemble_and_validate(db_session, session.id, token)
+    attachment = core.finalize_completion(db_session, session.id, token, assembled, current_user)
+    db_session.commit()
+
+    db_session.refresh(session)
+    assert session.status == "completed"
+    assert session.resulting_attachment_id == attachment.id
+    final_path = Path(attachment.storage_path)
+    original_mtime = final_path.stat().st_mtime
+    # finalize_completion already purges its own session's temp files as its last step (Section
+    # 4) -- force temp_files_purged_at back to NULL with real leftover files on disk, so this
+    # test genuinely exercises the retryable cleanup sweep itself, not finalize_completion's own
+    # synchronous purge.
+    temp_dir = core._session_temp_dir(session.id)
+    (temp_dir / "leftover.part").write_bytes(b"stray bytes a real interrupted purge could leave")
+    db_session.query(AttachmentUploadSession).filter(AttachmentUploadSession.id == session.id).update(
+        {"temp_files_purged_at": None}
+    )
+    db_session.commit()
+
+    first = core.purge_completed_session_temp_files(db_session)
+    assert first == 1
+    db_session.refresh(session)
+    assert session.temp_files_purged_at is not None
+    first_purged_at = session.temp_files_purged_at
+    assert list(temp_dir.iterdir()) == []  # the leftover file, and everything else, is gone
+    assert final_path.exists() and final_path.stat().st_mtime == original_mtime  # untouched
+    assert db_session.get(Attachment, attachment.id) is not None
+
+    # Repetition: a safe no-op, not merely error-free -- zero sessions match this time.
+    second = core.purge_completed_session_temp_files(db_session)
+    assert second == 0
+    db_session.refresh(session)
+    assert session.temp_files_purged_at == first_purged_at  # unchanged by the no-op second call
+    assert final_path.exists() and final_path.stat().st_mtime == original_mtime
+    assert db_session.get(Attachment, attachment.id) is not None
 
 
 def test_cleanup_reconstructs_an_orphan_using_a_fresh_session_object(
