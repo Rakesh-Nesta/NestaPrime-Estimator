@@ -2454,3 +2454,117 @@ export async function getMarketingDashboard(token, { periodStart, periodEnd }) {
   const res = await fetch(`${API_BASE}/marketplace-imports/marketing/dashboard?${params}`, { headers: authHeaders(token) });
   return handle(res);
 }
+
+// P5: Agreement & Execution Starter -- agreements, execution readiness/authorization, project
+// team, milestones, tasks and site issues.
+async function p5Json(token, method, path, payload) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: payload === undefined ? authHeaders(token) : { ...authHeaders(token), "Content-Type": "application/json" },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  return handle(res);
+}
+
+export async function getExecutionContext(token, projectId) {
+  return p5Json(token, "GET", `/projects/${projectId}/execution-context`);
+}
+
+export async function createAgreementDraft(token, quotationId) {
+  return p5Json(token, "POST", `/quotations/${quotationId}/agreement`);
+}
+
+export async function getCurrentAgreement(token, quotationId) {
+  const res = await fetch(`${API_BASE}/quotations/${quotationId}/agreement`, { headers: authHeaders(token) });
+  if (res.status === 404) return null;
+  return handle(res);
+}
+
+export async function listAgreementRevisions(token, quotationId) {
+  return p5Json(token, "GET", `/quotations/${quotationId}/agreements`);
+}
+
+export async function getAgreement(token, agreementId) {
+  return p5Json(token, "GET", `/agreements/${agreementId}`);
+}
+
+export async function clientSignAgreement(token, agreementId, { clientSignatoryId, signedOn, attachmentId }) {
+  return p5Json(token, "POST", `/agreements/${agreementId}/client-sign`, {
+    client_signatory_id: clientSignatoryId,
+    signed_on: signedOn,
+    attachment_id: attachmentId,
+  });
+}
+
+export async function executeAgreement(token, agreementId) {
+  return p5Json(token, "POST", `/agreements/${agreementId}/execute`);
+}
+
+export async function voidAgreement(token, agreementId, reason) {
+  return p5Json(token, "POST", `/agreements/${agreementId}/void`, { reason });
+}
+
+export async function supersedeAgreement(token, agreementId, reason) {
+  return p5Json(token, "POST", `/agreements/${agreementId}/supersede`, { reason });
+}
+
+export async function getExecutionReadiness(token, quotationId) {
+  return p5Json(token, "GET", `/quotations/${quotationId}/execution-readiness`);
+}
+
+export async function authorizeExecution(token, quotationId) {
+  return p5Json(token, "POST", `/quotations/${quotationId}/execution-authorization`);
+}
+
+export async function listExecutionAuthorizations(token, quotationId) {
+  return p5Json(token, "GET", `/quotations/${quotationId}/execution-authorizations`);
+}
+
+export async function listProjectTeam(token, projectId, includeRemoved = false) {
+  const qs = includeRemoved ? "?include_removed=true" : "";
+  return p5Json(token, "GET", `/projects/${projectId}/team${qs}`);
+}
+
+export async function addProjectTeamMember(token, projectId, { userId, projectRole }) {
+  return p5Json(token, "POST", `/projects/${projectId}/team`, { user_id: userId, project_role: projectRole });
+}
+
+export async function removeProjectTeamMember(token, projectId, teamMemberId) {
+  return p5Json(token, "DELETE", `/projects/${projectId}/team/${teamMemberId}`);
+}
+
+export async function listMilestones(token, projectId) {
+  return p5Json(token, "GET", `/projects/${projectId}/milestones`);
+}
+
+export async function createMilestone(token, projectId, payload) {
+  return p5Json(token, "POST", `/projects/${projectId}/milestones`, payload);
+}
+
+export async function updateMilestone(token, milestoneId, payload) {
+  return p5Json(token, "PATCH", `/milestones/${milestoneId}`, payload);
+}
+
+export async function listTasks(token, projectId) {
+  return p5Json(token, "GET", `/projects/${projectId}/tasks`);
+}
+
+export async function createTask(token, projectId, payload) {
+  return p5Json(token, "POST", `/projects/${projectId}/tasks`, payload);
+}
+
+export async function updateTask(token, taskId, payload) {
+  return p5Json(token, "PATCH", `/tasks/${taskId}`, payload);
+}
+
+export async function listSiteIssues(token, projectId) {
+  return p5Json(token, "GET", `/projects/${projectId}/site-issues`);
+}
+
+export async function createSiteIssue(token, projectId, payload) {
+  return p5Json(token, "POST", `/projects/${projectId}/site-issues`, payload);
+}
+
+export async function updateSiteIssue(token, issueId, payload) {
+  return p5Json(token, "PATCH", `/site-issues/${issueId}`, payload);
+}

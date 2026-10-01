@@ -17,7 +17,7 @@ from app.core import p5
 from app.core import p5_agreements as agreements_core
 from app.core.auth import require_roles
 from app.db.session import get_db
-from app.models.document import Quotation
+from app.models.document import Quotation, QuotationStatus
 from app.models.p5 import (
     Agreement,
     MilestoneStatus,
@@ -313,6 +313,46 @@ def list_execution_authorizations(
         .filter(ProjectExecutionAuthorization.quotation_id == quotation_id)
         .order_by(ProjectExecutionAuthorization.authorized_at, ProjectExecutionAuthorization.id)
         .all()
+    )
+
+
+class ExecutionContextOut(BaseModel):
+    """What a project's Execution screen needs to find its way: the Won quotation (id and document number
+    only -- no totals) and whether a Work Order exists. Exists because Procurement and Site Engineer team
+    members cannot list a project's quotations (documents.py's DOCUMENT_ROLES) yet must reach this screen."""
+
+    project_id: uuid.UUID
+    phase: str
+    quotation_id: uuid.UUID | None
+    quotation_no: str | None
+    work_order_exists: bool
+    work_order_id: uuid.UUID | None  # PM/Director only, like every other Work Order read
+    work_order_status: str | None
+
+
+@p5_router.get("/projects/{project_id}/execution-context", response_model=ExecutionContextOut)
+def get_execution_context(
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*VIEW_ROLES)),
+):
+    project = _project_or_404(db, project_id)
+    _require_team_gate(db, current_user, project_id)
+    quotation = (
+        db.query(Quotation)
+        .filter(Quotation.project_id == project_id, Quotation.status == QuotationStatus.WON)
+        .order_by(Quotation.created_at.desc(), Quotation.id.desc())
+        .first()
+    )
+    work_order = db.query(WorkOrder).filter(WorkOrder.quotation_id == quotation.id).first() if quotation else None
+    manager = current_user.role.value in MANAGE_ROLES
+    return ExecutionContextOut(
+        project_id=project.id, phase=project.phase.value,
+        quotation_id=quotation.id if quotation else None,
+        quotation_no=quotation.document_no if quotation else None,
+        work_order_exists=work_order is not None,
+        work_order_id=work_order.id if (work_order and manager) else None,
+        work_order_status=work_order.status.value if (work_order and manager) else None,
     )
 
 

@@ -16,12 +16,13 @@ const PHASE_COLORS = {
   abandoned: "bg-red-500/10 text-red-400",
 };
 
-function screenNavigator({ onOpenDocuments, onOpenScope, onOpenSiteSurvey, onOpenFollowUps }) {
+function screenNavigator({ onOpenDocuments, onOpenScope, onOpenSiteSurvey, onOpenFollowUps, onOpenExecution }) {
   return {
     documents: onOpenDocuments,
     scope: onOpenScope,
     site_survey: onOpenSiteSurvey,
     follow_ups: onOpenFollowUps,
+    execution: onOpenExecution,
   };
 }
 
@@ -50,7 +51,7 @@ function PendingItemRow({ item, navigators }) {
 const STAGE_EVIDENCE_ROLES = ["site_engineer", "pm", "director"];
 
 export default function ProjectOverview({
-  token, project, role, onOpenSports, onOpenScope, onOpenSiteSurvey, onOpenDocuments, onOpenFollowUps, onOpenStages,
+  token, project, role, onOpenSports, onOpenScope, onOpenSiteSurvey, onOpenDocuments, onOpenFollowUps, onOpenStages, onOpenExecution,
 }) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -73,7 +74,7 @@ export default function ProjectOverview({
   }
   if (!overview) return null;
 
-  const navigators = screenNavigator({ onOpenDocuments, onOpenScope, onOpenSiteSurvey, onOpenFollowUps });
+  const navigators = screenNavigator({ onOpenDocuments, onOpenScope, onOpenSiteSurvey, onOpenFollowUps, onOpenExecution });
   const itemsByWaiting = WAITING_ORDER.map((key) => ({
     key, items: overview.pending_items.filter((i) => i.waiting_on === key),
   })).filter((g) => g.items.length > 0);

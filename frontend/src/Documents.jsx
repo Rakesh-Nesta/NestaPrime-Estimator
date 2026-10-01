@@ -1678,7 +1678,7 @@ function WorkOrderPanel({ token, quotationId, canEditPayments, onOpenPayments })
       await createWorkOrder(token, quotationId);
       await refresh();
     } catch (err) {
-      setError(err.message);
+      setError(/not ready|agreement|authoriz|team|engineer/i.test(err.message) ? `${err.message} -- see the Execution tab for readiness.` : err.message);
     }
   }
 

@@ -675,3 +675,29 @@ def test_assigned_tasks_appear_in_the_existing_project_overview_pending_list(cli
     client.delete(f"/projects/{pid}/team/{member['id']}", headers=h)
     items = [i for i in client.get(f"/projects/{pid}/overview", headers=h).json()["pending_items"] if i["source"] == "task"]
     assert [i["label"] for i in items] == ["Needs reassignment: Pour the base slab"]
+
+
+def test_execution_context_lets_team_members_find_the_won_quotation_without_seeing_quotations(client, won, db_session):
+    """The Execution screen needs the Won quotation, but Site Engineers cannot list a project's quotations."""
+    h = won["headers"]
+    pid = won["project_id"]
+    engineer = make_user(db_session, "site_engineer")
+    eh = user_headers(client, engineer)
+    assert client.get(f"/projects/{pid}/quotations", headers=eh).status_code == 403  # the gap this endpoint closes
+    assert client.get(f"/projects/{pid}/execution-context", headers=eh).status_code == 403  # off the team: refused
+    staff_site_engineer(client, h, pid, user={"id": str(engineer.id)})
+    ctx = client.get(f"/projects/{pid}/execution-context", headers=eh)
+    assert ctx.status_code == 200, ctx.text
+    body = ctx.json()
+    assert body["quotation_id"] == won["quotation_id"] and body["quotation_no"].startswith("NPQ-")
+    assert body["work_order_exists"] is False and body["work_order_id"] is None
+    assert "total" not in str(body).lower()  # no commercial figures
+    execute_agreement(client, h, won["quotation_id"], won["client_id"])
+    assert authorize(client, h, won["quotation_id"]).status_code == 200
+    assert _wo(client, won).status_code == 201
+    member_view = client.get(f"/projects/{pid}/execution-context", headers=eh).json()
+    assert member_view["work_order_exists"] is True and member_view["work_order_id"] is None  # id/status: managers only
+    manager_view = client.get(f"/projects/{pid}/execution-context", headers=h).json()
+    assert manager_view["work_order_id"] and manager_view["work_order_status"] == "awarded"
+    for role in ("admin", "marketing", "ca_tax"):
+        assert client.get(f"/projects/{pid}/execution-context", headers=user_headers(client, make_user(db_session, role))).status_code == 403

@@ -278,11 +278,13 @@ export default function AttachmentsPanel({ token, docType, docId, role, onUpload
                 <button onClick={() => handleReview(a.id, "rejected")} className="text-red-400 hover:underline">
                   Reject
                 </button>
-                <button onClick={() => handleMarketingReuse(a)} className="text-text-secondary hover:underline">
-                  {a.marketing_reuse_approved_at && !a.marketing_reuse_revoked_at
-                    ? "Revoke marketing use"
-                    : "Approve for marketing"}
-                </button>
+                {docType !== "agreement" && (
+                  <button onClick={() => handleMarketingReuse(a)} className="text-text-secondary hover:underline">
+                    {a.marketing_reuse_approved_at && !a.marketing_reuse_revoked_at
+                      ? "Revoke marketing use"
+                      : "Approve for marketing"}
+                  </button>
+                )}
               </>
             )}
             {supersedingId === a.id ? (
