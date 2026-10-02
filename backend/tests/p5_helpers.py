@@ -69,7 +69,12 @@ def add_signatory(client, headers, client_id, authorized_on=None, expiry=None, n
     return res.json()
 
 
-def upload_agreement_document(client, headers, agreement_id, content=b"signed agreement"):
+def upload_agreement_document(client, headers, agreement_id, content=None):
+    from tests.valid_files import valid_pdf
+
+    if content is None or not content.startswith(b"%PDF"):
+        # uploads are validated by parsing, so the stand-in must be a real PDF; distinct labels give distinct bytes
+        content = valid_pdf((content or b"signed agreement").decode())
     res = client.post(
         "/attachments",
         data={"doc_type": "agreement", "doc_id": agreement_id, "tag": "signed_document"},
