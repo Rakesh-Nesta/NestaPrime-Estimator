@@ -1,6 +1,7 @@
 """Amendment 45 (Section 51): a general free-text notes/remarks catch-all
 on Client and Opportunity, distinct from either entity's own follow-up
 note."""
+from tests.relative_dates import d
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 
@@ -33,7 +34,7 @@ def _create_client_record(client, headers, **overrides):
 
 
 def _create_opportunity(client, headers, **overrides):
-    payload = {"lead_name": "Notes Test Lead", "next_follow_up_date": "2026-10-01", **overrides}
+    payload = {"lead_name": "Notes Test Lead", "next_follow_up_date": d("2026-10-01"), **overrides}
     res = client.post("/opportunities", json=payload, headers=headers)
     assert res.status_code == 201, res.text
     return res.json()
@@ -73,7 +74,7 @@ def test_client_notes_are_independent_of_follow_up_note(client, director_user):
     row = _create_client_record(client, headers)
     client.patch(
         f"/clients/{row['id']}/follow-up",
-        json={"next_follow_up_date": "2026-10-05", "follow_up_note": "Call about pricing"},
+        json={"next_follow_up_date": d("2026-10-05"), "follow_up_note": "Call about pricing"},
         headers=headers,
     )
     res = client.patch(f"/clients/{row['id']}/notes", json={"notes": "General remark"}, headers=headers)
@@ -143,7 +144,7 @@ def test_opportunity_notes_are_independent_of_follow_up_note(client, director_us
     row = _create_opportunity(client, headers)
     client.patch(
         f"/opportunities/{row['id']}/follow-up",
-        json={"next_follow_up_date": "2026-10-15", "follow_up_note": "Call back after Diwali"},
+        json={"next_follow_up_date": d("2026-10-15"), "follow_up_note": "Call back after Diwali"},
         headers=headers,
     )
     res = client.patch(f"/opportunities/{row['id']}/notes", json={"notes": "General remark"}, headers=headers)

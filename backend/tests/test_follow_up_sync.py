@@ -2,6 +2,7 @@
 Client's/Opportunity's legacy next_follow_up_date/follow_up_note columns and the
 FollowUp table (app/core/follow_up_sync.py), the org-wide "all" mode list_follow_ups
 gained for the central Follow-ups screen, and the read-only containment mode."""
+from tests.relative_dates import d
 from datetime import date
 
 from app.core.security import hash_password
@@ -28,7 +29,7 @@ def _sales_user(db_session, email="sales@test.local", name="Test Sales"):
 
 
 def _create_opportunity(client, headers, **overrides):
-    payload = {"lead_name": "Test Lead", "next_follow_up_date": "2026-10-01", **overrides}
+    payload = {"lead_name": "Test Lead", "next_follow_up_date": d("2026-10-01"), **overrides}
     res = client.post("/opportunities", json=payload, headers=headers)
     assert res.status_code == 201, res.text
     return res.json()
@@ -43,13 +44,13 @@ def _create_client_record(client, headers, **overrides):
 
 def test_creating_an_opportunity_creates_a_matching_primary_follow_up(client, director_user):
     headers = _director_headers(client, director_user)
-    opp = _create_opportunity(client, headers, next_follow_up_date="2026-10-15")
+    opp = _create_opportunity(client, headers, next_follow_up_date=d("2026-10-15"))
 
     res = client.get(f"/follow-ups?entity_type=opportunity&entity_id={opp['id']}", headers=headers)
     assert res.status_code == 200, res.text
     rows = res.json()
     assert len(rows) == 1
-    assert rows[0]["due_date"] == "2026-10-15"
+    assert rows[0]["due_date"] == d("2026-10-15")
     assert rows[0]["status"] == "open"
     assert rows[0]["owner_id"] == opp["owner_id"]
 
@@ -60,15 +61,15 @@ def test_rescheduling_an_opportunity_follow_up_updates_the_same_row_not_a_duplic
 
     res = client.patch(
         f"/opportunities/{opp['id']}/follow-up",
-        json={"next_follow_up_date": "2026-11-01", "follow_up_note": "Called, wants a quote"},
+        json={"next_follow_up_date": d("2026-11-01"), "follow_up_note": "Called, wants a quote"},
         headers=headers,
     )
     assert res.status_code == 200, res.text
-    assert res.json()["next_follow_up_date"] == "2026-11-01"
+    assert res.json()["next_follow_up_date"] == d("2026-11-01")
 
     rows = client.get(f"/follow-ups?entity_type=opportunity&entity_id={opp['id']}", headers=headers).json()
     assert len(rows) == 1
-    assert rows[0]["due_date"] == "2026-11-01"
+    assert rows[0]["due_date"] == d("2026-11-01")
     assert rows[0]["next_action"] == "Called, wants a quote"
 
 
@@ -93,13 +94,13 @@ def test_moving_an_opportunity_to_a_non_terminal_stage_updates_the_due_date_and_
     opp = _create_opportunity(client, headers)
     client.patch(
         f"/opportunities/{opp['id']}/follow-up",
-        json={"next_follow_up_date": "2026-10-20", "follow_up_note": "Waiting on their board"},
+        json={"next_follow_up_date": d("2026-10-20"), "follow_up_note": "Waiting on their board"},
         headers=headers,
     )
 
     res = client.patch(
         f"/opportunities/{opp['id']}/stage",
-        json={"stage": "qualified", "next_follow_up_date": "2026-10-25"},
+        json={"stage": "qualified", "next_follow_up_date": d("2026-10-25")},
         headers=headers,
     )
     assert res.status_code == 200, res.text
@@ -107,7 +108,7 @@ def test_moving_an_opportunity_to_a_non_terminal_stage_updates_the_due_date_and_
 
     rows = client.get(f"/follow-ups?entity_type=opportunity&entity_id={opp['id']}", headers=headers).json()
     assert len(rows) == 1
-    assert rows[0]["due_date"] == "2026-10-25"
+    assert rows[0]["due_date"] == d("2026-10-25")
     assert rows[0]["next_action"] == "Waiting on their board"
 
 
@@ -117,13 +118,13 @@ def test_setting_a_client_follow_up_creates_a_row_and_clearing_it_completes_that
 
     res = client.patch(
         f"/clients/{rec['id']}/follow-up",
-        json={"next_follow_up_date": "2026-10-10", "follow_up_note": "Send brochure"},
+        json={"next_follow_up_date": d("2026-10-10"), "follow_up_note": "Send brochure"},
         headers=headers,
     )
     assert res.status_code == 200, res.text
     rows = client.get(f"/follow-ups?entity_type=client&entity_id={rec['id']}", headers=headers).json()
     assert len(rows) == 1
-    assert rows[0]["due_date"] == "2026-10-10"
+    assert rows[0]["due_date"] == d("2026-10-10")
     assert rows[0]["status"] == "open"
 
     res = client.patch(f"/clients/{rec['id']}/follow-up", json={"next_follow_up_date": None}, headers=headers)
@@ -161,7 +162,7 @@ def test_containment_lock_blocks_every_client_and_opportunity_sync_route_with_no
     rec = _create_client_record(client, headers)
     client.patch(
         f"/clients/{rec['id']}/follow-up",
-        json={"next_follow_up_date": "2026-10-10", "follow_up_note": "Send brochure"},
+        json={"next_follow_up_date": d("2026-10-10"), "follow_up_note": "Send brochure"},
         headers=headers,
     )
     baseline_client = client.get(f"/clients/{rec['id']}", headers=headers).json()
@@ -171,7 +172,7 @@ def test_containment_lock_blocks_every_client_and_opportunity_sync_route_with_no
     # Opportunity's dedicated reschedule endpoint.
     res = client.patch(
         f"/opportunities/{opp['id']}/follow-up",
-        json={"next_follow_up_date": "2026-12-01", "follow_up_note": "Locked-mode edit"},
+        json={"next_follow_up_date": d("2026-12-01"), "follow_up_note": "Locked-mode edit"},
         headers=headers,
     )
     assert res.status_code == 423
@@ -182,12 +183,12 @@ def test_containment_lock_blocks_every_client_and_opportunity_sync_route_with_no
 
     # Creating a NEW Opportunity, which always writes an initial follow-up too.
     res = client.post(
-        "/opportunities", json={"lead_name": "Should be refused", "next_follow_up_date": "2026-10-01"}, headers=headers
+        "/opportunities", json={"lead_name": "Should be refused", "next_follow_up_date": d("2026-10-01")}, headers=headers
     )
     assert res.status_code == 423
 
     # Client's dedicated reschedule endpoint.
-    res = client.patch(f"/clients/{rec['id']}/follow-up", json={"next_follow_up_date": "2026-11-11"}, headers=headers)
+    res = client.patch(f"/clients/{rec['id']}/follow-up", json={"next_follow_up_date": d("2026-11-11")}, headers=headers)
     assert res.status_code == 423
 
     # Nothing above left a partial change -- both records read back exactly as before.
@@ -204,7 +205,7 @@ def test_containment_lock_blocks_new_writes_via_the_follow_ups_api_but_not_reads
     rec = _create_client_record(client, headers)
     existing = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": rec["id"], "next_action": "Call", "due_date": "2026-10-05"},
+        json={"entity_type": "client", "entity_id": rec["id"], "next_action": "Call", "due_date": d("2026-10-05")},
         headers=headers,
     ).json()
 
@@ -212,7 +213,7 @@ def test_containment_lock_blocks_new_writes_via_the_follow_ups_api_but_not_reads
 
     res = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": rec["id"], "next_action": "Another", "due_date": "2026-10-06"},
+        json={"entity_type": "client", "entity_id": rec["id"], "next_action": "Another", "due_date": d("2026-10-06")},
         headers=headers,
     )
     assert res.status_code == 423
@@ -267,21 +268,21 @@ def test_completing_an_opportunity_follow_up_from_the_central_api_updates_the_so
     /follow-ups endpoints (what the central Follow-ups screen calls) must show up on
     the Opportunity's own legacy field too, not just stay inside the shared table."""
     headers = _director_headers(client, director_user)
-    opp = _create_opportunity(client, headers, next_follow_up_date="2026-10-01")
+    opp = _create_opportunity(client, headers, next_follow_up_date=d("2026-10-01"))
     fu = client.get(f"/follow-ups?entity_type=opportunity&entity_id={opp['id']}", headers=headers).json()[0]
 
     res = client.patch(
         f"/follow-ups/{fu['id']}",
         json={
             "status": "completed",
-            "replacement": {"next_action": "Second call", "due_date": "2026-10-20"},
+            "replacement": {"next_action": "Second call", "due_date": d("2026-10-20")},
         },
         headers=headers,
     )
     assert res.status_code == 200, res.text
 
     source_screen_view = client.get(f"/opportunities/{opp['id']}", headers=headers).json()
-    assert source_screen_view["next_follow_up_date"] == "2026-10-20"
+    assert source_screen_view["next_follow_up_date"] == d("2026-10-20")
     assert source_screen_view["follow_up_note"] == "Second call"
 
 
@@ -294,11 +295,11 @@ def test_a_follow_up_created_from_the_central_api_on_a_client_with_no_reminder_y
 
     res = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": rec["id"], "next_action": "Send catalogue", "due_date": "2026-10-08"},
+        json={"entity_type": "client", "entity_id": rec["id"], "next_action": "Send catalogue", "due_date": d("2026-10-08")},
         headers=headers,
     )
     assert res.status_code == 201, res.text
 
     source_screen_view = client.get(f"/clients/{rec['id']}", headers=headers).json()
-    assert source_screen_view["next_follow_up_date"] == "2026-10-08"
+    assert source_screen_view["next_follow_up_date"] == d("2026-10-08")
     assert source_screen_view["follow_up_note"] == "Send catalogue"
