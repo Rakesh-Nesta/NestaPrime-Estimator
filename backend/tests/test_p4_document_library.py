@@ -74,7 +74,17 @@ def _draft_estimate_for(client, headers, project_id, cost_for_option=100000):
     return cost_sheet_id, res.json()["id"]
 
 
-def _upload(client, headers, doc_type, doc_id, tag, filename="test.txt", content=b"hello world"):
+def _content_for(filename):
+    """Genuinely valid content for the extension (uploads are validated by parsing, not by header)."""
+    from tests import valid_files
+
+    extension = filename.rsplit(".", 1)[-1].lower()
+    return {"jpg": valid_files.valid_jpeg, "jpeg": valid_files.valid_jpeg, "png": valid_files.valid_png,
+            "pdf": valid_files.valid_pdf}.get(extension, lambda: b"hello world")()
+
+
+def _upload(client, headers, doc_type, doc_id, tag, filename="test.txt", content=None):
+    content = content if content is not None else _content_for(filename)
     data = {"doc_type": doc_type, "doc_id": doc_id, "tag": tag}
     return client.post("/attachments", data=data, files={"file": (filename, content, "text/plain")}, headers=headers)
 

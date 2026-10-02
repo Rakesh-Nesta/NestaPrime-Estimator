@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.audit_log import write_audit_log_entry
 from app.api.documents import _document_no, _rate_blind_mode_on
 from app.config import settings
-from app.core import ownership
+from app.core import ownership, upload_policy
 from app.core.auth import require_roles
 from app.core.project_stages import advance_stage_on_evidence_upload
 from app.db.session import get_db
@@ -61,32 +61,12 @@ STAGE_ROLES = ("site_engineer", "pm", "director")
 # below, called inside each endpoint body -- Sales passing this outer
 # gate still gets rejected by that inner check on e.g. a cost_sheet.
 ALL_ATTACHMENT_ROLES = ("sales", "pm", "director", "procurement", "site_engineer")
-MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # M.3: "max 100 MB each"
+# One upload policy for all three paths lives in app/core/upload_policy.py; these names stay importable from here.
+MAX_FILE_SIZE_BYTES = upload_policy.MAX_FILE_SIZE_BYTES  # M.3: "max 100 MB each"
+BLOCKED_ATTACHMENT_EXTENSIONS = upload_policy.BLOCKED_ATTACHMENT_EXTENSIONS
+MAX_STORED_FILENAME_LENGTH = upload_policy.MAX_STORED_FILENAME_LENGTH
+_safe_filename = upload_policy.safe_filename
 
-# Amendment 58 (Section 61) item 8. Types that can run, or that a browser renders as a page, are not
-# attachments a site team has any reason to send. Everything else (drawings, photos, PDFs, spreadsheets,
-# video) is accepted -- a deny-list, so no genuine site file is ever blocked by surprise.
-BLOCKED_ATTACHMENT_EXTENSIONS = frozenset(
-    {".html", ".htm", ".xhtml", ".svg", ".js", ".mjs", ".exe", ".msi", ".bat", ".cmd", ".com",
-     ".scr", ".ps1", ".sh", ".jar", ".php", ".py", ".vbs", ".dll", ".lnk"}
-)
-MAX_STORED_FILENAME_LENGTH = 150
-
-
-def _safe_filename(raw_name: str | None) -> str:
-    """The name kept for an upload: no folders (either slash style), no control or shell-special
-    characters, never empty, length capped with the extension kept."""
-    name = (raw_name or "").replace("\\", "/").split("/")[-1]
-    name = re.sub(r'[\x00-\x1f\x7f<>:"|?*]', "", name).strip(" .")
-    if not name:
-        return "upload"
-    if len(name) > MAX_STORED_FILENAME_LENGTH:
-        stem, dot, extension = name.rpartition(".")
-        if dot and 0 < len(extension) <= 10:
-            name = stem[: MAX_STORED_FILENAME_LENGTH - len(extension) - 1] + "." + extension
-        else:
-            name = name[:MAX_STORED_FILENAME_LENGTH]
-    return name
 
 _DOC_TABLE = {
     DocumentType.COST_SHEET: CostSheet,
@@ -372,6 +352,18 @@ def _parse_captured_at(raw: str | None) -> datetime | None:
     return parsed.astimezone(UTC).replace(tzinfo=None)
 
 
+async def read_bounded(upload: UploadFile, limit: int, status_code: int, detail: str) -> bytes:
+    """Read an uploaded file in pieces and stop as soon as it exceeds `limit` -- never trusting a declared size."""
+    buffer = bytearray()
+    while True:
+        piece = await upload.read(upload_policy.READ_PIECE_BYTES)
+        if not piece:
+            return bytes(buffer)
+        buffer.extend(piece)
+        if len(buffer) > limit:
+            raise HTTPException(status_code=status_code, detail=detail)
+
+
 async def _store_upload(
     db: Session,
     request: Request,
@@ -387,26 +379,33 @@ async def _store_upload(
     captured_at: str | None = None,
     captured_at_source: str | None = None,
 ) -> Attachment:
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(status_code=413, detail="File exceeds the 100 MB limit (M.3)")
+    content = await read_bounded(file, MAX_FILE_SIZE_BYTES, 413, "File exceeds the 100 MB limit (M.3)")
     if not content:
         raise HTTPException(status_code=422, detail="Empty file")
 
     _validate_signatory_if_given(db, doc_type, doc_id, tag, signatory_name, signatory_designation)
 
-    original_filename = _safe_filename(file.filename)
-    extension = Path(original_filename).suffix.lower()
-    if extension in BLOCKED_ATTACHMENT_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Files of type {extension} can't be attached because they can run or open as a web page -- "
-            "send a PDF or an image instead",
-        )
+    try:
+        original_filename = upload_policy.check_filename(file.filename)
+    except upload_policy.PolicyViolation as violation:
+        raise HTTPException(status_code=violation.status_code, detail=violation.detail)
 
     sha256 = hashlib.sha256(content).hexdigest()
     dest = _storage_dir(doc_type, doc_id) / f"{uuid.uuid4()}_{original_filename}"
-    dest.write_bytes(content)
+    part = dest.with_name(dest.name + ".part")
+    part.write_bytes(content)
+    try:
+        upload_policy.inspect_file(part, original_filename)  # content signature + optional scanner (quarantines)
+        upload_policy.lock_quota(db)  # held until the caller's commit, so the cap below cannot be raced past
+        upload_policy.enforce_storage_cap(db, len(content))
+    except upload_policy.PolicyViolation as violation:
+        part.unlink(missing_ok=True)
+        db.rollback()
+        raise HTTPException(status_code=violation.status_code, detail=violation.detail)
+    except Exception:
+        part.unlink(missing_ok=True)
+        raise
+    part.replace(dest)
 
     attachment = Attachment(
         doc_type=doc_type,
@@ -504,7 +503,13 @@ def download_attachment(
     path = Path(attachment.storage_path)
     if not path.exists():
         raise HTTPException(status_code=410, detail="Stored file is missing from disk")
-    return FileResponse(path, filename=attachment.original_filename)
+    # The stored bytes are served exactly as uploaded (a signed original is never altered), as a download only,
+    # with headers that stop a browser from sniffing or rendering it.
+    return FileResponse(
+        path, filename=attachment.original_filename,
+        media_type=upload_policy.download_media_type(attachment.original_filename),
+        headers=upload_policy.download_headers(),
+    )
 
 
 @attachments_router.post("/{attachment_id}/supersede", response_model=AttachmentOut, status_code=201)

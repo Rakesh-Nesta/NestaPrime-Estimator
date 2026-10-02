@@ -15,6 +15,7 @@ project, which none of those files individually can."""
 import io
 
 from pypdf import PdfReader
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -100,7 +101,7 @@ def _upload_evidence(client, headers, doc_type, doc_id, strength="informal"):
     res = client.post(
         "/attachments",
         data={"doc_type": doc_type, "doc_id": doc_id, "tag": "approval_evidence", "approval_strength": strength},
-        files={"file": ("evidence.png", b"screenshot bytes", "image/png")},
+        files={"file": ("evidence.png", valid_png(), "image/png")},
         headers=headers,
     )
     assert res.status_code == 201, res.text

@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     # future S3 migration only needs to change how attachments.py reads/
     # writes bytes, not this setting's meaning.
     attachment_storage_root: str = "uploads"
+    # Upload hardening (app/core/upload_policy.py). Global ceiling on stored attachment bytes plus open upload
+    # declarations (0 disables it). Optional malware scanner run as `<command> <file>` (exit 0 clean, 1 infected,
+    # anything else = failed => the upload is refused). With upload_scan_required=true and no command, uploads are
+    # refused until one is configured.
+    attachment_storage_cap_bytes: int = 50 * 1024 * 1024 * 1024
+    upload_scan_command: str = ""
+    upload_scan_required: bool = False
+    upload_scan_timeout_seconds: int = 120
 
     # Amendment 8 (Section 8): the company's self-hosted WhatsApp backend
     # (wa-gateway -- Baileys/WhatsApp Web protocol, not a paid BSP).

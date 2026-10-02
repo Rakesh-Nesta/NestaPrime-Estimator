@@ -2,6 +2,7 @@ import io
 
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -56,7 +57,7 @@ def _upload_photo(client, headers, survey_id, filename="photo1.jpg"):
     res = client.post(
         "/attachments",
         data={"doc_type": "site_survey", "doc_id": survey_id, "tag": "photo"},
-        files={"file": (filename, io.BytesIO(b"fake jpg bytes"), "image/jpeg")},
+        files={"file": (filename, io.BytesIO(valid_jpeg()), "image/jpeg")},
         headers=headers,
     )
     assert res.status_code == 201, res.text

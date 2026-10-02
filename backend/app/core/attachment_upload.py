@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core import upload_policy
 from app.models.attachment import Attachment
 from app.models.attachment_upload_session import (
     AttachmentUploadChunk,
@@ -108,12 +109,19 @@ def start_session(
 ) -> AttachmentUploadSession:
     if declared_size <= 0 or declared_size > MAX_FILE_SIZE_BYTES:
         raise UploadProtocolError(413, "declared_size must be > 0 and within the 100 MB limit (M.3)")
-    if chunk_size <= 0:
-        raise UploadProtocolError(422, "chunk_size must be positive")
     if len(declared_sha256) != 64:
         raise UploadProtocolError(422, "declared_sha256 is required for the chunked upload path")
-
-    total_chunks = (declared_size + chunk_size - 1) // chunk_size
+    try:
+        upload_policy.check_filename(filename)  # the SAME policy as the ordinary and supersede paths
+        total_chunks = upload_policy.validate_chunking(declared_size, chunk_size)
+        # Limits are enforced under one advisory transaction lock, held until the commit below, so concurrent
+        # starts cannot jointly exceed them (count-then-insert without the lock is a race).
+        upload_policy.lock_quota(db)
+        upload_policy.enforce_open_session_limits(db, current_user.id, declared_size)
+        upload_policy.enforce_storage_cap(db, declared_size)
+    except upload_policy.PolicyViolation as violation:
+        db.rollback()
+        raise UploadProtocolError(violation.status_code, violation.detail)
     session = AttachmentUploadSession(
         doc_type=doc_type, doc_id=doc_id, filename=filename, declared_size=declared_size,
         declared_sha256=declared_sha256.lower(), chunk_size=chunk_size, total_chunks=total_chunks,
@@ -293,6 +301,12 @@ def assemble_and_validate(db: Session, session_id: uuid.UUID, attempt_token: int
     cannot fix it)."""
     session = db.get(AttachmentUploadSession, session_id)
     assembled_path = _assembly_temp_path(session_id, attempt_token)
+    try:
+        # A session opened BEFORE the filename policy existed is held to it now, exactly like a new one.
+        upload_policy.check_filename(session.filename)
+    except upload_policy.PolicyViolation as violation:
+        _fail_attempt(db, session_id, attempt_token)
+        raise UploadProtocolError(violation.status_code, violation.detail)
     hasher = hashlib.sha256()
     with open(assembled_path, "wb") as out:
         for index in range(session.total_chunks):
@@ -308,7 +322,57 @@ def assemble_and_validate(db: Session, session_id: uuid.UUID, attempt_token: int
         db.commit()
         assembled_path.unlink(missing_ok=True)
         raise UploadProtocolError(422, "Assembled file does not match declared_sha256 -- upload failed")
+    try:
+        upload_policy.inspect_file(assembled_path, session.filename)  # signature + optional scanner (quarantines)
+    except upload_policy.PolicyViolation as violation:
+        assembled_path.unlink(missing_ok=True)
+        if violation.status_code == 503:
+            raise UploadProtocolError(503, violation.detail)  # scanner unavailable: retriable, session left as is
+        _fail_attempt(db, session_id, attempt_token)
+        raise UploadProtocolError(violation.status_code, violation.detail)
     return assembled_path
+
+
+def _fail_attempt(db: Session, session_id: uuid.UUID, attempt_token: int) -> None:
+    """Fenced move to 'failed' (the received bytes can never become an acceptable attachment)."""
+    db.query(AttachmentUploadSession).filter(
+        AttachmentUploadSession.id == session_id,
+        AttachmentUploadSession.status == UploadSessionStatus.COMPLETING.value,
+        AttachmentUploadSession.completion_attempt == attempt_token,
+    ).update({"status": UploadSessionStatus.FAILED.value})
+    db.commit()
+    _assembly_temp_path(session_id, attempt_token).unlink(missing_ok=True)
+
+
+def _reauthorize_at_finalization(db: Session, session: AttachmentUploadSession, current_user) -> None:
+    """Fresh permission checks INSIDE the finalization transaction, with the rows they depend on locked until its
+    commit. A check followed by an unlocked commit leaves a race, so the project (ownership) and the user (active,
+    role) are taken FOR SHARE: a concurrent deactivation / role change / reassignment either commits first (and is
+    seen here, refusing the upload) or waits until this commit. Lock order matches the rest of the app: project,
+    then user. Raises UploadProtocolError: 401 inactive account, 403 role no longer permitted, 404 no longer visible."""
+    from fastapi import HTTPException
+
+    from app.api.attachments import _require_doc_type_role
+    from app.core import ownership
+    from app.models.project import Project
+    from app.models.setting import DocumentType
+    from app.models.user import User
+
+    project_id = ownership.project_id_for_document(db, session.doc_type, session.doc_id)
+    if project_id is not None:
+        db.execute(
+            select(Project).where(Project.id == project_id).with_for_update(read=True).execution_options(populate_existing=True)
+        )
+    fresh = db.execute(
+        select(User).where(User.id == current_user.id).with_for_update(read=True).execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if fresh is None or not fresh.is_active:
+        raise UploadProtocolError(401, "This account is no longer active")
+    try:
+        _require_doc_type_role(db, DocumentType(session.doc_type), fresh)
+        ownership.require_visible_document(db, fresh, session.doc_type, session.doc_id)
+    except HTTPException as exc:
+        raise UploadProtocolError(exc.status_code, str(exc.detail))
 
 
 def finalize_completion(
@@ -333,6 +397,13 @@ def finalize_completion(
     ):
         db.rollback()
         raise UploadProtocolError(409, "This completion attempt was superseded before it could finish")
+
+    try:
+        _reauthorize_at_finalization(db, session, current_user)
+    except UploadProtocolError:
+        db.rollback()
+        assembled_path.unlink(missing_ok=True)  # nothing was placed or committed
+        raise
 
     final_path = final_attachment_path(session.doc_type, session.doc_id, session.filename, session.id, attempt_token)
     os.replace(assembled_path, final_path)  # step 3 -- the file now exists at its final path

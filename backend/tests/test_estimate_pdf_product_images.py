@@ -128,20 +128,31 @@ def test_only_the_latest_non_superseded_image_is_embedded(client, director_user)
     assert _embedded_image_count(pdf_res) == 1
 
 
-def test_corrupt_image_file_does_not_break_pdf_generation(client, director_user):
-    """The upload endpoint doesn't validate image content, only extension
-    and size (M.3) -- a malformed file must degrade to 'no image', never
-    crash the whole PDF."""
+def _damage_stored_file(db_session, attachment_id):
+    import uuid
+    from pathlib import Path
+
+    from app.models.attachment import Attachment
+
+    row = db_session.get(Attachment, uuid.UUID(attachment_id))
+    Path(row.storage_path).write_bytes(b"this is not a valid PNG file at all")
+
+
+def test_corrupt_image_file_does_not_break_pdf_generation(client, director_user, db_session):
+    """A corrupt image can no longer be uploaded (content is validated), but one that is already stored -- legacy
+    data, or damage on disk -- must still degrade to 'no image', never crash the whole PDF. The valid upload is
+    damaged on disk to reproduce that."""
     headers = _director_headers(client, director_user)
     estimate = _draft_estimate(client, headers)
     option_id = estimate["options"][0]["id"]
     res = client.post(
         "/attachments",
         data={"doc_type": "estimate_option", "doc_id": option_id, "tag": "product_image"},
-        files={"file": ("not_really_a.png", io.BytesIO(b"this is not a valid PNG file at all"), "image/png")},
+        files={"file": ("not_really_a.png", io.BytesIO(_TINY_PNG), "image/png")},
         headers=headers,
     )
     assert res.status_code == 201, res.text
+    _damage_stored_file(db_session, res.json()["id"])
 
     pdf_res = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
     assert pdf_res.status_code == 200

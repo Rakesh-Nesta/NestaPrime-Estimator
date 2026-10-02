@@ -7,6 +7,7 @@ import importlib.util
 import io
 import uuid
 from pathlib import Path
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "delete_confirmed_test_records.py"
 
@@ -78,7 +79,7 @@ def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(cl
     att = client.post(
         "/attachments",
         data={"doc_type": "work_order", "doc_id": work_order["id"], "tag": "signed_document"},
-        files={"file": ("wo.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+        files={"file": ("wo.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=headers,
     )
     assert att.status_code == 201, att.text
@@ -133,7 +134,7 @@ def test_deletes_the_named_client_and_everything_under_it_leaves_others_alone(cl
     assert db_session.query(Estimate).filter(Estimate.id == uuid.UUID(safe_estimate["id"])).first() is not None
 
 
-def test_deletes_a_completed_upload_session_and_its_stages_without_fk_error(client, director_user, db_session):
+def test_deletes_a_completed_upload_session_and_its_stages_without_fk_error(client, director_user, db_session, monkeypatch):
     """Found while auditing the script for P4's new FK paths: project_construction_stages (every
     project now seeds 6 of them) and attachment_upload_sessions.resulting_attachment_id (a
     completed chunked upload points straight at an Attachment row) can each block a delete with
@@ -154,12 +155,15 @@ def test_deletes_a_completed_upload_session_and_its_stages_without_fk_error(clie
         f"/projects/{project_id}/cost-sheets", json={"cost_total": 100000}, headers=headers
     ).json()["id"]
 
+    from app.core import upload_policy
+
+    monkeypatch.setattr(upload_policy, "MIN_CHUNK_BYTES", 1)  # this test exercises deletion with 30-byte chunks
     content = b"A" * 30 + b"B" * 10  # 2 chunks of 30/10 against chunk_size=30
     sha = hashlib.sha256(content).hexdigest()
     session = client.post(
         "/attachments/upload-sessions",
         json={
-            "doc_type": "cost_sheet", "doc_id": cost_sheet_id, "filename": "evidence.bin",
+            "doc_type": "cost_sheet", "doc_id": cost_sheet_id, "filename": "evidence.txt",
             "declared_size": len(content), "declared_sha256": sha, "chunk_size": 30,
         },
         headers=headers,
