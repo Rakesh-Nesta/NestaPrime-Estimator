@@ -1,5 +1,6 @@
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -187,7 +188,7 @@ def test_no_waiver_entry_when_real_evidence_is_used_instead(client, director_use
     client.post(
         "/attachments",
         data={"doc_type": "estimate", "doc_id": estimate_id, "tag": "approval_evidence", "approval_strength": "formal"},
-        files={"file": ("evidence.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+        files={"file": ("evidence.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=headers,
     )
     client.patch(

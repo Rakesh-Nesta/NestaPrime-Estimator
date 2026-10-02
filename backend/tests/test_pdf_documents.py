@@ -5,6 +5,7 @@ from pypdf import PdfReader
 
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -382,7 +383,7 @@ def test_quotation_pdf_omits_reference_images_section_when_no_photos(client, dir
     assert "Reference Images" not in text
 
 
-def test_quotation_pdf_skips_a_corrupt_photo_attachment_without_crashing(client, director_user):
+def test_quotation_pdf_skips_a_corrupt_photo_attachment_without_crashing(client, director_user, db_session):
     """Mirrors _product_image_flowable's own documented behavior: a
     photo-tagged attachment that isn't actually a readable image is
     silently left out rather than breaking PDF generation."""
@@ -392,10 +393,16 @@ def test_quotation_pdf_skips_a_corrupt_photo_attachment_without_crashing(client,
     res = client.post(
         "/attachments",
         data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
-        files={"file": ("not-really-a-photo.png", b"this is not a real png file", "image/png")},
+        files={"file": ("not-really-a-photo.png", valid_png(), "image/png")},  # valid at upload; damaged on disk below
         headers=headers,
     )
     assert res.status_code == 201, res.text
+    import uuid
+    from pathlib import Path
+
+    from app.models.attachment import Attachment
+
+    Path(db_session.get(Attachment, uuid.UUID(res.json()["id"])).storage_path).write_bytes(b"this is not a real png file")
 
     res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
     assert res.status_code == 200

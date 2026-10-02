@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DataError
 
+from app.core.body_limit import BodyLimitMiddleware
 from app.config import settings as app_settings
 from app.core.ownership import enforce_own_records
 
@@ -79,6 +80,8 @@ from app.api import (
 # Amendment 60 (Section 63): the by-id half of own-records visibility applies to every route, in one place.
 app = FastAPI(title="NestaPrime Estimator API", version="0.1.0", dependencies=[Depends(enforce_own_records)])
 
+# Upload body ceiling (before multipart parsing); added first so CORS stays outermost and wraps its 413s.
+app.add_middleware(BodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in app_settings.cors_origins.split(",") if o.strip()],

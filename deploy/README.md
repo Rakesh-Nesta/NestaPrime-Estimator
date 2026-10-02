@@ -479,6 +479,37 @@ Director/Admin can also check `GET /notifications/delivery-failures` in the app 
 email that's exhausted its retries (5 attempts) and needs a human look (usually an SMTP
 config or a stale recipient address, not a code problem).
 
+## Upload hardening: policy, limits and cleanup
+
+**Policy (one for ordinary upload, supersede and resumable completion -- including sessions opened before the
+policy existed):** only supported business formats are accepted (PDF, PNG/JPG/GIF/WebP/HEIC, DOCX/XLSX/PPTX,
+DOC/XLS/PPT, EML, DWG, MP4/MOV/M4V, TXT, CSV); pages and executables (.html, .svg, .js, .exe, ...) are refused (400),
+other types 415, and the bytes must match the extension (415). Stored files are never modified, so a signed original
+downloads exactly as uploaded -- as an attachment, `nosniff`, with a sandboxing CSP.
+
+**Limits (proposed values, pending business acceptance -- all in `backend/app/core/upload_policy.py`):** chunks
+64 KiB-16 MiB (a single-chunk file may be smaller), at most 2,048 chunks, 10 open sessions and 500 MiB of declared bytes
+per user (429), a global storage ceiling `ATTACHMENT_STORAGE_CAP_BYTES` (default 50 GiB, 413; `0` disables). Quota
+decisions are serialized by a Postgres advisory lock, so concurrent requests cannot jointly exceed them. Request bodies
+are cut off at the route's ceiling before the multipart body is parsed.
+
+**Malware scanning:** none is installed. The hook is `UPLOAD_SCAN_COMMAND` (run as `<command> <file>`; exit 0 clean,
+1 infected, anything else = scanner failure). A failed scan refuses the upload (fail closed); an infected file is moved
+to `<attachment root>/_quarantine/` and nothing serves from there. Set `UPLOAD_SCAN_REQUIRED=true` to refuse all
+uploads until a scanner is configured. Reviewing/clearing quarantined files is a manual operator step.
+
+**Cleanup scheduling -- documented, NOT activated by this change.** Abandoned sessions hold quota until they are purged
+(24 h idle). The job is `deploy/cleanup_upload_sessions.sh` (runs the sweep, prints a JSON health line, writes a
+heartbeat file). Proposed entry, to be added deliberately by an operator:
+
+```cron
+*/15 * * * * /home/ubuntu/NestaPrime-Estimator/deploy/cleanup_upload_sessions.sh >> /home/ubuntu/nestaprime-backups/upload-cleanup.log 2>&1
+```
+
+Monitor: alert if `upload-cleanup.heartbeat` is older than ~1 hour, if `open_sessions` stays at a user-limit multiple,
+if `stored_attachment_bytes` approaches `storage_cap_bytes`, or if `quarantined_files` is non-zero. `--dry-run` previews
+the sweep; `--report` prints health only.
+
 ## What's deliberately not here yet
 
 - **HTTPS** -- serving plain HTTP on the IP directly; no domain name to get a TLS cert

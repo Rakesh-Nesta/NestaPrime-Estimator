@@ -1,5 +1,6 @@
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -250,7 +251,7 @@ def test_sales_cannot_attach_to_cost_sheet_when_mode_is_off(client, director_use
     res = client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": cost_sheet_id, "tag": "vendor_quote"},
-        files={"file": ("quote.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+        files={"file": ("quote.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=sales_headers,
     )
     assert res.status_code == 403
@@ -269,7 +270,7 @@ def test_sales_can_attach_vendor_quote_when_mode_is_on(client, director_user, db
     res = client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": cost_sheet_id, "tag": "vendor_quote"},
-        files={"file": ("quote.pdf", io.BytesIO(b"%PDF-1.4 fake"), "application/pdf")},
+        files={"file": ("quote.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=sales_headers,
     )
     assert res.status_code == 201, res.text

@@ -7,6 +7,7 @@ import pytest
 from app.core.project_stages import CONSTRUCTION_PHASES
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -64,7 +65,7 @@ def _upload_stage_evidence(client, headers, stage_id, filename="site.jpg"):
     return client.post(
         "/attachments",
         data={"doc_type": "project_stage", "doc_id": stage_id, "tag": "photo"},
-        files={"file": (filename, b"photo bytes", "image/jpeg")},
+        files={"file": (filename, valid_jpeg(), "image/jpeg")},
         headers=headers,
     )
 

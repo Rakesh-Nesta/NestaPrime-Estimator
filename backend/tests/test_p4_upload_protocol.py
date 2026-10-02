@@ -22,6 +22,7 @@ from app.models.attachment import Attachment
 from app.models.attachment_upload_session import AttachmentUploadChunk, AttachmentUploadSession
 from app.models.user import User, UserRole
 from tests.conftest import TestingSessionLocal
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -59,13 +60,22 @@ def _draft_cost_sheet(client, headers):
     return res.json()["id"]
 
 
+@pytest.fixture(autouse=True)
+def _protocol_tests_use_tiny_chunks(monkeypatch):
+    """These tests exercise the chunk PROTOCOL with 30-byte chunks. The production minimum chunk size (64 KiB) is
+    asserted in tests/test_upload_hardening.py; here it is relaxed for this module only."""
+    from app.core import upload_policy
+
+    monkeypatch.setattr(upload_policy, "MIN_CHUNK_BYTES", 1)
+
+
 CONTENT = b"A" * 30 + b"B" * 30 + b"C" * 10  # 3 chunks of size 30/30/10 against chunk_size=30
 DECLARED_SHA256 = hashlib.sha256(CONTENT).hexdigest()
 
 
 def _start_session(db_session, current_user, doc_type="cost_sheet", doc_id=None, declared_size=70, chunk_size=30, sha=None):
     return core.start_session(
-        db_session, current_user, doc_type, doc_id, "evidence.bin", declared_size, sha or DECLARED_SHA256, chunk_size,
+        db_session, current_user, doc_type, doc_id, "evidence.txt", declared_size, sha or DECLARED_SHA256, chunk_size,
     )
 
 
@@ -773,7 +783,7 @@ def _start_session_http(client, headers, doc_type, doc_id, declared_size=70, chu
     res = client.post(
         "/attachments/upload-sessions",
         json={
-            "doc_type": doc_type, "doc_id": str(doc_id), "filename": "evidence.bin",
+            "doc_type": doc_type, "doc_id": str(doc_id), "filename": "evidence.txt",
             "declared_size": declared_size, "declared_sha256": sha or DECLARED_SHA256, "chunk_size": chunk_size,
         },
         headers=headers,
@@ -1080,7 +1090,7 @@ def _reviewed_stage(client, headers):
     stage_id = sorted(stages, key=lambda s: s["phase"])[0]["id"]
     up = client.post(
         "/attachments", data={"doc_type": "project_stage", "doc_id": stage_id, "tag": "photo"},
-        files={"file": ("first.jpg", b"first evidence", "image/jpeg")}, headers=headers,
+        files={"file": ("first.jpg", valid_jpeg(), "image/jpeg")}, headers=headers,
     )
     assert up.status_code == 201, up.text
     sub = client.post(f"/stages/{stage_id}/submit", headers=headers)
@@ -1184,7 +1194,7 @@ def test_resumable_completion_stage_audit_failure_rolls_back_everything(client, 
     # The final-path file itself (step 3 already ran before the audit write in step 4's own
     # transaction) is a real, expected orphan -- not the database's problem, cleanup's.
     final_path = core.final_attachment_path(
-        "project_stage", uuid.UUID(stage_id), "evidence.bin", uuid.UUID(session["id"]), 1,
+        "project_stage", uuid.UUID(stage_id), "evidence.txt", uuid.UUID(session["id"]), 1,
     )
     assert final_path.exists()
 
