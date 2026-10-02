@@ -116,6 +116,13 @@ def _require_doc_type_role(db: Session, doc_type: DocumentType, current_user) ->
         )
 
 
+def require_doc_type_write_access(doc_type: DocumentType, current_user) -> None:
+    """Hook for a document type whose WRITE roles are narrower than the roles that may attach to it at all. None on this
+    branch; resumable-upload finalization calls it so a write check made when a session was opened is repeated, on the
+    user as they are NOW, when the attachment is committed. (The P5 Agreement rules plug in here: PM/Director only.)"""
+    return None
+
+
 def _get_document_or_404(db: Session, doc_type: DocumentType, doc_id: uuid.UUID):
     model = _DOC_TABLE[doc_type]
     document = db.query(model).filter(model.id == doc_id).first()

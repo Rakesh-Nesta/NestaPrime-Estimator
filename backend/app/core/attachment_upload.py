@@ -352,7 +352,7 @@ def _reauthorize_at_finalization(db: Session, session: AttachmentUploadSession, 
     then user. Raises UploadProtocolError: 401 inactive account, 403 role no longer permitted, 404 no longer visible."""
     from fastapi import HTTPException
 
-    from app.api.attachments import _require_doc_type_role
+    from app.api.attachments import _require_doc_type_role, require_doc_type_write_access
     from app.core import ownership
     from app.models.project import Project
     from app.models.setting import DocumentType
@@ -370,6 +370,7 @@ def _reauthorize_at_finalization(db: Session, session: AttachmentUploadSession, 
         raise UploadProtocolError(401, "This account is no longer active")
     try:
         _require_doc_type_role(db, DocumentType(session.doc_type), fresh)
+        require_doc_type_write_access(DocumentType(session.doc_type), fresh)
         ownership.require_visible_document(db, fresh, session.doc_type, session.doc_id)
     except HTTPException as exc:
         raise UploadProtocolError(exc.status_code, str(exc.detail))
