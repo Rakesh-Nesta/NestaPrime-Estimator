@@ -90,3 +90,14 @@ def valid_ole() -> bytes:
     struct.pack_into("<I", header, 44, 1)  # one FAT sector
     struct.pack_into("<I", header, 48, 1)  # directory starts at sector 1
     return bytes(header) + b"\x00" * 512 * 2
+
+
+def content_for(filename: str, default: bytes = b"hello world") -> bytes:
+    """Genuinely valid content for the filename's extension (plain text for anything else)."""
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    builders = {
+        "pdf": valid_pdf, "png": valid_png, "jpg": valid_jpeg, "jpeg": valid_jpeg, "gif": valid_gif, "xlsx": valid_xlsx,
+        "docx": valid_docx, "eml": valid_eml, "mp4": valid_mp4, "mov": valid_mp4, "m4v": valid_mp4, "dwg": valid_dwg,
+        "dxf": valid_dxf, "doc": valid_ole, "xls": valid_ole, "ppt": valid_ole,
+    }
+    return builders[extension]() if extension in builders else default
