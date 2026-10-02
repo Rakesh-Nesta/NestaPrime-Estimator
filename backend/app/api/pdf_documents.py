@@ -36,6 +36,7 @@ from app.api.schedule import get_schedule
 from app.api.settings import get_current_setting_value
 from app.api.sports import _dimension_deviations, _worst_deviation_status
 from app.core.auth import require_roles
+from app.core.upload_validators import MAX_IMAGE_PIXELS as MAX_EMBED_PIXELS  # embedded images are held to the upload ceiling
 from app.db.session import get_db
 from app.models.attachment import Attachment, AttachmentTag
 from app.models.client import Client, ClientType
@@ -281,6 +282,8 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         # try/except, so a bad file is caught here instead of crashing
         # PDF generation for the whole document.
         with PILImage.open(path) as pil_image:
+            if not _within_embed_budget(pil_image):
+                return ""
             pil_image.load()
         reader = ImageReader(str(path))
         original_width, original_height = reader.getSize()
@@ -288,6 +291,13 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         return Image(str(path), width=original_width * scale, height=original_height * scale)
     except Exception:
         return ""
+
+
+def _within_embed_budget(pil_image) -> bool:
+    """Generated PDFs decode every embedded image in full (measured: ~0.7 GB and ~11 s for one 50 Mpx image, ~1.3 GB and
+    ~22 s at 100 Mpx). Images stored BEFORE the upload ceiling existed can exceed it, so an image over the ceiling is
+    left out of the PDF (the same graceful skip as a corrupt one) rather than decoded."""
+    return pil_image.width * pil_image.height <= MAX_EMBED_PIXELS
 
 
 def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: float, max_height: float) -> list:
@@ -317,6 +327,8 @@ def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: 
             continue
         try:
             with PILImage.open(path) as pil_image:
+                if not _within_embed_budget(pil_image):
+                    continue
                 pil_image.load()
             reader = ImageReader(str(path))
             original_width, original_height = reader.getSize()

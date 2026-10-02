@@ -453,9 +453,10 @@ config or a stale recipient address, not a code problem).
 ## Upload hardening: policy, limits and cleanup
 
 **Policy (one for ordinary upload, supersede and resumable completion -- including sessions opened before the
-policy existed):** only supported business formats are accepted (PDF, PNG/JPG/GIF/WebP/HEIC, DOCX/XLSX/PPTX,
-DOC/XLS/PPT, EML, DWG, MP4/MOV/M4V, TXT, CSV); pages and executables (.html, .svg, .js, .exe, ...) are refused (400),
-other types 415, and the bytes must match the extension (415). Stored files are never modified, so a signed original
+policy existed):** only supported business formats are accepted (PDF, PNG/JPG/GIF/WebP/BMP/TIFF/HEIC, DOCX/XLSX/PPTX,
+DOC/XLS/PPT, EML, DWG, DXF, MP4/MOV/M4V, TXT, CSV); pages and executables (.html, .svg, .js, .exe, ...) are refused (400),
+other types 415, and the file must PARSE as its type (415) -- a matching header alone is not enough. Parsing is not
+malware scanning. Full detail, limits table and stated validator limits: `docs/security/upload-hardening.md`. Stored files are never modified, so a signed original
 downloads exactly as uploaded -- as an attachment, `nosniff`, with a sandboxing CSP.
 
 **Limits (proposed values, pending business acceptance -- all in `backend/app/core/upload_policy.py`):** chunks

@@ -327,7 +327,8 @@ def assemble_and_validate(db: Session, session_id: uuid.UUID, attempt_token: int
     except upload_policy.PolicyViolation as violation:
         assembled_path.unlink(missing_ok=True)
         if violation.status_code == 503:
-            raise UploadProtocolError(503, violation.detail)  # scanner unavailable: retriable, session left as is
+            _release_attempt(db, session_id, attempt_token)  # scanner unavailable: the session goes back to uploading
+            raise UploadProtocolError(503, violation.detail)
         _fail_attempt(db, session_id, attempt_token)
         raise UploadProtocolError(violation.status_code, violation.detail)
     return assembled_path
@@ -342,6 +343,22 @@ def _fail_attempt(db: Session, session_id: uuid.UUID, attempt_token: int) -> Non
     ).update({"status": UploadSessionStatus.FAILED.value})
     db.commit()
     _assembly_temp_path(session_id, attempt_token).unlink(missing_ok=True)
+
+
+def _release_attempt(db: Session, session_id: uuid.UUID, attempt_token: int) -> None:
+    """Move back to 'uploading' so the client can retry completion at once (all chunks are still accepted). The token is
+    bumped in the SAME statement as the status change (the pattern recover_stuck_sessions uses), so the attempt that was
+    just released can never commit afterwards: its token no longer matches and finalize_completion's fence refuses it."""
+    db.execute(
+        AttachmentUploadSession.__table__.update()
+        .where(
+            AttachmentUploadSession.id == session_id,
+            AttachmentUploadSession.status == UploadSessionStatus.COMPLETING.value,
+            AttachmentUploadSession.completion_attempt == attempt_token,
+        )
+        .values(status=UploadSessionStatus.UPLOADING.value, completion_attempt=AttachmentUploadSession.completion_attempt + 1)
+    )
+    db.commit()
 
 
 def _reauthorize_at_finalization(db: Session, session: AttachmentUploadSession, current_user) -> None:

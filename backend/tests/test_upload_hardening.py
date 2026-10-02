@@ -1060,7 +1060,9 @@ def test_an_unavailable_scanner_leaves_a_resumable_session_retriable_not_failed(
     monkeypatch.setitem(settings.__dict__, "upload_scan_command", "")  # the scanner is restored / disabled
     db.rollback()
     db.expire_all()
-    assert db.get(AttachmentUploadSession, uuid.UUID(sid)).status != "failed"
+    assert db.get(AttachmentUploadSession, uuid.UUID(sid)).status == "uploading"  # not failed, not stuck completing
+    retry = _complete(client, h, sid)  # with the scanner disabled again, the very same session completes
+    assert retry.status_code == 200, (retry.status_code, retry.text[:120])
 
 
 # ================================================================== 8. quarantine
@@ -1279,3 +1281,48 @@ def test_no_parser_is_given_unsupported_input_by_accident(tmp_path):
 
     for extension in sorted(upload_policy.SUPPORTED_EXTENSIONS):
         _refused(tmp_path, f"empty{extension}", b"", expect="empty")
+
+
+# ================================================================== 11. scanner unavailability keeps the completion FENCE intact
+
+
+def test_scanner_unavailable_creates_nothing_and_the_released_attempt_can_never_commit_afterwards(world, db_session, monkeypatch):
+    """Returning the session to 'uploading' bumps completion_attempt in the same statement, so a stale worker still
+    holding the old token (and its own assembled copy) is refused by finalize_completion's fence. Nothing is created
+    by the scanner failure itself: no Attachment, no stage change, no success receipt."""
+    uploader = make_user(db_session, "site_engineer")
+    uploader_id = uploader.id
+    headers = user_headers(world["client"], uploader)
+    started = _start(world["client"], headers, "project_stage", world["stage_id"], "evidence.pdf", PDF)
+    session_id = uuid.UUID(started.json()["id"])
+    _put_chunks(world["client"], headers, session_id, PDF, len(PDF))
+    monkeypatch.setitem(settings.__dict__, "upload_scan_command", "this-scanner-does-not-exist-anywhere")
+    before = _state(db_session)
+
+    setup = Session()
+    try:
+        old_token = upload_core.start_completion(setup, session_id)
+        with pytest.raises(upload_core.UploadProtocolError) as unavailable:
+            upload_core.assemble_and_validate(setup, session_id, old_token)
+    finally:
+        setup.close()
+    assert unavailable.value.status_code == 503
+    # a stale worker that had already assembled its own copy under the OLD token
+    stale_copy = upload_core._assembly_temp_path(session_id, old_token)
+    stale_copy.write_bytes(PDF)
+
+    assert _state(db_session) == before  # no Attachment row, no stage change, nothing placed on disk
+    row = db_session.execute(text(
+        "SELECT status, completion_attempt, resulting_attachment_id FROM attachment_upload_sessions WHERE id = :i"),
+        {"i": str(session_id)}).one()
+    assert row.status == "uploading" and row.completion_attempt == old_token + 1 and row.resulting_attachment_id is None
+
+    stale = Op(_finalize_fn(session_id, old_token, stale_copy, uploader_id)).start().join()
+    assert isinstance(stale.exc, upload_core.UploadProtocolError) and stale.exc.status_code == 409, stale.exc
+    assert _state(db_session) == before  # the stale worker committed nothing
+    db_session.rollback()
+    assert db_session.execute(text("SELECT resulting_attachment_id FROM attachment_upload_sessions WHERE id = :i"),
+                              {"i": str(session_id)}).scalar() is None  # and no success receipt
+
+    monkeypatch.setitem(settings.__dict__, "upload_scan_command", "")  # the scanner is restored: the session completes
+    assert _complete(world["client"], headers, str(session_id)).status_code == 200

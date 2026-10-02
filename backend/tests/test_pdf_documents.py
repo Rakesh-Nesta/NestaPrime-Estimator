@@ -676,3 +676,24 @@ def test_detailed_setup_quotation_pdf_omits_the_blind_quoting_assumptions(client
 
     assert "simplified (Quick) setup" not in text
     assert "Site address to be confirmed before survey" not in text
+
+
+def test_quotation_pdf_leaves_out_a_stored_image_over_the_embed_budget_instead_of_decoding_it(client, director_user, monkeypatch):
+    """Downstream processing, not validation: generated PDFs decode every embedded image in full. Images stored before the
+    upload pixel ceiling existed can exceed it, so PDF generation skips an over-budget image (like a corrupt one)."""
+    import app.api.pdf_documents as pdf_module
+
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+    res = client.post(
+        "/attachments", data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
+        files={"file": ("site-layout.png", _png_bytes(), "image/png")}, headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    ok = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert "Reference Images" in _pdf_text(ok)  # within budget: embedded as before
+
+    monkeypatch.setattr(pdf_module, "MAX_EMBED_PIXELS", 1)  # the same image is now over budget
+    skipped = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert skipped.status_code == 200 and skipped.content[:4] == b"%PDF"
+    assert "Reference Images" not in _pdf_text(skipped)
