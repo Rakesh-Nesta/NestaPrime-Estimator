@@ -20,6 +20,8 @@ import {
   createSkipRequest,
   createWorkOrder,
   downloadEstimatePdfBlob,
+  getPdfCheck,
+  PdfExportError,
   downloadQuotationPdfBlob,
   getL1View,
   getProjectReadiness,
@@ -52,6 +54,7 @@ import {
   updateWorkOrderStatus,
   verifyCostSheet,
 } from "./api";
+import PdfExportProblem from "./PdfExportProblem.jsx";
 
 function downloadBlobAsFile(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -655,18 +658,36 @@ function EstimatePanel({
   const [waiverReasons, setWaiverReasons] = useState({});
   const [rejectionReasons, setRejectionReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
+  const [pdfProblem, setPdfProblem] = useState(null);
+  const [pdfPending, setPdfPending] = useState(false);
   const [openReviseFor, setOpenReviseFor] = useState(null);
   const [reviseDrafts, setReviseDrafts] = useState({}); // estimateId -> { costs: {optionId: value}, refresh_pricing }
   const canWaive = role === "pm" || role === "director";
   const canRevise = role === "pm" || role === "director";
 
   async function handleDownloadPdf(estimate) {
+    if (pdfPending) return; // no duplicate requests while one is in flight
     setPdfError("");
+    setPdfProblem(null);
+    setPdfPending(true);
     try {
+      // Preview first so the user sees every image that cannot be included BEFORE a download is attempted; generation
+      // checks again (and refuses) regardless, so this preview is a convenience, not the safeguard.
+      const check = await getPdfCheck(token, "estimate", estimate.id);
+      if (!check.complete) {
+        setPdfProblem({ docId: estimate.id, record: estimate, kind: "excluded", excluded: check.excluded });
+        return;
+      }
       const blob = await downloadEstimatePdfBlob(token, estimate.id);
       downloadBlobAsFile(blob, `${estimate.document_no}.pdf`);
     } catch (err) {
-      setPdfError(err.message);
+      if (err instanceof PdfExportError) {
+        setPdfProblem({ docId: estimate.id, record: estimate, kind: err.kind, excluded: err.excluded });
+      } else {
+        setPdfError(err.message);
+      }
+    } finally {
+      setPdfPending(false);
     }
   }
   const sportNameByProjectSportId = Object.fromEntries(
@@ -724,6 +745,17 @@ function EstimatePanel({
       <h3 className="text-sm font-semibold text-text-secondary">Estimate (M.1 stage 2)</h3>
       <StageHint text={estimateHint(activeCostSheet, estimates, quotations)} />
       {pdfError && <p className="text-xs text-red-400">{pdfError}</p>}
+      {pdfProblem && (
+        <PdfExportProblem
+          token={token}
+          docType="estimate"
+          docId={pdfProblem.docId}
+          problem={pdfProblem}
+          retrying={pdfPending}
+          onChanged={() => {}}
+          onRetry={() => handleDownloadPdf(pdfProblem.record)}
+        />
+      )}
 
       {estimates.map((est) => (
         <div key={est.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
@@ -778,7 +810,7 @@ function EstimatePanel({
                   {openReviseFor === est.id ? "Cancel revise" : "Revise"}
                 </button>
               )}
-              <button onClick={() => handleDownloadPdf(est)} className="text-xs text-gold hover:underline">
+              <button onClick={() => handleDownloadPdf(est)} disabled={pdfPending} className="text-xs text-gold hover:underline disabled:opacity-50">
                 Download PDF
               </button>
               <button
@@ -1176,6 +1208,8 @@ function QuotationPanel({
   const [openCoverNoteFor, setOpenCoverNoteFor] = useState(null);
   const [waiverReasons, setWaiverReasons] = useState({});
   const [pdfError, setPdfError] = useState("");
+  const [pdfProblem, setPdfProblem] = useState(null);
+  const [pdfPending, setPdfPending] = useState(false);
   const [rejectFormFor, setRejectFormFor] = useState(null);
   const [openReviseFor, setOpenReviseFor] = useState(null);
   const [reviseDrafts, setReviseDrafts] = useState({}); // quotationId -> { discount_value, refresh_pricing, gst_mode }
@@ -1203,12 +1237,28 @@ function QuotationPanel({
   }
 
   async function handleDownloadPdf(quotation) {
+    if (pdfPending) return; // no duplicate requests while one is in flight
     setPdfError("");
+    setPdfProblem(null);
+    setPdfPending(true);
     try {
+      // Preview first so the user sees every image that cannot be included BEFORE a download is attempted; generation
+      // checks again (and refuses) regardless, so this preview is a convenience, not the safeguard.
+      const check = await getPdfCheck(token, "quotation", quotation.id);
+      if (!check.complete) {
+        setPdfProblem({ docId: quotation.id, record: quotation, kind: "excluded", excluded: check.excluded });
+        return;
+      }
       const blob = await downloadQuotationPdfBlob(token, quotation.id);
       downloadBlobAsFile(blob, `${quotation.document_no}.pdf`);
     } catch (err) {
-      setPdfError(err.message);
+      if (err instanceof PdfExportError) {
+        setPdfProblem({ docId: quotation.id, record: quotation, kind: err.kind, excluded: err.excluded });
+      } else {
+        setPdfError(err.message);
+      }
+    } finally {
+      setPdfPending(false);
     }
   }
 
@@ -1299,6 +1349,17 @@ function QuotationPanel({
         )}
       />
       {pdfError && <p className="text-xs text-red-400">{pdfError}</p>}
+      {pdfProblem && (
+        <PdfExportProblem
+          token={token}
+          docType="quotation"
+          docId={pdfProblem.docId}
+          problem={pdfProblem}
+          retrying={pdfPending}
+          onChanged={() => {}}
+          onRetry={() => handleDownloadPdf(pdfProblem.record)}
+        />
+      )}
 
       {quotations.map((q) => (
         <div key={q.id} className="border border-border-dark rounded px-3 py-2 text-sm space-y-2">
@@ -1348,7 +1409,7 @@ function QuotationPanel({
                 Release
               </button>
             )}
-            <button onClick={() => handleDownloadPdf(q)} className="text-gold hover:underline">
+            <button onClick={() => handleDownloadPdf(q)} disabled={pdfPending} className="text-gold hover:underline disabled:opacity-50">
               Download PDF
             </button>
             {q.status === "released" && (

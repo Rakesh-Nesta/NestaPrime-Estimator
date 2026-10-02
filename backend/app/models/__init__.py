@@ -49,6 +49,7 @@ from app.models.message_template import MessageTemplate, WhatsappTemplateStatus 
 from app.models.netting_grade import NettingGrade  # noqa: F401
 from app.models.notification import Notification, NotificationEmailStatus, NotificationKind  # noqa: F401
 from app.models.opportunity import Opportunity, OpportunityStage  # noqa: F401
+from app.models.pdf_image_exclusion import PdfImageExclusion  # noqa: F401
 from app.models.package_content import PackageContent  # noqa: F401
 from app.models.project import (  # noqa: F401
     BuildingStatus,

@@ -1936,21 +1936,60 @@ export async function uploadCompanyLogo(token, file) {
 
 // --- Part M.6: client-facing Estimate / Quotation PDFs ---
 
+// --- PDF export problems: never a silent omission, never a lost place ---
+
+export class PdfExportError extends Error {
+  constructor(kind, message, excluded = []) {
+    super(message);
+    this.kind = kind; // "excluded" | "busy"
+    this.excluded = excluded;
+  }
+}
+
+async function pdfFailure(res, fallback) {
+  const body = await res.json().catch(() => ({}));
+  const detail = body.detail;
+  if (detail && typeof detail === "object" && detail.code === "pdf_images_excluded") {
+    return new PdfExportError("excluded", detail.message, detail.excluded || []);
+  }
+  if (detail && typeof detail === "object" && detail.code === "pdf_busy") {
+    return new PdfExportError("busy", detail.message);
+  }
+  return new Error(typeof detail === "string" ? detail : `${fallback} (${res.status})`);
+}
+
+export async function getPdfCheck(token, docType, docId) {
+  const res = await fetch(`${API_BASE}/${docType === "estimate" ? "estimates" : "quotations"}/${docId}/pdf-check`, {
+    headers: authHeaders(token),
+  });
+  return handle(res);
+}
+
+export async function excludeImageFromDocument(token, { doc_type, doc_id, attachment_id, reason }) {
+  const res = await fetch(`${API_BASE}/pdf-image-exclusions`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ doc_type, doc_id, attachment_id, reason: reason ?? null }),
+  });
+  return handle(res);
+}
+
+export async function restoreImageToDocument(token, exclusionId) {
+  const res = await fetch(`${API_BASE}/pdf-image-exclusions/${exclusionId}`, { method: "DELETE", headers: authHeaders(token) });
+  if (!res.ok) return handle(res);
+  return null;
+}
+
+
 export async function downloadEstimatePdfBlob(token, estimateId) {
   const res = await fetch(`${API_BASE}/estimates/${estimateId}/pdf`, { headers: authHeaders(token) });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `PDF generation failed (${res.status})`);
-  }
+  if (!res.ok) throw await pdfFailure(res, "PDF generation failed");
   return res.blob();
 }
 
 export async function downloadQuotationPdfBlob(token, quotationId) {
   const res = await fetch(`${API_BASE}/quotations/${quotationId}/pdf`, { headers: authHeaders(token) });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `PDF generation failed (${res.status})`);
-  }
+  if (!res.ok) throw await pdfFailure(res, "PDF generation failed");
   return res.blob();
 }
 
@@ -1967,10 +2006,7 @@ export async function previewQuotationTemplateBlob(token, quotationId, { terms, 
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ terms: terms ?? null, warranty_table: warrantyTable ?? null }),
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Preview failed (${res.status})`);
-  }
+  if (!res.ok) throw await pdfFailure(res, "Preview failed");
   return res.blob();
 }
 
