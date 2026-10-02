@@ -426,6 +426,14 @@ at or before it, so it must never move.
   creates a new marker (that database has no P5-era Work Orders), which is correct.
 - Verify after any restore: `SELECT id, deployed_at FROM p5_migration_marker;` must return exactly one row
   (id = 1) with the original timestamp.
+- **The restore drill now asserts it.** `backup_db.sh` writes the marker's `deployed_at` (or `none` for a pre-P5
+  database) to a `.p5marker` sidecar beside each dump; `restore_drill.sh` restores the dump and **fails (exit 1)**
+  if `p5_migration_marker` has anything other than exactly one `id = 1` row, or if its value differs from the
+  sidecar (or from `EXPECTED_P5_MARKER_DEPLOYED_AT`, which takes precedence). With neither recorded it only checks
+  the single-row structure and says so. Verified against real dumps for: matching value (pass), different recorded
+  original, `none` recorded but a marker restored, wrong operator-supplied value, and a dump whose marker row was
+  lost (all four fail). The sidecar-writing step in `backup_db.sh` needs the production compose stack and has been
+  syntax-checked only, not executed end to end.
 
 ## Daily follow-up reminders (WP8)
 

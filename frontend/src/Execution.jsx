@@ -247,7 +247,7 @@ function ReadinessCard({ token, quotation, projectNo, workOrderExists, canManage
             Work Order for project <span className="font-mono">{projectNo}</span>
             {quotation?.document_no && <> &middot; quotation <span className="font-mono">{quotation.document_no}</span></>} &middot;{" "}
             <span className="text-text-secondary">{String(workOrder.status ?? "").replace("_", " ")}</span>
-            {workOrder.awarded_at && <span className="text-text-secondary"> &middot; awarded {new Date(workOrder.awarded_at).toLocaleDateString()}</span>}
+            {workOrder.awarded_at && <span className="text-text-secondary"> &middot; since {new Date(workOrder.awarded_at).toLocaleDateString()}</span>}
             <span className="block text-xs text-text-secondary">
               Work Orders carry no separate number in NestaPrime; they are identified by their project and quotation.
               Manage status and payments from the Documents tab.

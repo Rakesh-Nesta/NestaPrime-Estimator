@@ -53,11 +53,20 @@ fi
 mv "$TMP_DEST" "$DEST"
 echo "[$(date -u +%FT%TZ)] Wrote $(du -h "$DEST" | cut -f1) to $DEST"
 
+# P5: record the legacy-adoption cutoff (p5_migration_marker.deployed_at) next to the dump, so a restore drill can
+# assert the ORIGINAL value survived. "none" = the database has no marker table (it predates P5). Best-effort: a
+# failure here never fails the backup itself, but the drill then has no sidecar to compare against.
+MARKER_FILE="${DEST%.sql.gz}.p5marker"
+docker compose -f "$COMPOSE_FILE" exec -T db psql -U nestaprime -d nestaprime_estimator -t -A -c \
+  "SELECT CASE WHEN to_regclass('public.p5_migration_marker') IS NULL THEN 'none' ELSE COALESCE((SELECT to_char(deployed_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.US') FROM p5_migration_marker WHERE id = 1), 'missing-row') END;" \
+  > "$MARKER_FILE" 2>/dev/null || rm -f "$MARKER_FILE"
+
 # Retention: keep the newest $RETENTION_COUNT, delete the rest.
 mapfile -t OLD_BACKUPS < <(ls -1t "$BACKUP_DIR"/nestaprime_estimator_*.sql.gz 2>/dev/null | tail -n "+$((RETENTION_COUNT + 1))")
 if [ "${#OLD_BACKUPS[@]}" -gt 0 ]; then
   echo "[$(date -u +%FT%TZ)] Pruning ${#OLD_BACKUPS[@]} backup(s) older than the newest $RETENTION_COUNT"
   rm -f "${OLD_BACKUPS[@]}"
+  for old in "${OLD_BACKUPS[@]}"; do rm -f "${old%.sql.gz}.p5marker"; done
 fi
 
 echo "[$(date -u +%FT%TZ)] Done. $(ls -1 "$BACKUP_DIR"/nestaprime_estimator_*.sql.gz 2>/dev/null | wc -l) backup(s) on disk."
