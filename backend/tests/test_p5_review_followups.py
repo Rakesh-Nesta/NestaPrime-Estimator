@@ -35,23 +35,7 @@ from tests.p5_helpers import (
 from tests.test_work_orders import _director_headers, _won_quotation
 
 
-def _snapshot(db):
-    """EVERY persisted column of EVERY row of EVERY table in the schema (not counts or selected fields): a denied
-    request cannot pass while altering any record -- a P5 row, a Work Order, a Quotation value, an existing audit
-    entry, an Attachment hash, a User flag, anything."""
-    from sqlalchemy import select
-
-    from app.db.base import Base
-
-    db.rollback()
-    db.expire_all()
-    dump = {}
-    for table in Base.metadata.sorted_tables:
-        query = select(table)
-        if list(table.primary_key.columns):
-            query = query.order_by(*table.primary_key.columns)
-        dump[table.name] = [tuple(repr(value) for value in row) for row in db.execute(query)]
-    return dump
+from tests.db_snapshot import full_snapshot as _snapshot  # noqa: E402
 
 
 @pytest.fixture()
