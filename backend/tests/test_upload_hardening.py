@@ -1595,3 +1595,65 @@ def test_trailing_data_after_the_zlib_stream_and_a_missing_idat_are_refused(tmp_
     no_idat = b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", __import__("struct").pack(">IIBBBBB", 8, 8, 8, 2, 0, 0, 0)) + _png_chunk(b"IEND", b"")
     assert "no pixel data" in _stream_error(tmp_path, "noidat.png", no_idat)
     assert "not a valid .png" in _refused_detail(tmp_path, "noidat.png", no_idat)
+
+
+# ================================================================== 13. scanning REQUIRED: every failure mode keeps the file unavailable
+#
+# With UPLOAD_SCAN_REQUIRED=true each of these ends with NO Attachment row, NO stored/servable file and (resumable) a session
+# that is either failed (infected) or still retriable (scanner unavailable) -- never a completed one.
+
+SCAN_CASES = {
+    "not-configured": dict(command=None, content=b"clean text", status=503, text="scanner is required"),
+    "missing-executable": dict(command="this-scanner-does-not-exist-anywhere", content=b"clean text", status=503, text="could not be completed"),
+    "timeout": dict(command="SLOW", content=b"clean text", status=503, text="could not be completed"),
+    "scanner-error-exit-2": dict(command="SCRIPT", content=b"SCANNER-BROKEN text", status=503, text="could not be completed"),
+    "infected-exit-1": dict(command="SCRIPT", content=b"EICAR text", status=422, text="quarantined"),
+}
+
+
+def _configure_required_scanner(monkeypatch, tmp_path, case):
+    import sys
+
+    monkeypatch.setitem(settings.__dict__, "upload_scan_required", True)
+    command = case["command"]
+    if command == "SCRIPT":
+        script = tmp_path / "scan.py"
+        script.write_text(SCANNER)
+        command = '"' + sys.executable.replace("\\", "/") + '" "' + script.as_posix() + '"'
+    elif command == "SLOW":
+        slow = tmp_path / "slow.py"
+        slow.write_text("import time\ntime.sleep(30)\n")
+        command = '"' + sys.executable.replace("\\", "/") + '" "' + slow.as_posix() + '"'
+        monkeypatch.setitem(settings.__dict__, "upload_scan_timeout_seconds", 1)
+    monkeypatch.setitem(settings.__dict__, "upload_scan_command", command or "")
+
+
+@pytest.mark.parametrize("name", list(SCAN_CASES))
+def test_required_scanning_ordinary_upload_never_makes_the_file_available(world, monkeypatch, tmp_path, name):
+    case = SCAN_CASES[name]
+    _configure_required_scanner(monkeypatch, tmp_path, case)
+    before_db, before_files = _state(world["db"])
+    res = _post_ordinary(world, "doc.txt", case["content"])
+    assert res.status_code == case["status"] and case["text"] in res.json()["detail"], (name, res.status_code, res.text[:140])
+    assert _state(world["db"])[0] == before_db  # no Attachment row (nothing downloadable, shareable or usable as evidence)
+    assert _storage_without_quarantine() == before_files  # no servable file either
+    listing = world["client"].get("/attachments", params={"doc_type": "quotation", "doc_id": world["q"]}, headers=world["h"]).json()
+    assert not any(a["original_filename"] == "doc.txt" for a in listing)
+
+
+@pytest.mark.parametrize("name", list(SCAN_CASES))
+def test_required_scanning_resumable_completion_never_makes_the_file_available(world, monkeypatch, tmp_path, name):
+    case = SCAN_CASES[name]
+    client, h, db = world["client"], world["h"], world["db"]
+    sid = _start(client, h, "quotation", world["q"], "doc.txt", case["content"]).json()["id"]
+    _put_chunks(client, h, sid, case["content"], len(case["content"]))
+    _configure_required_scanner(monkeypatch, tmp_path, case)
+    before_db, before_files = _state(db)
+    res = _complete(client, h, sid)
+    assert res.status_code == case["status"] and case["text"] in res.json()["detail"], (name, res.status_code, res.text[:140])
+    assert _state(db)[0] == before_db and _storage_without_quarantine() == before_files
+    db.rollback()
+    db.expire_all()
+    session = db.get(AttachmentUploadSession, uuid.UUID(sid))
+    assert session.resulting_attachment_id is None and session.status != "completed"  # no success receipt
+    assert session.status == ("failed" if name == "infected-exit-1" else "uploading")  # infected: dead; unavailable: retriable

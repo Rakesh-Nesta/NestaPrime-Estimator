@@ -1,5 +1,9 @@
 # Upload hardening — policy, proposed limits, and what is and is not claimed
 
+> **Uploads are permitted unscanned by default; malware protection is not installed or verified.**
+> A logged warning is not malware protection. Parsing a file (section 2) is not scanning it. Until a scanner is installed
+> AND `UPLOAD_SCAN_REQUIRED=true` is set, any file that passes structural validation is accepted without a malware scan.
+
 Status: **proposed**. The numeric limits below are proposals awaiting business acceptance; nothing here is deployed,
 scheduled or merged. Code: `backend/app/core/upload_policy.py`, `upload_validators.py`, `body_limit.py`,
 `attachment_upload.py`; tests: `backend/tests/test_upload_hardening.py`.
@@ -45,6 +49,18 @@ reservation.
 | Scanner configured, exit 0 | accepted | `active` |
 | Scanner exit 1 (infected) | refused (422); file moved to `_quarantine/`; no Attachment row is created | quarantine count in `--report` |
 | Scanner missing/crashes/times out/other exit code | **refused (503), fail closed**; ordinary upload stores nothing; a resumable session stays retriable (not failed) | warning/error log |
+
+**Production readiness requires both of these** (neither is part of this change, and the production image contains no scanner):
+1. **Install a scanner in the backend image** and point `UPLOAD_SCAN_COMMAND` at it. The contract is `<command> <file>` with exit
+   0 = clean, 1 = infected, anything else = failure. ClamAV's `clamscan` follows that convention (a `clamdscan` daemon setup
+   would be preferable for speed); it would need adding to the Dockerfile and its signature database kept updated.
+2. **Set `UPLOAD_SCAN_REQUIRED=true`** so that a missing/unconfigured scanner refuses uploads instead of accepting them unscanned.
+
+Verify scanner availability, timeout (`UPLOAD_SCAN_TIMEOUT_SECONDS`, default 120) and failure behaviour on the real instance
+before activation. **Existing test evidence** (`test_upload_hardening.py`, section 13, run with `UPLOAD_SCAN_REQUIRED=true`, on both
+the ordinary and the resumable path): *not configured*, *missing executable*, *timeout*, *scanner error (exit 2)* and *infected
+(exit 1)* each end with no Attachment row, no servable file and — for resumable uploads — no success receipt (session `uploading`
+and retriable when the scanner was unavailable, `failed` when infected). A clean file passes when the scanner is working.
 
 No per-file "scanned" flag is stored (that would need a schema migration, deliberately not part of this change).
 
