@@ -468,10 +468,13 @@ def test_concurrent_retries_with_the_same_request_id_produce_one_attempt_and_one
     results = _race_threads(8, attempt)
     assert all(not isinstance(r, BaseException) for r in results), results
     assert sorted(r.already_recorded for r in results) == [False] + [True] * 7  # one creator, seven replays
+    assert len({r.id for r in results}) == 1  # and every caller resolved to the SAME durable attempt
     # EXPECTED OUTCOME: one durable attempt, and at most one provider invocation (here exactly one: the creator's)
     assert len(wa["calls"]) <= 1 and len(wa["calls"]) == 1
     wa["db"].rollback()
-    assert wa["db"].query(Message).filter(Message.request_id == rid).count() == 1
+    rows = wa["db"].query(Message).filter(Message.request_id == rid).all()
+    assert len(rows) == 1 and {str(r.id) for r in results} == {str(rows[0].id)}  # exactly one durable attempt, shared by all
+    assert rows[0].attempt_state == "accepted"
 
 
 def test_two_requests_that_both_pass_the_lookup_still_produce_one_attempt_the_insert_collision_is_handled(wa, director_user, monkeypatch):
@@ -504,7 +507,10 @@ def test_two_requests_that_both_pass_the_lookup_still_produce_one_attempt_the_in
     assert sorted(r.already_recorded for r in results) == [False, True]
     assert len(sent) <= 1 and len(sent) == 1  # at most one provider invocation
     wa["db"].rollback()
-    assert wa["db"].query(Message).filter(Message.request_id == rid).count() == 1
+    rows = wa["db"].query(Message).filter(Message.request_id == rid).all()
+    assert len(rows) == 1  # exactly one durable attempt
+    assert len({str(r.id) for r in results}) == 1 and str(results[0].id) == str(rows[0].id)  # the loser resolved to the winner's attempt
+    assert rows[0].attempt_state == "accepted"
 
 
 def test_concurrent_retries_of_a_confirmed_resend_create_one_new_linked_attempt(wa, director_user):
