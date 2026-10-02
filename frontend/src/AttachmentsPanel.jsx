@@ -58,7 +58,9 @@ function CapturedAtBadge({ capturedAt, capturedAtSource }) {
   );
 }
 
-export default function AttachmentsPanel({ token, docType, docId, role, onUploaded }) {
+// readOnly: the listing and Download only -- no review, supersede, marketing or upload controls. Used for locked
+// signed evidence (a signed Agreement document), where the backend refuses every one of those actions anyway.
+export default function AttachmentsPanel({ token, docType, docId, role, onUploaded, readOnly = false }) {
   const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -78,7 +80,7 @@ export default function AttachmentsPanel({ token, docType, docId, role, onUpload
   const [lineages, setLineages] = useState(null);
   const [lineagesError, setLineagesError] = useState("");
 
-  const canReview = role && REVIEW_ROLES.includes(role);
+  const canReview = role && REVIEW_ROLES.includes(role) && !readOnly;
 
   function load() {
     return listAttachments(token, docType, docId)
@@ -287,7 +289,7 @@ export default function AttachmentsPanel({ token, docType, docId, role, onUpload
                 )}
               </>
             )}
-            {supersedingId === a.id ? (
+            {!readOnly && (supersedingId === a.id ? (
               <>
                 <input
                   type="file"
@@ -317,11 +319,12 @@ export default function AttachmentsPanel({ token, docType, docId, role, onUpload
               <button onClick={() => setSupersedingId(a.id)} className="text-text-secondary hover:underline">
                 Supersede
               </button>
-            )}
+            ))}
           </div>
         </div>
       ))}
 
+      {!readOnly && (
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <select value={tag} onChange={(e) => setTag(e.target.value)} className="rounded border border-border-dark bg-surface-raised text-text-primary px-2 py-1 text-xs">
           {TAGS.map((t) => (
@@ -383,10 +386,11 @@ export default function AttachmentsPanel({ token, docType, docId, role, onUpload
           {showResumable ? "Hide resumable upload" : "Large file? Use resumable upload"}
         </button>
       </div>
-      {showResumable && (
+      )}
+      {!readOnly && showResumable && (
         <ChunkedUpload token={token} docType={docType} docId={docId} onUploaded={() => { load(); onUploaded?.(); }} />
       )}
-      {tag === "approval_evidence" && (
+      {!readOnly && tag === "approval_evidence" && (
         <p className="text-[11px] text-text-secondary">
           Formal evidence is required before "Won" for Government/Tender clients or quotations ≥ Rs 25 L (M.3);
           Informal is enough below that. Naming a signatory is optional, but if given it must match an active,

@@ -118,7 +118,7 @@ function ReasonForm({ label, confirmLabel, busy, onSubmit, onCancel }) {
 
 /* ------------------------------------------------------------------ Readiness */
 
-function ReadinessCard({ token, quotation, workOrderExists, canManage, role, version, onChanged }) {
+function ReadinessCard({ token, quotation, projectNo, workOrderExists, canManage, role, version, onChanged }) {
   const [readiness, setReadiness] = useState(null);
   const [auths, setAuths] = useState([]);
   const [workOrder, setWorkOrder] = useState(null);
@@ -173,6 +173,7 @@ function ReadinessCard({ token, quotation, workOrderExists, canManage, role, ver
   const teamOk = teamCount > 0;
   const agreementOk = !!readiness?.agreement_executed;
   const authorized = !!readiness?.authorization_valid;
+  const currentAuthorization = auths.find((a) => a.status === "authorized");
   const blockers = readiness?.blockers ?? [];
 
   const checks = readiness
@@ -216,14 +217,23 @@ function ReadinessCard({ token, quotation, workOrderExists, canManage, role, ver
       {actionError && <p className="text-sm text-red-400">{actionError}</p>}
       {canManage && readiness && (
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={busy || !(agreementOk && teamOk) || authorized}
-            onClick={() => run(() => authorizeExecution(token, qid))}
-            className={BTN}
-          >
-            {authorized ? "Execution authorized" : "Authorize execution"}
-          </button>
+          {authorized ? (
+            <p className="text-sm text-green-400" role="status">
+              <span aria-hidden="true">&#10003; </span>Execution authorized
+              {currentAuthorization?.authorized_at && (
+                <span className="text-text-secondary"> on {new Date(currentAuthorization.authorized_at).toLocaleString()}</span>
+              )}
+            </p>
+          ) : (
+            <button
+              type="button"
+              disabled={busy || !(agreementOk && teamOk)}
+              onClick={() => run(() => authorizeExecution(token, qid))}
+              className={BTN}
+            >
+              Authorize execution
+            </button>
+          )}
           {!authorized && !(agreementOk && teamOk) && (
             <span className="text-xs text-text-secondary">Needs an executed agreement and an active Site Engineer.</span>
           )}
@@ -234,9 +244,14 @@ function ReadinessCard({ token, quotation, workOrderExists, canManage, role, ver
         <h4 className="text-sm font-semibold text-text-primary">Work Order</h4>
         {workOrder ? (
           <p className="text-sm text-text-primary">
-            {workOrder.document_no ?? `Work Order #${workOrder.id}`} &middot;{" "}
+            Work Order for project <span className="font-mono">{projectNo}</span>
+            {quotation?.document_no && <> &middot; quotation <span className="font-mono">{quotation.document_no}</span></>} &middot;{" "}
             <span className="text-text-secondary">{String(workOrder.status ?? "").replace("_", " ")}</span>
-            <span className="block text-xs text-text-secondary">Manage its status and payments from the Documents tab.</span>
+            {workOrder.awarded_at && <span className="text-text-secondary"> &middot; awarded {new Date(workOrder.awarded_at).toLocaleDateString()}</span>}
+            <span className="block text-xs text-text-secondary">
+              Work Orders carry no separate number in NestaPrime; they are identified by their project and quotation.
+              Manage status and payments from the Documents tab.
+            </span>
           </p>
         ) : !canSeeReadiness ? (
           <p className="text-xs text-text-secondary">
@@ -438,7 +453,7 @@ function AgreementCard({ token, project, quotation, role, canManage, version, on
               <p className="text-xs text-text-secondary">
                 Upload the client-signed document here and set its tag to <span className="font-mono">signed_document</span>.
               </p>
-              <AttachmentsPanel token={token} docType="agreement" docId={current.id} role={role} onUploaded={loadAttachments} />
+              <AttachmentsPanel token={token} docType="agreement" docId={current.id} role={role} onUploaded={loadAttachments} readOnly={!!current.evidence_locked_at} />
             </div>
           )}
 
@@ -1066,7 +1081,7 @@ export default function Execution({ token, user, project, role, onBack }) {
       )}
       {!loading && !error && (
         <>
-          <ReadinessCard token={token} quotation={quotation} workOrderExists={workOrderExists} canManage={canManage} role={role} version={version} onChanged={bump} />
+          <ReadinessCard token={token} quotation={quotation} projectNo={project.project_no} workOrderExists={workOrderExists} canManage={canManage} role={role} version={version} onChanged={bump} />
           <AgreementCard token={token} project={project} quotation={quotation} role={role} canManage={canManage} version={version} onChanged={bump} />
           <TeamCard token={token} project={project} canManage={canManage} version={version} onChanged={bump} />
           <WorkItemsCard token={token} user={user} project={project} quotation={quotation} canManage={canManage} version={version} onChanged={bump} />
