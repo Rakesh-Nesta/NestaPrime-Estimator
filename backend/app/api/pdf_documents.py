@@ -39,7 +39,7 @@ from app.api.documents import DOCUMENT_ROLES
 from app.api.schedule import get_schedule
 from app.api.settings import get_current_setting_value
 from app.api.sports import _dimension_deviations, _worst_deviation_status
-from app.core import upload_validators
+from app.core import ownership, upload_validators
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import Attachment, AttachmentTag
@@ -1375,6 +1375,7 @@ def exclude_image_from_document(
 ):
     """Explicitly remove ONE selected image from ONE document's PDF. The Attachment, its file and hash are untouched and
     every other document that uses it is unaffected; the decision is attributed and audited."""
+    ownership.require_visible_document(db, current_user, payload.doc_type.value, payload.doc_id)  # Amendment 60: body ids too
     _guard_document_open(db, payload.doc_type, payload.doc_id)
     attachment = next((a for a in _selected_images(db, payload.doc_type, payload.doc_id) if a.id == payload.attachment_id), None)
     if attachment is None:
