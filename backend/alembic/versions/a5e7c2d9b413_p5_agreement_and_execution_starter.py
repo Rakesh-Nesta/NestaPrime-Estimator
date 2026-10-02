@@ -20,7 +20,7 @@ UUID = sa.dialects.postgresql.UUID(as_uuid=True)
 
 # The six P5 tables whose contents make a downgrade destructive (contract revision 7, Section 7).
 # p5_migration_marker is deliberately NOT in this list: it holds no user data, only the immutable
-# deploy timestamp, and is dropped with the schema.
+# deploy timestamp, and it is KEPT by downgrade() so the original cutoff survives every migration cycle.
 P5_DATA_TABLES = (
     "agreements",
     "project_execution_authorizations",
@@ -32,6 +32,16 @@ P5_DATA_TABLES = (
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    marker_existed = sa.inspect(bind).has_table("p5_migration_marker")
+    if marker_existed and bind.execute(sa.text("SELECT COUNT(*) FROM p5_migration_marker WHERE id = 1")).scalar() != 1:
+        # Fail CLOSED, before anything is created: a missing marker row would otherwise be re-invented with a
+        # newer timestamp, silently widening the legacy-adoption boundary. A human must restore the original.
+        raise RuntimeError(
+            "Refusing to upgrade: p5_migration_marker exists but its single row is missing. Restore the "
+            "original deployed_at value (never invent a new one) before re-running."
+        )
+
     # Attachments can now ride on an Agreement or a site issue. SQLAlchemy's Enum(DocumentType, ...)
     # stores the Python member's NAME on this Postgres enum (see 509d1202ac03's own comment).
     op.execute("ALTER TYPE override_document_type ADD VALUE IF NOT EXISTS 'AGREEMENT'")
@@ -181,15 +191,18 @@ def upgrade() -> None:
     )
     op.create_index("ix_project_site_issues_project_id", "project_site_issues", ["project_id"])
 
-    # The durable pre-P5 eligibility boundary: written once, here, never edited by any code path.
-    op.create_table(
-        "p5_migration_marker",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("deployed_at", sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-        sa.CheckConstraint("id = 1", name="ck_p5_migration_marker_single_row"),
-    )
-    op.execute("INSERT INTO p5_migration_marker (id, deployed_at) VALUES (1, (now() AT TIME ZONE 'utc'))")
+    # The durable pre-P5 eligibility boundary. It is written exactly ONCE, the first time this migration ever
+    # runs, and then NEVER rewritten: downgrade() deliberately leaves this table (and its row) in place, so a
+    # downgrade -> upgrade cycle reuses the ORIGINAL cutoff and cannot admit any later Work Order as "legacy".
+    if not marker_existed:
+        op.create_table(
+            "p5_migration_marker",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("deployed_at", sa.DateTime(), nullable=False),
+            sa.PrimaryKeyConstraint("id"),
+            sa.CheckConstraint("id = 1", name="ck_p5_migration_marker_single_row"),
+        )
+        op.execute("INSERT INTO p5_migration_marker (id, deployed_at) VALUES (1, (now() AT TIME ZONE 'utc'))")
 
 
 def downgrade() -> None:
@@ -197,29 +210,19 @@ def downgrade() -> None:
     populated = {
         table: bind.execute(sa.text(f"SELECT COUNT(*) FROM {table}")).scalar() for table in P5_DATA_TABLES
     }
-    # The marker is the legacy-adoption eligibility boundary and a downgrade -> upgrade cycle writes a NEW one.
-    # A Work Order created while P5 was live (after the marker) was gated by P5; letting a later, newer marker
-    # sweep it in as "pre-P5" would widen the boundary, so such a downgrade is refused outright. (Work Orders
-    # created while P5 is DOWNGRADED run the old, ungated code and are legitimately legacy.)
-    post_marker = bind.execute(
-        sa.text(
-            "SELECT COUNT(*) FROM work_orders WHERE created_at > "
-            "COALESCE((SELECT deployed_at FROM p5_migration_marker WHERE id = 1), 'infinity'::timestamp)"
-        )
-    ).scalar()
-    populated["work_orders_created_after_p5"] = post_marker
     populated = {table: count for table, count in populated.items() if count}
     if populated:
         raise RuntimeError(
             "Refusing to downgrade: P5 data exists and would be destroyed: "
             + ", ".join(f"{table}={count}" for table, count in populated.items())
         )
-    op.drop_table("p5_migration_marker")
     op.drop_table("project_site_issues")
     op.drop_table("project_tasks")
     op.drop_table("project_milestones")
     op.drop_table("project_execution_authorizations")
     op.drop_table("project_team_members")
     op.drop_table("agreements")
+    # p5_migration_marker is deliberately KEPT (see upgrade()): it holds no user data, and keeping it is what
+    # preserves the original legacy-adoption cutoff across every downgrade/upgrade cycle.
     # The AGREEMENT / SITE_ISSUE values added to override_document_type are left in place: Postgres
     # cannot drop an enum value, and an unused value is harmless (same as every prior enum addition).

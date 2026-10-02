@@ -273,7 +273,8 @@ def test_ac27_downgrade_succeeds_cleanly_against_the_empty_p5_schema(client, dir
     _won_quotation(client, h)  # real data elsewhere, but no P5 rows at all
     error, present = _downgrade_in_a_transaction(db_session)
     assert error is None
-    assert not (set(P5_TABLES) | {"p5_migration_marker"}) & present  # all seven P5 tables dropped inside the transaction
+    assert not set(P5_TABLES) & present  # the six P5 data tables are dropped inside the transaction
+    assert "p5_migration_marker" in present  # ...and the cutoff table is deliberately KEPT
     # the rollback restored everything (the refusal is conditional, not blanket breakage)
     with engine.connect() as conn:
         assert set(P5_TABLES) <= set(inspect(conn).get_table_names())
@@ -292,18 +293,70 @@ def test_the_adoption_script_refuses_without_the_migration_marker(client, direct
         adopt.run(db_session, confirm=False, actor_email=None)
 
 
-def test_a_downgrade_that_would_widen_the_adoption_boundary_is_refused(client, director_user, db_session):
-    """A downgrade -> upgrade cycle writes a NEW marker. A Work Order created while P5 was live (after the old
-    marker) was gated by P5; a newer marker must not be able to sweep it in as legacy, so that downgrade is
-    refused even when every P5 table is empty (e.g. emptied by hand)."""
-    h = _director_headers(client, director_user)
-    _, q, _wo = _legacy_world(client, db_session, h)  # a real Work Order, P5 rows stripped
-    _set_marker(db_session, datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1))  # the WO is AFTER the marker
-    error, present = _downgrade_in_a_transaction(db_session)
-    assert error is not None and "work_orders_created_after_p5=1" in str(error)
-    assert set(P5_TABLES) <= present  # nothing dropped
+def _in_migration_transaction(db_session, work):
+    """Run `work(migration, connection)` against the test schema inside a transaction that is ALWAYS rolled back."""
+    db_session.rollback()
+    migration = _load_migration()
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
 
-    # the same Work Order created BEFORE the marker is genuinely pre-P5: the cycle is allowed and not widening
-    _set_marker(db_session, datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1))
-    error, present = _downgrade_in_a_transaction(db_session)
-    assert error is None
+    conn = engine.connect()
+    trans = conn.begin()
+    try:
+        with Operations.context(MigrationContext.configure(conn)):
+            return work(migration, conn)
+    finally:
+        trans.rollback()
+        conn.close()
+
+
+def test_the_original_cutoff_survives_every_downgrade_upgrade_cycle(client, director_user, db_session):
+    """The cutoff is written once and never replaced: downgrade keeps the marker table and row, so a later upgrade
+    reuses the ORIGINAL timestamp and can never admit a Work Order created after it as 'legacy' -- including Work
+    Orders created while P5 was downgraded (no policy exception is made for them)."""
+    _set_marker(db_session, datetime(2026, 1, 1, 12, 0, 0))
+
+    def work(migration, conn):
+        before = conn.execute(text("SELECT deployed_at FROM p5_migration_marker")).scalar()
+        results = []
+        for _cycle in range(3):  # repeated cycles must not drift it either
+            migration.downgrade()
+            results.append(conn.execute(text("SELECT deployed_at FROM p5_migration_marker")).scalar())  # kept by downgrade
+            migration.upgrade()
+            results.append(conn.execute(text("SELECT deployed_at FROM p5_migration_marker")).scalar())
+            assert conn.execute(text("SELECT count(*) FROM p5_migration_marker")).scalar() == 1
+        tables = set(inspect(conn).get_table_names())
+        return before, results, tables
+
+    before, results, tables = _in_migration_transaction(db_session, work)
+    assert before == datetime(2026, 1, 1, 12, 0, 0)
+    assert results == [before] * 6  # identical after every downgrade AND every upgrade
+    assert set(P5_TABLES) <= tables  # the P5 tables came back each time
+
+
+def test_a_work_order_created_after_the_cutoff_is_never_adoptable_even_after_a_cycle(client, director_user, db_session):
+    h = _director_headers(client, director_user)
+    _, q, _wo = _legacy_world(client, db_session, h)  # a Work Order created NOW, P5 rows stripped
+    _set_marker(db_session, datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1))  # cutoff is EARLIER
+    error, _present = _downgrade_in_a_transaction(db_session)
+    assert error is None  # a cycle is permitted -- and it cannot move the cutoff (previous test)
+    assert adopt.run(db_session, confirm=True, actor_email=director_user.email)["eligible"] == 0
+    assert _agreements_for(db_session, q) == []
+
+
+def test_upgrade_fails_closed_when_the_marker_row_is_missing(client, director_user, db_session):
+    """A damaged marker must never be 're-invented' with a newer timestamp (that would widen eligibility)."""
+    _set_marker(db_session, datetime(2026, 1, 1, 12, 0, 0))
+
+    def work(migration, conn):
+        migration.downgrade()  # keeps the (now row-less) marker table
+        conn.execute(text("DELETE FROM p5_migration_marker"))
+        try:
+            migration.upgrade()
+        except RuntimeError as exc:
+            return str(exc), set(inspect(conn).get_table_names())
+        return None, set(inspect(conn).get_table_names())
+
+    message, tables = _in_migration_transaction(db_session, work)
+    assert message is not None and "Refusing to upgrade" in message and "missing" in message
+    assert not set(P5_TABLES) & tables  # nothing was recreated after the refusal

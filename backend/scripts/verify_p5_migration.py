@@ -299,6 +299,7 @@ def main():
         marker = scalar("SELECT deployed_at FROM p5_migration_marker")
         record("marker row written once and is not older than the legacy Work Order", marker is not None and marker >= legacy_wo_created_at,
                f"{marker} >= {legacy_wo_created_at}")
+        first_marker = marker
         try:
             sql("INSERT INTO p5_migration_marker (id, deployed_at) VALUES (2, now())")
             second_marker_refused = False
@@ -306,14 +307,34 @@ def main():
             second_marker_refused = True
         record("a second marker row is refused by the single-row CHECK", second_marker_refused)
 
+        marker = first_marker
         down = run_alembic(["downgrade", "-1"])
         record("clean downgrade of the still-EMPTY P5 schema succeeds", down.returncode == 0, down.stderr[-300:])
-        record("...and drops all seven P5 tables, legacy rows intact",
-               scalar("SELECT count(*) FROM information_schema.tables WHERE table_name = ANY(%s)", (list(P5_TABLES) + ["p5_migration_marker"],)) == 0
+        record("...and drops the six P5 data tables, legacy rows intact",
+               scalar("SELECT count(*) FROM information_schema.tables WHERE table_name = ANY(%s)", (list(P5_TABLES),)) == 0
                and counts() == before)
+        record("...while the cutoff table and its row are deliberately KEPT, unchanged",
+               scalar("SELECT deployed_at FROM p5_migration_marker") == marker)
         up = run_alembic(["upgrade", "head"])
-        record("re-upgrade succeeds and writes a fresh marker", up.returncode == 0 and scalar("SELECT count(*) FROM p5_migration_marker") == 1)
-        marker = scalar("SELECT deployed_at FROM p5_migration_marker")
+        record("re-upgrade succeeds and PRESERVES the original cutoff (no new marker is written)",
+               up.returncode == 0 and scalar("SELECT count(*) FROM p5_migration_marker") == 1
+               and scalar("SELECT deployed_at FROM p5_migration_marker") == marker)
+        for cycle in range(2):
+            run_alembic(["downgrade", "-1"]); run_alembic(["upgrade", "head"])
+        record("further downgrade/upgrade cycles never move the cutoff",
+               scalar("SELECT deployed_at FROM p5_migration_marker") == marker)
+        # fail closed: a missing marker row must stop the upgrade rather than be re-invented
+        run_alembic(["downgrade", "-1"])
+        sql("DELETE FROM p5_migration_marker")
+        broken = run_alembic(["upgrade", "head"])
+        record("upgrade FAILS CLOSED when the marker row is missing (no new cutoff invented)",
+               broken.returncode != 0 and "Refusing to upgrade" in (broken.stdout + broken.stderr)
+               and scalar("SELECT count(*) FROM p5_migration_marker") == 0
+               and scalar("SELECT count(*) FROM information_schema.tables WHERE table_name = 'agreements'") == 0)
+        sql("INSERT INTO p5_migration_marker (id, deployed_at) VALUES (1, %s)", (marker,))
+        up = run_alembic(["upgrade", "head"])
+        record("restoring the ORIGINAL value lets the upgrade proceed",
+               up.returncode == 0 and scalar("SELECT deployed_at FROM p5_migration_marker") == marker)
 
         checks = drive(BACKEND_DIR, "after_upgrade_checks", legacy)
         record("legacy Work Order, payments and status routes still work after the upgrade",
