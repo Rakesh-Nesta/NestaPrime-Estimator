@@ -57,6 +57,8 @@ COVERED_PATH_PARAMS = frozenset(
         "milestone_id",
         "task_id",
         "site_issue_id",
+        "message_id",  # resend: a message belongs to the project of the document it was sent about
+        "exclusion_id",  # restoring a PDF image: an exclusion belongs to the project of its document
     }
 )
 # `doc_type` is a plain value (which table doc_id names), not a record; `chunk_index` is a bare
@@ -265,6 +267,16 @@ def _resolve_owner_ok(db: Session, user: User, key: str, value: uuid.UUID) -> bo
 
         session = db.get(AttachmentUploadSession, value)
         return session is not None and may_see_document(db, user, session.doc_type, session.doc_id)
+    if key == "message_id":
+        from app.models.message import Message
+
+        message = db.get(Message, value)
+        return message is not None and may_see_document(db, user, message.doc_type.value, message.doc_id)
+    if key == "exclusion_id":
+        from app.models.pdf_image_exclusion import PdfImageExclusion
+
+        exclusion = db.get(PdfImageExclusion, value)
+        return exclusion is not None and may_see_document(db, user, exclusion.doc_type, exclusion.doc_id)
     return True  # a parameter this rule does not cover is not silently treated as hidden; the test guards new ones
 
 
