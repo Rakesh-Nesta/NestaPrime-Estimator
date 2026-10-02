@@ -38,7 +38,9 @@ async def receive_wa_gateway_webhook(
         return {"ok": True}
 
     message = db.query(Message).filter(Message.provider_message_id == msg_id).first()
-    if message is not None and message.status != MessageStatus.SENT:
+    if message is not None and (message.status != MessageStatus.SENT or message.attempt_state not in (None, "accepted")):
         message.status = MessageStatus.SENT
+        if message.attempt_state is not None:
+            message.attempt_state = "accepted"  # the gateway's own sync confirms the provider accepted it
         db.commit()
     return {"ok": True}

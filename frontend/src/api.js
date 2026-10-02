@@ -1831,24 +1831,69 @@ export async function draftMessage(token, { docType, docId, channel }) {
   return handle(res);
 }
 
-export async function createMessage(token, { docType, docId, channel, recipient, templateKey, templateId, subject, bodyNote, attachmentId, includeDocument }) {
-  const res = await fetch(`${API_BASE}/messages`, {
-    method: "POST",
-    headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({
-      doc_type: docType,
-      doc_id: docId,
-      channel,
-      recipient,
-      template_key: templateKey || null,
-      template_id: templateId || null,
-      subject: subject || null,
-      body_note: bodyNote || null,
-      attachment_id: attachmentId || null,
-      include_document: !!includeDocument,
-    }),
-  });
-  return handle(res);
+// A send carries a stable request id: retrying the SAME send (same id) returns the existing outcome and never sends
+// again. Structured refusals (excluded PDF images, a busy PDF service) surface as PdfExportError so the screen can show them.
+export class NetworkOutcomeUnknownError extends Error {
+  constructor() {
+    super("The connection was lost before the response arrived. The message may or may not have been sent.");
+  }
+}
+
+async function messageResponse(res) {
+  if (res.ok) return res.json();
+  const body = await res.json().catch(() => ({}));
+  const detail = body.detail;
+  if (detail && typeof detail === "object") {
+    if (detail.code === "pdf_images_excluded") throw new PdfExportError("excluded", detail.message, detail.excluded || []);
+    if (detail.code === "pdf_busy") throw new PdfExportError("busy", detail.message);
+    const err = new Error(detail.message || `Request failed (${res.status})`);
+    err.code = detail.code;
+    err.detail = detail;
+    throw err;
+  }
+  return handle({ ok: false, status: res.status, json: async () => body });
+}
+
+export async function createMessage(token, { docType, docId, channel, recipient, templateKey, templateId, subject, bodyNote, attachmentId, includeDocument, requestId }) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/messages`, {
+      method: "POST",
+      headers: { ...authHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        doc_type: docType,
+        doc_id: docId,
+        channel,
+        recipient,
+        template_key: templateKey || null,
+        template_id: templateId || null,
+        subject: subject || null,
+        body_note: bodyNote || null,
+        attachment_id: attachmentId || null,
+        include_document: !!includeDocument,
+        request_id: requestId || null,
+      }),
+    });
+  } catch {
+    throw new NetworkOutcomeUnknownError(); // the request may have reached the server: retry with the SAME request id
+  }
+  return messageResponse(res);
+}
+
+// "Send again anyway": a NEW linked attempt. Unless the earlier attempt is a confirmed failure the caller must pass
+// confirmDuplicateRisk=true after showing the user the duplicate warning.
+export async function resendMessage(token, messageId, { requestId, confirmDuplicateRisk } = {}) {
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/messages/${messageId}/resend`, {
+      method: "POST",
+      headers: { ...authHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: requestId || null, confirm_duplicate_risk: !!confirmDuplicateRisk }),
+    });
+  } catch {
+    throw new NetworkOutcomeUnknownError();
+  }
+  return messageResponse(res);
 }
 
 export async function listMessageTemplates(token, { channel, documentType, includeInactive } = {}) {

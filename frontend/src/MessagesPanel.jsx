@@ -1,17 +1,25 @@
 import { useEffect, useState } from "react";
-import { createMessage, draftMessage, listMessages, listMessageTemplates } from "./api";
+import { createMessage, draftMessage, listMessages, listMessageTemplates, NetworkOutcomeUnknownError, PdfExportError, resendMessage } from "./api";
+import PdfExportProblem from "./PdfExportProblem";
 
 // Amendment 8 (Sections 8 and 17): WhatsApp (wa-gateway), Telegram (Bot API)
 // and Email (SMTP) are all real sends now.
 const REAL_SEND_CHANNELS = ["whatsapp", "telegram", "email"];
 const DOC_TYPES_WITH_PDF = ["estimate", "quotation"];
 
-const STATUS_STYLE = {
-  recorded: "text-text-secondary",
-  sent: "text-green-400",
-  delivered: "text-green-400",
+// What the app can honestly say about a send. "accepted" is NOT delivery: the provider took it, the recipient may not have it.
+const OUTCOME_STYLE = {
+  pending: "text-yellow-300",
+  accepted: "text-green-400",
   failed: "text-red-400",
+  unknown: "text-yellow-300",
+  recorded: "text-text-secondary",
 };
+const DUPLICATE_WARNING = "The previous message may already have been sent. Sending again could create a duplicate.";
+
+function newRequestId() {
+  return crypto.randomUUID();
+}
 
 export default function MessagesPanel({ token, docType, docId }) {
   const [messages, setMessages] = useState([]);
@@ -27,6 +35,15 @@ export default function MessagesPanel({ token, docType, docId }) {
   const [templates, setTemplates] = useState([]);
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState("");
+  // One request id per send. It stays the same across retries of the SAME send, so a retry returns the existing outcome and
+  // never sends twice; it changes when the content changes or after the send is finished.
+  const [requestId, setRequestId] = useState(newRequestId);
+  const [pdfProblem, setPdfProblem] = useState(null);
+  const [lostConnection, setLostConnection] = useState(false);
+  const [confirmingFor, setConfirmingFor] = useState(null); // message id whose "send again anyway" is awaiting confirmation
+  const [understood, setUnderstood] = useState(false);
+  const [resendRequestIds, setResendRequestIds] = useState({});
+  const [resending, setResending] = useState(null);
 
   const isRealSend = REAL_SEND_CHANNELS.includes(channel);
   const canIncludeDocument = isRealSend && DOC_TYPES_WITH_PDF.includes(docType);
@@ -42,6 +59,13 @@ export default function MessagesPanel({ token, docType, docId }) {
     load().finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, docType, docId]);
+
+  // Any change to what would be sent makes it a different send: a new request id.
+  useEffect(() => {
+    setRequestId(newRequestId());
+    setLostConnection(false);
+    setPdfProblem(null);
+  }, [channel, recipient, templateId, subject, note, includeDocument]);
 
   useEffect(() => {
     listMessageTemplates(token, { channel })
@@ -59,27 +83,68 @@ export default function MessagesPanel({ token, docType, docId }) {
     }
   }
 
-  async function handleLog(e) {
-    e.preventDefault();
+  async function submitSend() {
+    if (sending) return; // no duplicate requests while one is pending
     setError("");
-    if (!recipient) return;
+    setPdfProblem(null);
     setSending(true);
     try {
       await createMessage(token, {
         docType, docId, channel, recipient, templateId: templateId || undefined,
         subject: subject || undefined, bodyNote: note || undefined,
-        includeDocument: canIncludeDocument && includeDocument,
+        includeDocument: canIncludeDocument && includeDocument, requestId,
       });
+      setLostConnection(false);
       setRecipient("");
       setTemplateId("");
       setSubject("");
       setNote("");
       setIncludeDocument(false);
+      setRequestId(newRequestId());
       await load();
     } catch (err) {
-      setError(err.message);
+      if (err instanceof PdfExportError) {
+        setPdfProblem({ kind: err.kind, excluded: err.excluded });
+      } else if (err instanceof NetworkOutcomeUnknownError) {
+        // The request may have been processed. Keep the SAME request id: Retry will return the recorded outcome (or send, if
+        // it never arrived) -- it can never send twice.
+        setLostConnection(true);
+        setError(err.message);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleLog(e) {
+    e.preventDefault();
+    if (!recipient) return;
+    await submitSend();
+  }
+
+  async function handleResend(m, { confirmed }) {
+    if (resending) return;
+    setError("");
+    setResending(m.id);
+    const rid = resendRequestIds[m.id] || newRequestId();
+    setResendRequestIds((ids) => ({ ...ids, [m.id]: rid })); // kept so a retry of THIS resend cannot send a third message
+    try {
+      await resendMessage(token, m.id, { requestId: rid, confirmDuplicateRisk: confirmed });
+      setConfirmingFor(null);
+      setUnderstood(false);
+      setResendRequestIds((ids) => {
+        const next = { ...ids };
+        delete next[m.id];
+        return next;
+      });
+      await load();
+    } catch (err) {
+      if (err instanceof PdfExportError) setPdfProblem({ kind: err.kind, excluded: err.excluded });
+      else setError(err.message);
+    } finally {
+      setResending(null);
     }
   }
 
@@ -108,16 +173,74 @@ export default function MessagesPanel({ token, docType, docId }) {
             : "This channel has no provider wired up -- logging a message here records that you sent this document yourself (by whatever means), for an audit trail. It does not actually send anything."}
         </p>
       </div>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && (
+        <p className="text-xs text-red-400" role="alert">
+          {error}
+          {lostConnection && (
+            <>
+              {" "}
+              <button type="button" onClick={submitSend} disabled={sending} className="underline disabled:opacity-50">
+                {sending ? "Checking…" : "Retry (will not send twice)"}
+              </button>
+            </>
+          )}
+        </p>
+      )}
+      {pdfProblem && (
+        <PdfExportProblem
+          token={token}
+          docType={docType}
+          docId={docId}
+          problem={pdfProblem}
+          retrying={sending}
+          onChanged={() => {}}
+          onRetry={submitSend}
+        />
+      )}
       {draftError && <p className="text-xs text-red-400">{draftError}</p>}
       {messages.length === 0 && <p className="text-xs text-text-secondary">No messages yet.</p>}
       {messages.map((m) => (
-        <div key={m.id} className="flex flex-wrap items-center gap-1 text-xs bg-surface rounded px-2 py-1 border border-border-dark">
-          <span className="font-medium">{m.channel}</span>
-          <span>&rarr; {m.recipient}</span>
-          {m.subject && <span className="text-text-secondary">· {m.subject}</span>}
-          <span className={STATUS_STYLE[m.status] || "text-text-secondary"}>· {m.status}</span>
-          <span className="text-text-secondary">· {new Date(m.created_at).toLocaleString()}</span>
+        <div key={m.id} className="text-xs bg-surface rounded px-2 py-1 border border-border-dark space-y-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="font-medium">{m.channel}</span>
+            <span>&rarr; {m.recipient}</span>
+            {m.subject && <span className="text-text-secondary">· {m.subject}</span>}
+            <span className={OUTCOME_STYLE[m.attempt_state] || "text-text-secondary"}>· {m.outcome_label || m.status}</span>
+            <span className="text-text-secondary">· {new Date(m.created_at).toLocaleString()}</span>
+            {m.previous_attempt_id && <span className="text-text-secondary">· sent again after an earlier attempt</span>}
+          </div>
+          {m.attempt_state === "failed" && (
+            <button type="button" disabled={resending === m.id} onClick={() => handleResend(m, { confirmed: false })} className="text-gold hover:underline disabled:opacity-50">
+              {resending === m.id ? "Sending…" : "Try again"}
+            </button>
+          )}
+          {["pending", "unknown", "accepted"].includes(m.attempt_state) && confirmingFor !== m.id && (
+            <button type="button" onClick={() => { setConfirmingFor(m.id); setUnderstood(false); }} className="text-gold hover:underline">
+              Send again anyway
+            </button>
+          )}
+          {confirmingFor === m.id && (
+            <div className="rounded border border-yellow-700 bg-yellow-950/30 p-2 space-y-1" role="alertdialog" aria-label="Confirm sending again">
+              <p className="text-yellow-200">{DUPLICATE_WARNING}</p>
+              <label className="flex items-center gap-1">
+                <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} />
+                I understand and want to send it again
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  disabled={!understood || resending === m.id}
+                  onClick={() => handleResend(m, { confirmed: true })}
+                  className="bg-gold text-base rounded px-2 py-0.5 disabled:opacity-50"
+                >
+                  {resending === m.id ? "Sending…" : "Send again"}
+                </button>
+                <button type="button" onClick={() => setConfirmingFor(null)} className="text-text-secondary hover:underline">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
 
