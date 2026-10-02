@@ -1,7 +1,7 @@
 """pdf_image_exclusions: a document-specific, attributable decision to leave one stored image out of one generated PDF
 
 Revision ID: b7a4c9d2e1f3
-Revises: 509d1202ac03
+Revises: a5e7c2d9b413
 Create Date: 2026-10-02 16:00:00.000000
 
 Additive only (one new table). NOTE for the merge plan: P5's migration a5e7c2d9b413 also descends from 509d1202ac03, so
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision: str = "b7a4c9d2e1f3"
-down_revision: Union[str, None] = "509d1202ac03"
+down_revision: Union[str, None] = "a5e7c2d9b413"  # re-parented onto P5's migration (merge order: P5 first)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
