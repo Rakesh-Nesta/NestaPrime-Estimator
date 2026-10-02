@@ -1326,3 +1326,272 @@ def test_scanner_unavailable_creates_nothing_and_the_released_attempt_can_never_
 
     monkeypatch.setitem(settings.__dict__, "upload_scan_command", "")  # the scanner is restored: the session completes
     assert _complete(world["client"], headers, str(session_id)).status_code == 200
+
+
+def test_a_very_large_jpeg_is_validated_cheaply_and_a_truncated_one_is_still_refused(tmp_path):
+    """JPEG is decoded at 1/8 scale, so a 40 Mpx image validates in bounded time/memory and truncation is still detected."""
+    import io
+    import time
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (8000, 5000), (200, 30, 30)).save(buffer, "JPEG", quality=60)  # 40 Mpx, solid colour: small file
+    data = buffer.getvalue()
+    started = time.monotonic()
+    _validate(tmp_path, "huge.jpg", data)
+    assert time.monotonic() - started < 10
+    _refused(tmp_path, "huge-truncated.jpg", data[: len(data) // 2])
+
+
+def test_a_large_gif_is_refused_because_non_jpeg_png_formats_are_decoded_in_full(tmp_path, monkeypatch):
+    from app.core import upload_validators
+
+    monkeypatch.setattr(upload_validators, "MAX_FULL_DECODE_PIXELS", 10)
+    assert "too large" in _refused(tmp_path, "big.gif", vf.valid_gif())  # 4x4 = 16 px > 10
+    assert "too large" in _refused(tmp_path, "big.bmp", _bmp())
+
+
+def _bmp() -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(buffer, "BMP")
+    return buffer.getvalue()
+
+
+# ================================================================== 12. PNG: structure/CRC checks are NOT pixel decoding
+#
+# Pillow's verify() checks chunk structure and CRCs only. Established by test below: a PNG with valid chunks and CRCs but
+# an invalid compressed stream PASSES Pillow's verify() and FAILS Pillow's load(). The validator therefore also streams the
+# IDAT data through zlib (counting, never storing) and requires exactly the byte count the header implies.
+
+
+def _png_chunk(kind, data):
+    import struct
+    import zlib
+
+    body = kind + data
+    return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+
+def _png(idat, width=8, height=8, color_type=2, interlace=0):
+    import struct
+
+    return (b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, interlace))
+            + _png_chunk(b"IDAT", idat) + _png_chunk(b"IEND", b""))
+
+
+def _raw_rows(width, height, channels):
+    return b"".join(b"\x00" + bytes([(x * 7 + y) % 251 for x in range(width * channels)]) for y in range(height))
+
+
+def _interlaced_raw(width, height, channels):
+    """Adam7 pass data built pixel by pixel (independent of the validator's size arithmetic)."""
+    out = b""
+    for x0, y0, dx, dy in ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)):
+        xs, ys = list(range(x0, width, dx)), list(range(y0, height, dy))
+        if not xs or not ys:
+            continue
+        for y in ys:
+            out += b"\x00" + bytes([(x + y) % 251 for x in xs for _ in range(channels)])
+    return out
+
+
+def test_pillow_verify_accepts_a_png_whose_pixel_data_is_corrupt_but_load_refuses_it(tmp_path):
+    """Establishes WHY verify() alone is insufficient (documented limit of the library)."""
+    from PIL import Image
+
+    path = tmp_path / "garbage.png"
+    path.write_bytes(_png(b"garbage-not-zlib-at-all-xxxxxxxx"))
+    with Image.open(path) as image:
+        image.verify()  # accepted: chunks and CRCs are valid
+    with pytest.raises(Exception):
+        with Image.open(path) as image:
+            image.load()  # refused: the compressed pixel data is invalid
+
+
+@pytest.mark.parametrize("name,idat", [
+    ("garbage-idat", b"garbage-not-zlib-at-all-xxxxxxxx"),
+    ("zero-bytes", b"\x00" * 40),
+    ("short-stream", __import__("zlib").compress(_raw_rows(8, 8, 3)[:-9])),
+    ("long-stream", __import__("zlib").compress(_raw_rows(8, 8, 3) + b"\0" * 64)),
+    ("truncated-zlib", __import__("zlib").compress(_raw_rows(8, 8, 3))[:-6]),
+])
+def test_a_png_with_valid_checksums_but_corrupt_pixel_data_is_refused_at_upload(world, name, idat):
+    before = _state(world["db"])
+    res = _post_ordinary(world, f"{name}.png", _png(idat))
+    assert res.status_code == 415 and "not a valid .png" in res.json()["detail"], (name, res.status_code, res.text[:140])
+    assert _state(world["db"]) == before  # refused at upload: nothing stored for rendering to meet
+
+
+@pytest.mark.parametrize("width,height,color_type,channels,interlace", [
+    (8, 8, 2, 3, 0), (1, 1, 2, 3, 0), (13, 9, 0, 1, 0), (5, 3, 6, 4, 0),
+    (1, 1, 2, 3, 1), (3, 5, 2, 3, 1), (13, 9, 2, 3, 1), (8, 8, 0, 1, 1), (17, 2, 6, 4, 1),
+])
+def test_genuinely_valid_pngs_including_interlaced_ones_are_accepted(tmp_path, width, height, color_type, channels, interlace):
+    import zlib
+
+    from PIL import Image
+
+    raw = _interlaced_raw(width, height, channels) if interlace else _raw_rows(width, height, channels)
+    data = _png(zlib.compress(raw), width, height, color_type, interlace)
+    path = tmp_path / "ok.png"
+    path.write_bytes(data)
+    with Image.open(path) as image:
+        image.load()  # the hand-built file really is a valid PNG as far as Pillow is concerned
+    _validate(tmp_path, "ok.png", data)  # and the validator accepts it (no false refusal, incl. Adam7 size arithmetic)
+
+
+def _png_layout(width, height, bit_depth, color_type, interlace=0, split=False):
+    """A PNG of the given layout built from first principles: row byte-length computed here, independently of the validator."""
+    import struct
+    import zlib
+
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
+    bits = channels * bit_depth
+
+    def rows(w, h):
+        return b"".join(b"\x00" + bytes((x + y) % 251 for x in range((w * bits + 7) // 8)) for y in range(h)) if w and h else b""
+
+    if interlace:
+        raw = b""
+        for x0, y0, dx, dy in ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)):
+            raw += rows(len(range(x0, width, dx)), len(range(y0, height, dy)))
+    else:
+        raw = rows(width, height)
+    compressed = zlib.compress(raw)
+    ihdr = _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, bit_depth, color_type, 0, 0, interlace))
+    plte = _png_chunk(b"PLTE", bytes(i % 256 for i in range(3 * (2 ** min(bit_depth, 8))))) if color_type == 3 else b""
+    middle = len(compressed) // 2
+    idats = ([compressed[:middle], compressed[middle:]] if split else [compressed])
+    return b"\x89PNG\r\n\x1a\n" + ihdr + plte + b"".join(_png_chunk(b"IDAT", d) for d in idats) + _png_chunk(b"IEND", b"")
+
+
+@pytest.mark.parametrize("color_type,depths", [(0, (1, 2, 4, 8, 16)), (2, (8, 16)), (3, (1, 2, 4, 8)), (4, (8, 16)), (6, (8, 16))])
+@pytest.mark.parametrize("interlace", [0, 1])
+def test_every_png_layout_the_specification_defines_is_accepted(tmp_path, color_type, depths, interlace):
+    from PIL import Image
+
+    for depth in depths:
+        data = _png_layout(11, 7, depth, color_type, interlace)
+        path = tmp_path / f"l{color_type}_{depth}_{interlace}.png"
+        path.write_bytes(data)
+        try:
+            with Image.open(path) as image:
+                image.load()  # cross-check: Pillow itself accepts the hand-built layout
+        except Exception:  # noqa: BLE001 - a layout Pillow cannot load is not used to judge the validator
+            continue
+        _validate(tmp_path, path.name, data)
+
+
+def test_a_png_split_across_several_idat_chunks_is_accepted(tmp_path):
+    _validate(tmp_path, "split.png", _png_layout(20, 20, 8, 2, split=True))
+
+
+@pytest.mark.parametrize("color_type,depth", [(2, 4), (2, 1), (3, 16), (4, 4), (6, 2), (0, 3), (5, 8), (1, 8)])
+def test_png_layouts_the_specification_does_not_define_fail_explicitly(tmp_path, color_type, depth):
+    import struct
+
+    data = _png_layout(8, 8, 8, 2)  # a valid file, then its header is rewritten to the impossible layout
+    ihdr = _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 8, depth, color_type, 0, 0, 0))
+    start = data.index(b"IHDR") - 4
+    forged = data[:start] + ihdr + data[start + 25:]
+    assert "unsupported PNG" in _stream_error(tmp_path, "layout.png", forged)  # explicit, from the validator itself
+    assert "not a valid .png" in _refused_detail(tmp_path, "layout.png", forged)  # and refused end to end (by whichever layer sees it first)
+
+
+def test_an_unknown_interlace_or_compression_method_fails_explicitly(tmp_path):
+    import struct
+
+    base = _png_layout(8, 8, 8, 2)
+    start = base.index(b"IHDR") - 4
+    for fields, expect in (((8, 8, 8, 2, 0, 0, 2), "interlace"), ((8, 8, 8, 2, 1, 0, 0), "compression"), ((8, 8, 8, 2, 0, 1, 0), "compression")):
+        forged = base[:start] + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", *fields)) + base[start + 25:]
+        assert expect in _stream_error(tmp_path, "m.png", forged)
+        assert "not a valid .png" in _refused_detail(tmp_path, "m.png", forged)
+
+
+def _stream_error(tmp_path, name, content):
+    from app.core import upload_validators
+
+    path = tmp_path / name
+    path.write_bytes(content)
+    try:
+        upload_validators.validate_png_pixel_stream(path)
+    except ValueError as exc:
+        return str(exc)
+    raise AssertionError("expected the PNG stream validator to refuse this file")
+
+
+def _refused_detail(tmp_path, name, content):
+    from app.core import upload_policy
+
+    path = tmp_path / name
+    path.write_bytes(content)
+    try:
+        upload_policy.validate_content(path, name)
+    except upload_policy.PolicyViolation as exc:
+        return exc.detail
+    raise AssertionError("expected a refusal")
+
+
+def test_a_png_deflate_bomb_is_stopped_after_at_most_one_byte_past_the_permitted_total(tmp_path):
+    """A ~300 KB IDAT that would inflate to 300 MB, under an 8x8 header: refused quickly, with memory bounded."""
+    import time
+    import tracemalloc
+    import zlib
+
+    bomb = _png(zlib.compress(b"\0" * (300 * 1024 * 1024), 9))
+    assert len(bomb) < 1024 * 1024
+    path = tmp_path / "bomb.png"
+    path.write_bytes(bomb)
+    from app.core import upload_validators
+
+    tracemalloc.start()
+    started = time.monotonic()
+    with pytest.raises(ValueError, match="longer than its header allows"):
+        upload_validators.validate_png_pixel_stream(path)
+    elapsed = time.monotonic() - started
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert elapsed < 5 and peak < 4 * 1024 * 1024, (elapsed, peak)  # nowhere near 300 MB
+
+
+def test_the_inflater_is_never_asked_for_more_than_the_permitted_total_plus_one(tmp_path, monkeypatch):
+    import zlib
+
+    from app.core import upload_validators
+
+    requested = []
+    real = zlib.decompressobj
+
+    class Spy:
+        def __init__(self):
+            self._d = real()
+
+        def decompress(self, data, max_length=0):
+            requested.append(max_length)
+            return self._d.decompress(data, max_length)
+
+        def __getattr__(self, name):
+            return getattr(self._d, name)
+
+    monkeypatch.setattr(zlib, "decompressobj", Spy)
+    path = tmp_path / "x.png"
+    path.write_bytes(_png(zlib.compress(b"\0" * 5000), 8, 8, 2, 0))  # expected raw size is 8 * (1 + 24) = 200 bytes
+    with pytest.raises(ValueError):
+        upload_validators.validate_png_pixel_stream(path)
+    assert requested and max(requested) <= 201 and all(r > 0 for r in requested), requested  # permitted total + 1, never 64 KiB
+
+
+def test_trailing_data_after_the_zlib_stream_and_a_missing_idat_are_refused(tmp_path):
+    import zlib
+
+    raw = _raw_rows(8, 8, 3)
+    assert "after the end" in _stream_error(tmp_path, "trail.png", _png(zlib.compress(raw) + b"extra-bytes"))
+    no_idat = b"\x89PNG\r\n\x1a\n" + _png_chunk(b"IHDR", __import__("struct").pack(">IIBBBBB", 8, 8, 8, 2, 0, 0, 0)) + _png_chunk(b"IEND", b"")
+    assert "no pixel data" in _stream_error(tmp_path, "noidat.png", no_idat)
+    assert "not a valid .png" in _refused_detail(tmp_path, "noidat.png", no_idat)
