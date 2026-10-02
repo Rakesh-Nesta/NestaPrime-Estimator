@@ -1,5 +1,8 @@
 import io
 import json
+import uuid
+
+import pytest
 
 from pypdf import PdfReader
 
@@ -697,3 +700,119 @@ def test_quotation_pdf_leaves_out_a_stored_image_over_the_embed_budget_instead_o
     skipped = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
     assert skipped.status_code == 200 and skipped.content[:4] == b"%PDF"
     assert "Reference Images" not in _pdf_text(skipped)
+
+
+def test_a_documents_total_image_pixels_are_bounded_across_all_its_images(client, director_user, monkeypatch):
+    """Per-document budget: three 4x4 photos (16 px each) against a 40-pixel document budget: only two are embedded."""
+    import app.api.pdf_documents as pdf_module
+
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+    for i in range(3):  # distinct images (the PDF library shares identical ones, which would hide the count)
+        res = client.post(
+            "/attachments", data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
+            files={"file": (f"photo{i}.png", valid_png(color=(40 * i + 10, 90, 200 - 30 * i), size=(4, 4)), "image/png")}, headers=headers,
+        )
+        assert res.status_code == 201, res.text
+
+    def embedded(res):
+        return res.content.count(b"/Subtype /Image")
+
+    unbounded = embedded(client.get(f"/quotations/{quotation['id']}/pdf", headers=headers))
+    monkeypatch.setattr(pdf_module, "MAX_PDF_IMAGE_PIXELS", 40)
+    bounded = embedded(client.get(f"/quotations/{quotation['id']}/pdf", headers=headers))
+    assert unbounded >= 3 and bounded == unbounded - 1, (unbounded, bounded)
+
+
+def test_concurrent_pdf_builds_in_one_worker_are_serialised_so_image_memory_cannot_stack():
+    import threading
+    import time
+
+    import app.api.pdf_documents as pdf_module
+
+    state = {"now": 0, "max": 0}
+    lock = threading.Lock()
+
+    @pdf_module._one_pdf_build_at_a_time
+    def fake_build():
+        with lock:
+            state["now"] += 1
+            state["max"] = max(state["max"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+        return "done"
+
+    results = []
+    # one build running + MAX_PDF_BUILD_WAITERS waiting: every request is served, one at a time
+    count = 1 + pdf_module.MAX_PDF_BUILD_WAITERS
+    threads = [threading.Thread(target=lambda: results.append(fake_build())) for _ in range(count)]
+    [t.start() for t in threads]
+    [t.join(30) for t in threads]
+    assert results == ["done"] * count and state["max"] == 1  # concurrent requests, never two builds at once
+
+
+def test_a_pdf_request_that_cannot_get_the_build_slot_is_told_to_retry_with_503(client, director_user, monkeypatch):
+    import threading
+
+    import app.api.pdf_documents as pdf_module
+
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+    slot = threading.BoundedSemaphore(1)
+    slot.acquire()  # another build holds the worker's only slot
+    monkeypatch.setattr(pdf_module, "_PDF_BUILD_SLOT", slot)
+    monkeypatch.setattr(pdf_module, "PDF_BUILD_WAIT_SECONDS", 0.2)
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 503 and "busy" in res.json()["detail"]
+    slot.release()
+    assert client.get(f"/quotations/{quotation['id']}/pdf", headers=headers).status_code == 200  # and the slot works again
+
+
+def test_an_oversized_logo_is_refused_before_any_pixel_data_is_decoded(client, director_user, monkeypatch):
+    """Logos are budgeted like every other image and the refusal happens from the header: load() is never called."""
+    import app.api.pdf_documents as pdf_module
+    from PIL import Image as PILImage
+
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+    assert client.post("/company/logo", files={"file": ("logo.png", _png_bytes(), "image/png")}, headers=headers).status_code in (200, 201)
+    loaded = []
+    real_load = PILImage.Image.load
+    monkeypatch.setattr(PILImage.Image, "load", lambda self, *a, **k: (loaded.append(self.size), real_load(self, *a, **k))[1])
+    monkeypatch.setattr(pdf_module, "MAX_EMBED_PIXELS", 1)  # the 4x4 logo is now over budget
+    res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert res.status_code == 200 and res.content[:4] == b"%PDF"
+    assert loaded == [], f"an over-budget image was decoded: {loaded}"
+
+
+def test_a_stored_png_with_valid_checksums_but_corrupt_pixel_data_is_left_out_of_the_pdf_without_crashing(client, director_user, db_session):
+    """Rendering-side handling for data stored BEFORE the stream check existed (the upload path now refuses it)."""
+    from pathlib import Path
+
+    from app.models.attachment import Attachment
+
+    headers = _director_headers(client, director_user)
+    quotation = _sent_quotation(client, headers)
+    res = client.post(
+        "/attachments", data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
+        files={"file": ("layout.png", _png_bytes(), "image/png")}, headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    path = Path(db_session.get(Attachment, uuid.UUID(res.json()["id"])).storage_path)
+    path.write_bytes(_png_with_garbage_pixel_data())
+    pdf = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+    assert "Reference Images" not in _pdf_text(pdf)
+
+
+def _png_with_garbage_pixel_data() -> bytes:
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 8, 8, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", b"this is not a zlib stream at all") + chunk(b"IEND", b""))
