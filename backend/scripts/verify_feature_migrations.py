@@ -142,6 +142,11 @@ def main() -> int:
         again = alembic("upgrade", "head")
         heads_after = alembic("heads").stdout.strip().splitlines()
         check("5. re-upgrade to head succeeds with exactly one head", again.returncode == 0 and len(heads_after) == 1, again.stderr[-200:] if again.returncode else "")
+        if p5_present:
+            with conn() as c:
+                marker_final = c.execute("SELECT id, deployed_at FROM p5_migration_marker").fetchall()
+            check("5. the ORIGINAL P5 marker is unchanged after the downgrade/re-upgrade cycle", marker_final == marker_before and len(marker_final) == 1,
+                  f"original={marker_before[0][1].isoformat() if marker_before else None} final={marker_final[0][1].isoformat() if marker_final else None}")
     finally:
         admin.execute(f'DROP DATABASE IF EXISTS "{NAME}" WITH (FORCE)')
         admin.close()
