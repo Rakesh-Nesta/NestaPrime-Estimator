@@ -36,6 +36,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    held = bind.execute(sa.text(
+        "SELECT COUNT(*) FROM messages WHERE request_id IS NOT NULL OR attempt_state IS NOT NULL "
+        "OR previous_attempt_id IS NOT NULL OR resend_confirmed_by_id IS NOT NULL"
+    )).scalar()
+    if held:
+        raise RuntimeError(
+            f"Refusing to downgrade: {held} message row(s) carry send-attempt records (request id, outcome state, resend "
+            "links/confirmations). They are the evidence of whether a message was sent; dropping the columns would destroy "
+            "it. Archive or remove them deliberately first."
+        )
     op.drop_index("uq_messages_request_id", table_name="messages")
     op.drop_constraint("fk_messages_resend_confirmed_by", "messages", type_="foreignkey")
     op.drop_constraint("fk_messages_previous_attempt", "messages", type_="foreignkey")

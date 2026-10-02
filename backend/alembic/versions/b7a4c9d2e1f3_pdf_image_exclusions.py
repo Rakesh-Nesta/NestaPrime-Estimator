@@ -38,5 +38,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    held = bind.execute(sa.text("SELECT COUNT(*) FROM pdf_image_exclusions")).scalar()
+    if held:
+        raise RuntimeError(
+            f"Refusing to downgrade: pdf_image_exclusions holds {held} explicit user decision(s) to leave an image out of a "
+            "document; dropping the table would destroy them. Review and remove them deliberately first."
+        )
     op.drop_index("ix_pdf_image_exclusions_doc_id", table_name="pdf_image_exclusions")
     op.drop_table("pdf_image_exclusions")
