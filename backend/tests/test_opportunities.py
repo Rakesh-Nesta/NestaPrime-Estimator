@@ -1,5 +1,6 @@
 """Amendment 44 (Section E step 5): the Opportunity entity -- pipeline
 stages, mandatory-follow-up-date discipline, Lead/Client distinction."""
+from tests.relative_dates import d
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 
@@ -59,7 +60,7 @@ def _satisfy_project_readiness(client, headers, project_id):
 
 
 def _create_opportunity(client, headers, **overrides):
-    payload = {"lead_name": "Test Lead", "next_follow_up_date": "2026-10-01", **overrides}
+    payload = {"lead_name": "Test Lead", "next_follow_up_date": d("2026-10-01"), **overrides}
     res = client.post("/opportunities", json=payload, headers=headers)
     assert res.status_code == 201, res.text
     return res.json()
@@ -75,7 +76,7 @@ def _legitimately_won_opportunity(client, headers, lead_name="Test Lead"):
     opp = _create_opportunity(client, headers, lead_name=lead_name, client_id=client_row["id"])
     res = client.patch(
         f"/opportunities/{opp['id']}/stage",
-        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        json={"stage": "qualified", "next_follow_up_date": d("2026-10-05")},
         headers=headers,
     )
     assert res.status_code == 200, res.text
@@ -131,7 +132,7 @@ def test_add_enquiry_creates_lead_only_opportunity(client, director_user):
     assert row["client_id"] is None
     assert row["lead_name"] == "Jane Doe"
     assert row["stage"] == "new"
-    assert row["next_follow_up_date"] == "2026-10-01"
+    assert row["next_follow_up_date"] == d("2026-10-01")
 
 
 def test_create_opportunity_requires_next_follow_up_date(client, director_user):
@@ -161,7 +162,7 @@ def test_create_opportunity_with_unknown_client_id_is_404(client, director_user)
         "/opportunities",
         json={
             "lead_name": "Ghost Client Lead",
-            "next_follow_up_date": "2026-10-01",
+            "next_follow_up_date": d("2026-10-01"),
             "client_id": "00000000-0000-0000-0000-000000000000",
         },
         headers=headers,
@@ -179,7 +180,7 @@ def test_procurement_cannot_create_opportunity(client, director_user, db_session
     procurement_headers = _procurement_headers(client, db_session)
     res = client.post(
         "/opportunities",
-        json={"lead_name": "Blocked Lead", "next_follow_up_date": "2026-10-01"},
+        json={"lead_name": "Blocked Lead", "next_follow_up_date": d("2026-10-01")},
         headers=procurement_headers,
     )
     assert res.status_code == 403
@@ -218,12 +219,12 @@ def test_stage_change_to_non_terminal_sets_the_new_follow_up_date(client, direct
     row = _create_opportunity(client, headers)
     res = client.patch(
         f"/opportunities/{row['id']}/stage",
-        json={"stage": "contacted", "next_follow_up_date": "2026-10-15"},
+        json={"stage": "contacted", "next_follow_up_date": d("2026-10-15")},
         headers=headers,
     )
     assert res.status_code == 200, res.text
     assert res.json()["stage"] == "contacted"
-    assert res.json()["next_follow_up_date"] == "2026-10-15"
+    assert res.json()["next_follow_up_date"] == d("2026-10-15")
 
 
 def test_stage_change_to_won_clears_the_follow_up_date(client, director_user):
@@ -266,11 +267,11 @@ def test_follow_up_endpoint_pushes_the_date_out(client, director_user):
     row = _create_opportunity(client, headers)
     res = client.patch(
         f"/opportunities/{row['id']}/follow-up",
-        json={"next_follow_up_date": "2026-11-01", "follow_up_note": "Call back after Diwali"},
+        json={"next_follow_up_date": d("2026-11-01"), "follow_up_note": "Call back after Diwali"},
         headers=headers,
     )
     assert res.status_code == 200, res.text
-    assert res.json()["next_follow_up_date"] == "2026-11-01"
+    assert res.json()["next_follow_up_date"] == d("2026-11-01")
     assert res.json()["follow_up_note"] == "Call back after Diwali"
 
 
@@ -301,7 +302,7 @@ def test_follow_up_endpoint_blocked_on_a_closed_opportunity(client, director_use
     client.patch(f"/opportunities/{row['id']}/stage", json={"stage": "lost"}, headers=headers)
 
     res = client.patch(
-        f"/opportunities/{row['id']}/follow-up", json={"next_follow_up_date": "2026-11-01"}, headers=headers
+        f"/opportunities/{row['id']}/follow-up", json={"next_follow_up_date": d("2026-11-01")}, headers=headers
     )
     assert res.status_code == 400
 
@@ -415,7 +416,7 @@ def _qualified_linked_opportunity(client, headers):
     opp = _create_opportunity(client, headers, client_id=client_row["id"])
     res = client.patch(
         f"/opportunities/{opp['id']}/stage",
-        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        json={"stage": "qualified", "next_follow_up_date": d("2026-10-05")},
         headers=headers,
     )
     assert res.status_code == 200, res.text
@@ -475,7 +476,7 @@ def test_start_project_rejects_a_lead_only_opportunity(client, director_user):
     opp = _create_opportunity(client, headers)  # no client_id
     client.patch(
         f"/opportunities/{opp['id']}/stage",
-        json={"stage": "qualified", "next_follow_up_date": "2026-10-05"},
+        json={"stage": "qualified", "next_follow_up_date": d("2026-10-05")},
         headers=headers,
     )
 

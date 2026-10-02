@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 
+from tests.relative_dates import d
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 from tests.conftest import TEST_DATABASE_URL
@@ -30,7 +31,7 @@ def _sales_user(db_session, email="sales@test.local", name="Test Sales"):
 
 
 def _create_opportunity(client, headers, **overrides):
-    payload = {"lead_name": "Test Lead", "next_follow_up_date": "2026-10-01", **overrides}
+    payload = {"lead_name": "Test Lead", "next_follow_up_date": d("2026-10-01"), **overrides}
     res = client.post("/opportunities", json=payload, headers=headers)
     assert res.status_code == 201, res.text
     return res.json()
@@ -61,7 +62,7 @@ def test_create_follow_up_defaults_owner_from_entity(client, director_user):
 
     res = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call back", "due_date": "2026-10-05"},
+        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call back", "due_date": d("2026-10-05")},
         headers=headers,
     )
     assert res.status_code == 201, res.text
@@ -81,7 +82,7 @@ def test_explicit_owner_flags_specialist_assignment(client, director_user, db_se
         "/follow-ups",
         json={
             "entity_type": "client", "entity_id": row["id"], "next_action": "Technical review",
-            "due_date": "2026-10-05", "owner_id": str(specialist.id),
+            "due_date": d("2026-10-05"), "owner_id": str(specialist.id),
         },
         headers=headers,
     )
@@ -96,7 +97,7 @@ def test_multiple_open_follow_ups_on_one_record_are_allowed(client, director_use
     for action in ("Routine call-back", "Site-visit follow-up"):
         res = client.post(
             "/follow-ups",
-            json={"entity_type": "client", "entity_id": row["id"], "next_action": action, "due_date": "2026-10-05"},
+            json={"entity_type": "client", "entity_id": row["id"], "next_action": action, "due_date": d("2026-10-05")},
             headers=headers,
         )
         assert res.status_code == 201, res.text
@@ -110,7 +111,7 @@ def test_purpose_key_is_idempotent_for_automated_actions(client, director_user):
     row = _create_client_record(client, headers)
     body = {
         "entity_type": "client", "entity_id": row["id"], "next_action": "Auto review",
-        "due_date": "2026-10-05", "purpose_key": "won_stage_review",
+        "due_date": d("2026-10-05"), "purpose_key": "won_stage_review",
     }
     first = client.post("/follow-ups", json=body, headers=headers)
     second = client.post("/follow-ups", json=body, headers=headers)
@@ -127,13 +128,13 @@ def test_patch_writes_history_for_due_date_and_status(client, director_user):
     row = _create_client_record(client, headers)
     created = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call", "due_date": "2026-10-05"},
+        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call", "due_date": d("2026-10-05")},
         headers=headers,
     ).json()
 
-    res = client.patch(f"/follow-ups/{created['id']}", json={"due_date": "2026-10-10", "status": "in_progress"}, headers=headers)
+    res = client.patch(f"/follow-ups/{created['id']}", json={"due_date": d("2026-10-10"), "status": "in_progress"}, headers=headers)
     assert res.status_code == 200, res.text
-    assert res.json()["due_date"] == "2026-10-10"
+    assert res.json()["due_date"] == d("2026-10-10")
     assert res.json()["status"] == "in_progress"
 
 
@@ -142,7 +143,7 @@ def test_waiting_status_requires_waiting_party(client, director_user):
     row = _create_client_record(client, headers)
     created = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call", "due_date": "2026-10-05"},
+        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call", "due_date": d("2026-10-05")},
         headers=headers,
     ).json()
 
@@ -170,7 +171,7 @@ def test_completing_the_last_open_follow_up_on_an_open_opportunity_requires_a_re
 
     ok = client.patch(
         f"/follow-ups/{fu['id']}",
-        json={"status": "completed", "replacement": {"next_action": "Next call", "due_date": "2026-10-12"}},
+        json={"status": "completed", "replacement": {"next_action": "Next call", "due_date": d("2026-10-12")}},
         headers=headers,
     )
     assert ok.status_code == 200, ok.text
@@ -192,7 +193,7 @@ def test_cancelling_the_last_open_follow_up_on_an_open_opportunity_requires_a_re
 
     ok = client.patch(
         f"/follow-ups/{fu['id']}",
-        json={"status": "cancelled", "replacement": {"next_action": "Rescheduled", "due_date": "2026-10-12"}},
+        json={"status": "cancelled", "replacement": {"next_action": "Rescheduled", "due_date": d("2026-10-12")}},
         headers=headers,
     )
     assert ok.status_code == 200
@@ -209,7 +210,7 @@ def test_deleting_the_last_open_follow_up_on_an_open_opportunity_is_blocked(clie
     # create a second one first -- now deleting the first is fine, it's no longer the last
     client.post(
         "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Backup", "due_date": "2026-10-06"},
+        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Backup", "due_date": d("2026-10-06")},
         headers=headers,
     )
     ok = client.delete(f"/follow-ups/{fu['id']}", headers=headers)
@@ -221,12 +222,12 @@ def test_completing_a_non_last_open_follow_up_needs_no_replacement(client, direc
     opp = _create_opportunity(client, headers)
     first = client.post(
         "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": "2026-10-05"},
+        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": d("2026-10-05")},
         headers=headers,
     ).json()
     client.post(
         "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Site visit", "due_date": "2026-10-06"},
+        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Site visit", "due_date": d("2026-10-06")},
         headers=headers,
     )
 
@@ -242,7 +243,7 @@ def test_the_guard_does_not_apply_once_the_opportunity_is_closed(client, directo
     opp = _create_opportunity(client, headers)
     fu = client.post(
         "/follow-ups",
-        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": "2026-10-05"},
+        json={"entity_type": "opportunity", "entity_id": opp["id"], "next_action": "Call", "due_date": d("2026-10-05")},
         headers=headers,
     ).json()
     client.patch(f"/opportunities/{opp['id']}/stage", json={"stage": "lost"}, headers=headers)
@@ -270,7 +271,7 @@ def test_a_procurement_user_cannot_write_a_follow_up_on_a_client(client, directo
 
     res = client.post(
         "/follow-ups",
-        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call", "due_date": "2026-10-05"},
+        json={"entity_type": "client", "entity_id": row["id"], "next_action": "Call", "due_date": d("2026-10-05")},
         headers=proc_headers,
     )
     assert res.status_code == 403
@@ -352,7 +353,7 @@ def test_unknown_entity_is_a_404_not_a_403(client, director_user):
         "/follow-ups",
         json={
             "entity_type": "client", "entity_id": "00000000-0000-0000-0000-000000000000",
-            "next_action": "Call", "due_date": "2026-10-05",
+            "next_action": "Call", "due_date": d("2026-10-05"),
         },
         headers=headers,
     )
