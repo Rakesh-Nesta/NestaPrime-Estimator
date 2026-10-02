@@ -1,5 +1,5 @@
-def _login(client, director_user):
 from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
+def _login(client, director_user):
     res = client.post(
         "/auth/login",
         data={"username": "director@test.local", "password": "TestPass!1"},
