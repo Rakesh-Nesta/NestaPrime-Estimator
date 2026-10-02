@@ -34,7 +34,7 @@ from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 
-MAX_IMAGE_PIXELS = 100_000_000
+MAX_IMAGE_PIXELS = 50_000_000  # sized to what PDF generation can decode (see docs/security/upload-hardening.md)
 MAX_ZIP_UNCOMPRESSED = 1024 * 1024 * 1024
 MAX_ZIP_ENTRIES = 5000
 MAX_XML_PART_BYTES = 8 * 1024 * 1024
