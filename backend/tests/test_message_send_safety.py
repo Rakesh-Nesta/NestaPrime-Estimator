@@ -412,3 +412,183 @@ def test_a_resend_reuses_the_original_content_including_the_generated_document_f
     finally:
         m.wa_gateway.send_media = original_media
     assert res.status_code == 201 and res.json()["include_document"] is True and len(sent) == 2  # media was sent both times
+
+
+# ---------------------------------------------------------------- concurrent retries (real, separate database sessions)
+#
+# The HTTP test client shares ONE database session, so it cannot race honestly. These call the same functions the endpoints
+# call, from threads that each own a session (and a separate connection), released together by a barrier.
+
+
+def _race_threads(n, fn):
+    import threading
+
+    barrier, results, lock = threading.Barrier(n), [], threading.Lock()
+
+    def worker():
+        barrier.wait()
+        try:
+            outcome = fn()
+        except BaseException as exc:  # noqa: BLE001
+            outcome = exc
+        with lock:
+            results.append(outcome)
+
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(60)
+    assert not any(t.is_alive() for t in threads), "a racing request never finished"
+    return results
+
+
+def _own_session_user(user_id):
+    from app.models.user import User
+
+    s = Session()
+    return s, s.get(User, user_id)
+
+
+def test_concurrent_retries_with_the_same_request_id_produce_one_attempt_and_one_provider_call(wa, director_user):
+    import time
+
+    rid = str(uuid.uuid4())
+    director_id = director_user.id
+    wa["behaviour"]["fn"] = lambda to, body: (time.sleep(0.3), "wamid.slow")[1]  # widen the window between record and answer
+    body = messages_api.MessageCreate(**{**_body(wa), "request_id": rid})
+
+    def attempt():
+        s, user = _own_session_user(director_id)
+        try:
+            return messages_api._perform_send(body, s, user, None, None)
+        finally:
+            s.close()
+
+    results = _race_threads(8, attempt)
+    assert all(not isinstance(r, BaseException) for r in results), results
+    assert sorted(r.already_recorded for r in results) == [False] + [True] * 7  # one creator, seven replays
+    # EXPECTED OUTCOME: one durable attempt, and at most one provider invocation (here exactly one: the creator's)
+    assert len(wa["calls"]) <= 1 and len(wa["calls"]) == 1
+    wa["db"].rollback()
+    assert wa["db"].query(Message).filter(Message.request_id == rid).count() == 1
+
+
+def test_two_requests_that_both_pass_the_lookup_still_produce_one_attempt_the_insert_collision_is_handled(wa, director_user, monkeypatch):
+    """Deterministic: both threads finish their 'does this request id exist?' lookup (and the document generation) BEFORE either
+    inserts -- so the unique constraint, not the lookup, decides. The loser must return the winner's outcome, not error."""
+    import threading
+
+    rid = str(uuid.uuid4())
+    director_id = director_user.id
+    both_looked = threading.Barrier(2)
+
+    def document_after_lookup(doc_type, doc_id, db, current_user):
+        both_looked.wait(20)  # reached only AFTER the existence lookup returned nothing
+        return b"%PDF-1.4 stand-in", "est.pdf"
+
+    sent = []
+    monkeypatch.setattr(messages_api, "_document_for_send", document_after_lookup)
+    monkeypatch.setattr(messages_api.wa_gateway, "send_media", lambda *a, **k: (sent.append(1), "wamid.m")[1])
+    body = messages_api.MessageCreate(**{**_body(wa), "request_id": rid, "include_document": True})
+
+    def attempt():
+        s, user = _own_session_user(director_id)
+        try:
+            return messages_api._perform_send(body, s, user, None, None)
+        finally:
+            s.close()
+
+    results = _race_threads(2, attempt)
+    assert all(not isinstance(r, BaseException) for r in results), results
+    assert sorted(r.already_recorded for r in results) == [False, True]
+    assert len(sent) <= 1 and len(sent) == 1  # at most one provider invocation
+    wa["db"].rollback()
+    assert wa["db"].query(Message).filter(Message.request_id == rid).count() == 1
+
+
+def test_concurrent_retries_of_a_confirmed_resend_create_one_new_linked_attempt(wa, director_user):
+    from fastapi import Response
+
+    first = _make_unknown(wa)
+    director_id = director_user.id
+    rid = str(uuid.uuid4())
+    calls_before = len(wa["calls"])
+
+    def resend():
+        s, user = _own_session_user(director_id)
+        try:
+            return messages_api.resend_message(
+                uuid.UUID(first["id"]), messages_api.ResendIn(request_id=uuid.UUID(rid), confirm_duplicate_risk=True),
+                None, Response(), s, user)
+        finally:
+            s.close()
+
+    results = _race_threads(6, resend)
+    assert all(not isinstance(r, BaseException) for r in results), results
+    assert sorted(r.already_recorded for r in results) == [False] + [True] * 5
+    assert len({r.id for r in results}) == 1  # everyone sees the SAME new attempt
+    assert len(wa["calls"]) == calls_before + 1  # one extra send in total, not six
+    wa["db"].rollback()
+    linked = wa["db"].query(Message).filter(Message.previous_attempt_id == uuid.UUID(first["id"])).all()
+    assert len(linked) == 1 and linked[0].resend_confirmed_by_id == director_id
+    entries = wa["db"].query(AuditLogEntry).filter(AuditLogEntry.field == "resend_confirmed").count()
+    assert entries == 1  # confirmed (and audited) once
+
+
+def test_two_distinct_confirmed_resend_requests_are_two_linked_attempts_with_both_audit_histories(wa, director_user):
+    """The documented boundary: idempotency is per request id; confirmation is per resend. Two DIFFERENT request ids, each with
+    an explicit confirmation, are two deliberate attempts: both linked to the original, both confirmed, both audited."""
+    from fastapi import Response
+
+    first = _make_unknown(wa)
+    director_id = director_user.id
+    calls_before = len(wa["calls"])
+
+    def resend():
+        s, user = _own_session_user(director_id)
+        try:
+            return messages_api.resend_message(
+                uuid.UUID(first["id"]), messages_api.ResendIn(request_id=uuid.uuid4(), confirm_duplicate_risk=True), None, Response(), s, user)
+        finally:
+            s.close()
+
+    results = _race_threads(2, resend)
+    assert all(not isinstance(r, BaseException) for r in results), results
+    assert len({r.id for r in results}) == 2 and len(wa["calls"]) == calls_before + 2
+    wa["db"].rollback()
+    rows = wa["db"].query(Message).filter(Message.previous_attempt_id == uuid.UUID(first["id"])).all()
+    assert len(rows) == 2 and all(r.resend_confirmed_by_id == director_id and r.resend_confirmed_at for r in rows)
+    entries = wa["db"].query(AuditLogEntry).filter(AuditLogEntry.field == "resend_confirmed").all()
+    assert {e.document_id for e in entries} == {r.id for r in rows} and len(entries) == 2  # both histories preserved
+    assert all(e.reason == WARNING for e in entries)
+
+
+def test_a_distinct_resend_request_without_confirmation_is_refused_with_no_provider_call_even_alongside_a_confirmed_one(wa, director_user):
+    from fastapi import HTTPException, Response
+
+    first = _make_unknown(wa)
+    director_id = director_user.id
+    calls_before = len(wa["calls"])
+    flags = iter([True, False])
+    lock = __import__("threading").Lock()
+
+    def resend():
+        with lock:
+            confirm = next(flags)
+        s, user = _own_session_user(director_id)
+        try:
+            return messages_api.resend_message(
+                uuid.UUID(first["id"]), messages_api.ResendIn(request_id=uuid.uuid4(), confirm_duplicate_risk=confirm), None, Response(), s, user)
+        finally:
+            s.close()
+
+    results = _race_threads(2, resend)
+    created = [r for r in results if not isinstance(r, BaseException)]
+    refused = [r for r in results if isinstance(r, HTTPException)]
+    assert len(created) == 1 and len(refused) == 1, results
+    assert refused[0].status_code == 409 and refused[0].detail["code"] == "duplicate_risk_confirmation_required"
+    assert len(wa["calls"]) == calls_before + 1  # only the confirmed one reached the provider
+    wa["db"].rollback()
+    assert wa["db"].query(Message).filter(Message.previous_attempt_id == uuid.UUID(first["id"])).count() == 1
+    assert wa["db"].query(AuditLogEntry).filter(AuditLogEntry.field == "resend_confirmed").count() == 1
