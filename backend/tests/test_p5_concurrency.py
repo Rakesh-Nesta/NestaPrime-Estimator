@@ -29,6 +29,7 @@ from app.models.p5 import (
 )
 from app.models.user import User
 from app.models.work_order import WorkOrder, WorkOrderStatus
+from tests.valid_files import valid_pdf
 from tests.p5_concurrency import Session, blocked_pair, run_to_completion
 from tests.p5_helpers import (
     add_signatory,
@@ -175,7 +176,7 @@ def sign_op(agreement_id, signatory_id, attachment_id, actor_id):
 
 def attachment_supersede_op(attachment_id, actor_id):
     def fn(s):
-        file = UploadFile(file=io.BytesIO(b"a second version"), filename="v2.pdf")
+        file = UploadFile(file=io.BytesIO(valid_pdf("a second version")), filename="v2.pdf")
         return asyncio.run(
             attachments_api.supersede_attachment(
                 attachment_id=attachment_id, request=SimpleNamespace(client=None), tag=None, approval_strength=None,

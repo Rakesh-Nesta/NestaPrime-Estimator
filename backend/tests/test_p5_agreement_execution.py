@@ -32,6 +32,7 @@ from tests.p5_helpers import (
     user_headers,
 )
 from tests.test_work_orders import _director_headers, _won_quotation
+from tests.valid_files import valid_pdf
 
 
 @pytest.fixture()
@@ -405,7 +406,7 @@ def test_ac16_signed_evidence_cannot_be_superseded_through_the_generic_route_eve
     def generic_supersede(attachment_id):
         return client.post(
             f"/attachments/{attachment_id}/supersede", data={"tag": "signed_document"},
-            files={"file": ("tamper.pdf", b"tampered", "application/pdf")}, headers=h,
+            files={"file": ("tamper.pdf", valid_pdf("tampered"), "application/pdf")}, headers=h,
         )
 
     res = generic_supersede(ev_id)
