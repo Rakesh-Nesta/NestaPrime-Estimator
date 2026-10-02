@@ -3,7 +3,7 @@ order from app.core.p5 (Project -> Quotation -> Agreement -> Authorization -> ..
 leaves committing to the caller, so each mutation and its audit entry land in one transaction."""
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request
 from sqlalchemy import select
@@ -19,6 +19,21 @@ from app.models.setting import DocumentType
 from app.models.user import User
 from app.models.work_order import WorkOrder
 from sqlalchemy.orm import Session
+
+
+# The business calendar is India's (Asia/Kolkata, UTC+5:30, no daylight saving): "today" for a signing date is
+# the Indian date, never the UTC date (which is a day behind from 00:00 to 05:30 IST) and never the server's
+# local date. A fixed offset is exact for IST and needs no tz database.
+BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "IST")
+
+
+def _now_utc() -> datetime:
+    """Test seam: tests freeze the clock here to probe the midnight-IST boundary."""
+    return datetime.now(UTC)
+
+
+def business_today() -> date:
+    return _now_utc().astimezone(BUSINESS_TZ).date()
 
 
 def _audit(db, actor, agreement, field, old, new, reason, request):
@@ -97,9 +112,7 @@ def record_client_signature(
     if agreement.status != AgreementStatus.DRAFTED:
         raise HTTPException(status_code=409, detail=f"Only a drafted Agreement can be client-signed (status: {agreement.status})")
     project = scope.project
-    # One day of tolerance: the date comes from a person's local calendar, which can be a day AHEAD of UTC
-    # (e.g. India, UTC+5:30, between 00:00 and 05:30 local). A strict UTC comparison would refuse "today".
-    if signed_on > datetime.now(UTC).date() + timedelta(days=1):
+    if signed_on > business_today():
         raise HTTPException(status_code=422, detail="The signing date cannot be in the future")
 
     signatory = db.get(ClientSignatory, signatory_id)

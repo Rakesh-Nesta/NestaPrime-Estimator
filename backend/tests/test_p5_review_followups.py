@@ -5,36 +5,21 @@
   with the switch OFF Sales loses ONLY the ownership restriction -- every role limit stays.
 * Status codes follow the established authorization order: ownership-concealed records answer 404 (the global
   enforce_own_records dependency runs first); otherwise the route's role gate answers 403.
-* Denied writes are checked against a snapshot that spans P5 tables AND related records (Work Orders,
-  Attachments, Quotations, Projects, Users, Notifications and the audit log).
+* Denied writes are checked against a full snapshot: every persisted column of every row of every table
+  (so a denied request cannot pass while changing any related record).
 * The execution-context route is pinned to its exact fields and proven free of commercial data.
 * The migration marker's single-row guarantee is checked through the ORM-created schema here; the
   migration-created schema is checked in test_p5_adoption_and_migration.py and
   scripts/verify_p5_migration.py (real Alembic)."""
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
-from app.models.attachment import Attachment
-from app.models.audit_log import AuditLogEntry
-from app.models.client_signatory import ClientSignatory
-from app.models.document import Quotation
-from app.models.notification import Notification
-from app.models.p5 import (
-    Agreement,
-    P5MigrationMarker,
-    ProjectExecutionAuthorization,
-    ProjectMilestone,
-    ProjectSiteIssue,
-    ProjectTask,
-    ProjectTeamMember,
-)
-from app.models.project import Project
-from app.models.user import User
-from app.models.work_order import WorkOrder
+from app.core import p5_agreements
+from app.models.p5 import P5MigrationMarker
 from tests.p5_helpers import (
     add_signatory,
     authorize,
@@ -51,31 +36,22 @@ from tests.test_work_orders import _director_headers, _won_quotation
 
 
 def _snapshot(db):
-    """Every row a P5 request could plausibly touch, directly or indirectly."""
+    """EVERY persisted column of EVERY row of EVERY table in the schema (not counts or selected fields): a denied
+    request cannot pass while altering any record -- a P5 row, a Work Order, a Quotation value, an existing audit
+    entry, an Attachment hash, a User flag, anything."""
+    from sqlalchemy import select
+
+    from app.db.base import Base
+
     db.rollback()
     db.expire_all()
-    counts = {
-        m.__tablename__: db.query(func.count()).select_from(m).scalar()
-        for m in (
-            Agreement, ProjectExecutionAuthorization, ProjectTeamMember, ProjectMilestone, ProjectTask,
-            ProjectSiteIssue, Attachment, AuditLogEntry, Notification, WorkOrder, Quotation, Project, User,
-        )
-    }
-    detail = {
-        "agreements": sorted((str(a.id), a.status, a.evidence_locked_at is not None, a.signed_document_sha256, a.void_reason)
-                             for a in db.query(Agreement).all()),
-        "authorizations": sorted((str(a.id), a.status, a.invalidated_reason) for a in db.query(ProjectExecutionAuthorization).all()),
-        "team": sorted((str(m.id), m.removed_at is None) for m in db.query(ProjectTeamMember).all()),
-        "milestones": sorted((str(m.id), m.status, m.name) for m in db.query(ProjectMilestone).all()),
-        "tasks": sorted((str(t.id), t.status, str(t.assigned_to_id), t.title) for t in db.query(ProjectTask).all()),
-        "issues": sorted((str(i.id), i.status, i.resolution_reason) for i in db.query(ProjectSiteIssue).all()),
-        "attachments": sorted((str(a.id), str(a.superseded_by_id), a.original_sha256, str(a.review_status)) for a in db.query(Attachment).all()),
-        "work_orders": sorted((str(w.id), w.status.value) for w in db.query(WorkOrder).all()),
-        "quotations": sorted((str(q.id), q.status.value) for q in db.query(Quotation).all()),
-        "projects": sorted((str(p.id), p.phase.value, str(p.owner_id)) for p in db.query(Project).all()),
-        "users": sorted((str(u.id), u.role.value, u.is_active) for u in db.query(User).all()),
-    }
-    return counts, detail
+    dump = {}
+    for table in Base.metadata.sorted_tables:
+        query = select(table)
+        if list(table.primary_key.columns):
+            query = query.order_by(*table.primary_key.columns)
+        dump[table.name] = [tuple(repr(value) for value in row) for row in db.execute(query)]
+    return dump
 
 
 @pytest.fixture()
@@ -288,23 +264,41 @@ def test_execution_context_membership_and_role_checks(client, db_session, world)
     assert owner_view.status_code == 200 and set(owner_view.json()) == CONTEXT_FIELDS
 
 
-# ============================================================ signing-date tolerance (found by the full-suite run)
+# ============================================================ signing date: the business calendar is Asia/Kolkata
 
 
-def test_signing_date_accepts_a_local_today_that_is_ahead_of_utc_but_not_two_days_ahead(client, director_user):
-    """Found at 1a8fa1b: a strict UTC comparison refused 'today' for a user whose local date was already
-    tomorrow in UTC terms (India, 00:00-05:30 local). One day of tolerance; two days ahead is still refused."""
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+@pytest.mark.parametrize(
+    "frozen_utc, signing_ok, signing_refused",
+    [
+        # 15:30 IST on 1 Oct: tomorrow is in the future (a UTC+1-day tolerance would have wrongly accepted it)
+        (datetime(2026, 10, 1, 10, 0, tzinfo=UTC), date(2026, 10, 1), date(2026, 10, 2)),
+        # one second BEFORE midnight IST (23:59:59 IST on 1 Oct = 18:29:59Z)
+        (datetime(2026, 10, 1, 18, 29, 59, tzinfo=UTC), date(2026, 10, 1), date(2026, 10, 2)),
+        # exactly midnight IST (00:00:00 IST on 2 Oct = 18:30:00Z): the Indian day has begun, UTC's has not
+        (datetime(2026, 10, 1, 18, 30, 0, tzinfo=UTC), date(2026, 10, 2), date(2026, 10, 3)),
+        # later in the same IST day, still before UTC midnight
+        (datetime(2026, 10, 1, 23, 59, 59, tzinfo=UTC), date(2026, 10, 2), date(2026, 10, 3)),
+    ],
+)
+def test_signing_date_follows_the_indian_business_date_at_and_around_midnight_ist(
+    client, director_user, monkeypatch, frozen_utc, signing_ok, signing_refused
+):
     h = _director_headers(client, director_user)
     _, q = _won_quotation(client, h)
     _, client_id = quotation_project(client, h, q)
     agreement = draft_agreement(client, h, q)
     attachment = upload_agreement_document(client, h, agreement["id"])
-    signatory = add_signatory(client, h, client_id)
-    utc_today = datetime.now(UTC).date()
-    refused = client_sign(client, h, agreement["id"], signatory["id"], attachment["id"], signed_on=utc_today + timedelta(days=2))
-    assert refused.status_code == 422 and "future" in refused.json()["detail"]
-    ok = client_sign(client, h, agreement["id"], signatory["id"], attachment["id"], signed_on=utc_today + timedelta(days=1))
-    assert ok.status_code == 200, ok.text
+    signatory = add_signatory(client, h, client_id, authorized_on=date(2026, 1, 1))
+    monkeypatch.setattr(p5_agreements, "_now_utc", lambda: frozen_utc)
+    assert frozen_utc.astimezone(IST).date() == p5_agreements.business_today()
+
+    refused = client_sign(client, h, agreement["id"], signatory["id"], attachment["id"], signed_on=signing_refused)
+    assert refused.status_code == 422 and "future" in refused.json()["detail"], (frozen_utc, signing_refused)
+    ok = client_sign(client, h, agreement["id"], signatory["id"], attachment["id"], signed_on=signing_ok)
+    assert ok.status_code == 200, (frozen_utc, signing_ok, ok.text)
 
 
 # ============================================================ the migration marker: uniqueness, persistence (ORM-created schema)
@@ -332,3 +326,24 @@ def test_marker_is_a_single_immutable_row_in_the_orm_created_schema(client, dire
     db_session.expire_all()
     assert db_session.get(P5MigrationMarker, 1).deployed_at == datetime(2026, 1, 1)
     assert db_session.query(func.count()).select_from(P5MigrationMarker).scalar() == 1
+
+
+def test_the_full_snapshot_really_detects_a_change_to_any_related_record(client, db_session, world):
+    """Guards the guard: if the snapshot only compared counts or selected fields, these would go unnoticed."""
+    from sqlalchemy import text
+
+    base = _snapshot(db_session)
+    assert _snapshot(db_session) == base  # stable when nothing changes
+    mutations = [
+        "UPDATE audit_log_entries SET reason = 'tampered' WHERE id = (SELECT id FROM audit_log_entries ORDER BY id LIMIT 1)",
+        "UPDATE quotations SET quotation_total = quotation_total + 1",
+        "UPDATE attachments SET original_sha256 = repeat('0', 64) WHERE id = (SELECT id FROM attachments LIMIT 1)",
+        "UPDATE users SET is_active = NOT is_active WHERE id = (SELECT id FROM users ORDER BY id LIMIT 1)",
+        "UPDATE work_orders SET awarded_at = awarded_at + interval '1 second'",
+    ]
+    for statement in mutations:
+        db_session.execute(text(statement))
+        db_session.commit()
+        assert _snapshot(db_session) != base, statement
+        db_session.rollback()
+        base = _snapshot(db_session)  # re-baseline after each deliberate change

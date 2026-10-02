@@ -546,3 +546,31 @@ def test_retry_limit_exhaustion_leaves_the_account_change_and_all_related_record
         s.close()
     assert _fresh_state(world.quotation_id).auths[0][1] == AuthorizationStatus.AUTHORIZED
     _assert_consistent(world.quotation_id, world.project_id)
+
+
+# ------------------------------------------------------------------ AC-11: simultaneous double authorization
+
+
+def test_ac11_two_simultaneous_authorizations_yield_exactly_one_current_row_and_the_same_result(world):
+    ready = _ready(world, authorized=False)
+    first, second = blocked_pair(
+        authorize_op(world.quotation_id, world.director_id), authorize_op(world.quotation_id, world.director_id)
+    )
+    assert first.exc is None and second.exc is None  # BOTH responses succeed (no error, no duplicate)
+    assert first.result == second.result  # the second call is idempotent: it returns the first call's own row
+    state = _fresh_state(world.quotation_id)
+    assert len(state.auths) == 1  # exactly one authorization row exists at all
+    assert state.auths[0][0] == first.result and state.auths[0][1] == AuthorizationStatus.AUTHORIZED
+    s = Session()
+    try:
+        current = s.execute(
+            select(func.count()).select_from(ProjectExecutionAuthorization).where(
+                ProjectExecutionAuthorization.quotation_id == world.quotation_id,
+                ProjectExecutionAuthorization.status == AuthorizationStatus.AUTHORIZED,
+            )
+        ).scalar()
+        assert current == 1
+    finally:
+        s.close()
+    _assert_consistent(world.quotation_id, world.project_id)
+    assert ready.agreement["id"]

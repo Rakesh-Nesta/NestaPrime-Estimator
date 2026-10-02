@@ -290,3 +290,20 @@ def test_the_adoption_script_refuses_without_the_migration_marker(client, direct
     db_session.commit()
     with pytest.raises(SystemExit):
         adopt.run(db_session, confirm=False, actor_email=None)
+
+
+def test_a_downgrade_that_would_widen_the_adoption_boundary_is_refused(client, director_user, db_session):
+    """A downgrade -> upgrade cycle writes a NEW marker. A Work Order created while P5 was live (after the old
+    marker) was gated by P5; a newer marker must not be able to sweep it in as legacy, so that downgrade is
+    refused even when every P5 table is empty (e.g. emptied by hand)."""
+    h = _director_headers(client, director_user)
+    _, q, _wo = _legacy_world(client, db_session, h)  # a real Work Order, P5 rows stripped
+    _set_marker(db_session, datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1))  # the WO is AFTER the marker
+    error, present = _downgrade_in_a_transaction(db_session)
+    assert error is not None and "work_orders_created_after_p5=1" in str(error)
+    assert set(P5_TABLES) <= present  # nothing dropped
+
+    # the same Work Order created BEFORE the marker is genuinely pre-P5: the cycle is allowed and not widening
+    _set_marker(db_session, datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1))
+    error, present = _downgrade_in_a_transaction(db_session)
+    assert error is None

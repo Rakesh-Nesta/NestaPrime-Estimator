@@ -197,6 +197,17 @@ def downgrade() -> None:
     populated = {
         table: bind.execute(sa.text(f"SELECT COUNT(*) FROM {table}")).scalar() for table in P5_DATA_TABLES
     }
+    # The marker is the legacy-adoption eligibility boundary and a downgrade -> upgrade cycle writes a NEW one.
+    # A Work Order created while P5 was live (after the marker) was gated by P5; letting a later, newer marker
+    # sweep it in as "pre-P5" would widen the boundary, so such a downgrade is refused outright. (Work Orders
+    # created while P5 is DOWNGRADED run the old, ungated code and are legitimately legacy.)
+    post_marker = bind.execute(
+        sa.text(
+            "SELECT COUNT(*) FROM work_orders WHERE created_at > "
+            "COALESCE((SELECT deployed_at FROM p5_migration_marker WHERE id = 1), 'infinity'::timestamp)"
+        )
+    ).scalar()
+    populated["work_orders_created_after_p5"] = post_marker
     populated = {table: count for table, count in populated.items() if count}
     if populated:
         raise RuntimeError(
