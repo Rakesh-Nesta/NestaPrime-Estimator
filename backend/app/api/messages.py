@@ -450,14 +450,14 @@ def _perform_send(
         previous_attempt_id=previous.id if previous is not None else None,
     )
     db.add(message)
-    if confirmed_by is not None:
-        message.resend_confirmed_by_id, message.resend_confirmed_at = confirmed_by[0].id, _utcnow()
-        db.flush()
-        write_audit_log_entry(
-            db, current_user, "message", message.id, "resend_confirmed", effective_attempt_state(previous), "confirmed",
-            reason=DUPLICATE_WARNING, request=request,
-        )
     try:
+        if confirmed_by is not None:
+            message.resend_confirmed_by_id, message.resend_confirmed_at = confirmed_by[0].id, _utcnow()
+            db.flush()  # the INSERT happens here, so a request-id collision surfaces here (handled below), not only at commit
+            write_audit_log_entry(
+                db, current_user, "message", message.id, "resend_confirmed", effective_attempt_state(previous), "confirmed",
+                reason=DUPLICATE_WARNING, request=request,
+            )
         db.commit()
     except IntegrityError:  # another request with the same id won the race: return ITS outcome
         db.rollback()
