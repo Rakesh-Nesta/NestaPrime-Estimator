@@ -499,6 +499,12 @@ are cut off at the route's ceiling before the multipart body is parsed.
 to `<attachment root>/_quarantine/` and nothing serves from there. Set `UPLOAD_SCAN_REQUIRED=true` to refuse all
 uploads until a scanner is configured. Reviewing/clearing quarantined files is a manual operator step.
 
+**Setting these in production:** `docker-compose.prod.yml` passes `UPLOAD_SCAN_COMMAND`, `UPLOAD_SCAN_REQUIRED`,
+`UPLOAD_SCAN_TIMEOUT_SECONDS` and `ATTACHMENT_STORAGE_CAP_BYTES` from the host `.env` (defaults equal the code's
+defaults: **unscanned uploads accepted**). A value in `.env` has no effect on a container that was not recreated.
+It also names the backend image (`BACKEND_IMAGE`, default `nestaprime-backend:local`) so a release can deploy a
+pre-built, digest-recorded image with `up -d --no-build` instead of rebuilding on the server.
+
 **Cleanup scheduling -- documented, NOT activated by this change.** Abandoned sessions hold quota until they are purged
 (24 h idle). The job is `deploy/cleanup_upload_sessions.sh` (runs the sweep, prints a JSON health line, writes a
 heartbeat file). Proposed entry, to be added deliberately by an operator:
