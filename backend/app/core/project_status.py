@@ -8,6 +8,16 @@ The Dashboard ("Open projects" tile) and GET /projects (status filter, per-row s
 independently -- the list called a project "lost"/"won" if *any* quotation was, so an older Lost + newer Draft project was
 Open on the Dashboard but "lost" (and absent from the Open filter) in the list, and the two counts disagreed. Both now call
 this module. Nothing is stored: this only classifies existing quotation rows.
+
+Compatibility decisions this module PRESERVES (existing Dashboard policy, not new rules; pinned by
+tests/test_project_status_production_shape.py):
+  * Won + a newer live quotation  -> the project is Open (not every quotation is Won/Lost).
+  * Stored SUPERSEDED / EXPIRED rows count as "not yet closed", exactly as the Dashboard always counted them. (EXPIRED is
+    normally a read-time label -- the stored status stays SENT -- so such a project is Open too.) A project whose only
+    non-terminal rows are superseded revisions of a Won quotation therefore reads as Open; changing that would change the
+    Dashboard rule itself and is a separate business decision.
+Known separate inconsistency, not changed here: the Dashboard's "Recent projects" panel lists calibration projects (it calls
+GET /projects without include_calibration=false) although every Dashboard tile excludes them.
 """
 import uuid
 
