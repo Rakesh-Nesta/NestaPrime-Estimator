@@ -63,6 +63,38 @@ docker exec "$CONTAINER_NAME" psql -U nestaprime -d nestaprime_estimator -t -c "
 USER_COUNT=$(docker exec "$CONTAINER_NAME" psql -U nestaprime -d nestaprime_estimator -t -A -c "SELECT count(*) FROM users;" 2>/dev/null || echo "0")
 SPORT_COUNT=$(docker exec "$CONTAINER_NAME" psql -U nestaprime -d nestaprime_estimator -t -A -c "SELECT count(*) FROM sports;" 2>/dev/null || echo "0")
 
+# P5: the migration marker is the legacy-adoption cutoff and must come back EXACTLY as it was. Expected value, in
+# order of preference: EXPECTED_P5_MARKER_DEPLOYED_AT (operator-supplied), else the .p5marker sidecar that
+# backup_db.sh wrote next to the dump ("none" = the source database predates P5 and had no marker).
+SIDECAR="${DUMP_FILE%.sql.gz}.p5marker"
+EXPECTED_MARKER="${EXPECTED_P5_MARKER_DEPLOYED_AT:-}"
+if [ -z "$EXPECTED_MARKER" ] && [ -f "$SIDECAR" ]; then
+  EXPECTED_MARKER="$(tr -d '[:space:]' < "$SIDECAR")"
+fi
+MARKER_PRESENT=$(docker exec "$CONTAINER_NAME" psql -U nestaprime -d nestaprime_estimator -t -A -c "SELECT to_regclass('public.p5_migration_marker') IS NOT NULL;" 2>/dev/null || echo "f")
+MARKER_FAIL=""
+if [ "$MARKER_PRESENT" = "t" ]; then
+  MARKER_ROWS=$(docker exec "$CONTAINER_NAME" psql -U nestaprime -d nestaprime_estimator -t -A -c "SELECT count(*) FROM p5_migration_marker;")
+  MARKER_VALUE=$(docker exec "$CONTAINER_NAME" psql -U nestaprime -d nestaprime_estimator -t -A -c "SELECT to_char(deployed_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.US') FROM p5_migration_marker WHERE id = 1;")
+  if [ "$MARKER_ROWS" != "1" ] || [ -z "$MARKER_VALUE" ]; then
+    MARKER_FAIL="p5_migration_marker came back with $MARKER_ROWS row(s) and no id=1 value -- the legacy-adoption cutoff did not survive"
+  elif [ -n "$EXPECTED_MARKER" ] && [ "$EXPECTED_MARKER" != "none" ] && [ "$EXPECTED_MARKER" != "$MARKER_VALUE" ]; then
+    MARKER_FAIL="p5_migration_marker restored as $MARKER_VALUE but the original was $EXPECTED_MARKER"
+  elif [ "$EXPECTED_MARKER" = "none" ]; then
+    MARKER_FAIL="the source database had no p5_migration_marker but the restore contains one ($MARKER_VALUE)"
+  fi
+  echo "[$(date -u +%FT%TZ)] P5 marker: $MARKER_VALUE (expected: ${EXPECTED_MARKER:-not recorded -- only checked that exactly one id=1 row exists})"
+else
+  if [ -n "$EXPECTED_MARKER" ] && [ "$EXPECTED_MARKER" != "none" ]; then
+    MARKER_FAIL="the source database had a p5_migration_marker ($EXPECTED_MARKER) but the restore has no such table"
+  fi
+  echo "[$(date -u +%FT%TZ)] P5 marker: table not present in this dump (expected: ${EXPECTED_MARKER:-none recorded})"
+fi
+if [ -n "$MARKER_FAIL" ]; then
+  echo "FAIL: $MARKER_FAIL. Do not promote this restore -- an upgrade would be unable to reuse the original cutoff." >&2
+  exit 1
+fi
+
 echo ""
 echo "[$(date -u +%FT%TZ)] Drill result: users=$USER_COUNT sports=$SPORT_COUNT"
 if [ "$USER_COUNT" -gt 0 ] && [ "$SPORT_COUNT" -gt 0 ]; then

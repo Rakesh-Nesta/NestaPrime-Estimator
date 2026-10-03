@@ -1,3 +1,4 @@
+from tests.p5_helpers import create_work_order
 """End-to-end integration tests for Tender Mode (Part L), chaining every
 piece built across the whole Tender Mode effort into single, realistic
 scenarios: auto-triggered tender_mode (B.2), TenderDetails, the technical
@@ -245,7 +246,7 @@ def test_full_tender_mode_lifecycle_end_to_end(client, director_user):
     assert format_inr(quotation["cost_total"]) not in text  # K.3: cost never leaks
 
     # Post-award: Work Order & Actuals.
-    work_order = client.post(f"/quotations/{quotation['id']}/work-order", headers=headers).json()
+    work_order = create_work_order(client, headers, quotation['id']).json()
     assert work_order["status"] == "awarded"
 
     advance = client.post(
@@ -393,5 +394,5 @@ def test_work_order_cannot_be_created_before_release_and_send_even_if_evidence_e
     assert res.status_code == 400  # sent, not won yet
 
     client.post(f"/quotations/{quotation_id}/mark-won", json={}, headers=headers)
-    res = client.post(f"/quotations/{quotation_id}/work-order", headers=headers)
+    res = create_work_order(client, headers, quotation_id)
     assert res.status_code == 201, res.text

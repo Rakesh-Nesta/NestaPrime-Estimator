@@ -193,6 +193,11 @@ def test_every_route_a_salesperson_can_reach_refuses_someone_elses_record_with_4
         # project_reassignment, test_download_authorization_follows_reassignment_for_old_and_
         # new_versions).
         "doc_id", "doc_type", "session_id", "chunk_index",
+        # P5 contract revision 7: an Agreement needs a WON quotation, which this generic world does
+        # not build. The by-id refusal for GET /agreements/{agreement_id} (the only P5 route with a new
+        # id that a Sales user can reach) is asserted directly, with the switch on, by
+        # test_p5_agreement_execution.py::test_ac24_sales_visibility_follows_the_own_records_switch.
+        "agreement_id",
     }, skipped  # cannot be built here
 
 

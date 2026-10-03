@@ -7,6 +7,7 @@ is inferred from the client's free-text payment terms."""
 from datetime import date, timedelta
 
 from app.core.security import hash_password
+from tests.p5_helpers import create_work_order
 from app.models.user import User, UserRole
 
 
@@ -90,7 +91,7 @@ def _won_work_order(client, headers, name="Payments Client", cost_for_option=850
         headers=headers,
     )
     order_value = client.get(f"/projects/{project_id}/quotations", headers=headers).json()[0]["quotation_total"]
-    work_order_id = client.post(f"/quotations/{quotation_id}/work-order", headers=headers).json()["id"]
+    work_order_id = create_work_order(client, headers, quotation_id).json()["id"]
     return work_order_id, project_id, order_value
 
 

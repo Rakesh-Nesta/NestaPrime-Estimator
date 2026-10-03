@@ -406,6 +406,35 @@ backup, not just one:
 
 Record every drill -- pass or fail -- in [docs/ops/restore-drill-log.md](../docs/ops/restore-drill-log.md), the same "recurring, provably done" discipline Note R2 itself asks for.
 
+## P5 migration marker -- a deliberate rollback exception (read before any rollback or restore)
+
+Migration `a5e7c2d9b413` (P5) creates `p5_migration_marker`: ONE row holding the moment P5 was first deployed.
+It is the **legacy-adoption cutoff** -- `scripts/p5_adopt_legacy_work_orders.py` adopts only Work Orders created
+at or before it, so it must never move.
+
+- **A P5 downgrade is not a complete reversal.** `alembic downgrade -1` drops the six P5 data tables (and
+  refuses outright if any of them holds data) but **keeps `p5_migration_marker` and its row on purpose**.
+  A later `alembic upgrade head` reuses the original row; it never writes a new one.
+- **Never delete the marker as part of a "routine" rollback.** If the table exists but its row is missing,
+  `alembic upgrade head` **refuses** ("Refusing to upgrade: p5_migration_marker exists but its single row is
+  missing") rather than inventing a newer cutoff. Recovery is a human decision: restore the ORIGINAL
+  `deployed_at` value (from a backup or the audit trail), never a new one.
+- **Backups and restores must carry the marker.** `deploy/backup_db.sh` is a whole-database `pg_dump`, so the
+  marker is included automatically; a whole-database restore (`deploy/restore_drill.sh`) restores it with the
+  data it belongs to. Do NOT restore selected tables only, exclude `p5_migration_marker`, or restore P5 data into
+  a database whose marker differs. Restoring a backup taken BEFORE P5 shipped and then upgrading legitimately
+  creates a new marker (that database has no P5-era Work Orders), which is correct.
+- Verify after any restore: `SELECT id, deployed_at FROM p5_migration_marker;` must return exactly one row
+  (id = 1) with the original timestamp.
+- **The restore drill now asserts it.** `backup_db.sh` writes the marker's `deployed_at` (or `none` for a pre-P5
+  database) to a `.p5marker` sidecar beside each dump; `restore_drill.sh` restores the dump and **fails (exit 1)**
+  if `p5_migration_marker` has anything other than exactly one `id = 1` row, or if its value differs from the
+  sidecar (or from `EXPECTED_P5_MARKER_DEPLOYED_AT`, which takes precedence). With neither recorded it only checks
+  the single-row structure and says so. Verified against real dumps for: matching value (pass), different recorded
+  original, `none` recorded but a marker restored, wrong operator-supplied value, and a dump whose marker row was
+  lost (all four fail). The sidecar-writing step in `backup_db.sh` needs the production compose stack and has been
+  syntax-checked only, not executed end to end.
+
 ## Daily follow-up reminders (WP8)
 
 Same "no in-process scheduler" situation as the backup above -- an OS-level crontab entry

@@ -24,6 +24,7 @@ import PriceRequests from "./PriceRequests";
 import PricingCalculator from "./PricingCalculator";
 import ProjectOverview from "./ProjectOverview";
 import StageEvidence from "./StageEvidence";
+import Execution from "./Execution";
 import ProjectSetup from "./ProjectSetup";
 import QuickSearch from "./QuickSearch";
 import RateSheet from "./RateSheet";
@@ -115,7 +116,7 @@ export default function App() {
     // P3 contract, Section 8/9.
     "marketplace_imports_ops", "marketing_dashboard",
   ];
-  const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents", "stage_evidence"];
+  const PROJECT_STAGE_SCREENS = ["overview", "sports", "scope", "site_survey", "tender", "documents", "execution", "stage_evidence"];
 
   function goToTopLevel(target) {
     if (!TOP_LEVEL_SCREENS.includes(screen)) {
@@ -298,6 +299,7 @@ export default function App() {
             <ProjectBreadcrumb
               project={activeProject}
               screen={screen}
+              role={user.role}
               onDashboard={() => setScreen("dashboard")}
               onSetup={() => setActiveProject(null)}
               onStage={(stage) => setScreen(stage)}
@@ -479,6 +481,7 @@ export default function App() {
             onOpenDocuments={() => setScreen("documents")}
             onOpenFollowUps={() => goToTopLevel("followups")}
             onOpenStages={() => setScreen("stage_evidence")}
+            onOpenExecution={() => setScreen("execution")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "sports" && (
@@ -526,6 +529,16 @@ export default function App() {
             onOpenScope={() => setScreen("scope")}
             onOpenSiteSurvey={() => setScreen("site_survey")}
             onBack={() => setScreen("scope")}
+          />
+        )}
+        {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "execution" &&
+          canOpen("execution", user.role) && (
+          <Execution
+            token={accessToken}
+            user={user}
+            project={activeProject}
+            role={user.role}
+            onBack={() => setScreen("overview")}
           />
         )}
         {!TOP_LEVEL_SCREENS.includes(screen) && activeProject && screen === "stage_evidence" &&
@@ -597,13 +610,14 @@ export default function App() {
 // the "← Dashboard" link every section is supposed to get. Site Survey and
 // Tender Mode are optional side-branches reached from Scope, not their own
 // step in the main line -- shown here as "current" by highlighting Scope.
-function ProjectBreadcrumb({ project, screen, onDashboard, onSetup, onStage }) {
+function ProjectBreadcrumb({ project, screen, role, onDashboard, onSetup, onStage }) {
   const steps = [
     { key: "overview", label: "Overview", onClick: () => onStage("overview") },
     { key: "setup", label: "Setup", onClick: onSetup },
     { key: "sports", label: "Sport", onClick: () => onStage("sports") },
     { key: "scope", label: "Scope", onClick: () => onStage("scope") },
     { key: "documents", label: "Documents", onClick: () => onStage("documents") },
+    ...(canOpen("execution", role) ? [{ key: "execution", label: "Execution", onClick: () => onStage("execution") }] : []),
   ];
   const currentKey = screen === "site_survey" || screen === "tender" ? "scope" : screen;
 

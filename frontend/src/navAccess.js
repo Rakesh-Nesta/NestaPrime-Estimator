@@ -52,6 +52,10 @@ export const SCREEN_ROLES = {
   // STAGE_ROLES (attachments.py) -- upload/view/submit is site_engineer/pm/director; review
   // itself is further narrowed to pm/director inside the screen and re-enforced by the backend.
   stage_evidence: ["site_engineer", "pm", "director"],
+  // P5: the Execution tab -- agreement, readiness, team, milestones/tasks, site issues. Sales is
+  // read-only; procurement/site_engineer only get data for projects they are on the team of
+  // (the screen shows a friendly empty state on the backend's 403). Admin/marketing/ca_tax: no tab.
+  execution: ["sales", "pm", "director", "procurement", "site_engineer"],
 };
 
 export function canOpen(screen, role) {

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
 from app.api.payments import PaymentRowOut
+from app.core import p5
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.document import Quotation, QuotationStatus
@@ -58,23 +59,34 @@ def create_work_order(
     """M.1 diagram: 'QUOTATION -> WORK ORDER / ACTUALS.' Stage 4's own
     status lifecycle starts at Awarded (M.1: 'Awarded -> In progress ->
     Completed')."""
-    quotation = db.query(Quotation).filter(Quotation.id == quotation_id).first()
-    if not quotation:
+    if not db.query(Quotation.id).filter(Quotation.id == quotation_id).first():
         raise HTTPException(status_code=404, detail="Quotation not found")
-    if quotation.status != QuotationStatus.WON:
-        raise HTTPException(status_code=400, detail="A Work Order can only be created once the Quotation is Won")
+    try:
+        # P5 contract revision 7, Section 4.4: take the shared lock order (Project -> Quotation ->
+        # Agreement -> Authorization -> TeamMember -> User) and re-check everything LIVE under it, so a
+        # concurrent void/correction/removal/deactivation either commits first (and this refuses) or
+        # waits until this Work Order exists (which it then leaves untouched).
+        scope = p5.lock_quotation_scope(db, quotation_id, with_team=True)
+        quotation = scope.quotation
+        if quotation.status != QuotationStatus.WON:
+            raise HTTPException(status_code=400, detail="A Work Order can only be created once the Quotation is Won")
 
-    existing = db.query(WorkOrder).filter(WorkOrder.quotation_id == quotation_id).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="A Work Order already exists for this Quotation")
+        existing = db.query(WorkOrder).filter(WorkOrder.quotation_id == quotation_id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="A Work Order already exists for this Quotation")
 
-    work_order = WorkOrder(
-        project_id=quotation.project_id,
-        quotation_id=quotation_id,
-        created_by_id=current_user.id,
-    )
-    db.add(work_order)
-    db.commit()
+        p5.require_work_order_authorization(db, quotation, scope)
+
+        work_order = WorkOrder(
+            project_id=quotation.project_id,
+            quotation_id=quotation_id,
+            created_by_id=current_user.id,
+        )
+        db.add(work_order)
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
     db.refresh(work_order)
     return work_order
 
