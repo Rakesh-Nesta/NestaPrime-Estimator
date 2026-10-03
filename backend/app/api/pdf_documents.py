@@ -60,7 +60,13 @@ from app.models.project import Project
 from app.models.scope_item import ProjectScopeItem, ScopeItem
 from app.models.setting import DocumentType
 from app.models.sport import ProjectSport, Sport
-from app.pdf_utils import amount_in_words_inr, format_inr, round_to_nearest_10
+from app.pdf_utils import (
+    amount_in_words_inr,
+    format_inr,
+    format_signed_inr,
+    round_to_nearest_10,
+    rounding_adjustment,
+)
 from app.services import quotation_content
 
 pdf_documents_router = APIRouter(tags=["pdf-documents"])
@@ -1106,11 +1112,17 @@ def build_quotation_pdf(
     # means this isn't always literally 18%). selling_ex_gst is the
     # ex-GST base in both GstMode.EXCLUSIVE and GstMode.INCLUSIVE.
     effective_gst_rate = (gst_amount / selling_ex_gst * 100) if selling_ex_gst else 18.0
+    # M.6 rounds only the TOTAL to the nearest Rs 10; Subtotal and GST print to the rupee, so the printed lines can miss the
+    # printed total by a few rupees. Show that difference as its own row (omitted when the lines already reconcile) instead
+    # of leaving the page's arithmetic unexplained. The stored amounts and the rounding policy are unchanged.
+    adjustment = rounding_adjustment(selling_ex_gst, gst_amount, total_rounded)
     totals_rows = [
         ["Subtotal", format_inr(selling_ex_gst)],
         [f"GST @ {effective_gst_rate:.1f}%", format_inr(gst_amount)],
-        ["Total Project Cost", format_inr(total_rounded)],
     ]
+    if adjustment:
+        totals_rows.append(["Rounding adjustment (total to nearest Rs 10)", format_signed_inr(adjustment)])
+    totals_rows.append(["Total Project Cost", format_inr(total_rounded)])
     totals_table = Table(totals_rows, colWidths=[135 * mm, 40 * mm])
     totals_table.setStyle(
         TableStyle(

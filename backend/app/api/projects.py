@@ -8,14 +8,13 @@ from sqlalchemy.orm import Session
 from app.api.audit_log import write_audit_log_entry
 from app.api.clients import _default_package
 from app.api.field_settings import get_field_state
-from app.core import ownership
+from app.core import ownership, project_status
 from app.core.auth import require_roles
 from app.core.db_retry import create_with_retry
 from app.core.project_stages import seed_stages_for_project
 from app.db.session import get_db
 from app.models.client import Client, ClientType
 from app.models.client_site import ClientSite
-from app.models.document import Quotation, QuotationStatus
 from app.models.hub import Hub
 from app.models.opportunity import Opportunity, OpportunityStage
 from app.models.project import (
@@ -353,6 +352,9 @@ class ProjectSummaryOut(BaseModel):
     city: str
     status: str  # "open" | "won" | "lost"
     created_at: datetime
+    # Calibration/test projects are excluded from every Dashboard tile (Amendment 28 Part B); the list keeps them
+    # visible by default but flags them so the screen can show them and exclude them from its counts.
+    is_calibration: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -367,50 +369,40 @@ def list_projects(
     search: str | None = None,
     status: str | None = None,  # "open" | "won" | "lost"
     client_id: uuid.UUID | None = None,  # Section 19: per-client project list
+    include_calibration: bool = True,  # False = the Dashboard's own population (no calibration/test projects)
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*LIST_ROLES)),
 ):
-    won_project_ids = (
-        db.query(Quotation.project_id).filter(Quotation.status == QuotationStatus.WON).distinct()
-    )
-    lost_project_ids = (
-        db.query(Quotation.project_id).filter(Quotation.status == QuotationStatus.LOST).distinct()
-    )
-    closed_project_ids = (
-        db.query(Quotation.project_id)
-        .filter(Quotation.status.in_([QuotationStatus.WON, QuotationStatus.LOST]))
-        .distinct()
-    )
+    # One status rule shared with the Dashboard (app/core/project_status.py): closed only when EVERY quotation is
+    # Won/Lost, so an older Lost + newer live quotation is Open here exactly as it is on the Dashboard tile.
+    closed_ids = project_status.closed_project_ids(db)
+    won_ids_query = project_status.won_project_ids(db)
 
     query = db.query(Project, Client.name).join(Client, Client.id == Project.client_id)
     if ownership.scoping_applies(db, current_user):
         query = query.filter(Project.owner_id == current_user.id)
     if client_id is not None:
         query = query.filter(Project.client_id == client_id)
+    if not include_calibration:
+        query = query.filter(Project.is_calibration.is_(False))
     if search:
         needle = f"%{search}%"
         query = query.filter(
             (Project.project_no.ilike(needle)) | (Client.name.ilike(needle))
         )
     if status == "open":
-        query = query.filter(~Project.id.in_(closed_project_ids))
+        query = query.filter(~Project.id.in_(closed_ids))
     elif status == "won":
-        query = query.filter(Project.id.in_(won_project_ids))
+        query = query.filter(Project.id.in_(closed_ids), Project.id.in_(won_ids_query))
     elif status == "lost":
-        query = query.filter(Project.id.in_(lost_project_ids))
+        query = query.filter(Project.id.in_(closed_ids), ~Project.id.in_(won_ids_query))
 
     rows = query.order_by(Project.created_at.desc()).all()
-    won_ids = {pid for (pid,) in won_project_ids.all()}
-    lost_ids = {pid for (pid,) in lost_project_ids.all()}
+    statuses = project_status.project_statuses(db, [project.id for project, _ in rows])
 
     out = []
     for project, client_name in rows:
-        if project.id in won_ids:
-            row_status = "won"
-        elif project.id in lost_ids:
-            row_status = "lost"
-        else:
-            row_status = "open"
+        row_status = statuses[project.id]
         out.append(
             ProjectSummaryOut(
                 owner_id=project.owner_id,
@@ -420,6 +412,7 @@ def list_projects(
                 city=project.city,
                 status=row_status,
                 created_at=project.created_at,
+                is_calibration=project.is_calibration,
             )
         )
     return out

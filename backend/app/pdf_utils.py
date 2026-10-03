@@ -14,6 +14,22 @@ def round_to_nearest_10(amount: float) -> float:
     return round(amount / 10) * 10
 
 
+def rounding_adjustment(subtotal: float, gst: float, printed_total: float) -> int:
+    """Whole rupees that reconcile the PRINTED lines to the printed (nearest-Rs-10) total.
+
+    Subtotal and GST are printed to the rupee (format_inr) while the total is rounded to the nearest Rs 10 (M.6), so
+    `printed subtotal + printed GST` can differ from the printed total by a few rupees. This is that difference, computed
+    from exactly what is printed so the arithmetic on the page always adds up. Nothing stored is changed."""
+    return int(round(printed_total)) - (int(round(subtotal)) + int(round(gst)))
+
+
+def format_signed_inr(amount: int) -> str:
+    """5 -> '+Rs 5', -4 -> '-Rs 4', 0 -> 'Rs 0' (an adjustment is always shown with its sign)."""
+    if amount > 0:
+        return "+" + format_inr(amount)
+    return format_inr(amount)
+
+
 def format_inr(amount: float) -> str:
     """1250000 -> 'Rs 12,50,000' (last 3 digits, then groups of 2)."""
     rounded = round(amount)
