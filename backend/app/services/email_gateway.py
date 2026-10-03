@@ -18,10 +18,19 @@ from app.config import settings
 
 
 class EmailGatewayError(Exception):
-    """An email could not be sent -- not configured, an SMTP connection/
+    """`ambiguous` is True when the failure happened while the message was being handed to the SMTP server without a
+    definite refusal (a timeout or dropped connection during the transfer): it may have been accepted, so the outcome is
+    UNKNOWN. A failure to connect or authenticate, or a definite SMTP refusal, is a confirmed failure.
+
+    An email could not be sent -- not configured, an SMTP connection/
     auth failure, or any other send error. The caller (app/api/
     messages.py) catches this and records Message.status=FAILED rather
     than letting it 500."""
+
+
+    def __init__(self, message: str = "", ambiguous: bool = False):
+        super().__init__(message)
+        self.ambiguous = ambiguous
 
 
 def _require_configured() -> None:
@@ -58,11 +67,19 @@ def send_email(
         part["Content-Disposition"] = f'attachment; filename="{attachment_filename}"'
         message.attach(part)
 
+    stage = "connect"  # nothing has been handed to the server yet
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
             if settings.smtp_use_tls:
                 server.starttls()
             server.login(settings.smtp_username, settings.smtp_password)
+            stage = "transfer"
             server.sendmail(from_address, [to], message.as_string())
+            stage = "accepted"  # the server returned success for the message; only closing the connection remains
     except (smtplib.SMTPException, OSError) as exc:
-        raise EmailGatewayError(f"Email send failed: {exc}") from exc
+        if stage == "accepted":
+            return  # the server had already accepted the message; a failure while closing the connection is not a send failure
+        # A definite SMTP response (refused recipient/sender, rejected data, auth failure) is a confirmed failure; a
+        # timeout or dropped connection DURING the transfer is ambiguous.
+        definite = isinstance(exc, smtplib.SMTPResponseException) or isinstance(exc, smtplib.SMTPRecipientsRefused)
+        raise EmailGatewayError(f"Email send failed: {exc}", ambiguous=(stage == "transfer" and not definite)) from exc

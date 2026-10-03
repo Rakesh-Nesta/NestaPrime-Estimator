@@ -140,8 +140,9 @@ def _damage_stored_file(db_session, attachment_id):
 
 def test_corrupt_image_file_does_not_break_pdf_generation(client, director_user, db_session):
     """A corrupt image can no longer be uploaded (content is validated), but one that is already stored -- legacy
-    data, or damage on disk -- must still degrade to 'no image', never crash the whole PDF. The valid upload is
-    damaged on disk to reproduce that."""
+    data, or damage on disk -- must never crash the whole PDF. It is refused with a 409 naming the image (not omitted
+    silently); after the user explicitly removes it from this estimate the PDF is produced without it. The valid upload
+    is damaged on disk to reproduce that."""
     headers = _director_headers(client, director_user)
     estimate = _draft_estimate(client, headers)
     option_id = estimate["options"][0]["id"]
@@ -154,6 +155,16 @@ def test_corrupt_image_file_does_not_break_pdf_generation(client, director_user,
     assert res.status_code == 201, res.text
     _damage_stored_file(db_session, res.json()["id"])
 
+    refused = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
+    assert refused.status_code == 409  # a controlled refusal naming the image: never a crash, never a silent omission
+    excluded = refused.json()["detail"]["excluded"]
+    assert [(e["attachment_id"], e["reason"]) for e in excluded] == [(res.json()["id"], "unreadable")]
+
+    removed = client.post(
+        "/pdf-image-exclusions", json={"doc_type": "estimate", "doc_id": estimate["id"], "attachment_id": res.json()["id"]},
+        headers=headers,
+    )
+    assert removed.status_code == 201, removed.text
     pdf_res = client.get(f"/estimates/{estimate['id']}/pdf", headers=headers)
     assert pdf_res.status_code == 200
     assert _embedded_image_count(pdf_res) == 0
