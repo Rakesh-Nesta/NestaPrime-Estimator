@@ -2,6 +2,7 @@ import io
 
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -93,7 +94,7 @@ def _upload_structural_design(client, headers, cost_sheet_id, filename="engineer
     return client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": cost_sheet_id, "tag": "structural_design"},
-        files={"file": (filename, io.BytesIO(b"%PDF-1.4 fake engineer design"), "application/pdf")},
+        files={"file": (filename, io.BytesIO(valid_pdf()), "application/pdf")},
         headers=headers,
     )
 
@@ -148,7 +149,7 @@ def test_no_trigger_for_a_different_attachment_tag(client, director_user):
     res = client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": cost_sheet_id, "tag": "drawing"},
-        files={"file": ("drawing.pdf", io.BytesIO(b"%PDF-1.4 fake drawing"), "application/pdf")},
+        files={"file": ("drawing.pdf", io.BytesIO(valid_pdf('drawing')), "application/pdf")},
         headers=headers,
     )
     assert res.status_code == 201, res.text
@@ -247,7 +248,7 @@ def test_supersede_also_triggers_the_rebase(client, director_user):
     res = client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": cost_sheet_id, "tag": "drawing"},
-        files={"file": ("drawing.pdf", io.BytesIO(b"%PDF-1.4 fake drawing"), "application/pdf")},
+        files={"file": ("drawing.pdf", io.BytesIO(valid_pdf('drawing')), "application/pdf")},
         headers=headers,
     )
     assert res.status_code == 201, res.text
@@ -258,7 +259,7 @@ def test_supersede_also_triggers_the_rebase(client, director_user):
     res = client.post(
         f"/attachments/{attachment_id}/supersede",
         data={"tag": "structural_design"},
-        files={"file": ("engineer_design_v2.pdf", io.BytesIO(b"%PDF-1.4 revised design"), "application/pdf")},
+        files={"file": ("engineer_design_v2.pdf", io.BytesIO(valid_pdf('revised design')), "application/pdf")},
         headers=headers,
     )
     assert res.status_code == 201, res.text

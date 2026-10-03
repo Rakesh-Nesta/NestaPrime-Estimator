@@ -41,7 +41,24 @@ def main() -> None:
         help="Read-only preview: counts what each of the four sweeps would do -- deletes and "
              "modifies nothing. Reuses each sweep's own real selection criteria.",
     )
+    parser.add_argument(
+        "--report", action="store_true",
+        help="Print ONE JSON line of storage health (open sessions, declared bytes, oldest open session, stored bytes "
+             "vs the cap, quarantined files) for monitoring, and run no cleanup.",
+    )
     args = parser.parse_args()
+
+    if args.report:
+        import json
+
+        from app.core.upload_policy import storage_health
+
+        db = SessionLocal()
+        try:
+            print(json.dumps({"at": datetime.now(UTC).isoformat(), **storage_health(db)}))
+        finally:
+            db.close()
+        return
 
     now = datetime.now(UTC)
     db = SessionLocal()

@@ -56,7 +56,10 @@ def _draft_cost_sheet(client, headers):
     return res.json()["id"]
 
 
-def _upload(client, headers, doc_type, doc_id, tag, approval_strength=None, filename="test.txt", content=b"hello world"):
+def _upload(client, headers, doc_type, doc_id, tag, approval_strength=None, filename="test.txt", content=None):
+    from tests.valid_files import content_for
+
+    content = content if content is not None else content_for(filename)  # uploads are validated by parsing
     data = {"doc_type": doc_type, "doc_id": doc_id, "tag": tag}
     if approval_strength:
         data["approval_strength"] = approval_strength

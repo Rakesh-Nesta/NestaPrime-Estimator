@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from sqlalchemy.orm import Session
 
-from app.api.attachments import ALL_ATTACHMENT_ROLES, AttachmentOut, _require_doc_type_role, require_agreement_write
+from app.api.attachments import ALL_ATTACHMENT_ROLES, AttachmentOut, _require_doc_type_role, read_bounded, require_agreement_write
 from app.core import attachment_upload as upload_core
 from app.core import ownership
 from app.core.auth import require_roles
@@ -119,7 +119,8 @@ async def upload_chunk(
 ):
     session = _get_session_or_404(db, session_id)
     _authorize_session(db, session, current_user)
-    content = await file.read()
+    # Bounded: stop reading the moment the body exceeds this session's own chunk size (never trust a client's framing).
+    content = await read_bounded(file, session.chunk_size, 422, "Chunk is larger than the session's chunk_size")
     try:
         claimed_attempt = upload_core.claim_chunk(db, session_id, chunk_index)
         result = upload_core.write_and_promote_chunk(db, session_id, chunk_index, claimed_attempt, content)
