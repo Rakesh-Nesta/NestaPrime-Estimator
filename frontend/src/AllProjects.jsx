@@ -68,6 +68,9 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
   }, [initialStatus]);
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("");
+  // Calibration/test projects are never counted on the Dashboard (Amendment 28 Part B). They stay in the data and one
+  // click away here, but are hidden by default so the counts below match the Dashboard tile that opens this screen.
+  const [showCalibration, setShowCalibration] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [autoSelectDone, setAutoSelectDone] = useState(false);
   const [sort, setSort] = useState({ key: "project_no", dir: "asc" });
@@ -76,11 +79,13 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
 
   useEffect(() => {
     setLoading(true);
-    listProjects(token, { status: status || undefined })
+    // The whole list is fetched once; the status tabs filter it client-side. Fetching per status (as before) made every
+    // tab/tile count reflect only the current filter -- "Open (3)" turned into "Open (0)" after choosing Lost.
+    listProjects(token)
       .then(setRows)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [token, status]);
+  }, [token]);
 
   // The "Selected project" summary bar reads as part of the page -- so the first row is selected by
   // default as soon as there is one, the same as the mockup shows it. Once, not on every load.
@@ -100,8 +105,11 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
   }
 
   const needle = search.trim().toLowerCase();
-  const clientNames = [...new Set(rows.map((r) => r.client_name))].sort();
-  const visibleRows = rows
+  const clientNames = [...new Set(population.map((r) => r.client_name))].sort();
+  const population = showCalibration ? rows : rows.filter((r) => !r.is_calibration);
+  const calibrationCount = rows.filter((r) => r.is_calibration).length;
+  const visibleRows = population
+    .filter((r) => !status || r.status === status)
     .filter((r) => (!needle || r.project_no.toLowerCase().includes(needle) || r.client_name.toLowerCase().includes(needle)))
     .filter((r) => !clientFilter || r.client_name === clientFilter)
     .slice()
@@ -111,15 +119,15 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
       const cmp = String(av).localeCompare(String(bv));
       return sort.dir === "asc" ? cmp : -cmp;
     });
-  const selected = rows.find((r) => r.id === selectedId) || null;
+  const selected = population.find((r) => r.id === selectedId) || null;
   const tabCounts = {
-    "": rows.length,
-    open: rows.filter((r) => r.status === "open").length,
-    won: rows.filter((r) => r.status === "won").length,
-    lost: rows.filter((r) => r.status === "lost").length,
+    "": population.length,
+    open: population.filter((r) => r.status === "open").length,
+    won: population.filter((r) => r.status === "won").length,
+    lost: population.filter((r) => r.status === "lost").length,
   };
   const tiles = [
-    { key: "", label: "Total projects", value: rows.length, icon: FolderIcon },
+    { key: "", label: "Total projects", value: tabCounts[""], icon: FolderIcon },
     { key: "open", label: "Open", value: tabCounts.open, icon: FolderIcon },
     { key: "lost", label: "Lost", value: tabCounts.lost, icon: FolderIcon },
   ];
@@ -190,6 +198,12 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
               className="rounded border border-border-dark bg-surface-raised text-text-primary pl-7 pr-2 py-1.5 text-xs w-48"
             />
           </div>
+          {calibrationCount > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-text-secondary whitespace-nowrap cursor-pointer">
+              <input type="checkbox" checked={showCalibration} onChange={(e) => setShowCalibration(e.target.checked)} />
+              Show calibration/test ({calibrationCount})
+            </label>
+          )}
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
@@ -230,6 +244,11 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
                 <td className="px-3 py-2.5 font-mono text-text-primary whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5">
                     <FolderIcon className="w-3.5 h-3.5 text-gold" /> {p.project_no}
+                    {p.is_calibration && (
+                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-raised text-text-secondary">
+                        calibration
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td className="px-3 py-2.5 text-text-primary">{p.client_name}</td>
