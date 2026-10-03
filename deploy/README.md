@@ -500,10 +500,13 @@ to `<attachment root>/_quarantine/` and nothing serves from there. Set `UPLOAD_S
 uploads until a scanner is configured. Reviewing/clearing quarantined files is a manual operator step.
 
 **Setting these in production:** `docker-compose.prod.yml` passes `UPLOAD_SCAN_COMMAND`, `UPLOAD_SCAN_REQUIRED`,
-`UPLOAD_SCAN_TIMEOUT_SECONDS` and `ATTACHMENT_STORAGE_CAP_BYTES` from the host `.env` (defaults equal the code's
-defaults: **unscanned uploads accepted**). A value in `.env` has no effect on a container that was not recreated.
-It also names the backend image (`BACKEND_IMAGE`, default `nestaprime-backend:local`) so a release can deploy a
-pre-built, digest-recorded image with `up -d --no-build` instead of rebuilding on the server.
+`UPLOAD_SCAN_TIMEOUT_SECONDS` and `ATTACHMENT_STORAGE_CAP_BYTES` from the host `.env`. When they are **unset**, the
+defaults equal the code's defaults (**unscanned uploads accepted**). Lines for them that already exist in the server
+`.env` were ignored until now and **take effect when the container is recreated**: check the host `.env` (names and
+the non-secret limits) before recreating. It also names the backend image (`BACKEND_IMAGE`, default
+`nestaprime-backend:local`, a mutable tag) so a release can run a pre-built image with `up -d --no-build`; a release
+must set an immutable reference (digest, or unique tag plus recorded image ID) and verify the running container's
+image ID matches it.
 
 **Cleanup scheduling -- documented, NOT activated by this change.** Abandoned sessions hold quota until they are purged
 (24 h idle). The job is `deploy/cleanup_upload_sessions.sh` (runs the sweep, prints a JSON health line, writes a

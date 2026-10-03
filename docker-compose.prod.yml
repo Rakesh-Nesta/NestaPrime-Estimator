@@ -21,8 +21,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # Lets a deploy run a PRE-BUILT image (`up -d --no-build`) so the image that was
-    # rehearsed is the image that is promoted. `up -d --build` still builds and tags it.
+    # Lets a deploy run a PRE-BUILT image (`up -d --no-build`). The default tag is mutable and proves
+    # nothing: a release must set BACKEND_IMAGE to an immutable reference (a digest, or a unique tag plus
+    # the recorded image ID) and verify the running container's image ID matches it.
     image: ${BACKEND_IMAGE:-nestaprime-backend:local}
     restart: unless-stopped
     depends_on:
