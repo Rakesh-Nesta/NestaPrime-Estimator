@@ -105,8 +105,8 @@ export default function AllProjects({ token, role, initialStatus = "", onOpenPro
   }
 
   const needle = search.trim().toLowerCase();
-  const clientNames = [...new Set(population.map((r) => r.client_name))].sort();
   const population = showCalibration ? rows : rows.filter((r) => !r.is_calibration);
+  const clientNames = [...new Set(population.map((r) => r.client_name))].sort();
   const calibrationCount = rows.filter((r) => r.is_calibration).length;
   const visibleRows = population
     .filter((r) => !status || r.status === status)
