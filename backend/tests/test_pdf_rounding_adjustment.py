@@ -21,7 +21,7 @@ def _printed_totals(text: str) -> dict:
     found = {
         "subtotal": re.search(r"Subtotal\s+" + money, flat),
         "gst": re.search(r"GST @ [\d.]+%\s+" + money, flat),
-        "adjustment": re.search(r"Rounding adjustment[^R+-]*" + money, flat),
+        "adjustment": re.search(r"Rounding adjustment \(total to nearest Rs 10\)\s+" + money, flat),
         "total": re.search(r"Total Project Cost\s+" + money, flat),
     }
     return {k: (_rupees(m.group(1).replace(" ", "")) if m else None) for k, m in found.items()}
