@@ -21,6 +21,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Lets a deploy run a PRE-BUILT image (`up -d --no-build`). The default tag is mutable and proves
+    # nothing: a release must set BACKEND_IMAGE to an immutable reference (a digest, or a unique tag plus
+    # the recorded image ID) and verify the running container's image ID matches it.
+    image: ${BACKEND_IMAGE:-nestaprime-backend:local}
     restart: unless-stopped
     depends_on:
       db:
@@ -41,6 +45,14 @@ services:
       WA_GATEWAY_API_KEY: ${WA_GATEWAY_API_KEY:-}
       WA_GATEWAY_WEBHOOK_SECRET: ${WA_GATEWAY_WEBHOOK_SECRET:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # Upload hardening (docs/security/upload-hardening.md). Defaults mirror app/config.py:
+      # unscanned uploads accepted (a logged warning is NOT malware protection). Set
+      # UPLOAD_SCAN_REQUIRED=true to refuse every upload until a verified scanner is configured.
+      UPLOAD_SCAN_COMMAND: ${UPLOAD_SCAN_COMMAND:-}
+      UPLOAD_SCAN_REQUIRED: ${UPLOAD_SCAN_REQUIRED:-false}
+      UPLOAD_SCAN_TIMEOUT_SECONDS: ${UPLOAD_SCAN_TIMEOUT_SECONDS:-120}
+      # 50 GiB default; set from the measured disk (stored attachments + open reservations).
+      ATTACHMENT_STORAGE_CAP_BYTES: ${ATTACHMENT_STORAGE_CAP_BYTES:-53687091200}
     # Bound to localhost only -- the public-facing side is the host's own
     # nginx (deploy/nginx/nestaprime.conf), which reverse-proxies /api/
     # here. The backend container is never directly internet-reachable.
