@@ -2,6 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Only the lightweight client runs here. The signature database and scanning
+# engine live in the separately bounded clamd container, reached over a Unix socket.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clamdscan \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
