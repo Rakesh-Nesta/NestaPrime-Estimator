@@ -138,8 +138,9 @@ def require_agreement_write(doc_type, current_user) -> None:
 
 
 def require_doc_type_write_access(doc_type: DocumentType, current_user) -> None:
-    """Hook for a document type whose WRITE roles are narrower than the roles that may attach to it at all. resumable-upload finalization calls it so a write check made when a session was opened is repeated, on the
-    user as they are NOW, when the attachment is committed. (The P5 Agreement rules plug in here: PM/Director only.)"""
+    """Hook for a document type whose WRITE roles are narrower than the roles that may attach to it at all.
+    Resumable-upload finalization calls it so a write check made when a session was opened is repeated, on the user
+    as they are NOW, when the attachment is committed. P5's Agreement rule plugs in here: PM/Director only."""
     require_agreement_write(doc_type, current_user)  # P5: Agreement files are PM/Director-write only
 
 
