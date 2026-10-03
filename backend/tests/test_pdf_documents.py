@@ -386,31 +386,41 @@ def test_quotation_pdf_omits_reference_images_section_when_no_photos(client, dir
     assert "Reference Images" not in text
 
 
-def test_quotation_pdf_skips_a_corrupt_photo_attachment_without_crashing(client, director_user, db_session):
-    """Mirrors _product_image_flowable's own documented behavior: a
-    photo-tagged attachment that isn't actually a readable image is
-    silently left out rather than breaking PDF generation."""
+def test_quotation_pdf_never_crashes_on_a_corrupt_stored_photo_and_never_silently_drops_it(client, director_user, db_session):
+    """Purpose preserved: a stored photo that is not a readable image must not crash PDF generation (no 500). New contract:
+    it is not silently left out either -- generation refuses with a structured 409 naming the image, and works once the user
+    explicitly removes that image from THIS document (the attachment itself is untouched)."""
     headers = _director_headers(client, director_user)
     quotation = _sent_quotation(client, headers)
-
     res = client.post(
-        "/attachments",
-        data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
+        "/attachments", data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
         files={"file": ("not-really-a-photo.png", valid_png(), "image/png")},  # valid at upload; damaged on disk below
         headers=headers,
     )
     assert res.status_code == 201, res.text
-    import uuid
+    attachment_id = res.json()["id"]
     from pathlib import Path
 
     from app.models.attachment import Attachment
 
-    Path(db_session.get(Attachment, uuid.UUID(res.json()["id"])).storage_path).write_bytes(b"this is not a real png file")
+    path = Path(db_session.get(Attachment, uuid.UUID(attachment_id)).storage_path)
+    path.write_bytes(b"this is not a real png file")
 
+    refused = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert refused.status_code == 409, refused.status_code  # a controlled refusal, not a 500
+    detail = refused.json()["detail"]
+    assert detail["code"] == "pdf_images_excluded"
+    assert [(e["attachment_id"], e["reason"]) for e in detail["excluded"]] == [(attachment_id, "unreadable")]
+
+    removed = client.post(
+        "/pdf-image-exclusions", json={"doc_type": "quotation", "doc_id": quotation["id"], "attachment_id": attachment_id},
+        headers=headers,
+    )
+    assert removed.status_code == 201, removed.text
     res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
-    assert res.status_code == 200
-    assert res.content[:4] == b"%PDF"
+    assert res.status_code == 200 and res.content[:4] == b"%PDF"
     assert "Reference Images" not in _pdf_text(res)
+    assert path.read_bytes() == b"this is not a real png file"  # the stored file is exactly as it was
 
 
 # ---------------------------------------------------------------------------
@@ -681,9 +691,10 @@ def test_detailed_setup_quotation_pdf_omits_the_blind_quoting_assumptions(client
     assert "Site address to be confirmed before survey" not in text
 
 
-def test_quotation_pdf_leaves_out_a_stored_image_over_the_embed_budget_instead_of_decoding_it(client, director_user, monkeypatch):
+def test_an_over_budget_stored_image_is_refused_with_its_reason_instead_of_being_decoded_or_silently_dropped(client, director_user, monkeypatch):
     """Downstream processing, not validation: generated PDFs decode every embedded image in full. Images stored before the
-    upload pixel ceiling existed can exceed it, so PDF generation skips an over-budget image (like a corrupt one)."""
+    upload pixel ceiling existed can exceed it: generation refuses (409, reason over_image_budget) rather than decoding it or
+    omitting it silently."""
     import app.api.pdf_documents as pdf_module
 
     headers = _director_headers(client, director_user)
@@ -697,31 +708,39 @@ def test_quotation_pdf_leaves_out_a_stored_image_over_the_embed_budget_instead_o
     assert "Reference Images" in _pdf_text(ok)  # within budget: embedded as before
 
     monkeypatch.setattr(pdf_module, "MAX_EMBED_PIXELS", 1)  # the same image is now over budget
-    skipped = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
-    assert skipped.status_code == 200 and skipped.content[:4] == b"%PDF"
-    assert "Reference Images" not in _pdf_text(skipped)
+    refused = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert refused.status_code == 409
+    assert [e["reason"] for e in refused.json()["detail"]["excluded"]] == ["over_image_budget"]
 
 
 def test_a_documents_total_image_pixels_are_bounded_across_all_its_images(client, director_user, monkeypatch):
-    """Per-document budget: three 4x4 photos (16 px each) against a 40-pixel document budget: only two are embedded."""
+    """Per-document budget: three 4x4 photos (16 px each) against a 40-pixel document budget: the third is refused (409,
+    over_document_budget); once it is explicitly removed from this document the other two are embedded."""
     import app.api.pdf_documents as pdf_module
 
     headers = _director_headers(client, director_user)
     quotation = _sent_quotation(client, headers)
+    ids = []
     for i in range(3):  # distinct images (the PDF library shares identical ones, which would hide the count)
         res = client.post(
             "/attachments", data={"doc_type": "quotation", "doc_id": quotation["id"], "tag": "photo"},
             files={"file": (f"photo{i}.png", valid_png(color=(40 * i + 10, 90, 200 - 30 * i), size=(4, 4)), "image/png")}, headers=headers,
         )
         assert res.status_code == 201, res.text
+        ids.append(res.json()["id"])
 
     def embedded(res):
         return res.content.count(b"/Subtype /Image")
 
     unbounded = embedded(client.get(f"/quotations/{quotation['id']}/pdf", headers=headers))
     monkeypatch.setattr(pdf_module, "MAX_PDF_IMAGE_PIXELS", 40)
+    refused = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
+    assert unbounded >= 3 and refused.status_code == 409
+    excluded = refused.json()["detail"]["excluded"]
+    assert [e["reason"] for e in excluded] == ["over_document_budget"] and len(excluded) == 1
+    client.post("/pdf-image-exclusions", json={"doc_type": "quotation", "doc_id": quotation["id"], "attachment_id": excluded[0]["attachment_id"]}, headers=headers)
     bounded = embedded(client.get(f"/quotations/{quotation['id']}/pdf", headers=headers))
-    assert unbounded >= 3 and bounded == unbounded - 1, (unbounded, bounded)
+    assert bounded == unbounded - 1, (unbounded, bounded)
 
 
 def test_concurrent_pdf_builds_in_one_worker_are_serialised_so_image_memory_cannot_stack():
@@ -764,7 +783,8 @@ def test_a_pdf_request_that_cannot_get_the_build_slot_is_told_to_retry_with_503(
     monkeypatch.setattr(pdf_module, "_PDF_BUILD_SLOT", slot)
     monkeypatch.setattr(pdf_module, "PDF_BUILD_WAIT_SECONDS", 0.2)
     res = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
-    assert res.status_code == 503 and "busy" in res.json()["detail"]
+    assert res.status_code == 503 and res.json()["detail"] == {"code": "pdf_busy", "message": "PDF generation is busy. Please retry shortly."}
+    assert res.headers["retry-after"] == "5"
     slot.release()
     assert client.get(f"/quotations/{quotation['id']}/pdf", headers=headers).status_code == 200  # and the slot works again
 
@@ -786,8 +806,9 @@ def test_an_oversized_logo_is_refused_before_any_pixel_data_is_decoded(client, d
     assert loaded == [], f"an over-budget image was decoded: {loaded}"
 
 
-def test_a_stored_png_with_valid_checksums_but_corrupt_pixel_data_is_left_out_of_the_pdf_without_crashing(client, director_user, db_session):
-    """Rendering-side handling for data stored BEFORE the stream check existed (the upload path now refuses it)."""
+def test_a_stored_png_with_valid_checksums_but_corrupt_pixel_data_is_refused_by_the_pdf_without_crashing(client, director_user, db_session):
+    """Rendering-side handling for data stored BEFORE the stream check existed (the upload path now refuses it): a 409
+    naming the image, never a 500 and never a silent omission."""
     from pathlib import Path
 
     from app.models.attachment import Attachment
@@ -802,8 +823,7 @@ def test_a_stored_png_with_valid_checksums_but_corrupt_pixel_data_is_left_out_of
     path = Path(db_session.get(Attachment, uuid.UUID(res.json()["id"])).storage_path)
     path.write_bytes(_png_with_garbage_pixel_data())
     pdf = client.get(f"/quotations/{quotation['id']}/pdf", headers=headers)
-    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
-    assert "Reference Images" not in _pdf_text(pdf)
+    assert pdf.status_code == 409 and pdf.json()["detail"]["excluded"][0]["reason"] == "unreadable"
 
 
 def _png_with_garbage_pixel_data() -> bytes:

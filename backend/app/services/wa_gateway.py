@@ -14,10 +14,24 @@ from app.config import settings
 
 
 class WaGatewayError(Exception):
-    """A WhatsApp send could not be completed -- not configured, the
+    """`ambiguous` is True when the request may already have reached the gateway (a read/write timeout, a dropped
+    connection mid-request, a 5xx reply): the outcome is then UNKNOWN, not "failed". A refusal before anything was sent
+    (not configured, connection refused, a 4xx reply) is a confirmed failure.
+
+    A WhatsApp send could not be completed -- not configured, the
     instance isn't connected (409, e.g. no paired number), or any other
     non-2xx response. The caller (app/api/messages.py) catches this and
     records Message.status=FAILED rather than letting it 500."""
+
+
+    def __init__(self, message: str = "", ambiguous: bool = False):
+        super().__init__(message)
+        self.ambiguous = ambiguous
+
+
+def _transport_ambiguous(exc: Exception) -> bool:
+    """Connection never established => nothing was sent. Anything after the connection was made may have been."""
+    return not isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
 
 
 def _require_configured() -> None:
@@ -42,9 +56,9 @@ def send_text(to: str, text: str, instance_id: str = "default") -> str | None:
             timeout=15,
         )
     except httpx.HTTPError as exc:
-        raise WaGatewayError(f"wa-gateway request failed: {exc}") from exc
+        raise WaGatewayError(f"wa-gateway request failed: {exc}", ambiguous=_transport_ambiguous(exc)) from exc
     if res.status_code != 200:
-        raise WaGatewayError(f"wa-gateway /sendText returned {res.status_code}: {res.text[:200]}")
+        raise WaGatewayError(f"wa-gateway /sendText returned {res.status_code}: {res.text[:200]}", ambiguous=res.status_code >= 500)
     return _extract_message_id(res)
 
 
@@ -70,9 +84,9 @@ def send_media(
             f"{settings.wa_gateway_base_url}/sendMedia", json=payload, headers=_headers(), timeout=30,
         )
     except httpx.HTTPError as exc:
-        raise WaGatewayError(f"wa-gateway request failed: {exc}") from exc
+        raise WaGatewayError(f"wa-gateway request failed: {exc}", ambiguous=_transport_ambiguous(exc)) from exc
     if res.status_code != 200:
-        raise WaGatewayError(f"wa-gateway /sendMedia returned {res.status_code}: {res.text[:200]}")
+        raise WaGatewayError(f"wa-gateway /sendMedia returned {res.status_code}: {res.text[:200]}", ambiguous=res.status_code >= 500)
     return _extract_message_id(res)
 
 

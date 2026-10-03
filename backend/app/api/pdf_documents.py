@@ -16,10 +16,11 @@ import io
 import json
 import threading
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape as _xml_escape
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from PIL import Image as PILImage
@@ -32,17 +33,29 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy.orm import Session
 
+from app.api.audit_log import write_audit_log_entry
 from app.api.company import get_current_company_logo
 from app.api.documents import DOCUMENT_ROLES
 from app.api.schedule import get_schedule
 from app.api.settings import get_current_setting_value
 from app.api.sports import _dimension_deviations, _worst_deviation_status
+from app.core import ownership, upload_validators
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.attachment import Attachment, AttachmentTag
 from app.models.client import Client, ClientType
-from app.models.document import CostSheetLine, Estimate, EstimateOption, Quotation, QuotationLine, WorkPackage
+from app.models.document import (
+    CostSheetLine,
+    Estimate,
+    EstimateOption,
+    EstimateStatus,
+    Quotation,
+    QuotationLine,
+    QuotationStatus,
+    WorkPackage,
+)
 from app.models.package_content import PackageContent
+from app.models.pdf_image_exclusion import PdfImageExclusion
 from app.models.project import Project
 from app.models.scope_item import ProjectScopeItem, ScopeItem
 from app.models.setting import DocumentType
@@ -248,52 +261,6 @@ def _get_estimate(db: Session, estimate_id: uuid.UUID) -> Estimate:
     return estimate
 
 
-def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float, max_height: float, budget: "_PixelBudget | None" = None):
-    """M.6: 'product options table (Budget/Standard/Premium with images).'
-    The latest non-superseded product_image attachment on this specific
-    option (Attachment's own EstimateOption doc_type, separate from
-    Estimate's, since one image belongs to one sport+package row, not
-    the whole Estimate). Scaled to fit inside (max_width, max_height)
-    while preserving the original aspect ratio -- reportlab pulls Pillow
-    in as its own dependency, so no extra image library is needed. A
-    missing/corrupt file or no upload at all silently yields no image
-    rather than breaking PDF generation -- the row just has no picture."""
-    attachment = (
-        db.query(Attachment)
-        .filter(
-            Attachment.doc_type == DocumentType.ESTIMATE_OPTION,
-            Attachment.doc_id == option_id,
-            Attachment.tag == AttachmentTag.PRODUCT_IMAGE,
-            Attachment.superseded_by_id.is_(None),
-        )
-        .order_by(Attachment.uploaded_at.desc())
-        .first()
-    )
-    if attachment is None:
-        return ""
-    path = Path(attachment.storage_path)
-    if not path.exists():
-        return ""
-    try:
-        # ImageReader.getSize() only reads the header -- a truncated or
-        # otherwise corrupt file can still pass that and only fail later,
-        # inside reportlab's own build() when the pixel data is actually
-        # decoded (too late to degrade gracefully). Pillow's own .load()
-        # forces the full decode now, while it's still inside this
-        # try/except, so a bad file is caught here instead of crashing
-        # PDF generation for the whole document.
-        with PILImage.open(path) as pil_image:
-            if not _within_embed_budget(pil_image, budget):
-                return ""
-            pil_image.load()
-        reader = ImageReader(str(path))
-        original_width, original_height = reader.getSize()
-        scale = min(max_width / original_width, max_height / original_height)
-        return Image(str(path), width=original_width * scale, height=original_height * scale)
-    except Exception:
-        return ""
-
-
 # --- memory budget for images embedded in generated PDFs ------------------------------------------------------------
 # Generated PDFs decode every embedded image in full. Measured on a development machine (NOT the server, no load test):
 # ~13 MB of peak memory per megapixel, e.g. 12 Mpx = 180 MB / 2.5 s, 50 Mpx = 0.7 GB / 11 s. The intended server is a 2 GB
@@ -349,7 +316,10 @@ def _one_pdf_build_at_a_time(builder):
     worker would otherwise stack their memory). A request that cannot get the slot in time is told to retry (503)."""
     @functools.wraps(builder)
     def wrapper(*args, **kwargs):
-        busy = HTTPException(status_code=503, detail="The server is busy generating other PDFs -- please retry in a moment")
+        busy = HTTPException(
+            status_code=503, headers={"Retry-After": "5"},
+            detail={"code": "pdf_busy", "message": "PDF generation is busy. Please retry shortly."},
+        )
         # Only a few requests may WAIT for the slot (each waiter holds a pool thread); the rest are refused immediately.
         if not _PDF_BUILD_WAITERS.acquire(blocking=False):
             raise busy
@@ -367,16 +337,105 @@ def _one_pdf_build_at_a_time(builder):
     return wrapper
 
 
-def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: float, max_height: float, budget: "_PixelBudget | None" = None) -> list:
-    """Every non-superseded photo-tagged attachment on this Quotation
-    (uploaded via the existing Attachments panel -- Documents.jsx already
-    renders it on the Quotation row, doc_type="quotation") -- e.g. a site
-    layout diagram or a 3D facility render, the kind of image real
-    quotations are sent with today for client clarity but the PDF itself
-    never included. Same scale-to-fit/graceful-skip pattern as
-    _product_image_flowable above; a corrupt or unreadable file is simply
-    left out rather than breaking PDF generation for the whole document."""
-    attachments = (
+# --- which images a generated PDF contains, and why any are left out ------------------------------------------------
+# A selected image that cannot be embedded is NEVER dropped silently: generation (and therefore a direct API call, a
+# download and a send alike) refuses with a structured 409 listing each excluded image and the reason, until the user
+# resolves it -- replace the image, or explicitly remove it from THIS document (a PdfImageExclusion record; the
+# Attachment itself is never touched). The read-only /pdf-check endpoints preview the same decision, but only the
+# generation path enforces it, so a stale preview can never let an omission through.
+
+_REASON_TEXT = {
+    "over_image_budget": "is too large to embed in a generated PDF",
+    "over_document_budget": "would push this document's total image size over the limit",
+    "unreadable": "could not be read as an image",
+    "file_missing": "is missing from storage",
+    "removed_by_user": "was removed from this document by a user",
+}
+
+
+@dataclass
+class ImageExclusion:
+    attachment_id: str
+    filename: str
+    tag: str
+    reason: str
+    message: str
+    user_removed: bool = False
+    exclusion_id: str | None = None
+
+    def as_dict(self) -> dict:
+        return {
+            "attachment_id": self.attachment_id, "filename": self.filename, "tag": self.tag, "reason": self.reason,
+            "message": self.message, "user_removed": self.user_removed, "exclusion_id": self.exclusion_id,
+        }
+
+
+class _ImagePlan:
+    """Per-document record of the decisions made about each selected image."""
+
+    def __init__(self, db: Session, doc_type: DocumentType, doc_id: uuid.UUID):
+        self.doc_type = doc_type
+        self.doc_id = doc_id
+        self.budget = _PixelBudget()
+        self.exclusions: list[ImageExclusion] = []
+        self.included = 0
+        self.removed = {
+            row.attachment_id: row
+            for row in db.query(PdfImageExclusion).filter(
+                PdfImageExclusion.doc_type == doc_type.value, PdfImageExclusion.doc_id == doc_id
+            )
+        }
+
+    def admit(self, pil_image) -> str | None:
+        """None when the image fits, else the reason. Header-only: nothing has been decoded yet."""
+        cost = _decoded_cost(pil_image)
+        if cost > MAX_EMBED_PIXELS:
+            return "over_image_budget"
+        if not self.budget.take(cost):
+            return "over_document_budget"
+        return None
+
+    def add(self, attachment: Attachment, reason: str) -> None:
+        removal = self.removed.get(attachment.id)
+        self.exclusions.append(ImageExclusion(
+            attachment_id=str(attachment.id), filename=attachment.original_filename, tag=attachment.tag.value,
+            reason=reason, message=f"{attachment.original_filename} {_REASON_TEXT[reason]}",
+            user_removed=reason == "removed_by_user", exclusion_id=str(removal.id) if removal else None,
+        ))
+
+    @property
+    def blocking(self) -> list[ImageExclusion]:
+        return [e for e in self.exclusions if not e.user_removed]
+
+    def raise_if_blocked(self) -> None:
+        if self.blocking:
+            raise HTTPException(status_code=409, detail=self.blocked_detail())
+
+    def blocked_detail(self) -> dict:
+        return {
+            "code": "pdf_images_excluded",
+            "message": "This document cannot be generated yet: some of its selected images cannot be included. "
+                       "Replace each image, or remove it from this document, then try again.",
+            "excluded": [e.as_dict() for e in self.blocking],
+        }
+
+
+def _latest_product_image(db: Session, option_id: uuid.UUID):
+    return (
+        db.query(Attachment)
+        .filter(
+            Attachment.doc_type == DocumentType.ESTIMATE_OPTION,
+            Attachment.doc_id == option_id,
+            Attachment.tag == AttachmentTag.PRODUCT_IMAGE,
+            Attachment.superseded_by_id.is_(None),
+        )
+        .order_by(Attachment.uploaded_at.desc())
+        .first()
+    )
+
+
+def _quotation_photos(db: Session, quotation_id: uuid.UUID) -> list:
+    return (
         db.query(Attachment)
         .filter(
             Attachment.doc_type == DocumentType.QUOTATION,
@@ -387,23 +446,87 @@ def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: 
         .order_by(Attachment.uploaded_at.asc())
         .all()
     )
+
+
+def _selected_images(db: Session, doc_type: DocumentType, doc_id: uuid.UUID) -> list:
+    """The images a document of this type would try to embed -- ONE definition shared by the builders, the preview and the
+    exclusion endpoint, so they cannot drift apart."""
+    if doc_type == DocumentType.ESTIMATE:
+        options = db.query(EstimateOption).filter(EstimateOption.estimate_id == doc_id).all()
+        return [image for option in options if (image := _latest_product_image(db, option.id)) is not None]
+    if doc_type == DocumentType.QUOTATION:
+        return _quotation_photos(db, doc_id)
+    return []
+
+
+def _evaluate_image(plan: "_ImagePlan", attachment: Attachment, full: bool) -> bool:
+    """True when the image may be embedded; otherwise the reason is recorded on the plan. full=True (generation) decodes the
+    image, so a corrupt one is found here; full=False (preview) applies the same header-level budget and the cheap, bounded
+    upload validators instead of a full decode."""
+    if attachment.id in plan.removed:
+        plan.add(attachment, "removed_by_user")
+        return False
+    path = Path(attachment.storage_path)
+    if not path.exists():
+        plan.add(attachment, "file_missing")
+        return False
+    try:
+        with PILImage.open(path) as pil_image:
+            reason = plan.admit(pil_image)  # from the header, before any pixel data is loaded
+            if reason:
+                plan.add(attachment, reason)
+                return False
+            if full:
+                pil_image.load()
+        if not full:
+            extension = path.suffix.lower()
+            if extension in upload_validators.VALIDATORS:
+                upload_validators.VALIDATORS[extension](path)
+    except Exception:  # noqa: BLE001 - anything unreadable is reported, never swallowed
+        plan.add(attachment, "unreadable")
+        return False
+    return True
+
+
+def _scaled_image(path: Path, max_width: float, max_height: float):
+    reader = ImageReader(str(path))
+    original_width, original_height = reader.getSize()
+    scale = min(max_width / original_width, max_height / original_height)
+    return Image(str(path), width=original_width * scale, height=original_height * scale)
+
+
+def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float, max_height: float, plan: "_ImagePlan"):
+    """M.6: 'product options table (Budget/Standard/Premium with images).' The latest non-superseded product_image on this
+    specific option, scaled to fit while preserving the aspect ratio. A row with NO upload simply has no picture; an image
+    that exists but cannot be embedded is recorded on the plan (and blocks generation) -- never silently dropped."""
+    attachment = _latest_product_image(db, option_id)
+    if attachment is None:
+        return ""
+    if not _evaluate_image(plan, attachment, full=True):
+        return ""
+    try:
+        flowable = _scaled_image(Path(attachment.storage_path), max_width, max_height)
+    except Exception:  # noqa: BLE001
+        plan.add(attachment, "unreadable")
+        return ""
+    plan.included += 1
+    return flowable
+
+
+def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: float, max_height: float, plan: "_ImagePlan") -> list:
+    """Every non-superseded photo-tagged attachment on this Quotation (a site layout, a 3D render ...). Same rule as above:
+    each one is embedded, explicitly removed by a user for this document, or recorded as an exclusion that blocks generation."""
     flowables: list = []
-    for attachment in attachments:
-        path = Path(attachment.storage_path)
-        if not path.exists():
+    for attachment in _quotation_photos(db, quotation_id):
+        if not _evaluate_image(plan, attachment, full=True):
             continue
         try:
-            with PILImage.open(path) as pil_image:
-                if not _within_embed_budget(pil_image, budget):
-                    continue
-                pil_image.load()
-            reader = ImageReader(str(path))
-            original_width, original_height = reader.getSize()
-            scale = min(max_width / original_width, max_height / original_height)
-            flowables.append(Image(str(path), width=original_width * scale, height=original_height * scale))
+            flowables.append(_scaled_image(Path(attachment.storage_path), max_width, max_height))
             flowables.append(Spacer(1, 3 * mm))
-        except Exception:
+        except Exception:  # noqa: BLE001
+            plan.add(attachment, "unreadable")
             continue
+        plan.included += 1
     return flowables
 
 
@@ -584,15 +707,15 @@ def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO,
     """Amendment 8 (Section 8): factored out of the route below so
     app/api/messages.py can attach the same PDF to a WhatsApp/Telegram
     send without a second, divergent copy of this layout."""
-    budget = _PixelBudget()
     estimate = _get_estimate(db, estimate_id)
+    plan = _ImagePlan(db, DocumentType.ESTIMATE, estimate_id)
     project = db.query(Project).filter(Project.id == estimate.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
     options = db.query(EstimateOption).filter(EstimateOption.estimate_id == estimate_id).all()
     inclusions, exclusions = _inclusions_and_exclusions(db, project.id)
 
     styles = _styles()
-    logo = _company_logo_flowable(db, 45 * mm, 18 * mm, budget)
+    logo = _company_logo_flowable(db, 45 * mm, 18 * mm, plan.budget)
     story: list = [
         *([logo, Spacer(1, 2 * mm)] if logo else []),
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
@@ -617,7 +740,7 @@ def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO,
         sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
         rows.append(
             [
-                _product_image_flowable(db, option.id, image_col_width, image_col_height, budget),
+                _product_image_flowable(db, option.id, image_col_width, image_col_height, plan),
                 sport.name,
                 option.package.value.capitalize(),
                 f"{sport.playing_dims} ft" + (f"\n({sport.source_citation})" if sport.source_citation else ""),
@@ -671,6 +794,7 @@ def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO,
     story.append(Spacer(1, 6 * mm))
     story.append(Paragraph("Client signature: _______________________ &nbsp;&nbsp; Date: ____________", styles["Normal"]))
 
+    plan.raise_if_blocked()  # nothing selected is dropped silently: refuse, listing each excluded image
     buffer = io.BytesIO()
     SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm).build(story)
     return buffer, f"{estimate.document_no}.pdf"
@@ -817,7 +941,7 @@ def build_quotation_pdf(
     real Quotation's data without writing anything to the database. The
     real download endpoint never passes these -- it always reads whatever
     is currently saved via _current_quotation_terms/_current_warranty_table."""
-    budget = _PixelBudget()
+    plan = _ImagePlan(db, DocumentType.QUOTATION, quotation_id)
     quotation = _get_quotation(db, quotation_id)
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -856,7 +980,7 @@ def build_quotation_pdf(
 
     styles = _styles()
     doc_title = "FINANCIAL BID (Tender Mode)" if project.tender_mode else "FORMAL QUOTATION"
-    logo = _company_logo_flowable(db, 45 * mm, 18 * mm, budget)
+    logo = _company_logo_flowable(db, 45 * mm, 18 * mm, plan.budget)
     story: list = [
         *([logo, Spacer(1, 2 * mm)] if logo else []),
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
@@ -889,7 +1013,7 @@ def build_quotation_pdf(
     # Quotation's own Attachments panel -- attaching already worked, but
     # nothing on this screen ever made it into the actual client-facing
     # PDF until now.
-    photo_flowables = _quotation_photo_flowables(db, quotation.id, 160 * mm, 100 * mm, budget)
+    photo_flowables = _quotation_photo_flowables(db, quotation.id, 160 * mm, 100 * mm, plan)
     if photo_flowables:
         story.append(Paragraph("Reference Images", styles["SectionHeading"]))
         story.extend(photo_flowables)
@@ -1103,6 +1227,7 @@ def build_quotation_pdf(
     story.append(Spacer(1, 10 * mm))
     story.append(Paragraph("Accepted by client: _______________________ &nbsp;&nbsp; Date: ____________", styles["Normal"]))
 
+    plan.raise_if_blocked()  # nothing selected is dropped silently: refuse, listing each excluded image
     buffer = io.BytesIO()
     SimpleDocTemplate(buffer, pagesize=A4, topMargin=15 * mm, bottomMargin=15 * mm).build(story)
     return buffer, f"{quotation.document_no}.pdf"
@@ -1163,3 +1288,134 @@ def preview_quotation_pdf_template(
         terms_override=payload.terms, warranty_table_override=payload.warranty_table,
     )
     return _pdf_response(buffer, f"preview-{filename}")
+
+
+# ---------------------------------------------------------------------------
+# Image preview and document-specific exclusions
+# ---------------------------------------------------------------------------
+
+_CLOSED_QUOTATION = (QuotationStatus.WON, QuotationStatus.LOST, QuotationStatus.EXPIRED, QuotationStatus.SUPERSEDED)
+_CLOSED_ESTIMATE = (EstimateStatus.EXPIRED, EstimateStatus.SUPERSEDED)
+
+
+class PdfCheckOut(BaseModel):
+    doc_type: str
+    doc_id: uuid.UUID
+    complete: bool  # True only when every selected image would be embedded (user-removed ones are an explicit choice)
+    included_images: int
+    excluded: list[dict]
+    note: str
+
+
+def _plan_preview(db: Session, doc_type: DocumentType, doc_id: uuid.UUID) -> PdfCheckOut:
+    plan = _ImagePlan(db, doc_type, doc_id)
+    for attachment in _selected_images(db, doc_type, doc_id):
+        if _evaluate_image(plan, attachment, full=False):
+            plan.included += 1
+    return PdfCheckOut(
+        doc_type=doc_type.value, doc_id=doc_id, complete=not plan.blocking, included_images=plan.included,
+        excluded=[e.as_dict() for e in plan.exclusions],
+        note="This is a preview. The document is checked again when it is generated, downloaded or sent.",
+    )
+
+
+@pdf_documents_router.get("/estimates/{estimate_id}/pdf-check", response_model=PdfCheckOut)
+def check_estimate_pdf(
+    estimate_id: uuid.UUID, db: Session = Depends(get_db), current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    _get_estimate(db, estimate_id)
+    return _plan_preview(db, DocumentType.ESTIMATE, estimate_id)
+
+
+@pdf_documents_router.get("/quotations/{quotation_id}/pdf-check", response_model=PdfCheckOut)
+def check_quotation_pdf(
+    quotation_id: uuid.UUID, db: Session = Depends(get_db), current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    if not db.query(Quotation).filter(Quotation.id == quotation_id).first():
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    return _plan_preview(db, DocumentType.QUOTATION, quotation_id)
+
+
+class PdfImageExclusionIn(BaseModel):
+    doc_type: DocumentType
+    doc_id: uuid.UUID
+    attachment_id: uuid.UUID
+    reason: str | None = None
+
+
+class PdfImageExclusionOut(BaseModel):
+    id: uuid.UUID
+    doc_type: str
+    doc_id: uuid.UUID
+    attachment_id: uuid.UUID
+    reason: str | None
+
+
+def _guard_document_open(db: Session, doc_type: DocumentType, doc_id: uuid.UUID) -> None:
+    """A closed document (won/lost/expired/superseded quotation, expired/superseded estimate) is a record: what its PDF
+    contains is not changed by an exclusion."""
+    if doc_type == DocumentType.QUOTATION:
+        document = db.query(Quotation).filter(Quotation.id == doc_id).first()
+        closed = document is not None and document.status in _CLOSED_QUOTATION
+    elif doc_type == DocumentType.ESTIMATE:
+        document = db.query(Estimate).filter(Estimate.id == doc_id).first()
+        closed = document is not None and document.status in _CLOSED_ESTIMATE
+    else:
+        raise HTTPException(status_code=400, detail="Only an Estimate or a Quotation has a generated PDF")
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"{doc_type.value} not found")
+    if closed:
+        raise HTTPException(status_code=409, detail="This document is closed; the images in its PDF can no longer be changed")
+
+
+@pdf_documents_router.post("/pdf-image-exclusions", response_model=PdfImageExclusionOut, status_code=201)
+def exclude_image_from_document(
+    payload: PdfImageExclusionIn, request: Request, db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    """Explicitly remove ONE selected image from ONE document's PDF. The Attachment, its file and hash are untouched and
+    every other document that uses it is unaffected; the decision is attributed and audited."""
+    ownership.require_visible_document(db, current_user, payload.doc_type.value, payload.doc_id)  # Amendment 60: body ids too
+    _guard_document_open(db, payload.doc_type, payload.doc_id)
+    attachment = next((a for a in _selected_images(db, payload.doc_type, payload.doc_id) if a.id == payload.attachment_id), None)
+    if attachment is None:
+        raise HTTPException(status_code=400, detail="That image is not one of the images this document includes")
+    existing = (
+        db.query(PdfImageExclusion)
+        .filter(PdfImageExclusion.doc_type == payload.doc_type.value, PdfImageExclusion.doc_id == payload.doc_id,
+                PdfImageExclusion.attachment_id == attachment.id)
+        .first()
+    )
+    if existing is not None:
+        return existing  # idempotent
+    row = PdfImageExclusion(
+        doc_type=payload.doc_type.value, doc_id=payload.doc_id, attachment_id=attachment.id,
+        excluded_by_id=current_user.id, reason=(payload.reason or None),
+    )
+    db.add(row)
+    write_audit_log_entry(
+        db, current_user, payload.doc_type.value, payload.doc_id, "pdf_image_excluded", None, attachment.original_filename,
+        reason=payload.reason, request=request,
+    )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@pdf_documents_router.delete("/pdf-image-exclusions/{exclusion_id}", status_code=204)
+def restore_image_to_document(
+    exclusion_id: uuid.UUID, request: Request, db: Session = Depends(get_db),
+    current_user=Depends(require_roles(*DOCUMENT_ROLES)),
+):
+    row = db.query(PdfImageExclusion).filter(PdfImageExclusion.id == exclusion_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Exclusion not found")
+    doc_type = DocumentType(row.doc_type)
+    _guard_document_open(db, doc_type, row.doc_id)
+    attachment = db.query(Attachment).filter(Attachment.id == row.attachment_id).first()
+    write_audit_log_entry(
+        db, current_user, row.doc_type, row.doc_id, "pdf_image_excluded", attachment.original_filename if attachment else None,
+        None, reason="restored to the document", request=request,
+    )
+    db.delete(row)
+    db.commit()

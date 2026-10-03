@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, false
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -88,3 +88,19 @@ class Message(Base):
     provider_message_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+
+    # --- send-attempt safety (recorded BEFORE the provider is contacted) --------------------------------------------
+    # request_id: client-chosen, uniquely constrained. An ordinary retry reuses it and gets the existing outcome back;
+    # reusing it with different content is refused. NULL on legacy rows (their state is derived from `status`).
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)  # hash of the INTENDED content
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)  # hash of the document bytes sent
+    include_document: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    # pending | accepted | failed | unknown -- see app/api/messages.py (a pending row that is never finalized, e.g. after a
+    # crash, is reported as unknown once it is stale; it is never silently treated as "not sent").
+    attempt_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    attempt_state_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # "Send again anyway": a NEW attempt linked to the one it follows, with the confirming user and time.
+    previous_attempt_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id"), nullable=True)
+    resend_confirmed_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    resend_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

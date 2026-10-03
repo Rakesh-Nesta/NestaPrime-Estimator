@@ -14,10 +14,18 @@ from app.config import settings
 
 
 class TelegramError(Exception):
-    """A Telegram send could not be completed -- not configured, an
+    """`ambiguous` is True when the request may already have reached Telegram (timeout / dropped connection / 5xx):
+    the outcome is then UNKNOWN, not "failed". A refusal before anything was sent is a confirmed failure.
+
+    A Telegram send could not be completed -- not configured, an
     invalid/unreachable chat_id (the bot can only message a chat that
     has messaged it first), or any other API error. The caller (app/
     api/messages.py) catches this and records Message.status=FAILED."""
+
+
+    def __init__(self, message: str = "", ambiguous: bool = False):
+        super().__init__(message)
+        self.ambiguous = ambiguous
 
 
 def _require_configured() -> None:
@@ -33,10 +41,14 @@ def _call(method: str, **kwargs) -> dict:
     try:
         res = httpx.post(_api_url(method), timeout=15, **kwargs)
     except httpx.HTTPError as exc:
-        raise TelegramError(f"Telegram request failed: {exc}") from exc
+        raise TelegramError(
+            f"Telegram request failed: {exc}", ambiguous=not isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
+        ) from exc
     body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
     if res.status_code != 200 or not body.get("ok"):
-        raise TelegramError(f"Telegram API error ({res.status_code}): {body.get('description', res.text[:200])}")
+        raise TelegramError(
+            f"Telegram API error ({res.status_code}): {body.get('description', res.text[:200])}", ambiguous=res.status_code >= 500
+        )
     return body["result"]
 
 
