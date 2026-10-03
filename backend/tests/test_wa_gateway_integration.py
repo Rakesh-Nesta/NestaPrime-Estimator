@@ -17,6 +17,7 @@ from app.models.user import User, UserRole
 from app.services.email_gateway import EmailGatewayError
 from app.services.telegram import TelegramError
 from app.services.wa_gateway import WaGatewayError
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -341,7 +342,7 @@ def test_attachment_id_takes_precedence_over_include_document(client, director_u
     upload_res = client.post(
         "/attachments",
         data={"doc_type": "estimate", "doc_id": estimate_id, "tag": "photo"},
-        files={"file": ("signed.pdf", b"fake pdf bytes", "application/pdf")},
+        files={"file": ("signed.pdf", valid_pdf(), "application/pdf")},
         headers=headers,
     )
     attachment_id = upload_res.json()["id"]

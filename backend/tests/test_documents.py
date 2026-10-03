@@ -1,5 +1,6 @@
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -330,7 +331,7 @@ def test_sales_can_record_client_status_on_option(client, db_session, director_u
     client.post(
         "/attachments",
         data={"doc_type": "estimate", "doc_id": estimate["id"], "tag": "approval_evidence", "approval_strength": "informal"},
-        files={"file": ("whatsapp-screenshot.png", b"fake-image-bytes", "image/png")},
+        files={"file": ("whatsapp-screenshot.png", valid_png(), "image/png")},
         headers=sales_headers,
     )
     res = client.patch(

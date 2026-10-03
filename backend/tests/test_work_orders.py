@@ -2,6 +2,7 @@ import io
 
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -367,7 +368,7 @@ def test_client_work_order_can_be_attached_via_the_generic_attachment_system(cli
     res = client.post(
         "/attachments",
         data={"doc_type": "work_order", "doc_id": work_order["id"], "tag": "signed_document"},
-        files={"file": ("work_order.pdf", io.BytesIO(b"%PDF-1.4 fake work order"), "application/pdf")},
+        files={"file": ("work_order.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=headers,
     )
     assert res.status_code == 201, res.text
@@ -387,7 +388,7 @@ def test_sales_cannot_attach_to_a_work_order(client, director_user, db_session):
     res = client.post(
         "/attachments",
         data={"doc_type": "work_order", "doc_id": work_order["id"], "tag": "signed_document"},
-        files={"file": ("work_order.pdf", io.BytesIO(b"%PDF-1.4 fake work order"), "application/pdf")},
+        files={"file": ("work_order.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=sales_headers,
     )
     assert res.status_code == 403

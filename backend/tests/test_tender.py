@@ -1,3 +1,4 @@
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 def _login(client, director_user):
     res = client.post(
         "/auth/login",
@@ -299,7 +300,7 @@ def test_technical_bid_checklist_item_document_can_be_attached(client, director_
     res = client.post(
         "/attachments",
         data={"doc_type": "technical_bid_checklist_item", "doc_id": gst_item_id, "tag": "reference"},
-        files={"file": ("gst_certificate.pdf", io.BytesIO(b"%PDF-1.4 fake gst certificate"), "application/pdf")},
+        files={"file": ("gst_certificate.pdf", io.BytesIO(valid_pdf()), "application/pdf")},
         headers=headers,
     )
     assert res.status_code == 201, res.text

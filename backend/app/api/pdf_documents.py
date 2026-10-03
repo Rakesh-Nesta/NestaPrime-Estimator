@@ -11,8 +11,10 @@ Quotation PDF only ever uses selling_after_discount/gst_amount/
 quotation_total, all already GST-inclusive, client-facing numbers.
 """
 
+import functools
 import io
 import json
+import threading
 import uuid
 from pathlib import Path
 from xml.sax.saxutils import escape as _xml_escape
@@ -246,7 +248,7 @@ def _get_estimate(db: Session, estimate_id: uuid.UUID) -> Estimate:
     return estimate
 
 
-def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float, max_height: float):
+def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float, max_height: float, budget: "_PixelBudget | None" = None):
     """M.6: 'product options table (Budget/Standard/Premium with images).'
     The latest non-superseded product_image attachment on this specific
     option (Attachment's own EstimateOption doc_type, separate from
@@ -281,6 +283,8 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         # try/except, so a bad file is caught here instead of crashing
         # PDF generation for the whole document.
         with PILImage.open(path) as pil_image:
+            if not _within_embed_budget(pil_image, budget):
+                return ""
             pil_image.load()
         reader = ImageReader(str(path))
         original_width, original_height = reader.getSize()
@@ -290,7 +294,80 @@ def _product_image_flowable(db: Session, option_id: uuid.UUID, max_width: float,
         return ""
 
 
-def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: float, max_height: float) -> list:
+# --- memory budget for images embedded in generated PDFs ------------------------------------------------------------
+# Generated PDFs decode every embedded image in full. Measured on a development machine (NOT the server, no load test):
+# ~13 MB of peak memory per megapixel, e.g. 12 Mpx = 180 MB / 2.5 s, 50 Mpx = 0.7 GB / 11 s. The intended server is a 2 GB
+# Lightsail instance that also runs Postgres, with 2 gunicorn workers (Dockerfile), so the limits below are PROVISIONAL and
+# were chosen against that: one build at a time per worker x 24 Mpx per document = ~0.3 GB per worker, ~0.6 GB for both.
+# Change them if the server's memory or worker count changes.
+MAX_EMBED_PIXELS = 16_000_000  # per image; larger stored images are left out of the PDF (graceful skip, like a corrupt one)
+MAX_PDF_IMAGE_PIXELS = 24_000_000  # per document, summed over every embedded image
+PDF_BUILD_WAIT_SECONDS = 30  # a request waits this long for the worker's single build slot, then gets 503
+MAX_PDF_BUILD_WAITERS = 4  # further requests are refused at once (503): waiting threads would otherwise tie up the thread pool
+# SCOPE: these two semaphores are per PROCESS. The deployment is one `backend` container (docker-compose.prod.yml, no
+# replicas) running 2 gunicorn workers (Dockerfile) => at most 2 builds at once machine-wide. Adding workers or replicas
+# multiplies the worst-case memory: re-derive the budget above if either changes.
+_PDF_BUILD_SLOT = threading.BoundedSemaphore(1)  # per worker process: only one PDF build decodes images at a time
+_PDF_BUILD_WAITERS = threading.BoundedSemaphore(MAX_PDF_BUILD_WAITERS)
+
+# bytes per pixel once decoded, relative to 8-bit RGB (3): the budget counts DECODED size, not just pixel count
+_BYTES_PER_PIXEL = {"1": 0.125, "L": 1, "P": 1, "LA": 2, "RGB": 3, "YCbCr": 3, "LAB": 3, "HSV": 3, "RGBA": 4, "CMYK": 4,
+                    "I": 4, "F": 4, "I;16": 2}
+
+
+class _PixelBudget:
+    def __init__(self, total: int | None = None):
+        self.remaining = MAX_PDF_IMAGE_PIXELS if total is None else total
+
+    def take(self, pixels: int) -> bool:
+        if pixels > self.remaining:
+            return False
+        self.remaining -= pixels
+        return True
+
+
+def _decoded_cost(pil_image) -> int:
+    """RGB-equivalent pixels: width x height x (bytes per pixel / 3), so an RGBA or CMYK image counts a third more than the
+    same-sized RGB one and a 32-bit float image counts as much as it really occupies. Computed from the header alone."""
+    bytes_per_pixel = _BYTES_PER_PIXEL.get(pil_image.mode, 4)
+    return int(pil_image.width * pil_image.height * bytes_per_pixel / 3)
+
+
+def _within_embed_budget(pil_image, budget: "_PixelBudget | None" = None) -> bool:
+    """True when this image may be decoded into the PDF: within the per-image ceiling AND the document's remaining budget,
+    both measured in RGB-equivalent pixels from the image HEADER -- called before any pixel data is loaded, so nothing
+    large is allocated for an image that is then refused. Images stored before the upload ceiling existed can exceed
+    either, so an over-budget image is left out (the same graceful skip as a corrupt one) rather than decoded."""
+    cost = _decoded_cost(pil_image)
+    if cost > MAX_EMBED_PIXELS:
+        return False
+    return budget.take(cost) if budget is not None else True
+
+
+def _one_pdf_build_at_a_time(builder):
+    """Serialise PDF builds within a worker so concurrent requests cannot decode images at the same time (threads in one
+    worker would otherwise stack their memory). A request that cannot get the slot in time is told to retry (503)."""
+    @functools.wraps(builder)
+    def wrapper(*args, **kwargs):
+        busy = HTTPException(status_code=503, detail="The server is busy generating other PDFs -- please retry in a moment")
+        # Only a few requests may WAIT for the slot (each waiter holds a pool thread); the rest are refused immediately.
+        if not _PDF_BUILD_WAITERS.acquire(blocking=False):
+            raise busy
+        try:
+            got_slot = _PDF_BUILD_SLOT.acquire(timeout=PDF_BUILD_WAIT_SECONDS)
+        finally:
+            _PDF_BUILD_WAITERS.release()
+        if not got_slot:
+            raise busy
+        try:  # the slot is held BEFORE the builder runs, i.e. before any image is opened or decoded
+            return builder(*args, **kwargs)
+        finally:
+            _PDF_BUILD_SLOT.release()
+
+    return wrapper
+
+
+def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: float, max_height: float, budget: "_PixelBudget | None" = None) -> list:
     """Every non-superseded photo-tagged attachment on this Quotation
     (uploaded via the existing Attachments panel -- Documents.jsx already
     renders it on the Quotation row, doc_type="quotation") -- e.g. a site
@@ -317,6 +394,8 @@ def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: 
             continue
         try:
             with PILImage.open(path) as pil_image:
+                if not _within_embed_budget(pil_image, budget):
+                    continue
                 pil_image.load()
             reader = ImageReader(str(path))
             original_width, original_height = reader.getSize()
@@ -328,7 +407,7 @@ def _quotation_photo_flowables(db: Session, quotation_id: uuid.UUID, max_width: 
     return flowables
 
 
-def _company_logo_flowable(db: Session, max_width: float, max_height: float):
+def _company_logo_flowable(db: Session, max_width: float, max_height: float, budget: "_PixelBudget | None" = None):
     """R.0: 'Logo (SVG/PNG) ... for PDF.' Only a PNG logo can actually be
     embedded here -- reportlab's Image flowable (and the Pillow decode
     it relies on, same as _product_image_flowable above) has no native
@@ -345,6 +424,8 @@ def _company_logo_flowable(db: Session, max_width: float, max_height: float):
         return None
     try:
         with PILImage.open(path) as pil_image:
+            if not _within_embed_budget(pil_image, budget):  # a 5 MB PNG can still decode to gigabytes
+                return None
             pil_image.load()
         reader = ImageReader(str(path))
         original_width, original_height = reader.getSize()
@@ -498,10 +579,12 @@ def _package_content_flow(db: Session, styles, sport: Sport, option: EstimateOpt
 # ---------------------------------------------------------------------------
 
 
+@_one_pdf_build_at_a_time
 def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO, str]:
     """Amendment 8 (Section 8): factored out of the route below so
     app/api/messages.py can attach the same PDF to a WhatsApp/Telegram
     send without a second, divergent copy of this layout."""
+    budget = _PixelBudget()
     estimate = _get_estimate(db, estimate_id)
     project = db.query(Project).filter(Project.id == estimate.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -509,7 +592,7 @@ def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO,
     inclusions, exclusions = _inclusions_and_exclusions(db, project.id)
 
     styles = _styles()
-    logo = _company_logo_flowable(db, 45 * mm, 18 * mm)
+    logo = _company_logo_flowable(db, 45 * mm, 18 * mm, budget)
     story: list = [
         *([logo, Spacer(1, 2 * mm)] if logo else []),
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
@@ -534,7 +617,7 @@ def build_estimate_pdf(db: Session, estimate_id: uuid.UUID) -> tuple[io.BytesIO,
         sport = db.query(Sport).filter(Sport.id == project_sport.sport_id).first()
         rows.append(
             [
-                _product_image_flowable(db, option.id, image_col_width, image_col_height),
+                _product_image_flowable(db, option.id, image_col_width, image_col_height, budget),
                 sport.name,
                 option.package.value.capitalize(),
                 f"{sport.playing_dims} ft" + (f"\n({sport.source_citation})" if sport.source_citation else ""),
@@ -716,6 +799,7 @@ def _granular_boq_rows_for_sport(
     return rows
 
 
+@_one_pdf_build_at_a_time
 def build_quotation_pdf(
     db: Session,
     quotation_id: uuid.UUID,
@@ -733,6 +817,7 @@ def build_quotation_pdf(
     real Quotation's data without writing anything to the database. The
     real download endpoint never passes these -- it always reads whatever
     is currently saved via _current_quotation_terms/_current_warranty_table."""
+    budget = _PixelBudget()
     quotation = _get_quotation(db, quotation_id)
     project = db.query(Project).filter(Project.id == quotation.project_id).first()
     client = db.query(Client).filter(Client.id == project.client_id).first()
@@ -771,7 +856,7 @@ def build_quotation_pdf(
 
     styles = _styles()
     doc_title = "FINANCIAL BID (Tender Mode)" if project.tender_mode else "FORMAL QUOTATION"
-    logo = _company_logo_flowable(db, 45 * mm, 18 * mm)
+    logo = _company_logo_flowable(db, 45 * mm, 18 * mm, budget)
     story: list = [
         *([logo, Spacer(1, 2 * mm)] if logo else []),
         Paragraph("NESTAPRIME SPORTS INFRASTRUCTURE", styles["CompanyHeader"]),
@@ -804,7 +889,7 @@ def build_quotation_pdf(
     # Quotation's own Attachments panel -- attaching already worked, but
     # nothing on this screen ever made it into the actual client-facing
     # PDF until now.
-    photo_flowables = _quotation_photo_flowables(db, quotation.id, 160 * mm, 100 * mm)
+    photo_flowables = _quotation_photo_flowables(db, quotation.id, 160 * mm, 100 * mm, budget)
     if photo_flowables:
         story.append(Paragraph("Reference Images", styles["SectionHeading"]))
         story.extend(photo_flowables)

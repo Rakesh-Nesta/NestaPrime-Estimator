@@ -1,6 +1,7 @@
 from app.api import messages as messages_api
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from tests.valid_files import valid_jpeg, valid_pdf, valid_png  # noqa: E402
 
 
 def _login(client, email, password="TestPass!1"):
@@ -234,7 +235,7 @@ def test_message_can_reference_an_existing_attachment(client, director_user):
     upload_res = client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": cost_sheet_id, "tag": "photo"},
-        files={"file": ("site.jpg", b"fake image bytes", "image/jpeg")},
+        files={"file": ("site.jpg", valid_jpeg(), "image/jpeg")},
         headers=headers,
     )
     attachment_id = upload_res.json()["id"]
@@ -251,7 +252,7 @@ def test_message_rejects_an_attachment_from_a_different_document(client, directo
     upload_res = client.post(
         "/attachments",
         data={"doc_type": "cost_sheet", "doc_id": other_cost_sheet_id, "tag": "photo"},
-        files={"file": ("site.jpg", b"fake image bytes", "image/jpeg")},
+        files={"file": ("site.jpg", valid_jpeg(), "image/jpeg")},
         headers=headers,
     )
     attachment_id = upload_res.json()["id"]
