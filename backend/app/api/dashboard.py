@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import AuditLogEntryOut
-from app.core import follow_up_entities, ownership
+from app.core import follow_up_entities, ownership, project_status
 from app.core.auth import require_roles
 from app.db.session import get_db
 from app.models.audit_log import AuditLogEntry
@@ -134,15 +134,9 @@ def _summary(db: Session, owner: uuid.UUID | None, followups_viewer: User) -> Da
     # currently-active Quotation is Open regardless of an older Lost one
     # (e.g. a re-bid, which Amendment 26 made possible). A project with no
     # Quotations at all is never closed, unaffected by this fix.
-    open_quotation_project_ids = (
-        db.query(Quotation.project_id)
-        .filter(~Quotation.status.in_([QuotationStatus.WON, QuotationStatus.LOST]))
-    )
-    closed_project_ids = (
-        db.query(Quotation.project_id)
-        .filter(~Quotation.project_id.in_(open_quotation_project_ids))
-        .distinct()
-    )
+    # The rule itself now lives in app/core/project_status.py, shared with GET /projects so the tile and the list
+    # it opens cannot disagree.
+    closed_project_ids = project_status.closed_project_ids(db)
     open_projects = db.query(Project).filter(~Project.id.in_(closed_project_ids), Project.is_calibration.is_(False))
     if owner is not None:
         open_projects = open_projects.filter(Project.owner_id == owner)
