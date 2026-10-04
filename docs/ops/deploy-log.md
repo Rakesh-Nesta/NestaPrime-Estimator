@@ -58,6 +58,14 @@ works -- same discipline as the restore drill log.
 
 **Release-record gaps still open:** the deployed revision is not on `main` (PRs #281/#282 unmerged); the ClamAV verification, load-test and restore evidence above lives in the deployment session's records and server logs, not in the repository; the first automatic snapshot and a whole-instance snapshot restore are unverified; a 2026-09-29 deploy (`2649282`) has no entry in this log either.
 
+**Reconciliation, 2026-10-04 (appended; everything above is the original record and is left as written — it describes the state at the time of the deployment report).** Repository facts, checked directly on GitHub/git after the deployment:
+- **PR #281** merged as `6434c02a8cd5131f7b5a06657c8187ccc4998109` (2026-10-03T16:13:21Z), merge commit, pinned to head `00107aef9736307d49f94c36c5c958d3de5c914d`; all six checks had passed at that head.
+- **PR #282** was retargeted to `main`, updated by merging `main` into the branch (new head `267134fa304f7e59535c64c714508a510f62df59`; its tree is byte-identical to the previous head `31d002d1…`), then merged as `dd86799a2e14ed5358582769542d84b8a879f1a8` (2026-10-04T02:21:25Z), merge commit, pinned to `267134fa…`. Required CI at that exact head: both `test` jobs 2118 passed; `dependency-audit` and `docker-build` passed in both workflow runs (six checks, all success).
+- **Ancestry gap closed:** the deployed revision `355c8a04bf848fa23fa1141387921332ece7e22f` is now an ancestor of `main` (merge commits were used so that it is). The original-record statement "the deployed revision is not on `main`" is therefore **no longer true as of `dd86799`**; it was true when written.
+- **`main` against the deployed revision:** at `dd86799` they differ only by two rehearsal scripts from #282 (`backend/scripts/verify_clamav_http.py`, `backend/scripts/verify_release_load.py`, 378 lines added), plus this docs change once merged. The deployed application code equals `main`'s.
+- **Production is unchanged and remains at `355c8a04bf848fa23fa1141387921332ece7e22f`.** Merging #281/#282 deployed nothing. **PR #283** (project status/count consistency and the explicit PDF rounding-adjustment row) is an unmerged draft; **merging #283 will not deploy its fixes** — production will not have them until a separately authorized deployment. When #283 is merged, `main` will be ahead of production by its application changes.
+- **Still open from the list above:** the ClamAV, load-test and restore evidence lives in the deployment session's records and server logs, not the repository; the first automatic snapshot and a whole-instance snapshot restore are unverified; the 2026-09-29 deploy (`2649282`) still has no entry in this log.
+
 ---
 
 ## 2026-09-27 -- PRs #244-#246: Amendment 60 (own-records visibility) and a production data cleanup
