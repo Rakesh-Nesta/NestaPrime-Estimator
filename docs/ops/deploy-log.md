@@ -11,6 +11,63 @@ works -- same discipline as the restore drill log.
 
 ---
 
+## 2026-10-03 -- new production host (NestaPrime-CRM-8gb) at revision `355c8a0`: P5, upload hardening, PDF export controls, message retry safety, required ClamAV scanning
+
+**Source of this entry:** the report of a **separate assisted deployment session**, relayed by the Director. The author of this entry ran **none** of the server commands below and has **not independently verified** any server-side result; where this entry says "verified" it means *the deployment session reported it verified*. Repository facts (commits, PRs, CI) were checked directly against the repository and GitHub.
+
+**Release identity (as reported):**
+- Backend revision `355c8a04bf848fa23fa1141387921332ece7e22f`; running image `sha256:8261e6258f5110da2cdfe98cc0616af1515e939b33ec8ecefd720f9eed7baa2a`.
+- Image pinned by **local image ID**, recorded in `/home/ubuntu/nestaprime-release/images.yml` with `pull_policy: never`; the running container's image ID and revision label matched the recorded candidate. This is a verified **local image-ID pin**, not a registry digest and not proof of reproducible builds.
+- Host: Lightsail **NestaPrime-CRM-8gb**, private IP 172.26.8.254; the existing static IP `65.1.234.78` was moved to it. `app.nestaprime.in` live over HTTPS; public maintenance removed afterwards.
+
+**Repository state at the time of this entry (checked, not reported):** `origin/main` is `e57edd70…` and does **not** contain `355c8a0`. `355c8a0` = `main` + PR #281's two commits (`629c055`, `00107ae`) + one ClamAV integration commit, and exists only on `origin/release-clamav-integration` (head of draft PR #282 is `31d002d`, two commits **ahead** of the deployed revision: HTTP rehearsal and load-rehearsal scripts). `git diff main 355c8a0` touches 8 files (Dockerfile, `docker-compose.prod.yml`, `deploy/README.md`, ClamAV config/scripts/doc) and nothing under `backend/app`, so the deployed application code equals `main`. **PRs #281 and #282 are open drafts; neither is merged.** A fresh checkout of `main` does not reproduce production until they are merged or the revision is otherwise tagged.
+
+**Database (as reported):** production was at `a52ee7f4a768` and migrated through **six** migrations to `c8e5d0f3a2b4` (repository chain: `c1a4f7b92d63`, `9f2c6b1e4a70`, `509d1202ac03`, `a5e7c2d9b413`, `b7a4c9d2e1f3`, `c8e5d0f3a2b4`). Production P5 marker `2026-10-03 11:22:03.402797`. Legacy-adoption **dry run found zero eligible records; no `--confirm` adoption was run.**
+
+**Maintenance and frontend (as reported):** during the cutover all five attachment upload routes plus the logo and both import routes returned nginx 503; all five served frontend files matched the build's SHA-256 manifest over HTTPS. Director browser login, existing quotations and PDF generation with the company logo were verified. Certificate-renewal dry run passed.
+
+**Scanner (as reported):**
+- Required ClamAV scanning configured: required scanning confirmed by the running backend, the expected scanner command, timeout 120 s, successful daemon PING.
+- Deployed-image inspection check: clean file accepted; EICAR refused and quarantined; unavailable scanner refused with HTTP 503.
+- Separate HTTP rehearsal script at `18cdb28`, disposable database: **11 checks passed**, exit 0 (ordinary upload, supersede, resumable completion, completed-session retry, recovery after scanner unavailability).
+- Signature updater: the systemd update service ran successfully (`Result=success`, `ExecMainStatus=0`); the enabled timer also triggered successfully (next observed run 2026-10-03 15:54:59 UTC). **Definitions were already current, so this proves a successful update check, not an actual signature download or reload under load.**
+
+**Load rehearsal (as reported):** script commit `31d002d126dce03d4a9b526ba4b341b0af3b1356`, run against the deployed `355c8a0` image: 16 timed requests (8 PDFs, 8 scanned uploads) plus two fixture uploads, exit 0, 91.56 s. Sampled maxima: backend 644.5 MiB, database 107.0 MiB, scanner 946.8 MiB; minimum host `MemAvailable` 5159.7 MiB; service-state checks passed; the inspected kernel-log window had no OOM or segfault entries. Logs remain on the new server: `/home/ubuntu/nestaprime-rehearsal/load-20261003T092624Z.log` and `…-resources.jsonl`. **Limitations:** a bounded pilot with two distinct 12 Mpx JPEGs. It did **not** establish maximum capacity and did not cover 100 MiB files, simultaneous signature updates, nginx load or live messaging providers. **Upload and PDF limits remain provisional.**
+
+**Backups and recovery (as reported):**
+- A post-deployment database backup was restored into an isolated database; revision, counts and the exact P5 marker were verified (see `restore-drill-log.md`).
+- Daily database backups enabled at 02:00 UTC / 07:30 IST, 14 retained. Automatic instance snapshots enabled for 08:30 IST, 7 retained; **the first scheduled execution is not yet verified.**
+- Manual snapshot `nestaprime-postdeploy-20261003` is listed without an in-progress indicator. **Whole-instance snapshot restoration has not been tested.**
+- Old production containers remain stopped; the old instance and the pre-cutover snapshot are retained for recovery. Rehearsal containers/network were removed; temporary transfer access was revoked and its key files deleted.
+
+**Failed attempts and diagnostics (reported separately from the passing evidence above; not an exhaustive history of every earlier development test run):**
+1. The inherited ClamAV health check used TCP while the daemon listened on a Unix socket; replaced with a socket-based health check, subsequently healthy.
+2. Rehearsal host port 18000 was unavailable on its internal-only Docker network; internal and container-to-container HTTP checks passed instead.
+3. Generic URL parsing failed on the database URL; SQLAlchemy parsing verified the actual connection fields without exposing credentials.
+4. Compose `create` rejected `--no-deps`; corrected to supported create flags.
+5. Frontend manifest creation initially hit a permissions problem; ownership corrected and hashes verified.
+6. Mobile login returned 401 with no matching account; the existing Director email login succeeded.
+7. A cleanup command was run on the wrong host and stopped at its hostname assertion before changing anything.
+
+**CI tied to exact commits (checked on GitHub; each commit has two workflow runs, all jobs passed):**
+| Commit | Where | dependency-audit | docker-build | test |
+|---|---|---|---|---|
+| `00107aef9736307d49f94c36c5c958d3de5c914d` | PR #281 head | pass | pass | pass |
+| `355c8a04bf848fa23fa1141387921332ece7e22f` | **deployed revision** (branch `release-clamav-integration`) | pass | pass | pass |
+| `31d002d126dce03d4a9b526ba4b341b0af3b1356` | PR #282 head | pass | pass | pass |
+
+**Release-record gaps still open:** the deployed revision is not on `main` (PRs #281/#282 unmerged); the ClamAV verification, load-test and restore evidence above lives in the deployment session's records and server logs, not in the repository; the first automatic snapshot and a whole-instance snapshot restore are unverified; a 2026-09-29 deploy (`2649282`) has no entry in this log either.
+
+**Reconciliation, 2026-10-04 (appended; everything above is the original record and is left as written — it describes the state at the time of the deployment report).** Repository facts, checked directly on GitHub/git after the deployment:
+- **PR #281** merged as `6434c02a8cd5131f7b5a06657c8187ccc4998109` (2026-10-03T16:13:21Z), merge commit, pinned to head `00107aef9736307d49f94c36c5c958d3de5c914d`; all six checks had passed at that head.
+- **PR #282** was retargeted to `main`, updated by merging `main` into the branch (new head `267134fa304f7e59535c64c714508a510f62df59`; its tree is byte-identical to the previous head `31d002d1…`), then merged as `dd86799a2e14ed5358582769542d84b8a879f1a8` (2026-10-04T02:21:25Z), merge commit, pinned to `267134fa…`. Required CI at that exact head: both `test` jobs 2118 passed; `dependency-audit` and `docker-build` passed in both workflow runs (six checks, all success).
+- **Ancestry gap closed:** the deployed revision `355c8a04bf848fa23fa1141387921332ece7e22f` is now an ancestor of `main` (merge commits were used so that it is). The original-record statement "the deployed revision is not on `main`" is therefore **no longer true as of `dd86799`**; it was true when written.
+- **`main` against the deployed revision:** at `dd86799` they differ only by two rehearsal scripts from #282 (`backend/scripts/verify_clamav_http.py`, `backend/scripts/verify_release_load.py`, 378 lines added), plus this docs change once merged. The deployed application code equals `main`'s.
+- **Production is unchanged and remains at `355c8a04bf848fa23fa1141387921332ece7e22f`.** Merging #281/#282 deployed nothing. **PR #283** (project status/count consistency and the explicit PDF rounding-adjustment row) is an unmerged draft; **merging #283 will not deploy its fixes** — production will not have them until a separately authorized deployment. When #283 is merged, `main` will be ahead of production by its application changes.
+- **Still open from the list above:** the ClamAV, load-test and restore evidence lives in the deployment session's records and server logs, not the repository; the first automatic snapshot and a whole-instance snapshot restore are unverified; the 2026-09-29 deploy (`2649282`) still has no entry in this log.
+
+---
+
 ## 2026-09-27 -- PRs #244-#246: Amendment 60 (own-records visibility) and a production data cleanup
 
 **Run by:** R. Patni (with AI development assistance)

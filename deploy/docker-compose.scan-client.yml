@@ -1,0 +1,15 @@
+# Use after docker-compose.prod.yml. Does not start the scanner or run migrations
+# by itself. The normal backend command STILL migrates on container startup.
+services:
+  backend:
+    environment:
+      UPLOAD_SCAN_COMMAND: "clamdscan --config-file=/app/scripts/clamd-client.conf --stream --no-summary"
+      UPLOAD_SCAN_REQUIRED: "true"
+      UPLOAD_SCAN_TIMEOUT_SECONDS: "120"
+    volumes:
+      - clamav_socket:/run/clamav:ro
+
+volumes:
+  clamav_socket:
+    external: true
+    name: nestaprime_clamav_socket
