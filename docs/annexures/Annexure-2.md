@@ -2943,6 +2943,30 @@ against current code:
 Needs a Director-approved spec before implementation, per this register's own Change Process
 (spec: `docs/annexures/Section-64-specs.md`, approved 26 September 2026).
 
+### Amendment No. 62 — Professional Document Templates & Final Output Management
+**Registered 5 October 2026**, recording a requirement the Director **approved on 4 October 2026 at 23:53 IST** (with
+the preview-first delivery order) and clarified on 5 October. Number checked: this register held Amendments 1-61 only,
+there was no `Section-65` file, and nothing in any branch, PR or commit referred to Amendment 62 or later.
+- **Relationship to Amendment No. 14 (Customizable Document Templates).** A14 delivered Tiers 1-2 for the Quotation
+  only (company details; terms and warranty editor with preview) and explicitly left layout/colour/font control out.
+  **This amendment extends A14; A14's entry and spec are unchanged.**
+- **Amendment No. 59 permissions are preserved.** Admin manages **layouts and template availability** only. Bank
+  details and commercial wording (terms, warranty, anything that prices or words a quotation) stay **Director-only**;
+  template management grants no access to restricted report data, no approval authority and no power to change a
+  calculation.
+- **Scope:** at least five professional templates per supported document category (Corporate Classic, Modern Minimal,
+  Detailed Technical, Tender / Institutional, Branded Presentation); existing outputs first (quotations, estimates,
+  reports and exports), future documents (invoices, receipts, purchase orders, work orders, agreements, completion and
+  handover) with their own modules. Business values, rounding and numbering are identical across layouts (Amendments
+  24, 54, 57 and the nearest-Rs-10 rounding rule are preserved).
+- **History:** the **exact issued file is preserved alongside the document revision and the template version used**;
+  later layout changes never alter a historical document. (Today PDFs are generated live and not stored, so this needs
+  its own design in the implementation step.)
+- **Delivery order (approved):** inventory the existing outputs and prepare five quotation previews -> **Director
+  design acceptance (a hard gate)** -> template management and quotation integration -> existing reports and outputs
+  -> future finance and lifecycle documents.
+**Status: requirements approved; not implemented; not deployed.** Spec: `docs/annexures/Section-65-specs.md`.
+
 ## Register Notes (non-software, business-process)
 
 **Note R1 — Rate validation**: Validate the estimation engine against FY 23–24 actuals
