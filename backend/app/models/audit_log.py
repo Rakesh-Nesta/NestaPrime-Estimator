@@ -46,7 +46,14 @@ class AuditLogEntry(Base):
     session_id stays permanently unpopulated (None) -- this app has no
     session concept beyond a stateless JWT bearer token, so there is
     nothing honest to put there; the column is kept for Part O field-
-    parity, not fabricated data."""
+    parity, not fabricated data.
+
+    One named exception to "Attachments are NOT re-logged here" above: P4
+    contract rev 7, Section 5 requires every review, re-review, marketing-
+    reuse approval and revocation of an attachment to be audit-logged on
+    each call (document_type "attachment", fields review_status and
+    marketing_reuse), because those columns overwrite and the full history
+    must live here. Uploads and supersedes are still not logged."""
 
     __tablename__ = "audit_log_entries"
 

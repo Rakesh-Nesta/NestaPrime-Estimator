@@ -653,22 +653,48 @@ class ReviewIn(BaseModel):
     status: str  # "approved" | "rejected"
 
 
+def _marketing_reuse_state(attachment: Attachment) -> str | None:
+    """None = never approved; otherwise the state the columns currently show (a fresh approval clears the revoked pair)."""
+    if attachment.marketing_reuse_approved_at is None:
+        return None
+    return "revoked" if attachment.marketing_reuse_revoked_at is not None else "approved"
+
+
+def _audit_attachment_action(
+    db: Session, request: Request, current_user, attachment: Attachment, field: str, old_value, new_value
+) -> None:
+    """P4 contract rev 7, Section 5: review and marketing-reuse actions are audit-logged each time they are called, not
+    only the first -- the columns overwrite, so the complete history lives here. One row per successful call, even when
+    old and new are equal (a repeat is still an action). The row is staged on the caller's session and committed by the
+    caller's own db.commit() together with the change (write_audit_log_entry does not commit). It names the exact
+    attachment version it was made on: document_id is that version's own id, the reason carries its version number."""
+    write_audit_log_entry(
+        db, current_user, "attachment", attachment.id, field,
+        old_value=old_value, new_value=new_value,
+        reason=f"attachment version {attachment.version} ({attachment.doc_type.value} {attachment.doc_id})",
+        request=request,
+    )
+
+
 @attachments_router.post("/{attachment_id}/review", response_model=AttachmentOut)
 def review_attachment(
     attachment_id: uuid.UUID,
     body: ReviewIn,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("pm", "director")),
 ):
     """Repeatable, not one-way: a PM/Director may re-review an attachment at any time -- this
     simply overwrites review_status/reviewed_by_id/reviewed_at again. Requires the same
-    document-access check as every other action, not the role gate in isolation."""
+    document-access check as every other action, not the role gate in isolation. Every successful
+    call is audit-logged, repeats included (P4 contract rev 7, Section 5), in the same transaction."""
     attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
     if body.status not in ("approved", "rejected"):
         raise HTTPException(status_code=422, detail="status must be 'approved' or 'rejected'")
+    _audit_attachment_action(db, request, current_user, attachment, "review_status", attachment.review_status, body.status)
     attachment.review_status = body.status
     attachment.reviewed_by_id = current_user.id
     attachment.reviewed_at = datetime.now(UTC)
@@ -680,6 +706,7 @@ def review_attachment(
 @attachments_router.post("/{attachment_id}/marketing-reuse/approve", response_model=AttachmentOut)
 def approve_marketing_reuse(
     attachment_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("pm", "director")),
 ):
@@ -692,6 +719,9 @@ def approve_marketing_reuse(
     ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
     if attachment.doc_type == DocumentType.AGREEMENT:
         raise HTTPException(status_code=409, detail="A signed Agreement is not marketing material")
+    _audit_attachment_action(
+        db, request, current_user, attachment, "marketing_reuse", _marketing_reuse_state(attachment), "approved"
+    )
     attachment.marketing_reuse_approved_at = datetime.now(UTC)
     attachment.marketing_reuse_approved_by_id = current_user.id
     attachment.marketing_reuse_revoked_at = None
@@ -704,6 +734,7 @@ def approve_marketing_reuse(
 @attachments_router.post("/{attachment_id}/marketing-reuse/revoke", response_model=AttachmentOut)
 def revoke_marketing_reuse(
     attachment_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("pm", "director")),
 ):
@@ -713,6 +744,9 @@ def revoke_marketing_reuse(
     ownership.require_visible_document(db, current_user, attachment.doc_type.value, attachment.doc_id)
     if attachment.marketing_reuse_approved_at is None:
         raise HTTPException(status_code=400, detail="This attachment has no active marketing-reuse approval to revoke")
+    _audit_attachment_action(
+        db, request, current_user, attachment, "marketing_reuse", _marketing_reuse_state(attachment), "revoked"
+    )
     attachment.marketing_reuse_revoked_at = datetime.now(UTC)
     attachment.marketing_reuse_revoked_by_id = current_user.id
     db.commit()
