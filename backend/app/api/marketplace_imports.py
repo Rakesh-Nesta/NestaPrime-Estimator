@@ -235,9 +235,10 @@ def run_backfill(
 #   1. cohort basis ("enquiry_time or received_at"): the caller selects it (`basis`); the default stays
 #      enquiry_time, the behaviour this endpoint already shipped with. The response echoes it.
 #   2. date-bucket granularity: `bucket` = day | week | month (default day). Weeks start on Monday (ISO).
-#   3. timezone: period dates and buckets are IST (Asia/Kolkata, UTC+05:30) calendar days. `enquiry_time` is stored as
-#      the provider's own wall-clock value (parsed, never converted) and is compared as written;
-#      `received_at` is stored as naive UTC and is converted to IST.
+#   3. timezone: `received_at` is stored as naive UTC and is converted to IST (Asia/Kolkata, UTC+05:30) calendar days.
+#      `enquiry_time` is the provider's own wall-clock value, parsed and never converted; the provider's timezone for it
+#      is NOT verified (the contract states IST only for the Pull API's request window parameters), so enquiry_time
+#      periods and buckets use the date exactly as recorded and the response says so rather than claiming IST.
 #   4. period boundaries: [period_start 00:00, period_end + 1 day 00:00) in that calendar, so the end date is
 #      inclusive to its last instant and the next midnight belongs to the next day.
 #   5. denominator: Opportunities imported (ledger rows that produced an Opportunity), counted distinctly --
@@ -246,7 +247,12 @@ def run_backfill(
 # India has no daylight saving: IST is exactly UTC+05:30, so a fixed offset is exact and needs no timezone database
 # (the production image is python:slim and requirements.txt does not pin tzdata).
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
-TIMEZONE_NOTE = "IST (UTC+05:30, Asia/Kolkata): period dates and buckets are IST calendar days"
+TIMEZONE_NOTES = {
+    "enquiry_time": "Provider-recorded time, timezone not verified: dates and buckets use the enquiry date exactly as the "
+    "provider recorded it (no timezone conversion)",
+    "received_at": "IST (UTC+05:30, Asia/Kolkata): received times are stored in UTC and converted; dates and buckets are "
+    "IST calendar days",
+}
 MAX_BUCKETS = 2000  # a response-size safeguard, not a business rule: ask for a coarser bucket or a shorter period
 
 CohortBasis = Literal["enquiry_time", "received_at"]
@@ -405,7 +411,7 @@ def get_marketing_dashboard(
         period_end=period_end,
         cohort_basis=basis,
         bucket=bucket,
-        timezone=TIMEZONE_NOTE,
+        timezone=TIMEZONE_NOTES[basis],
         received_total=len(rows),
         imported_total=imported_total,
         excluded_missing_enquiry_time=excluded,

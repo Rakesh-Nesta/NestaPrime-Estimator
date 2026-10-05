@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMarketingDashboard } from "./api";
 
 // P3 contract (revision 4), Section 9: Phase A's aggregate-only dashboard -- counts by source, QUERY_TYPE and
@@ -50,27 +50,54 @@ export default function MarketingDashboard({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Only the LATEST request may update results, errors and loading: every request takes a sequence number and is
+  // cancelled when a newer one starts; a response (or error) from a superseded request is ignored even if it
+  // arrives afterwards and cancellation did not stop it.
+  const requestSeq = useRef(0);
+  const abortRef = useRef(null);
+
   function load() {
+    abortRef.current?.abort();
+    const seq = ++requestSeq.current;
     if (periodEnd < periodStart) {
+      // Do not leave the previous results on screen under an error about different dates.
+      setData(null);
+      setLoading(false);
       setError("The end date must not be before the start date.");
       return;
     }
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError("");
-    getMarketingDashboard(token, { periodStart, periodEnd, basis, bucket })
-      .then(setData)
+    getMarketingDashboard(token, { periodStart, periodEnd, basis, bucket, signal: controller.signal })
+      .then((result) => {
+        if (seq === requestSeq.current) setData(result);
+      })
       .catch((err) => {
+        if (seq !== requestSeq.current || err.name === "AbortError") return;
         setData(null);
         setError(err.message);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (seq === requestSeq.current) setLoading(false);
+      });
   }
 
   useEffect(() => {
     load();
+    return () => {
+      requestSeq.current += 1; // a response arriving after unmount (or a token change) must not be applied
+      abortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // The results on screen are described by the RESPONSE (what was actually applied), never by the controls, which
+  // may have been changed since. `dirty` is true while the controls differ from what the results show.
+  const dirty =
+    data !== null &&
+    (periodStart !== data.period_start || periodEnd !== data.period_end || basis !== data.cohort_basis || bucket !== data.bucket);
   const maxBucket = data ? Math.max(1, ...data.by_date_bucket.map((b) => b.count)) : 1;
   const fieldClass = "block mt-1 bg-surface-raised border border-border-dark rounded px-2 py-1 text-sm";
 
@@ -120,6 +147,17 @@ export default function MarketingDashboard({ token }) {
 
       {!loading && data && (
         <>
+          <div className="bg-surface shadow rounded-lg px-6 py-3 space-y-1" data-testid="applied-summary">
+            <p className="text-sm text-text-primary">
+              Showing <strong>{data.period_start}</strong> to <strong>{data.period_end}</strong> · grouped by{" "}
+              {BASIS_LABELS[data.cohort_basis] || data.cohort_basis} · by {data.bucket}
+            </p>
+            {dirty && (
+              <p className="text-xs text-amber-300" role="status" data-testid="unapplied-filters">
+                Filters changed — these results are for the settings above, not the ones now selected. Press Refresh to apply.
+              </p>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-surface shadow rounded-lg p-6">
               <p className="text-[10px] uppercase tracking-wider text-text-secondary/70">Leads received</p>
@@ -137,7 +175,7 @@ export default function MarketingDashboard({ token }) {
             </div>
           </div>
           <p className="text-xs text-text-secondary">
-            Grouped by {BASIS_LABELS[data.cohort_basis] || data.cohort_basis}. {data.timezone}.
+            {data.timezone}.
             {data.excluded_missing_enquiry_time > 0 &&
               ` ${data.excluded_missing_enquiry_time} lead${data.excluded_missing_enquiry_time === 1 ? "" : "s"} received in this period ${
                 data.excluded_missing_enquiry_time === 1 ? "has" : "have"
@@ -159,7 +197,7 @@ export default function MarketingDashboard({ token }) {
             )}
           </Section>
 
-          <Section title={`By ${bucket}`}>
+          <Section title={`By ${data.bucket}`}>
             {data.received_total === 0 ? (
               <p className="text-sm text-text-secondary">No leads in this period.</p>
             ) : (

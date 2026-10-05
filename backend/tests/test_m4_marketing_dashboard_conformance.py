@@ -9,8 +9,8 @@ period)... counts and rates only -- never individual buyer fields, never raw pay
 INTERPRETATIONS the contract does not settle (each is stated in the API response and documented in the PR, not silent):
   * cohort basis: selectable (`basis` = enquiry_time | received_at); default enquiry_time = the behaviour already shipped.
   * date bucket granularity: selectable (`bucket` = day | week | month); default day. Weeks start Monday (ISO).
-  * calendar/timezone: period dates and buckets are Asia/Kolkata (IST) calendar days. `enquiry_time` is stored as the provider's
-    own wall-clock value (unconverted) and is compared as written; `received_at` is stored UTC and is converted to IST.
+  * timezone: `received_at` is stored UTC and converted to IST (UTC+05:30) calendar days. `enquiry_time` is the provider's own
+    wall-clock value (unconverted); its timezone is NOT verified, so it is compared as recorded and labelled as such.
   * period is [period_start 00:00, period_end + 1 day 00:00) in that calendar (end date inclusive).
   * denominator = Opportunities imported (ledger rows that produced an Opportunity), not all ledger rows.
   * a lead captured but not yet processed has no durable query_type copy and groups as "unknown" (the dashboard never reads raw_payload).
@@ -117,7 +117,16 @@ def test_defaults_preserve_existing_behaviour_and_state_the_interpretation(clien
     h, _ = seeded
     body = _get(client, h, **SEPT).json()
     assert body["cohort_basis"] == "enquiry_time" and body["bucket"] == "day"
-    assert "Asia/Kolkata" in body["timezone"]
+    # the enquiry_time basis must not claim a timezone the evidence does not support
+    assert "not verified" in body["timezone"].lower() and "IST" not in body["timezone"] and "UTC+05:30" not in body["timezone"]
+
+
+def test_timezone_description_matches_the_basis(client, db_session, seeded):
+    h, _ = seeded
+    enquiry = _get(client, h, basis="enquiry_time", **SEPT).json()["timezone"]
+    received = _get(client, h, basis="received_at", **SEPT).json()["timezone"]
+    assert "not verified" in enquiry.lower() and "no timezone conversion" in enquiry.lower()
+    assert "IST" in received and "UTC+05:30" in received and "not verified" not in received.lower()
 
 
 # --- 2. counts by source, QUERY_TYPE and date bucket -------------------------------------------------------
