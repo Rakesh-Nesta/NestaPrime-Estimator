@@ -196,18 +196,25 @@ def test_unknown_attachment_and_invalid_input_write_nothing(client, director_use
 
 
 def test_an_agreement_file_cannot_be_approved_for_marketing_and_nothing_is_written(client, director_user, db_session):
-    """Existing 409 rule (P5): a signed Agreement is not marketing material. Refused -> no state change, no audit row."""
-    from app.models.setting import DocumentType
+    """Existing P5 rule: a signed Agreement is not marketing material. Uses a real Agreement (drafted for a Won
+    quotation) with a real uploaded signed-document file -- no rewritten rows -- and expects exactly HTTP 409, with no
+    change to the attachment and no audit entry."""
+    from tests.p5_helpers import draft_agreement, upload_agreement_document
+    from tests.test_work_orders import _won_quotation
 
-    headers, attachment = _setup(client, director_user)
-    row = db_session.get(Attachment, uuid.UUID(attachment["id"]))
-    row.doc_type = DocumentType.AGREEMENT
-    db_session.commit()
+    headers = _director_headers(client, director_user)
+    _project_id, quotation_id = _won_quotation(client, headers)
+    agreement = draft_agreement(client, headers, quotation_id)
+    attachment = upload_agreement_document(client, headers, agreement["id"])
+    assert attachment["doc_type"] == "agreement" and attachment["doc_id"] == agreement["id"]
     before = _state(db_session, attachment["id"])
 
     res = client.post(f"/attachments/{attachment['id']}/marketing-reuse/approve", headers=headers)
-    assert res.status_code in (404, 409), res.text  # 409 by the rule; a visibility refusal first would also change nothing
+
+    assert res.status_code == 409, res.text
+    assert "not marketing material" in res.json()["detail"]
     assert _state(db_session, attachment["id"]) == before
+    assert before["approved_at"] is None
     assert _all_attachment_entries(db_session) == 0
 
 
