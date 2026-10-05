@@ -241,8 +241,10 @@ def run_backfill(
 #      checked 5 Oct 2026), state IST only for the start_time/end_time request parameters; the guide's text gives no timezone
 #      for the QUERY_TIME response field (its sample response is an image). So enquiry_time periods and buckets use the date
 #      exactly as recorded and the response says so rather than claiming IST.
-#   4. period boundaries: [period_start 00:00, period_end + 1 day 00:00) in that calendar, so the end date is
-#      inclusive to its last instant and the next midnight belongs to the next day.
+#   4. period boundaries: from period_start 00:00:00 to period_end 23:59:59.999999, both inclusive, in that calendar (the same
+#      set as "[start, end + 1 day)", but representable at the end of the calendar: 9999-12-31 + 1 day does not exist).
+#      The whole calendar (0001-01-01 .. 9999-12-31) is supported; there is no business-date cutoff. A lower bound that
+#      would fall before the first representable timestamp is exactly "no lower bound", since no stored value is earlier.
 #   5. denominator: Opportunities imported (ledger rows that produced an Opportunity), counted distinctly --
 #      not every ledger row, which also includes pending, quarantined, rejected and expired leads.
 
@@ -316,7 +318,7 @@ def _bucket_starts(period_start: date, period_end: date, bucket: str) -> list[da
     starts: list[date] = []
     current = _bucket_start(period_start, bucket)
     last = _bucket_start(period_end, bucket)
-    while current <= last:
+    while True:
         starts.append(current)
         if len(starts) > MAX_BUCKETS:
             raise HTTPException(
@@ -324,20 +326,33 @@ def _bucket_starts(period_start: date, period_end: date, bucket: str) -> list[da
                 detail=f"This period needs more than {MAX_BUCKETS} {bucket} buckets; choose a coarser bucket (week or month) "
                 "or a shorter period",
             )
+        if current >= last:
+            break  # never step past the final required bucket: stepping from the last bucket of the calendar overflows
         current = _next_bucket(current, bucket)
     return starts
 
 
-def _ist_midnight_as_naive_utc(day: date) -> datetime:
-    return datetime.combine(day, time.min, tzinfo=IST).astimezone(UTC).replace(tzinfo=None)
+def _ist_to_naive_utc(local: datetime) -> datetime | None:
+    """An IST wall-clock value as naive UTC, or None when that instant is before the first representable timestamp."""
+    try:
+        return local.replace(tzinfo=IST).astimezone(UTC).replace(tzinfo=None)
+    except OverflowError:
+        return None
 
 
 def _cohort_window(basis: str, period_start: date, period_end: date) -> tuple[datetime, datetime]:
-    """Half-open [start, end) in the basis column's own stored clock (see the notes above)."""
-    first, after = period_start, period_end + timedelta(days=1)
-    if basis == "received_at":
-        return _ist_midnight_as_naive_utc(first), _ist_midnight_as_naive_utc(after)
-    return datetime.combine(first, time.min), datetime.combine(after, time.min)
+    """Inclusive (first instant, last instant) in the basis column's own stored clock (see the notes above). The upper bound
+    is the period's last microsecond, not "next midnight", so 9999-12-31 needs no date beyond the calendar."""
+    first = datetime.combine(period_start, time.min)
+    last = datetime.combine(period_end, time.max)
+    if basis != "received_at":
+        return first, last
+    lower = _ist_to_naive_utc(first)
+    upper = _ist_to_naive_utc(last)
+    if upper is None:
+        raise OverflowError("period ends before the first representable timestamp")
+    # IST 0001-01-01 00:00 is before the first UTC instant that exists: there is nothing earlier to exclude, so no lower bound.
+    return (datetime.min if lower is None else lower), upper
 
 
 def _local_date(basis: str, value: datetime) -> date:
@@ -361,10 +376,14 @@ def get_marketing_dashboard(
     grouping keeps working after the 90-day retention purge removes raw_payload."""
     if period_end < period_start:
         raise HTTPException(status_code=400, detail="period_end must not be before period_start")
-    bucket_starts = _bucket_starts(period_start, period_end, bucket)  # also bounds the response size, before any query
-    window_start, window_end = _cohort_window(basis, period_start, period_end)
+    try:
+        bucket_starts = _bucket_starts(period_start, period_end, bucket)  # also bounds the response size, before any query
+        window_start, window_end = _cohort_window(basis, period_start, period_end)
+        received_window = _cohort_window("received_at", period_start, period_end) if basis == "enquiry_time" else None
+    except (OverflowError, ValueError):  # defence in depth: an unrepresentable period is a clear 400, never a 500
+        raise HTTPException(status_code=400, detail="This period cannot be processed; choose dates within the supported calendar")
     cohort_column = MarketplaceLeadImport.enquiry_time if basis == "enquiry_time" else MarketplaceLeadImport.received_at
-    in_window = (cohort_column >= window_start, cohort_column < window_end)
+    in_window = (cohort_column >= window_start, cohort_column <= window_end)
 
     rows = (
         db.query(MarketplaceLeadImport.platform, MarketplaceLeadImport.query_type, cohort_column)
@@ -400,11 +419,11 @@ def get_marketing_dashboard(
 
     excluded = 0
     if basis == "enquiry_time":
-        received_start, received_end = _cohort_window("received_at", period_start, period_end)
+        received_start, received_end = received_window
         excluded = (
             db.query(func.count(MarketplaceLeadImport.id))
             .filter(MarketplaceLeadImport.enquiry_time.is_(None))
-            .filter(MarketplaceLeadImport.received_at >= received_start, MarketplaceLeadImport.received_at < received_end)
+            .filter(MarketplaceLeadImport.received_at >= received_start, MarketplaceLeadImport.received_at <= received_end)
             .scalar()
         ) or 0
 
