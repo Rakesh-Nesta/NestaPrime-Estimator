@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getMarketingDashboard } from "./api";
+import { createDashboardLoader, hasUnappliedFilters } from "./marketingDashboardLogic";
 
 // P3 contract (revision 4), Section 9: Phase A's aggregate-only dashboard -- counts by source, QUERY_TYPE and
 // date bucket, plus a CURRENT-STAGE SNAPSHOT of the Opportunities imported in the selected period (that count is
@@ -50,54 +51,35 @@ export default function MarketingDashboard({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Only the LATEST request may update results, errors and loading: every request takes a sequence number and is
-  // cancelled when a newer one starts; a response (or error) from a superseded request is ignored even if it
-  // arrives afterwards and cancellation did not stop it.
-  const requestSeq = useRef(0);
-  const abortRef = useRef(null);
+  // Validation (empty / malformed / reversed dates) and "only the LATEST request may update data, error and loading"
+  // live in marketingDashboardLogic.js, where they are unit-tested (`node --test src/marketingDashboardLogic.test.js`).
+  // An invalid period makes no request and clears the previous results; a superseded request's success, failure or
+  // abort is ignored even if it arrives later.
+  const loaderRef = useRef(null);
+  if (loaderRef.current === null) {
+    loaderRef.current = createDashboardLoader({
+      fetchDashboard: (params, signal) => getMarketingDashboard(params.token, { ...params, signal }),
+      onChange: (update) => {
+        if ("data" in update) setData(update.data);
+        if ("loading" in update) setLoading(update.loading);
+        if ("error" in update) setError(update.error);
+      },
+    });
+  }
 
   function load() {
-    abortRef.current?.abort();
-    const seq = ++requestSeq.current;
-    if (periodEnd < periodStart) {
-      // Do not leave the previous results on screen under an error about different dates.
-      setData(null);
-      setLoading(false);
-      setError("The end date must not be before the start date.");
-      return;
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-    setError("");
-    getMarketingDashboard(token, { periodStart, periodEnd, basis, bucket, signal: controller.signal })
-      .then((result) => {
-        if (seq === requestSeq.current) setData(result);
-      })
-      .catch((err) => {
-        if (seq !== requestSeq.current || err.name === "AbortError") return;
-        setData(null);
-        setError(err.message);
-      })
-      .finally(() => {
-        if (seq === requestSeq.current) setLoading(false);
-      });
+    loaderRef.current.load({ token, periodStart, periodEnd, basis, bucket });
   }
 
   useEffect(() => {
     load();
-    return () => {
-      requestSeq.current += 1; // a response arriving after unmount (or a token change) must not be applied
-      abortRef.current?.abort();
-    };
+    return () => loaderRef.current.cancel(); // a response arriving after unmount or a token change must not be applied
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   // The results on screen are described by the RESPONSE (what was actually applied), never by the controls, which
   // may have been changed since. `dirty` is true while the controls differ from what the results show.
-  const dirty =
-    data !== null &&
-    (periodStart !== data.period_start || periodEnd !== data.period_end || basis !== data.cohort_basis || bucket !== data.bucket);
+  const dirty = hasUnappliedFilters({ periodStart, periodEnd, basis, bucket }, data);
   const maxBucket = data ? Math.max(1, ...data.by_date_bucket.map((b) => b.count)) : 1;
   const fieldClass = "block mt-1 bg-surface-raised border border-border-dark rounded px-2 py-1 text-sm";
 

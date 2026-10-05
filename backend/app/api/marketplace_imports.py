@@ -237,8 +237,10 @@ def run_backfill(
 #   2. date-bucket granularity: `bucket` = day | week | month (default day). Weeks start on Monday (ISO).
 #   3. timezone: `received_at` is stored as naive UTC and is converted to IST (Asia/Kolkata, UTC+05:30) calendar days.
 #      `enquiry_time` is the provider's own wall-clock value, parsed and never converted; the provider's timezone for it
-#      is NOT verified (the contract states IST only for the Pull API's request window parameters), so enquiry_time
-#      periods and buckets use the date exactly as recorded and the response says so rather than claiming IST.
+#      is NOT verified: the contract, and IndiaMART's Pull API guide (help.indiamart.com/knowledge-base/lms-crm-integration-v2/,
+#      checked 5 Oct 2026), state IST only for the start_time/end_time request parameters; the guide's text gives no timezone
+#      for the QUERY_TIME response field (its sample response is an image). So enquiry_time periods and buckets use the date
+#      exactly as recorded and the response says so rather than claiming IST.
 #   4. period boundaries: [period_start 00:00, period_end + 1 day 00:00) in that calendar, so the end date is
 #      inclusive to its last instant and the next midnight belongs to the next day.
 #   5. denominator: Opportunities imported (ledger rows that produced an Opportunity), counted distinctly --
