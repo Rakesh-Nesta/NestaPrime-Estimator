@@ -13,6 +13,7 @@ INTERPRETATIONS the contract does not settle (each is stated in the API response
     own wall-clock value (unconverted) and is compared as written; `received_at` is stored UTC and is converted to IST.
   * period is [period_start 00:00, period_end + 1 day 00:00) in that calendar (end date inclusive).
   * denominator = Opportunities imported (ledger rows that produced an Opportunity), not all ledger rows.
+  * a lead captured but not yet processed has no durable query_type copy and groups as "unknown" (the dashboard never reads raw_payload).
 Every expected figure below is computed by hand from the fixture data."""
 
 from datetime import datetime
@@ -127,7 +128,9 @@ def test_counts_by_source_query_type_and_day_bucket_are_hand_computed(client, db
     body = _get(client, h, **SEPT).json()
     assert body["received_total"] == 6                                    # A B E F H I
     assert body["by_source"] == {"indiamart": 5, "tradeindia": 1}         # A B E F I | H
-    assert body["by_query_type"] == {"W": 3, "B": 1, "P": 2}              # A F I | B | E H
+    # QUERY_TYPE is read from the ledger's durable column (the contract: copied at Process time, never read from raw_payload).
+    # E and I were never processed, so their type has not been copied yet and they group as "unknown": A F | B | H | E I.
+    assert body["by_query_type"] == {"W": 2, "B": 1, "P": 1, "unknown": 2}
     buckets = {b["bucket_start"]: b["count"] for b in body["by_date_bucket"]}
     assert len(body["by_date_bucket"]) == 30                              # every day of September, zero-filled
     assert buckets["2026-09-01"] == 1 and buckets["2026-09-12"] == 1 and buckets["2026-09-15"] == 2

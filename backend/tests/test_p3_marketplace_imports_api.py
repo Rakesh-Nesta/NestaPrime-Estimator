@@ -305,7 +305,8 @@ def test_marketing_dashboard_aggregates_only_and_role_boundary_case_15(client, d
     body = res.json()
     assert body["imported_total"] == 1
     assert body["by_query_type"] == {"W": 1}
-    assert body["current_stage_distribution"] == [{"stage": "new", "count": 1}]
+    # M4: each stage now carries its rate over the explicit denominator (Opportunities imported in the period).
+    assert body["current_stage_distribution"] == [{"stage": "new", "count": 1, "rate": 1.0}]
 
     refused = client.get("/opportunities", headers=marketing_headers)
     assert refused.status_code == 403
