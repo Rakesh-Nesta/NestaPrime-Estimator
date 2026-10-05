@@ -1,4 +1,4 @@
-"""Finance milestone-cap reproduction (TEST-ONLY; no product code changes).
+"""Finance milestone-cap: reproduction of the race (PR #289) and the regression tests for its fix.
 
 Invariant under test (Section 54, item 4): the milestones of a Work Order may not total more than its order value.
 
@@ -17,10 +17,11 @@ Cases (R-numbers follow the pending-work register r3, section F):
   R1 create/create    R2 edit/edit (two different milestones)    R3 create/edit
   R4 delete/create (control)    R5 boundary (independent fixtures, sequential)    R6 order-value control
 
-RESULT (17a67113, local throwaway Postgres): R1, R2 and R3 REPRODUCED -- both operations committed, neither blocked on a
-lock, and the stored total exceeded the order value (V = 1,269,620.25; stored 1,295,012.65). R4 control: no violation
-(the create was refused 400 because the delete had not committed). R5 a-d: boundary behaviour correct. R6: no path
-changed the Won quotation. The fix design is NOT part of this package.
+HISTORY: on 17a67113 R1, R2 and R3 REPRODUCED the defect (both operations committed, neither blocked, stored total
+1,295,012.65 > V = 1,269,620.25). The fix (api/work_orders.py: the common Work Order locking protocol,
+`_lock_work_order_or_404` / `_locked_milestone_or_404`) serialises milestone writers per Work Order. These tests now
+assert the EXPECTED outcomes: the second request WAITS for the lock, then re-reads, and receives the existing cap
+refusal (HTTP 400 "Milestones would total ..."); exactly one request succeeds; no other exception is accepted.
 """
 
 import time
@@ -33,6 +34,8 @@ from fastapi import HTTPException
 
 from app.api.work_orders import (
     PaymentMilestoneCreate,
+    WorkOrderPaymentEntryCreate,
+    add_payment_entry,
     PaymentMilestoneUpdate,
     add_payment_milestone,
     delete_payment_milestone,
@@ -131,21 +134,24 @@ def wo(client, director_user):
     return headers, work_order_id, _money(order_value)
 
 
+def _assert_serialised(op1, op2, blocked, expected_total, V, after):
+    """The fix's expected outcome: the second request waited on the Work Order lock, re-read the committed state and
+    got the EXISTING cap refusal; exactly one request succeeded; nothing else went wrong."""
+    assert blocked, "the second request did not wait for the Work Order lock"
+    assert op1.exc is None, f"first request failed: {op1.exc!r}"
+    assert isinstance(op2.exc, HTTPException), f"second request should have been refused, got {op2.exc!r}"
+    assert op2.exc.status_code == 400 and "Milestones would total" in str(op2.exc.detail), repr(op2.exc.detail)
+    assert after == expected_total, f"stored total {after}, expected {expected_total}"
+    assert after <= V
+
+
 # ---------------------------------------------------------------------------------------------------------------
-# R1-R3 and R4: concurrent cases. The invariant is asserted; a violation is a REPRODUCED defect.
+# R1-R3 and R4: concurrent cases. The expected outcomes are asserted; a violation would be a regression of the fix.
 # ---------------------------------------------------------------------------------------------------------------
 
-# R1-R3 REPRODUCE the suspected defect (recorded 5 Oct 2026 on 17a67113: 3 of 3 cases, every repeat). They are marked
-# xfail(strict=True) so the suite stays green while the defect is open, and so that the day a fix lands the unexpected
-# pass FAILS the build and forces this marker to be removed deliberately. Remove the marker with the fix.
-REPRODUCED = pytest.mark.xfail(
-    strict=True,
-    reason="REPRODUCED: _check_milestone_cap has no lock; concurrent requests that each pass the check exceed the order value",
-)
 REPEATS = pytest.mark.parametrize("repeat", [1, 2, 3])
 
 
-@REPRODUCED
 @REPEATS
 def test_r1_create_create(client, wo, repeat):
     headers, work_order_id, V = wo
@@ -157,10 +163,9 @@ def test_r1_create_create(client, wo, repeat):
     op1, op2, blocked = _race(_create_fn(work_order_id, a, "race-1"), _create_fn(work_order_id, a, "race-2"))
     after = _stored_total(work_order_id)
     _record("R1 create/create", V, before, op1, op2, blocked, after)
-    assert after <= V, f"cap violated: stored total {after} > order value {V}"
+    _assert_serialised(op1, op2, blocked, before + a, V, after)
 
 
-@REPRODUCED
 @REPEATS
 def test_r2_edit_edit_two_different_milestones(client, wo, repeat):
     headers, work_order_id, V = wo
@@ -178,10 +183,9 @@ def test_r2_edit_edit_two_different_milestones(client, wo, repeat):
     )
     after = _stored_total(work_order_id)
     _record("R2 edit/edit", V, before, op1, op2, blocked, after)
-    assert after <= V, f"cap violated: stored total {after} > order value {V}"
+    _assert_serialised(op1, op2, blocked, before + d, V, after)
 
 
-@REPRODUCED
 @REPEATS
 def test_r3_create_edit(client, wo, repeat):
     headers, work_order_id, V = wo
@@ -198,11 +202,12 @@ def test_r3_create_edit(client, wo, repeat):
     )
     after = _stored_total(work_order_id)
     _record("R3 create/edit", V, before, op1, op2, blocked, after)
-    assert after <= V, f"cap violated: stored total {after} > order value {V}"
+    _assert_serialised(op1, op2, blocked, before + a, V, after)  # the create (first) wins; the edit is refused
 
 
 def test_r4_delete_create_control(client, wo):
-    """Control: total == V; a create that only fits if a concurrent delete lands first. Either outcome keeps the cap."""
+    """Control: total == V; a create that only fits once a concurrent delete has committed. With the lock the create
+    WAITS for the delete, re-reads, and now fits: both succeed and the cap holds (before the fix it was refused)."""
     headers, work_order_id, V = wo
     half = _money(V / 2)
     ma = _milestone(client, headers, work_order_id, float(half), DUE, name="A")
@@ -212,8 +217,93 @@ def test_r4_delete_create_control(client, wo):
     op1, op2, blocked = _race(_delete_fn(ma["id"]), _create_fn(work_order_id, half, "replacement"))
     after = _stored_total(work_order_id)
     _record("R4 delete/create (control)", V, before, op1, op2, blocked, after)
-    assert op1.exc is None
-    assert after <= V
+    assert blocked and op1.exc is None and op2.exc is None, (op1.exc, op2.exc)
+    assert after == V
+
+
+def test_edit_of_a_milestone_deleted_while_waiting_gets_the_normal_404(client, wo):
+    """The milestone is re-read under the lock: an edit that waited behind a delete of the same milestone is refused
+    with the ordinary 404, not an error."""
+    headers, work_order_id, V = wo
+    ma = _milestone(client, headers, work_order_id, float(_money(V / 4)), DUE, name="A")
+    op1, op2, blocked = _race(_delete_fn(ma["id"]), _edit_fn(ma["id"], _money(V / 5)))
+    assert blocked and op1.exc is None
+    assert isinstance(op2.exc, HTTPException) and op2.exc.status_code == 404, repr(op2.exc)
+    assert _stored_total(work_order_id) == 0
+
+
+def test_different_work_orders_proceed_independently(client, director_user):
+    headers = _director_headers(client, director_user)
+    wo1, _p1, v1 = _won_work_order(client, headers, name="Independent One")
+    wo2, _p2, v2 = _won_work_order(client, headers, name="Independent Two")
+    a1, a2 = _money(_money(v1) / 4), _money(_money(v2) / 4)
+    op1 = Op(_create_fn(wo1, a1, "one"), gate=True).start().wait_holding_locks()  # holds Work Order 1's lock
+    op2 = Op(_create_fn(wo2, a2, "two"), gate=True).start()
+    assert op2.reached_commit.wait(8), f"a different Work Order must not wait; exception: {op2.exc!r}"
+    assert lock_waiters() == 0
+    op1.release()
+    op2.release()
+    op1.join()
+    op2.join()
+    assert op1.exc is None and op2.exc is None, (op1.exc, op2.exc)
+    assert _stored_total(wo1) == a1 and _stored_total(wo2) == a2
+
+
+def test_receipt_writes_are_not_blocked_by_a_milestone_lock(client, wo):
+    """The Work Order lock is FOR NO KEY UPDATE: it conflicts with another milestone writer but NOT with the
+    FOR KEY SHARE that a receipt insert takes on its parent Work Order row, so receipts proceed while a milestone
+    write is in flight (receipt behaviour is unchanged by the fix)."""
+    headers, work_order_id, V = wo
+
+    def receipt(session):
+        return add_payment_entry(
+            work_order_id=uuid.UUID(str(work_order_id)),
+            payload=WorkOrderPaymentEntryCreate(milestone_name="Advance", amount_received=1000.0, received_date=DUE),
+            request=_Req(), db=session, current_user=_director(session),
+        )
+
+    op1 = Op(_create_fn(work_order_id, _money(V / 4), "holding"), gate=True).start().wait_holding_locks()  # lock held
+    op2 = Op(receipt, gate=True).start()
+    assert op2.reached_commit.wait(8), f"a receipt write must not wait for a milestone lock; exception: {op2.exc!r}"
+    assert lock_waiters() == 0
+    op1.release()
+    op2.release()
+    op1.join()
+    op2.join()
+    assert op1.exc is None and op2.exc is None, (op1.exc, op2.exc)
+
+
+def test_a_refused_request_releases_its_lock(client, wo):
+    headers, work_order_id, V = wo
+    over = _money(V + Decimal("1"))
+    refused = Op(_create_fn(work_order_id, over, "too-big")).start().join()
+    assert isinstance(refused.exc, HTTPException) and refused.exc.status_code == 400
+    # the next writer on the same Work Order is not blocked by the refused one
+    nxt = Op(_create_fn(work_order_id, _money(V / 4), "fits"), gate=True).start()
+    nxt.wait_holding_locks(timeout=8)
+    assert lock_waiters() == 0
+    nxt.release().join()
+    assert nxt.exc is None and _stored_total(work_order_id) == _money(V / 4)
+
+
+def test_a_failed_audit_write_rolls_back_and_releases_its_lock(client, wo, monkeypatch):
+    """The business change and its audit entry share one transaction: if the audit write fails, nothing is committed
+    and the Work Order lock is released for the next writer."""
+    headers, work_order_id, V = wo
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("audit store unavailable")
+
+    monkeypatch.setattr("app.api.work_orders.write_audit_log_entry", boom)
+    failed = Op(_create_fn(work_order_id, _money(V / 4), "will-fail")).start().join()
+    monkeypatch.undo()
+    assert isinstance(failed.exc, RuntimeError)
+    assert _stored_total(work_order_id) == 0
+    nxt = Op(_create_fn(work_order_id, _money(V / 4), "after"), gate=True).start()
+    nxt.wait_holding_locks(timeout=8)
+    assert lock_waiters() == 0
+    nxt.release().join()
+    assert nxt.exc is None and _stored_total(work_order_id) == _money(V / 4)
 
 
 # ---------------------------------------------------------------------------------------------------------------
