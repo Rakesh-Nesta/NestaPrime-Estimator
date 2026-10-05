@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.audit_log import write_audit_log_entry
@@ -297,6 +298,52 @@ def _get_work_order_or_404(db: Session, work_order_id: uuid.UUID) -> WorkOrder:
     return work_order
 
 
+def _lock_work_order_or_404(db: Session, work_order_id: uuid.UUID) -> WorkOrder:
+    """The common Work Order locking protocol for EVERY payment-milestone write (create, edit, delete).
+
+    A milestone write must (1) take this lock, (2) only then re-read the state it depends on (the other milestones,
+    the milestone being edited or deleted), (3) validate against the cap, (4) mutate and write its audit entry, and
+    (5) commit -- all in one transaction, so the lock is held until the commit or rollback and is released by either
+    (a refused or failed request is rolled back by the request's session closing, app/db/session.py get_db).
+
+    Why a lock on the Work Order row: the cap ("milestones may not total more than the order value", Section 54
+    item 4) is a property of ALL of a Work Order's milestones, so writers of different milestones of one Work Order
+    must serialise; writers of different Work Orders never contend. It is FOR NO KEY UPDATE (SQLAlchemy
+    key_share=True): two milestone writers on one Work Order conflict, but the foreign-key checks of receipt writes and
+    other child inserts (FOR KEY SHARE) are NOT blocked, so receipt behaviour is unchanged.
+
+    Lock order: this is the only row lock these paths take (the Work Order row, a leaf in the P5 lock order, which
+    never locks Work Order rows), and nothing else is locked after it, so it cannot take part in a deadlock cycle.
+    populate_existing makes the read return the committed state even if the row was loaded earlier in the session."""
+    work_order = db.execute(
+        select(WorkOrder)
+        .where(WorkOrder.id == work_order_id)
+        .with_for_update(key_share=True)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if not work_order:
+        raise HTTPException(status_code=404, detail="Work Order not found")
+    return work_order
+
+
+def _locked_milestone_or_404(db: Session, milestone_id: uuid.UUID) -> tuple[WorkOrderPaymentMilestone, WorkOrder]:
+    """Locate a milestone, take its Work Order's lock, then RE-READ the milestone under the lock. The first read is
+    only used to learn the (immutable) work_order_id; if the milestone was deleted while this request waited for the
+    lock, the re-read finds nothing and the request gets the same 404 as for any missing milestone."""
+    first = db.query(WorkOrderPaymentMilestone.work_order_id).filter(WorkOrderPaymentMilestone.id == milestone_id).first()
+    if first is None:
+        raise HTTPException(status_code=404, detail="Payment milestone not found")
+    work_order = _lock_work_order_or_404(db, first[0])
+    milestone = db.execute(
+        select(WorkOrderPaymentMilestone)
+        .where(WorkOrderPaymentMilestone.id == milestone_id)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if milestone is None:
+        raise HTTPException(status_code=404, detail="Payment milestone not found")
+    return milestone, work_order
+
+
 def _milestone_out(db: Session, milestone: WorkOrderPaymentMilestone) -> dict:
     derived = payments_service.milestones_for_work_order(db, milestone.work_order_id, date.today())
     return next(m for m in derived if m["id"] == milestone.id)
@@ -334,7 +381,7 @@ def add_payment_milestone(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ROLES)),
 ):
-    work_order = _get_work_order_or_404(db, work_order_id)
+    work_order = _lock_work_order_or_404(db, work_order_id)  # lock first, then re-read and validate
     _check_milestone_cap(db, work_order, payload.amount_due)
 
     milestone = WorkOrderPaymentMilestone(
@@ -371,16 +418,13 @@ def update_payment_milestone(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*ROLES)),
 ):
-    milestone = db.query(WorkOrderPaymentMilestone).filter(WorkOrderPaymentMilestone.id == milestone_id).first()
-    if not milestone:
-        raise HTTPException(status_code=404, detail="Payment milestone not found")
+    milestone, work_order = _locked_milestone_or_404(db, milestone_id)  # lock first, then re-read and validate
 
     changes = payload.model_dump(exclude_unset=True)
     for required in ("name", "amount_due", "due_date"):
         if required in changes and changes[required] is None:
             raise HTTPException(status_code=400, detail=f"{required} cannot be cleared")
     if "amount_due" in changes:
-        work_order = _get_work_order_or_404(db, milestone.work_order_id)
         _check_milestone_cap(db, work_order, changes["amount_due"], exclude_id=milestone.id)
 
     for field, value in changes.items():
@@ -410,9 +454,7 @@ def delete_payment_milestone(
     """A milestone is only a promise, so it can be deleted -- but not while
     receipts are recorded against it, which would silently orphan them.
     Unlink those receipts first (PATCH /payment-entries/{id})."""
-    milestone = db.query(WorkOrderPaymentMilestone).filter(WorkOrderPaymentMilestone.id == milestone_id).first()
-    if not milestone:
-        raise HTTPException(status_code=404, detail="Payment milestone not found")
+    milestone, _work_order = _locked_milestone_or_404(db, milestone_id)  # lock first, then re-read and validate
     linked = db.query(WorkOrderPaymentEntry).filter(WorkOrderPaymentEntry.milestone_id == milestone_id).count()
     if linked:
         raise HTTPException(
