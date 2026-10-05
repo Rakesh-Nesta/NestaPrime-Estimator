@@ -308,13 +308,26 @@ def _lock_work_order_or_404(db: Session, work_order_id: uuid.UUID) -> WorkOrder:
 
     Why a lock on the Work Order row: the cap ("milestones may not total more than the order value", Section 54
     item 4) is a property of ALL of a Work Order's milestones, so writers of different milestones of one Work Order
-    must serialise; writers of different Work Orders never contend. It is FOR NO KEY UPDATE (SQLAlchemy
-    key_share=True): two milestone writers on one Work Order conflict, but the foreign-key checks of receipt writes and
-    other child inserts (FOR KEY SHARE) are NOT blocked, so receipt behaviour is unchanged.
+    must serialise; writers of different Work Orders do not contend.
 
-    Lock order: this is the only row lock these paths take (the Work Order row, a leaf in the P5 lock order, which
-    never locks Work Order rows), and nothing else is locked after it, so it cannot take part in a deadlock cycle.
-    populate_existing makes the read return the committed state even if the row was loaded earlier in the session."""
+    Lock mode: SELECT ... FOR NO KEY UPDATE (SQLAlchemy `with_for_update(key_share=True)`). In PostgreSQL that mode
+    conflicts with FOR UPDATE, FOR NO KEY UPDATE and FOR SHARE, and does NOT conflict with FOR KEY SHARE. So: (a) two
+    milestone writers on one Work Order exclude each other; (b) the foreign-key checks that a receipt insert or any
+    other child insert makes against this Work Order row (FOR KEY SHARE) are NOT blocked, so receipt writes proceed
+    (covered by a test); (c) an ordinary UPDATE of this row that does not touch its key, such as a Work Order status
+    change, takes the same mode and therefore waits for an in-flight milestone write, and vice versa -- briefly, and
+    harmlessly.
+
+    Deadlock reasoning (by inspection of the current code and by the tests, not a proof): this is the only EXPLICIT
+    row lock these paths take, and no explicit lock is requested after it. The audit and milestone inserts then take
+    implicit FOR KEY SHARE locks on parent rows (for example the acting user); no other code path holds a stronger lock
+    on such a row while waiting for a Work Order lock -- P5's explicit lock order (Project, Quotation, Agreement,
+    Authorization, TeamMember, User, Attachment) never locks Work Order rows, and receipt and status paths do not wait
+    on this lock while holding anything these paths need. A new code path that locks Work Order rows explicitly must
+    be placed in that order deliberately.
+
+    populate_existing makes the read return the row as it is NOW (after any wait), even if it was loaded earlier in
+    the session; the other reads that follow (the milestones) are fresh queries in the same transaction."""
     work_order = db.execute(
         select(WorkOrder)
         .where(WorkOrder.id == work_order_id)

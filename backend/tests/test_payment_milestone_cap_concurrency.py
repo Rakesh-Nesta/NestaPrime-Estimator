@@ -34,6 +34,8 @@ from fastapi import HTTPException
 
 from app.api.work_orders import (
     PaymentMilestoneCreate,
+    WorkOrderPaymentEntryCreate,
+    add_payment_entry,
     PaymentMilestoneUpdate,
     add_payment_milestone,
     delete_payment_milestone,
@@ -245,6 +247,30 @@ def test_different_work_orders_proceed_independently(client, director_user):
     op2.join()
     assert op1.exc is None and op2.exc is None, (op1.exc, op2.exc)
     assert _stored_total(wo1) == a1 and _stored_total(wo2) == a2
+
+
+def test_receipt_writes_are_not_blocked_by_a_milestone_lock(client, wo):
+    """The Work Order lock is FOR NO KEY UPDATE: it conflicts with another milestone writer but NOT with the
+    FOR KEY SHARE that a receipt insert takes on its parent Work Order row, so receipts proceed while a milestone
+    write is in flight (receipt behaviour is unchanged by the fix)."""
+    headers, work_order_id, V = wo
+
+    def receipt(session):
+        return add_payment_entry(
+            work_order_id=uuid.UUID(str(work_order_id)),
+            payload=WorkOrderPaymentEntryCreate(milestone_name="Advance", amount_received=1000.0, received_date=DUE),
+            request=_Req(), db=session, current_user=_director(session),
+        )
+
+    op1 = Op(_create_fn(work_order_id, _money(V / 4), "holding"), gate=True).start().wait_holding_locks()  # lock held
+    op2 = Op(receipt, gate=True).start()
+    assert op2.reached_commit.wait(8), f"a receipt write must not wait for a milestone lock; exception: {op2.exc!r}"
+    assert lock_waiters() == 0
+    op1.release()
+    op2.release()
+    op1.join()
+    op2.join()
+    assert op1.exc is None and op2.exc is None, (op1.exc, op2.exc)
 
 
 def test_a_refused_request_releases_its_lock(client, wo):
