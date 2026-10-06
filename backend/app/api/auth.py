@@ -189,7 +189,12 @@ def change_password(
             ),
         )
     except SigningKeyUnavailable:
-        db.rollback()
+        # Attempt the rollback, but never let a failing rollback replace the sanitized signing-failure response: whatever it raises is
+        # discarded. Nothing was committed either way, and no claim is made that the rollback succeeded.
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise  # the shared handler answers 503; nothing was committed and the old session still works
     try:
         db.commit()
