@@ -69,11 +69,11 @@ jobs:
 
       - name: Python packages (pip-audit)
         working-directory: backend
-        # PYSEC-2026-1325: ecdsa (a python-jose dependency) has no fix and its flaw is ECDSA *signing*
-        # timing; this app signs tokens with HS256 only. See docs/security/dependency-audit-exceptions.md.
+        # No advisory is ignored: ecdsa (and python-jose) left the dependency graph when the token library
+        # became PyJWT[crypto]. See docs/security/dependency-audit-exceptions.md.
         run: |
           python -m pip install --upgrade pip pip-audit
-          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
+          pip-audit -r requirements.txt
 
       - name: npm packages (production dependencies)
         working-directory: frontend
