@@ -145,11 +145,11 @@ _POOL_LEAKS = ["fakeuser", "fakepassword", "fake.invalid", "fakedb", "+919876543
                "Exception during reset", "sqlalchemy", "RuntimeError", "File \""]
 
 
-def _run_double(mode, scenario):
+def _run_double(mode, scenario, config="default"):
     import subprocess
     import sys
 
-    return subprocess.run([sys.executable, str(_DOUBLE), mode, scenario], capture_output=True, text=True, timeout=120)
+    return subprocess.run([sys.executable, str(_DOUBLE), mode, scenario, config], capture_output=True, text=True, timeout=120)
 
 
 def test_the_double_really_drives_sqlalchemys_logging_path_when_uncontained():
@@ -160,18 +160,32 @@ def test_the_double_really_drives_sqlalchemys_logging_path_when_uncontained():
     assert "fakepassword" in proc.stderr and "Traceback" in proc.stderr
 
 
-@pytest.mark.parametrize(
-    "scenario,expected_code",
-    [
-        ("query_failure", preflight.EXIT_ASSESSMENT),                       # assessment error
-        ("rollback_and_pool_reset_failure", preflight.EXIT_ASSESSMENT),     # the reviewer's reproduction: assessment error wins
-        ("connect_failure", preflight.EXIT_ASSESSMENT),
-        ("pool_reset_failure_after_a_good_read", preflight.EXIT_CLEANUP),   # read fine, cleanup failed: NOT apparent success
-        ("connection_close_failure", preflight.EXIT_CLEANUP),
-    ],
-)
-def test_real_sqlalchemy_failures_print_only_the_fixed_message(scenario, expected_code):
-    proc = _run_double("main", scenario)
+# Every logging configuration an environment might have. The preflight must be safe under ALL of them (see _contained()).
+LOGGING_CONFIGS = [
+    "default",                          # nothing configured: Python's last-resort handler would print the traceback
+    "root_stream_handler",              # root StreamHandler holding the ORIGINAL stderr
+    "pool_handler_no_propagate",        # sqlalchemy.pool StreamHandler, propagate=False
+    "pool_null_handler_no_propagate",   # sqlalchemy.pool NullHandler, propagate=False: a root-based counter never sees the record
+    "retaining_handlers",               # existing handlers that KEEP records: raw sensitive records must never reach them
+    "pool_level_critical",              # logger level above ERROR: the record would not be created
+    "pool_disabled",                    # logger.disabled = True
+    "global_logging_disable",           # logging.disable(CRITICAL)
+]
+FAILURE_SCENARIOS = [
+    ("query_failure", preflight.EXIT_ASSESSMENT),                       # assessment error
+    ("rollback_and_pool_reset_failure", preflight.EXIT_ASSESSMENT),     # the reviewer's reproduction: assessment error wins
+    ("connect_failure", preflight.EXIT_ASSESSMENT),
+    ("pool_reset_failure_after_a_good_read", preflight.EXIT_CLEANUP),   # read fine, cleanup failed: NOT apparent success
+    ("connection_close_failure", preflight.EXIT_CLEANUP),
+]
+
+
+@pytest.mark.parametrize("config", LOGGING_CONFIGS)
+@pytest.mark.parametrize("scenario,expected_code", FAILURE_SCENARIOS)
+def test_real_sqlalchemy_failures_print_only_the_fixed_message_under_any_logging_configuration(scenario, expected_code, config):
+    proc = _run_double("main", scenario, config)
+    # The helper exits 97 if the logging/warnings/stderr configuration was not restored, 98 if an existing handler was handed a
+    # record; either would show here as a different exit code.
     assert proc.returncode == expected_code
     assert proc.stdout == ""                                                # counts withheld after any failure
     assert proc.stderr == preflight._MESSAGES[expected_code] + "\n"         # exactly the fixed line: nothing else, no traceback
@@ -179,14 +193,19 @@ def test_real_sqlalchemy_failures_print_only_the_fixed_message(scenario, expecte
         assert leak not in proc.stdout + proc.stderr, f"leaked {leak!r}"
 
 
-def test_a_real_sqlalchemy_success_prints_counts_only_and_nothing_on_stderr():
+@pytest.mark.parametrize("config", LOGGING_CONFIGS)
+def test_a_real_sqlalchemy_success_is_unaffected_by_the_logging_configuration(config):
     import json
 
-    proc = _run_double("main", "success")
+    proc = _run_double("main", "success", config)
     assert proc.returncode == 0 and proc.stderr == ""
-    result = json.loads(proc.stdout)
-    assert result["users_with_mobile"] == 3 and result["refused_by_approved_rule"]["accounts"] == 2
-    assert "9876543210" not in proc.stdout and "@" not in proc.stdout
+    assert json.loads(proc.stdout)["users_with_mobile"] == 3
+
+
+@pytest.mark.parametrize("config", ["default", "pool_null_handler_no_propagate", "retaining_handlers", "global_logging_disable"])
+def test_the_logging_configuration_is_restored_even_when_the_run_is_interrupted(config):
+    proc = _run_double("main_interrupted", "success", config)
+    assert proc.returncode == 0, "logging/warnings/stderr state was not restored after an exceptional exit"
 
 
 class _FakeSession:

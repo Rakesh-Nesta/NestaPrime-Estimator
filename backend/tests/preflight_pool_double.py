@@ -10,9 +10,11 @@ No network, no PostgreSQL, fabricated values only. (This exercises error OUTPUT,
 statement is emulated as a no-op here, and enforced by the database in the other tests.)"""
 
 import importlib.util
+import logging
 import sqlite3
 import sys
 import types
+import warnings
 from pathlib import Path
 
 from sqlalchemy import create_engine
@@ -96,13 +98,86 @@ def make_session_factory(scenario):
     return sessionmaker(bind=create_engine("sqlite://", creator=creator))
 
 
+# ---- logging configurations the preflight must be safe under (applied in the child BEFORE main() runs) ----------------------------
+class Retaining(logging.Handler):
+    """An existing handler that keeps whatever it is given -- the way a log shipper or an in-memory buffer would."""
+
+    def __init__(self):
+        super().__init__(level=logging.NOTSET)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def apply_logging_config(name):
+    root, pool = logging.getLogger(), logging.getLogger("sqlalchemy.pool")
+    retained = Retaining()
+    if name == "default":
+        pass
+    elif name == "root_stream_handler":  # retains the ORIGINAL stderr object, so redirecting sys.stderr later cannot catch it
+        root.addHandler(logging.StreamHandler(sys.stderr))
+    elif name == "pool_handler_no_propagate":
+        pool.addHandler(logging.StreamHandler(sys.stderr))
+        pool.propagate = False
+    elif name == "pool_null_handler_no_propagate":  # nothing downstream will ever see the record: a root-based counter is blind
+        pool.addHandler(logging.NullHandler())
+        pool.propagate = False
+    elif name == "retaining_handlers":
+        for target in (root, pool, logging.getLogger("sqlalchemy")):
+            target.addHandler(retained)
+    elif name == "pool_level_critical":  # the record would not even be created
+        pool.setLevel(logging.CRITICAL)
+        root.addHandler(logging.StreamHandler(sys.stderr))
+    elif name == "pool_disabled":
+        pool.disabled = True
+        root.addHandler(logging.StreamHandler(sys.stderr))
+    elif name == "global_logging_disable":
+        logging.disable(logging.CRITICAL)
+        root.addHandler(logging.StreamHandler(sys.stderr))
+    else:
+        raise SystemExit(f"unknown logging config {name}")
+    return retained
+
+
+def snapshot():
+    root, pool = logging.getLogger(), logging.getLogger("sqlalchemy.pool")
+    return (tuple(root.handlers), tuple(pool.handlers), tuple(logging.getLogger("sqlalchemy").handlers), pool.propagate, pool.level,
+            pool.disabled, root.level, logging.root.manager.disable, sys.stderr, sys.stdout, sys.unraisablehook,
+            list(warnings.filters), warnings.showwarning, logging.Logger.handle, logging.Logger.callHandlers,
+            logging.Logger.isEnabledFor, logging.lastResort)
+
+
+EXIT_NOT_RESTORED = 97
+EXIT_RETAINED_RECORD = 98
+
+
 if __name__ == "__main__":
     mode, scenario = sys.argv[1], sys.argv[2]
+    config = sys.argv[3] if len(sys.argv) > 3 else "default"
     preflight = load_preflight()
     factory = make_session_factory(scenario)
     sys.modules["app.db.session"] = types.SimpleNamespace(SessionLocal=factory)  # what main() imports
+    retained = apply_logging_config(config)
+    before = snapshot()
     if mode == "main":
-        sys.exit(preflight.main(["--json"]))
+        code = preflight.main(["--json"])
+        if snapshot() != before:
+            sys.exit(EXIT_NOT_RESTORED)
+        if retained.records:  # an existing handler was handed a (raw, sensitive) record
+            sys.exit(EXIT_RETAINED_RECORD)
+        sys.exit(code)
+    if mode == "main_interrupted":
+        # EXCEPTIONAL exit: the run is interrupted from inside the contained region; the configuration must still be restored.
+        def interrupted(_diagnostics):
+            raise KeyboardInterrupt
+
+        preflight._assess = interrupted
+        try:
+            preflight.main(["--json"])
+        except KeyboardInterrupt:
+            pass
+        sys.exit(0 if snapshot() == before else EXIT_NOT_RESTORED)
     if mode == "uncontained":
         # POSITIVE CONTROL: the same session/pool cleanup WITHOUT the preflight's containment. It must reproduce the library's own
         # stderr diagnostic, proving the double really drives SQLAlchemy's logging path.
