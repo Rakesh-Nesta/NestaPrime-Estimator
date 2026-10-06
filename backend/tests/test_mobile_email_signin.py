@@ -358,3 +358,77 @@ def test_wrong_passwords_by_an_approved_form_still_count_toward_the_same_lockout
     for _ in range(5):
         assert _login(client, "098765-43210", password="wrong").status_code == 401
     assert _login(client, "+919876543210").status_code == 401  # locked, whichever form is typed
+
+
+# ---------------------------------------------------------------------------
+# Compatibility through the callers: benign formatting and a previously accepted Unicode identifier
+# ---------------------------------------------------------------------------
+
+BENIGN_FORMS = ["98765.43210", "(98765) 43210", "98765 43210", "98765‑43210", "+91 (98765) 43210"]
+UNICODE_STORED = "+91९876543210"  # accepted before the corrections (+91 then a Devanagari 9), stored as written
+
+
+@pytest.mark.parametrize("form", BENIGN_FORMS)
+def test_create_accepts_benign_formatting_and_stores_the_canonical_number(client, director_user, db_session, form):
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/users", json={"name": "Benign Create", "mobile": form, "role": "sales", "password": "TestPass!1"}, headers=headers
+    )
+    assert res.status_code == 201, (form, res.text)
+    assert res.json()["mobile"] == "+919876543210"
+    assert _login(client, "98765 43210").status_code == 200
+
+
+@pytest.mark.parametrize("form", BENIGN_FORMS)
+def test_edit_accepts_benign_formatting_and_stores_the_canonical_number(client, director_user, db_session, form):
+    headers = _director_headers(client, director_user)
+    created = client.post(
+        "/users", json={"name": "Benign Edit", "email": "benign-edit@test.local", "role": "sales", "password": "TestPass!1"},
+        headers=headers,
+    ).json()
+    res = client.patch(f"/users/{created['id']}", json={"mobile": form}, headers=headers)
+    assert res.status_code == 200, (form, res.text)
+    assert res.json()["mobile"] == "+919876543210"
+
+
+@pytest.mark.parametrize("form", BENIGN_FORMS)
+def test_sign_in_by_a_benign_form_identifies_the_same_account(client, db_session, form):
+    user = _mobile_user(db_session)
+    res = _login(client, form)
+    assert res.status_code == 200, (form, res.text)
+    assert decode_access_token(res.json()["access_token"])["sub"] == str(user.id)
+
+
+def test_wrong_passwords_by_a_benign_form_count_toward_the_same_lockout(client, db_session):
+    _mobile_user(db_session)
+    for _ in range(5):
+        assert _login(client, "(98765) 43210", password="wrong").status_code == 401
+    assert _login(client, "+919876543210").status_code == 401  # locked, whichever form is typed
+
+
+def test_a_previously_accepted_unicode_identifier_still_signs_in_by_the_same_text(client, db_session):
+    """A fixture account stored as '+91' + a Devanagari 9 + 876543210 (the normalizer used to accept and store it). Whether
+    production holds any such account is NOT assumed. The correction must not turn that identifier into a refusal."""
+    user = _mobile_user(db_session, mobile=UNICODE_STORED)
+    res = _login(client, UNICODE_STORED)
+    assert res.status_code == 200, res.text
+    assert decode_access_token(res.json()["access_token"])["sub"] == str(user.id)
+    assert _login(client, "+91 ९876543210").status_code == 200   # same number, formatted
+
+
+def test_wrong_passwords_by_a_stored_unicode_identifier_lock_it_like_any_account(client, db_session):
+    """The lock is proved through the account's EMAIL, so a refused identifier (which identifies nobody and locks nothing)
+    cannot make this pass by accident."""
+    _mobile_user(db_session, mobile=UNICODE_STORED, email="unicode-lock@test.local")
+    for _ in range(5):
+        assert _login(client, UNICODE_STORED, password="wrong").status_code == 401
+    assert _login(client, "unicode-lock@test.local").status_code == 401  # locked, so the right password by email fails too
+
+
+def test_creating_the_same_unicode_identifier_twice_is_a_conflict(client, director_user, db_session):
+    _mobile_user(db_session, mobile=UNICODE_STORED)
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/users", json={"name": "Dup Unicode", "mobile": UNICODE_STORED, "role": "sales", "password": "TestPass!1"}, headers=headers
+    )
+    assert res.status_code == 409, res.text
