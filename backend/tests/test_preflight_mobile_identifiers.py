@@ -138,6 +138,57 @@ def test_missing_secret_key_configuration_failure_is_sanitized(tmp_path):
     _assert_clean_failure(proc.returncode, proc.stdout, proc.stderr, "configuration")
 
 
+# ---- real SQLAlchemy session/pool cleanup: the library's own logging must not reach stderr ------------------------------------
+# The double and the subprocess rationale are in tests/preflight_pool_double.py.
+_DOUBLE = Path(__file__).resolve().parent / "preflight_pool_double.py"
+_POOL_LEAKS = ["fakeuser", "fakepassword", "fake.invalid", "fakedb", "+919876543210", "9876543210", "Traceback",
+               "Exception during reset", "sqlalchemy", "RuntimeError", "File \""]
+
+
+def _run_double(mode, scenario):
+    import subprocess
+    import sys
+
+    return subprocess.run([sys.executable, str(_DOUBLE), mode, scenario], capture_output=True, text=True, timeout=120)
+
+
+def test_the_double_really_drives_sqlalchemys_logging_path_when_uncontained():
+    """Positive control: without the preflight's containment the library writes the traceback, with the fabricated text, to the real
+    stderr. If this ever stops reproducing, the containment tests below would be vacuous."""
+    proc = _run_double("uncontained", "rollback_and_pool_reset_failure")
+    assert "Exception during reset or similar" in proc.stderr
+    assert "fakepassword" in proc.stderr and "Traceback" in proc.stderr
+
+
+@pytest.mark.parametrize(
+    "scenario,expected_code",
+    [
+        ("query_failure", preflight.EXIT_ASSESSMENT),                       # assessment error
+        ("rollback_and_pool_reset_failure", preflight.EXIT_ASSESSMENT),     # the reviewer's reproduction: assessment error wins
+        ("connect_failure", preflight.EXIT_ASSESSMENT),
+        ("pool_reset_failure_after_a_good_read", preflight.EXIT_CLEANUP),   # read fine, cleanup failed: NOT apparent success
+        ("connection_close_failure", preflight.EXIT_CLEANUP),
+    ],
+)
+def test_real_sqlalchemy_failures_print_only_the_fixed_message(scenario, expected_code):
+    proc = _run_double("main", scenario)
+    assert proc.returncode == expected_code
+    assert proc.stdout == ""                                                # counts withheld after any failure
+    assert proc.stderr == preflight._MESSAGES[expected_code] + "\n"         # exactly the fixed line: nothing else, no traceback
+    for leak in _POOL_LEAKS:
+        assert leak not in proc.stdout + proc.stderr, f"leaked {leak!r}"
+
+
+def test_a_real_sqlalchemy_success_prints_counts_only_and_nothing_on_stderr():
+    import json
+
+    proc = _run_double("main", "success")
+    assert proc.returncode == 0 and proc.stderr == ""
+    result = json.loads(proc.stdout)
+    assert result["users_with_mobile"] == 3 and result["refused_by_approved_rule"]["accounts"] == 2
+    assert "9876543210" not in proc.stdout and "@" not in proc.stdout
+
+
 class _FakeSession:
     """Records the cleanup calls; each step can be made to fail with a message full of sensitive-looking text."""
 
