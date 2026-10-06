@@ -47,9 +47,14 @@ Categories (every non-null stored mobile falls into exactly one):
 """
 
 import argparse
+import contextlib
+import gc
+import io
 import json
+import logging
 import re
 import sys
+import warnings
 from collections import Counter
 from pathlib import Path
 
@@ -178,17 +183,64 @@ def _fail(code: int) -> int:
     return code
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Read-only preflight of stored mobile identifiers (aggregate counts only).")
-    parser.add_argument("--json", action="store_true", help="print the counts as JSON")
-    args = parser.parse_args(argv)
+class _Diagnostics:
+    """How many error-level diagnostics the libraries emitted while contained. A COUNT only: no text is kept or written anywhere."""
 
+    def __init__(self):
+        self.count = 0
+
+
+class _Discard(io.TextIOBase):
+    def write(self, text):
+        return len(text)
+
+
+class _CountingHandler(logging.Handler):
+    def __init__(self, diagnostics):
+        super().__init__(level=logging.ERROR)
+        self._diagnostics = diagnostics
+
+    def emit(self, record):
+        self._diagnostics.count += 1  # never formats or stores the record: it can carry URLs, credentials and identifiers
+
+
+@contextlib.contextmanager
+def _contained(diagnostics):
+    """Library-generated diagnostics must not reach the terminal. SQLAlchemy reports a failed rollback or pool reset through
+    `logging` with the full traceback, and with no handler configured Python's last-resort handler writes it to stderr, quoting
+    whatever the driver put in the exception (URLs, passwords, identifiers). So for the whole run -- configuration import,
+    assessment, session close, engine disposal and the garbage collection that runs finalizers -- this:
+      * gives the root logger a handler, so the last-resort handler is never used; the handler only counts ERROR+ records;
+      * drops warnings and "exception ignored" reports (counted), and discards anything else written to stderr.
+    Local to this standalone command only: it changes no application logging or database behaviour, writes nothing anywhere, and
+    is undone on exit. Native code writing directly to file descriptor 2 is outside what Python can contain (see the limits in
+    the PR description)."""
+    root = logging.getLogger()
+    handler = _CountingHandler(diagnostics)
+    root.addHandler(handler)
+    previous_hook = sys.unraisablehook
+
+    def count_unraisable(_args):
+        diagnostics.count += 1
+
+    sys.unraisablehook = count_unraisable
+    try:
+        with warnings.catch_warnings(), contextlib.redirect_stderr(_Discard()):
+            warnings.simplefilter("ignore")
+            yield
+    finally:
+        sys.unraisablehook = previous_hook
+        root.removeHandler(handler)
+
+
+def _assess(diagnostics):
+    """Returns (exit_code_or_None, result). Runs inside _contained()."""
     try:
         # Imported here so importing this module never loads settings or opens a connection. A configuration error (for
         # example a missing SECRET_KEY) is raised by this import, and its text can quote the DATABASE_URL.
         from app.db.session import SessionLocal
     except Exception:
-        return _fail(EXIT_CONFIGURATION)
+        return EXIT_CONFIGURATION, None
 
     db = None
     result = None
@@ -205,13 +257,36 @@ def main(argv=None) -> int:
             db.close()
         except Exception:
             cleanup_failed = True
+    # Release the pooled connections now, while contained, so a failure closing one is seen here and not at interpreter exit.
+    kw = getattr(SessionLocal, "kw", None)
+    bind = kw.get("bind") if isinstance(kw, dict) else None
+    if bind is not None and hasattr(bind, "dispose"):
+        try:
+            bind.dispose()
+        except Exception:
+            cleanup_failed = True
+    gc.collect()  # runs finalizers while still contained
 
-    # A failed assessment is reported as such even if cleanup also failed; a successful one whose cleanup failed is NOT
-    # reported as success (its read-only transaction could not be confirmed ended), and its counts are withheld.
+    # A failed assessment is reported as such even if cleanup also failed. A successful read whose cleanup failed -- including a
+    # failure the library only LOGGED (for example a pool reset) -- is NOT reported as success: its read-only transaction could not
+    # be confirmed ended, and its counts are withheld. Containing the diagnostics must never turn an error into apparent success.
     if assessment_failed:
-        return _fail(EXIT_ASSESSMENT)
-    if cleanup_failed:
-        return _fail(EXIT_CLEANUP)
+        return EXIT_ASSESSMENT, None
+    if cleanup_failed or diagnostics.count:
+        return EXIT_CLEANUP, None
+    return None, result
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Read-only preflight of stored mobile identifiers (aggregate counts only).")
+    parser.add_argument("--json", action="store_true", help="print the counts as JSON")
+    args = parser.parse_args(argv)
+
+    diagnostics = _Diagnostics()
+    with _contained(diagnostics):
+        code, result = _assess(diagnostics)
+    if code is not None:
+        return _fail(code)
     print(json.dumps(result, indent=2) if args.json else render(result))
     return 0
 
