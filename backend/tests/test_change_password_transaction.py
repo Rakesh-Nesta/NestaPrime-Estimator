@@ -84,6 +84,50 @@ def test_a_signing_failure_at_reissuance_rolls_back_the_staged_change_and_leaves
     assert _login(client, NEW_PASSWORD).status_code == 401
 
 
+def test_a_signing_failure_keeps_the_sanitized_503_even_when_the_rollback_also_fails(client, db_session, account, monkeypatch, caplog, capsys):
+    """Authenticate normally, inject SigningKeyUnavailable at token reissuance, then make the rollback itself raise a fabricated sensitive
+    diagnostic. The response must still be the fixed 503 with no token, nothing may be committed, no cleanup diagnostic may escape, and
+    the plan makes no claim that the rollback succeeded (the staged changes were simply never committed)."""
+    from app.core import security
+
+    token = _signed_in(client)
+    before = _stored(account.id)
+    commits, rollbacks = [], []
+    real_commit = db_session.commit
+
+    def counting_commit():
+        commits.append("commit")
+        return real_commit()
+
+    def rollback_fails():
+        rollbacks.append("rollback")
+        raise RuntimeError(FABRICATED_FAULT)
+
+    def reissuance_fails(*args, **kwargs):
+        raise security.SigningKeyUnavailable()
+
+    monkeypatch.setattr(api_auth, "create_access_token", reissuance_fails)
+    monkeypatch.setattr(db_session, "commit", counting_commit)
+    monkeypatch.setattr(db_session, "rollback", rollback_fails)
+    response = _change(client, token)  # an escaped diagnostic would raise out of the test client here
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": security.SIGNING_UNAVAILABLE_DETAIL}  # the ORIGINAL sanitized signing error, unchanged
+    assert "access_token" not in response.text
+    assert rollbacks == ["rollback"]  # the rollback was attempted exactly once
+    assert commits == []  # nothing was committed
+    for leaked in ("leakpass", "leakuser", "leak.invalid", "connection failure"):
+        assert leaked not in response.text and leaked not in caplog.text
+        captured = capsys.readouterr()
+        assert leaked not in captured.out and leaked not in captured.err
+    assert "rolled back" not in response.text.lower()  # no claim that the rollback succeeded
+
+    monkeypatch.undo()
+    db_session.rollback()  # test hygiene only: drop the staged-but-never-committed state left by the failed rollback
+    assert _stored(account.id) == before  # the database never saw the change
+    assert client.get("/auth/me", headers=_bearer(token)).status_code == 200
+
+
 # ---- failure point 2: the commit --------------------------------------------------------------------------------------------------
 
 
