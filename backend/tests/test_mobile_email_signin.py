@@ -2,6 +2,8 @@
 
 import uuid
 
+import pytest
+
 from app.core.security import decode_access_token, hash_password
 from app.models.user import User, UserRole
 
@@ -281,3 +283,78 @@ def test_list_users_still_works_and_includes_mobile_field(client, director_user)
     assert res.status_code == 200
     row = next(u for u in res.json() if u["email"] == "director@test.local")
     assert row["mobile"] is None
+
+
+# ---------------------------------------------------------------------------
+# A61 mobile-normalization corrections: the one shared normalizer, seen from create, edit and sign-in
+# ---------------------------------------------------------------------------
+
+MALFORMED_MOBILES = ["+915123456789", "+91987654321", "+91 98765 432101", "abc9876543210xyz", "+91 98765 43210 ext"]
+APPROVED_FORMS = ["98765 43210", "098765-43210", "+91 98765 43210", "91 9876543210"]
+
+
+def _mobile_user(db_session, mobile="+919876543210", email=None):
+    user = User(
+        name="A61 Mobile", email=email, mobile=mobile, hashed_password=hash_password("TestPass!1"), role=UserRole.SALES
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+
+@pytest.mark.parametrize("bad", MALFORMED_MOBILES)
+def test_create_refuses_a_malformed_mobile_with_the_existing_validation_response(client, director_user, db_session, bad):
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/users", json={"name": "Bad Mobile", "mobile": bad, "role": "sales", "password": "TestPass!1"}, headers=headers
+    )
+    assert res.status_code == 400, res.text
+    assert isinstance(res.json()["detail"], str) and res.json()["detail"]
+    assert db_session.query(User).filter(User.name == "Bad Mobile").count() == 0
+
+
+@pytest.mark.parametrize("bad", MALFORMED_MOBILES)
+def test_edit_refuses_a_malformed_mobile_and_leaves_the_account_unchanged(client, director_user, db_session, bad):
+    headers = _director_headers(client, director_user)
+    created = client.post(
+        "/users",
+        json={"name": "Edit Target", "email": "edit-target-a61@test.local", "mobile": "9876543299", "role": "sales", "password": "TestPass!1"},
+        headers=headers,
+    ).json()
+    res = client.patch(f"/users/{created['id']}", json={"mobile": bad}, headers=headers)
+    assert res.status_code == 400, res.text
+    assert db_session.get(User, uuid.UUID(created["id"])).mobile == "+919876543299"
+
+
+@pytest.mark.parametrize("bad", MALFORMED_MOBILES)
+def test_sign_in_with_a_malformed_number_gives_the_generic_failure_even_with_the_right_password(client, db_session, bad):
+    _mobile_user(db_session)
+    res = _login(client, bad)  # the correct password for the account whose number the bad input resembles
+    unknown = _login(client, "nobody@test.local")
+    assert res.status_code == unknown.status_code == 401
+    assert res.json()["detail"] == unknown.json()["detail"]
+
+
+def test_malformed_look_alikes_cannot_be_used_to_lock_a_real_account(client, db_session):
+    """Before the fix 'abc9876543210xyz' was erased to the real number, so wrong passwords typed that way counted toward the
+    real account's lockout. A value that identifies nobody must lock nothing."""
+    _mobile_user(db_session)
+    for bad in ("abc9876543210xyz", "+91 98765 43210 ext"):
+        for _ in range(6):
+            assert _login(client, bad, password="wrong").status_code == 401
+    assert _login(client, "+919876543210").status_code == 200  # not locked
+
+
+@pytest.mark.parametrize("form", APPROVED_FORMS)
+def test_the_approved_forms_identify_the_same_account(client, db_session, form):
+    user = _mobile_user(db_session)
+    res = _login(client, form)
+    assert res.status_code == 200, (form, res.text)
+    assert decode_access_token(res.json()["access_token"])["sub"] == str(user.id)
+
+
+def test_wrong_passwords_by_an_approved_form_still_count_toward_the_same_lockout(client, db_session):
+    _mobile_user(db_session)
+    for _ in range(5):
+        assert _login(client, "098765-43210", password="wrong").status_code == 401
+    assert _login(client, "+919876543210").status_code == 401  # locked, whichever form is typed
