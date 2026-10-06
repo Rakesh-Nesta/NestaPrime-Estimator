@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -6,6 +8,7 @@ from sqlalchemy.exc import DataError
 from app.core.body_limit import BodyLimitMiddleware
 from app.config import settings as app_settings
 from app.core.ownership import enforce_own_records
+from app.core.security import SIGNING_UNAVAILABLE_DETAIL, SigningKeyUnavailable, require_usable_signing_key
 
 from app.api import (
     accessories,
@@ -77,6 +80,9 @@ from app.api import (
     work_orders,
 )
 
+# JWT migration: refuse to serve with a signing key that cannot sign tokens (fixed failure message, no key text).
+require_usable_signing_key()
+
 # Amendment 60 (Section 63): the by-id half of own-records visibility applies to every route, in one place.
 app = FastAPI(title="NestaPrime Estimator API", version="0.1.0", dependencies=[Depends(enforce_own_records)])
 
@@ -89,6 +95,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(SigningKeyUnavailable)
+async def signing_key_unavailable(request, exc):
+    """JWT migration: the signing/verification key became unusable after startup. That is a server configuration fault, not a credential
+    fault: one fixed, sanitized 503 for every caller (authentication, the ownership gate, login, password change). The route never
+    runs, so nothing is granted; invalid TOKENS are unaffected (they keep their 401 / pass-through)."""
+    logging.getLogger("app.security").error("The token signing/verification key is unusable (server configuration)")
+    return JSONResponse(status_code=503, content={"detail": SIGNING_UNAVAILABLE_DETAIL})
 
 
 @app.exception_handler(DataError)

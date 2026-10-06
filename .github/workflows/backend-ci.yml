@@ -38,7 +38,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgresql+psycopg://nestaprime:nestaprime_dev_password@localhost:5432/nestaprime_estimator_test
-          SECRET_KEY: ci-only-secret-not-for-real-use
+          SECRET_KEY: ci-only-secret-not-for-real-use-0123456789
         run: python -m pytest tests/ -v
 
   docker-build:

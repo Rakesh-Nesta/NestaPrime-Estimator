@@ -10,6 +10,7 @@ from app.core.auth import get_current_user
 from app.core.identifiers import InvalidMobileNumber, normalize_mobile
 from app.core.security import (
     MIN_PASSWORD_LENGTH,
+    SigningKeyUnavailable,
     create_access_token,
     hash_password,
     password_problem,
@@ -129,6 +130,11 @@ def read_current_user(current_user: User = Depends(get_current_user)):
     )
 
 
+PASSWORD_CHANGE_UNCONFIRMED_DETAIL = (
+    "The password change could not be confirmed. Try signing in with your new password first, then your current password."
+)
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
@@ -159,23 +165,40 @@ def change_password(
     )
     if problem:
         raise HTTPException(status_code=400, detail=problem)
-    current_user.hashed_password = hash_password(payload.new_password)
+    new_hash = hash_password(payload.new_password)
+    current_user.hashed_password = new_hash
     current_user.must_change_password = False
     # Amendment 58 item 6: that a change happened, never the password itself.
     write_audit_log_entry(
         db, current_user, "user", current_user.id, "password",
         old_value="(self-service change)", new_value="(self-service change)", request=request,
     )
-    db.commit()
-    db.refresh(current_user)
-    return ChangePasswordOut(
-        id=str(current_user.id),
-        name=current_user.name,
-        email=current_user.email,
-        mobile=current_user.mobile,
-        role=current_user.role.value,
-        must_change_password=current_user.must_change_password,
-        access_token=create_access_token(
-            subject=str(current_user.id), role=current_user.role.value, password_hash=current_user.hashed_password
-        ),
-    )
+    # JWT migration (decision D4): the re-issued token is signed from the NEW fingerprint BEFORE the commit, so a signing failure aborts the
+    # whole change (the staged password, flag and audit entry are explicitly rolled back) instead of leaving a changed password and no
+    # token. The token is only released after the commit succeeds.
+    try:
+        reissued = ChangePasswordOut(
+            id=str(current_user.id),
+            name=current_user.name,
+            email=current_user.email,
+            mobile=current_user.mobile,
+            role=current_user.role.value,
+            must_change_password=False,
+            access_token=create_access_token(
+                subject=str(current_user.id), role=current_user.role.value, password_hash=new_hash
+            ),
+        )
+    except SigningKeyUnavailable:
+        db.rollback()
+        raise  # the shared handler answers 503; nothing was committed and the old session still works
+    try:
+        db.commit()
+    except Exception:
+        # Any reported commit failure: try to clean the session up, release NO token, and say only that the change could not be confirmed.
+        # The database may already have committed before the error reached us, so a rollback is never claimed to have undone anything.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=503, detail=PASSWORD_CHANGE_UNCONFIRMED_DETAIL) from None
+    return reissued
