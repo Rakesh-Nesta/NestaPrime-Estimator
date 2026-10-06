@@ -103,3 +103,145 @@ def test_a_write_inside_the_preflight_transaction_would_be_refused_by_the_databa
     with pytest.raises(DBAPIError):
         preflight.run(db_session)
     db_session.rollback()
+
+
+# ---- the command-line error boundary: a failure is nonzero, fixed-message, and leaks nothing ----------------------------------
+# Every sensitive-looking value below is fabricated.
+LEAKS = ["leakuser", "leakpass", "leakdb", "leak.internal", "postgresql", "Traceback", "+919876543210", "9876543210",
+         "secret_key", "input_value", "pydantic", "sqlalchemy", "psycopg"]
+FABRICATED_URL = "postgresql+psycopg://leakuser:leakpass@leak.internal:5432/leakdb"
+
+
+def _assert_clean_failure(code, out, err, expected_fragment=None):
+    assert code not in (0, None)
+    combined = (out + err).lower()
+    for leak in LEAKS:
+        assert leak.lower() not in combined, f"leaked {leak!r}"
+    assert "by_category" not in combined and "users_total" not in combined     # no counts after a failure
+    assert (err or out).strip()                                                 # a useful message is given
+    if expected_fragment:
+        assert expected_fragment in combined
+
+
+def test_missing_secret_key_configuration_failure_is_sanitized(tmp_path):
+    """Run the real script in a fresh process, with a fabricated DATABASE_URL and NO SECRET_KEY: the settings validation fails
+    while `app.db.session` is imported. Stdout and stderr are both captured."""
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k.upper() not in ("DATABASE_URL", "SECRET_KEY")}
+    env["DATABASE_URL"] = FABRICATED_URL
+    proc = subprocess.run(
+        [sys.executable, str(Path(preflight.__file__)), "--json"], capture_output=True, text=True, env=env, cwd=tmp_path, timeout=120
+    )
+    _assert_clean_failure(proc.returncode, proc.stdout, proc.stderr, "configuration")
+
+
+class _FakeSession:
+    """Records the cleanup calls; each step can be made to fail with a message full of sensitive-looking text."""
+
+    def __init__(self, execute_error=None, rollback_error=None, close_error=None, rows=None):
+        self.execute_error, self.rollback_error, self.close_error, self.rows = execute_error, rollback_error, close_error, rows
+        self.calls = []
+
+    def execute(self, statement, *a, **k):
+        self.calls.append("execute")
+        if self.execute_error:
+            raise self.execute_error
+        raise AssertionError("unexpected execute")
+
+    def rollback(self):
+        self.calls.append("rollback")
+        if self.rollback_error:
+            raise self.rollback_error
+
+    def close(self):
+        self.calls.append("close")
+        if self.close_error:
+            raise self.close_error
+
+
+def _boom(label):
+    return RuntimeError(f"{label}: {FABRICATED_URL} user +919876543210 password leakpass")
+
+
+def _run_main(monkeypatch, capsys, factory, *args):
+    import app.db.session as session_module
+
+    monkeypatch.setattr(session_module, "SessionLocal", factory)
+    code = preflight.main(list(args))
+    captured = capsys.readouterr()
+    return code, captured.out, captured.err
+
+
+def test_session_creation_failure_is_sanitized(monkeypatch, capsys):
+    def factory():
+        raise _boom("cannot create session")
+
+    code, out, err = _run_main(monkeypatch, capsys, factory)
+    _assert_clean_failure(code, out, err)
+
+
+def test_query_failure_is_sanitized_and_the_session_is_rolled_back_and_closed(monkeypatch, capsys):
+    session = _FakeSession(execute_error=_boom("query failed"))
+    code, out, err = _run_main(monkeypatch, capsys, lambda: session, "--json")
+    _assert_clean_failure(code, out, err)
+    assert session.calls == ["execute", "rollback", "close"]
+
+
+def test_a_real_connection_failure_is_sanitized(monkeypatch, capsys):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    unreachable = sessionmaker(bind=create_engine("postgresql+psycopg://leakuser:leakpass@127.0.0.1:1/leakdb"))
+    code, out, err = _run_main(monkeypatch, capsys, unreachable)
+    _assert_clean_failure(code, out, err)
+    assert "127.0.0.1" not in out + err
+
+
+def test_rollback_failure_after_a_query_failure_is_still_a_sanitized_failure(monkeypatch, capsys):
+    session = _FakeSession(execute_error=_boom("query failed"), rollback_error=_boom("rollback failed"))
+    code, out, err = _run_main(monkeypatch, capsys, lambda: session)
+    _assert_clean_failure(code, out, err)
+    assert session.calls == ["execute", "rollback", "close"]
+
+
+def test_close_failure_after_a_query_failure_is_still_a_sanitized_failure(monkeypatch, capsys):
+    session = _FakeSession(execute_error=_boom("query failed"), close_error=_boom("close failed"))
+    code, out, err = _run_main(monkeypatch, capsys, lambda: session)
+    _assert_clean_failure(code, out, err)
+    assert session.calls == ["execute", "rollback", "close"]
+
+
+def test_cleanup_failure_after_a_successful_assessment_is_not_apparent_success(db_session, stored, monkeypatch, capsys):
+    """The assessment itself succeeded, but ending the session failed: nonzero, sanitized, and the counts are withheld because
+    the read-only transaction could not be confirmed ended."""
+    real_close = db_session.close
+
+    def failing_close():
+        real_close()
+        raise _boom("close failed")
+
+    monkeypatch.setattr(db_session, "close", failing_close)
+    code, out, err = _run_main(monkeypatch, capsys, lambda: db_session, "--json")
+    _assert_clean_failure(code, out, err, "cleanup")
+
+
+def test_a_rollback_failure_after_a_successful_query_is_not_apparent_success(db_session, stored, monkeypatch, capsys):
+    monkeypatch.setattr(db_session, "rollback", lambda: (_ for _ in ()).throw(_boom("rollback failed")))
+    code, out, err = _run_main(monkeypatch, capsys, lambda: db_session)
+    _assert_clean_failure(code, out, err)
+
+
+def test_success_through_the_command_line_entry_prints_counts_only_and_exits_zero(db_session, stored, monkeypatch, capsys):
+    import json
+
+    from sqlalchemy.orm import sessionmaker
+
+    code, out, err = _run_main(monkeypatch, capsys, sessionmaker(bind=db_session.get_bind()), "--json")
+    assert code == 0 and err == ""
+    result = json.loads(out)
+    assert result["users_with_mobile"] == len(FIXTURES)
+    assert result["refused_by_approved_rule"]["accounts"] == 7
+    assert not re.search(r"\d{6,}", out) and "@" not in out
