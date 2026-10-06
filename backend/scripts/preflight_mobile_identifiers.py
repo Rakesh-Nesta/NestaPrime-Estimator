@@ -195,42 +195,44 @@ class _Discard(io.TextIOBase):
         return len(text)
 
 
-class _CountingHandler(logging.Handler):
-    def __init__(self, diagnostics):
-        super().__init__(level=logging.ERROR)
-        self._diagnostics = diagnostics
-
-    def emit(self, record):
-        self._diagnostics.count += 1  # never formats or stores the record: it can carry URLs, credentials and identifiers
-
-
 @contextlib.contextmanager
 def _contained(diagnostics):
-    """Library-generated diagnostics must not reach the terminal. SQLAlchemy reports a failed rollback or pool reset through
-    `logging` with the full traceback, and with no handler configured Python's last-resort handler writes it to stderr, quoting
-    whatever the driver put in the exception (URLs, passwords, identifiers). So for the whole run -- configuration import,
-    assessment, session close, engine disposal and the garbage collection that runs finalizers -- this:
-      * gives the root logger a handler, so the last-resort handler is never used; the handler only counts ERROR+ records;
-      * drops warnings and "exception ignored" reports (counted), and discards anything else written to stderr.
-    Local to this standalone command only: it changes no application logging or database behaviour, writes nothing anywhere, and
-    is undone on exit. Native code writing directly to file descriptor 2 is outside what Python can contain (see the limits in
-    the PR description)."""
-    root = logging.getLogger()
-    handler = _CountingHandler(diagnostics)
-    root.addHandler(handler)
-    previous_hook = sys.unraisablehook
+    """Library-generated diagnostics must not reach the terminal, a retaining handler or anything else. SQLAlchemy reports a
+    failed rollback or pool reset through `logging` with the full traceback, quoting whatever the driver put in the exception
+    (URLs, passwords, identifiers). Adding a handler is not enough -- existing handlers would still receive the record, a
+    non-propagating logger never reaches the root, and a logger level, `disabled` flag or `logging.disable()` stops the record
+    being created at all -- so for the whole run (configuration import, assessment, session close, engine disposal and the garbage
+    collection that runs finalizers) the logging DISPATCH is replaced, on the Logger class, before any handler is reached:
+      * `Logger.isEnabledFor` is true for ERROR and above whatever the logger's level, `disabled` flag or the global disable, so
+        every error-level diagnostic is created and detected; lower levels are not created at all;
+      * `Logger.handle` and `Logger.callHandlers` only COUNT an ERROR+ record and discard it: no handler -- last-resort,
+        existing, retaining, propagating or not -- ever receives it, and nothing is formatted or stored;
+      * warnings are ignored, "exception ignored" reports are counted, and other writes to sys.stderr are discarded.
+    Everything is restored on exit, normal or exceptional. Local to this standalone command only: application logging and
+    database behaviour are unchanged. Limits (native writes to file descriptor 2, loggers that override these methods) are listed
+    in the PR description."""
+    saved = (logging.Logger.isEnabledFor, logging.Logger.handle, logging.Logger.callHandlers, sys.unraisablehook)
+
+    def is_enabled_for(self, level):
+        return level >= logging.ERROR
+
+    def intercept(self, record):
+        if record.levelno >= logging.ERROR:
+            diagnostics.count += 1  # never formats or stores the record
 
     def count_unraisable(_args):
         diagnostics.count += 1
 
-    sys.unraisablehook = count_unraisable
     try:
+        logging.Logger.isEnabledFor = is_enabled_for
+        logging.Logger.handle = intercept
+        logging.Logger.callHandlers = intercept
+        sys.unraisablehook = count_unraisable
         with warnings.catch_warnings(), contextlib.redirect_stderr(_Discard()):
             warnings.simplefilter("ignore")
             yield
     finally:
-        sys.unraisablehook = previous_hook
-        root.removeHandler(handler)
+        logging.Logger.isEnabledFor, logging.Logger.handle, logging.Logger.callHandlers, sys.unraisablehook = saved
 
 
 def _assess(diagnostics):
