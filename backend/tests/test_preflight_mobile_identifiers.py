@@ -108,7 +108,7 @@ def test_a_write_inside_the_preflight_transaction_would_be_refused_by_the_databa
 # ---- the command-line error boundary: a failure is nonzero, fixed-message, and leaks nothing ----------------------------------
 # Every sensitive-looking value below is fabricated.
 LEAKS = ["leakuser", "leakpass", "leakdb", "leak.internal", "postgresql", "Traceback", "+919876543210", "9876543210",
-         "secret_key", "input_value", "pydantic", "sqlalchemy", "psycopg"]
+         "input_value", "pydantic", "sqlalchemy", "psycopg"]   # (the NAME of a variable in the fixed message is not a leak)
 FABRICATED_URL = "postgresql+psycopg://leakuser:leakpass@leak.internal:5432/leakdb"
 
 

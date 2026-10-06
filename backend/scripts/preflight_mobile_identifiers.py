@@ -14,10 +14,25 @@ What it does and does not do
     developer who wrote it. It uses the application's own `normalize_mobile`, so it applies exactly the rule that
     sign-in, create and edit will apply.
 
-Run, from the backend directory with DATABASE_URL pointing at the database to inspect:
-    python scripts/preflight_mobile_identifiers.py [--json]
-or, in the deployed container, the way the repository's other scripts are run:
-    docker compose exec -e PYTHONPATH=/app backend python scripts/preflight_mobile_identifiers.py [--json]
+Run it standalone from a checkout of the pinned commit (this is the way to run it BEFORE the rule is activated; the
+currently deployed image does not contain this script):
+  1. Working directory: the `backend` directory of the checkout (the script puts it on sys.path itself). Settings also read
+     a `.env` file in the working directory if one exists, so run it somewhere that has none you do not intend.
+  2. Dependencies: Python 3.12 and `pip install -r requirements.txt` (run in a virtual environment).
+  3. Configuration, as environment variables (the application's settings validation is unchanged and requires both):
+       DATABASE_URL  SQLAlchemy URL of the database to inspect, e.g. postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
+                     (use a read-only database role if one exists; the session is READ ONLY regardless)
+       SECRET_KEY    ANY placeholder string. The script never signs or verifies a token, so do NOT copy the production
+                     signing secret for this assessment.
+     bash:        export DATABASE_URL='...'; export SECRET_KEY='preflight-placeholder-not-a-real-secret'
+     PowerShell:  $env:DATABASE_URL='...'; $env:SECRET_KEY='preflight-placeholder-not-a-real-secret'
+  4. Run:  python scripts/preflight_mobile_identifiers.py [--json]
+Once an image built from a commit that contains this script is deployed, it can instead be run in the container, which
+already has its own configuration (WORKDIR /app):
+    docker compose -f docker-compose.prod.yml exec backend python scripts/preflight_mobile_identifiers.py [--json]
+Exit status: 0 success; 2 configuration could not be loaded; 3 database could not be connected to or read; 4 the session
+could not be cleanly closed. Every failure prints one fixed line and nothing else (no exception text, traceback, URL,
+credential or identifier), and a failure never prints partial counts.
 
 Categories (every non-null stored mobile falls into exactly one):
   valid_ascii                  accepted, and equal to what the normalizer would store
@@ -95,8 +110,8 @@ def classify(stored: str) -> str:
 
 def run(db: Session) -> dict:
     """Aggregate counts only. The transaction is READ ONLY for its whole life and is rolled back."""
-    db.execute(text("SET TRANSACTION READ ONLY"))  # must be the first statement of the transaction
     try:
+        db.execute(text("SET TRANSACTION READ ONLY"))  # must be the first statement of the transaction
         total_users = db.execute(select(func.count()).select_from(User)).scalar_one()
         rows = db.execute(select(User.mobile, User.is_active, User.email).where(User.mobile.is_not(None))).all()
         counts = Counter({c: 0 for c in CATEGORIES})
@@ -135,17 +150,68 @@ def render(result: dict) -> str:
     return "\n".join(lines)
 
 
+# Exit codes. Every failure prints ONE fixed line to stderr and nothing else: never an exception text, a traceback, a database
+# URL, a credential or a user identifier (library errors routinely embed all of those).
+EXIT_CONFIGURATION = 2
+EXIT_ASSESSMENT = 3
+EXIT_CLEANUP = 4
+_MESSAGES = {
+    EXIT_CONFIGURATION: (
+        "Preflight failed: the application configuration could not be loaded. Run from the backend directory with the "
+        "dependencies installed and DATABASE_URL and SECRET_KEY set (see the instructions at the top of this script). "
+        "Details are withheld because they can contain connection settings."
+    ),
+    EXIT_ASSESSMENT: (
+        "Preflight failed: the database could not be connected to or read. No results are reported. Check that "
+        "DATABASE_URL points at the intended database and that it is reachable. Details are withheld because they can "
+        "contain connection settings or data."
+    ),
+    EXIT_CLEANUP: (
+        "Preflight failed: the read-only session cleanup failed (it could not be confirmed closed), so no results are reported. "
+        "Re-run it. Details are withheld."
+    ),
+}
+
+
+def _fail(code: int) -> int:
+    print(_MESSAGES[code], file=sys.stderr)
+    return code
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Read-only preflight of stored mobile identifiers (aggregate counts only).")
     parser.add_argument("--json", action="store_true", help="print the counts as JSON")
     args = parser.parse_args(argv)
-    from app.db.session import SessionLocal  # imported here so importing this module never opens a connection
 
-    db = SessionLocal()
     try:
-        result = run(db)
-    finally:
-        db.close()
+        # Imported here so importing this module never loads settings or opens a connection. A configuration error (for
+        # example a missing SECRET_KEY) is raised by this import, and its text can quote the DATABASE_URL.
+        from app.db.session import SessionLocal
+    except Exception:
+        return _fail(EXIT_CONFIGURATION)
+
+    db = None
+    result = None
+    assessment_failed = False
+    try:
+        db = SessionLocal()
+        result = run(db)  # READ ONLY for its whole life; rolls back in its own `finally`
+    except Exception:
+        assessment_failed = True
+
+    cleanup_failed = False
+    if db is not None:
+        try:
+            db.close()
+        except Exception:
+            cleanup_failed = True
+
+    # A failed assessment is reported as such even if cleanup also failed; a successful one whose cleanup failed is NOT
+    # reported as success (its read-only transaction could not be confirmed ended), and its counts are withheld.
+    if assessment_failed:
+        return _fail(EXIT_ASSESSMENT)
+    if cleanup_failed:
+        return _fail(EXIT_CLEANUP)
     print(json.dumps(result, indent=2) if args.json else render(result))
     return 0
 
