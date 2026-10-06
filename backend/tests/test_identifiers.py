@@ -45,11 +45,13 @@ def test_blank_is_refused():
 
 
 # ---------------------------------------------------------------------------
-# A61 mobile-normalization corrections (Section 64, Part A item 2)
-#   REQUIRED FIX 1. a malformed ASCII +91 number must not fall through to generic international acceptance;
-#   REQUIRED FIX 2. letters must be refused, not silently erased into an accepted number.
-# EVERYTHING ELSE is compared against the function as it was before these corrections (`_legacy`), which is the
-# differential baseline for compatibility: benign formatting and Unicode-digit behaviour must not have changed.
+# A61 mobile-normalization (Section 64, Part A item 2) -- Director-approved input policies
+#   POLICY 1 (Unicode): Unicode decimal digits are validated by NUMERIC VALUE. The Indian mobile rule -- country code 91,
+#     exactly ten national digits, the first 6-9 -- holds across digit scripts, including Unicode spellings of the country
+#     code. Validation uses a temporary digit-value form; the returned spelling and the lookup key are what they always were.
+#   POLICY 2 (formatting): whitespace, hyphens/dashes, dots and parentheses are formatting; letters and other punctuation
+#     (/ , # _ [ ] *) and invisible format characters (U+200B, U+200D, U+2060) are refused.
+# The pre-correction function is kept below as `_legacy`: every difference from it is listed and intentional.
 # ---------------------------------------------------------------------------
 
 import re as _re
@@ -88,20 +90,14 @@ def _current(raw: str) -> str:
         return REFUSED
 
 
-# ---- required fix 1: malformed ASCII +91 --------------------------------------------------------------------------
+# ---- malformed ASCII +91 (required fix 1) ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "raw",
     [
-        "+915123456789",      # +91 then a national number starting 5 (not 6-9)
-        "+91987654321",       # nine national digits
-        "+91 98765 432101",   # eleven national digits (overlength)
-        "+9198765432100",     # twelve national digits
-        "+9112345678901",     # thirteen national digits, 91-prefixed: India's code is never a generic number
-        "+91 6",              # far too short
-        "+91",                # a bare country code
-        "+91 (51234) 56789",  # the same malformation with permitted formatting
+        "+915123456789", "+91987654321", "+91 98765 432101", "+9198765432100", "+9112345678901", "+91 6", "+91",
+        "+91 (51234) 56789",
     ],
 )
 def test_a_malformed_ascii_plus_91_number_is_refused_not_accepted_as_a_generic_international_number(raw):
@@ -109,18 +105,14 @@ def test_a_malformed_ascii_plus_91_number_is_refused_not_accepted_as_a_generic_i
         normalize_mobile(raw)
 
 
-# ---- required fix 2: letters ------------------------------------------------------------------------------------------
+# ---- letters (required fix 2) ---------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "raw",
     [
-        "abc9876543210xyz", "+91 98765 43210 ext", "98765 43210 ext", "9876543210x", "x9876543210",
-        "+91 98765 4321O",    # the letter O in place of a zero
-        "9876543210abc",
-        "+14155550132x",      # an otherwise valid international number with a stray letter
-        "+1 415 555 0132 ext 5", "call 9876543210",
-        "98765 4321अ",   # a non-Latin letter (Devanagari A)
+        "abc9876543210xyz", "+91 98765 43210 ext", "98765 43210 ext", "9876543210x", "x9876543210", "+91 98765 4321O",
+        "9876543210abc", "+14155550132x", "+1 415 555 0132 ext 5", "call 9876543210", "98765 4321अ",
     ],
 )
 def test_letters_are_refused_before_they_can_be_erased_into_an_accepted_number(raw):
@@ -128,21 +120,117 @@ def test_letters_are_refused_before_they_can_be_erased_into_an_accepted_number(r
         normalize_mobile(raw)
 
 
-# ---- compatibility: benign formatting is accepted exactly as before ---------------------------------------------------
+# ---- POLICY 1: Unicode decimal digits are validated by numeric value -----------------------------------------------
+
+# The Director's required examples.
+REQUIRED_ACCEPTED = [("+91९876543210", "+91९876543210")]   # +91 then Devanagari 9: accepted, spelling retained
+REQUIRED_REFUSED = [
+    "+91512345678९",   # first national digit is 5
+    "+9198765432९",    # nine national digits
+    "+919876543210९",  # eleven national digits
+]
+
+
+@pytest.mark.parametrize("raw,expected", REQUIRED_ACCEPTED)
+def test_required_example_a_valid_unicode_spelled_number_is_accepted_and_keeps_its_spelling(raw, expected):
+    assert normalize_mobile(raw) == expected
+
+
+@pytest.mark.parametrize("raw", REQUIRED_REFUSED)
+def test_required_examples_malformed_numbers_containing_unicode_digits_are_refused(raw):
+    assert _legacy(raw) != REFUSED                       # the legacy function accepted these: the change is intentional
+    with pytest.raises(InvalidMobileNumber, match="Indian mobile"):
+        normalize_mobile(raw)
+
+
+# Invalid Indian numbers whose country code is spelled with Unicode digits must not bypass the rule.
+UNICODE_COUNTRY_CODE_REFUSED = [
+    "+９１5123456789",          # fullwidth 91, first national digit 5
+    "+९१5123456789",          # Devanagari 91, first national digit 5
+    "+९१ 98765 432101",       # Devanagari 91, eleven national digits
+    "+９１98765432",            # fullwidth 91, eight national digits
+    "+9१ 5123456789",              # a Latin 9 with a Devanagari 1: still the country code 91 by value
+    "+९१",                    # a bare Unicode-spelled country code
+]
+
+
+@pytest.mark.parametrize("raw", UNICODE_COUNTRY_CODE_REFUSED)
+def test_invalid_indian_numbers_with_a_unicode_spelled_country_code_are_refused(raw):
+    with pytest.raises(InvalidMobileNumber, match="Indian mobile"):
+        normalize_mobile(raw)
+
+
+@pytest.mark.parametrize("raw", ["+91५123456789", "+9१५123456789"])
+def test_a_unicode_digit_as_a_malformed_first_national_digit_is_refused(raw):
+    with pytest.raises(InvalidMobileNumber, match="Indian mobile"):
+        normalize_mobile(raw)
+
+
+# Valid by value: the OUTPUT SPELLING is exactly what the legacy function produced (so lookup keys and stored values
+# do not move), and these are the inputs the legacy function also accepted.
+VALID_UNICODE_RETAINED = [
+    ("+91९876543210", "+91९876543210"),
+    ("+91 ९876543210", "+91९876543210"),
+    ("9८76543210", "+919८76543210"),               # ASCII-leading national number with later Unicode digits
+    ("+91 9८76543210", "+919८76543210"),
+    ("+919८76543210", "+919८76543210"),
+    ("+９１ 9876543210", "+９１9876543210"),  # fullwidth country code, valid national number: spelling kept
+    ("+९१ 9876543210", "+९१9876543210"),  # Devanagari country code, valid national number
+]
+
+
+@pytest.mark.parametrize("raw,expected", VALID_UNICODE_RETAINED)
+def test_valid_unicode_forms_keep_exactly_the_output_the_legacy_function_gave(raw, expected):
+    assert _legacy(raw) == expected
+    assert normalize_mobile(raw) == expected
+
+
+# Valid by value that the legacy function REFUSED (a consequence of validating by value; new acceptances).
+NEWLY_ACCEPTED_BY_VALUE = [
+    ("९876543210", "+91९876543210"),         # a bare Indian number whose first digit is a Devanagari 9
+    ("0९876543210", "+91९876543210"),        # with the optional leading 0
+    ("９１ 9876543210", "+919876543210"),      # fullwidth 91 without a plus: the optional 91 prefix by value
+]
+
+
+@pytest.mark.parametrize("raw,expected", NEWLY_ACCEPTED_BY_VALUE)
+def test_a_number_that_is_valid_by_value_is_accepted_even_where_the_legacy_function_refused_it(raw, expected):
+    assert _legacy(raw) == REFUSED
+    assert normalize_mobile(raw) == expected
+
+
+# ---- POLICY 2: formatting ----------------------------------------------------------------------------------------------
 
 BENIGN_FORMATTING = [
-    "98765.43210", "(98765) 43210", "+91 (98765) 43210", "(+91) 98765-43210", "+91.98765.43210",     # dots, parentheses
-    "98765 43210", "+91 98765 43210",                                                  # internal no-break space
-    "98765 43210", "98765　43210", "98765\t43210",                                          # other space characters
-    "98765‑43210", "98765‐43210", "98765–43210", "98765—43210",                   # non-breaking hyphen and dashes
-    "98765-43210", "98765 43210", "  98765 43210  ",                                                  # approved spaces / hyphens
+    "98765.43210", "(98765) 43210", "+91 (98765) 43210", "(+91) 98765-43210", "+91.98765.43210",
+    "98765 43210", "+91 98765 43210", "98765 43210", "98765　43210", "98765\t43210",
+    "98765‑43210", "98765‐43210", "98765–43210", "98765—43210",
+    "98765-43210", "98765 43210", "  98765 43210  ",
 ]
 
 
 @pytest.mark.parametrize("raw", BENIGN_FORMATTING)
-def test_benign_formatting_is_accepted_and_gives_the_same_result_as_before_the_corrections(raw):
-    assert _legacy(raw) == "+919876543210"          # baseline: it was accepted
-    assert normalize_mobile(raw) == "+919876543210"  # and still is, with the same stored value
+def test_whitespace_dashes_dots_and_parentheses_are_formatting_and_give_the_legacy_result(raw):
+    assert _legacy(raw) == "+919876543210"
+    assert normalize_mobile(raw) == "+919876543210"
+
+
+EXCLUDED_CHARACTERS = [
+    ("/", "U+002F"), (",", "U+002C"), ("#", "U+0023"), ("_", "U+005F"), ("[", "U+005B"), ("]", "U+005D"), ("*", "U+002A"),
+    ("​", "U+200B"), ("‍", "U+200D"), ("⁠", "U+2060"),
+]
+
+
+@pytest.mark.parametrize("ch,code", EXCLUDED_CHARACTERS, ids=[c for _, c in EXCLUDED_CHARACTERS])
+def test_excluded_punctuation_and_invisible_format_characters_are_refused(ch, code):
+    """Approved: letters and these characters are refused (the legacy function silently erased them)."""
+    raw = f"98765{ch}43210"
+    assert _legacy(raw) == "+919876543210"
+    with pytest.raises(InvalidMobileNumber, match="digits"):
+        normalize_mobile(raw)
+
+
+# ---- the four approved inputs, existing valid variants and international controls --------------------------------------
 
 
 @pytest.mark.parametrize("raw", ["98765 43210", "098765-43210", "+91 98765 43210", "91 9876543210"])
@@ -154,7 +242,9 @@ def test_the_four_approved_inputs_still_normalize_to_the_same_number(raw):
     "raw,expected",
     [
         ("+91-98765-43210", "+919876543210"),
-        ("+ 91 98765 43210", "+919876543210"),          # existing tolerance: a space after the plus
+        ("+ 91 98765 43210", "+919876543210"),
+        ("0 98765 43210", "+919876543210"),
+        ("919876543210", "+919876543210"),
         ("+1 415 555 0132", "+14155550132"),
         ("+44 7911 123456", "+447911123456"),
         ("+971 50 123 4567", "+971501234567"),
@@ -166,73 +256,36 @@ def test_valid_existing_variants_and_valid_international_numbers_still_work(raw,
     assert _legacy(raw) == expected
 
 
-# ---- compatibility: Unicode decimal digits behave exactly as before (policy NOT changed here) -------------------------
-
-UNICODE_DIGIT_INPUTS = [
-    "+91९876543210",         # +91 then Devanagari 9 as the first national digit
-    "+91 ९876543210",
-    "+91५123456789",         # +91 then Devanagari 5 (a malformed Indian number if read by digit value)
-    "9८76543210",            # ASCII-leading national number with later Unicode digits
-    "+91 9८76543210",
-    "+919८76543210",
-    "+９１ 9876543210",   # fullwidth country-code digits (a valid-looking 91 country code)
-    "+９１5123456789",    # fullwidth country code + a malformed national number
-    "９１ 9876543210",    # fullwidth 91 without a plus
-]
+@pytest.mark.parametrize("raw", ["+١ 415 555 0132", "+٤٤ 7911 123456"])
+def test_a_valid_international_number_spelled_in_unicode_digits_keeps_its_spelling(raw):
+    """Not India's code (1 and 44 by value): the generic 8-15 digit rule applies, spelling kept, as before."""
+    assert normalize_mobile(raw) == _legacy(raw) != REFUSED
 
 
-@pytest.mark.parametrize("raw", UNICODE_DIGIT_INPUTS)
-def test_unicode_digit_behaviour_is_identical_to_the_legacy_function(raw):
-    """The standing instruction: leave the Unicode-digit policy alone. No canonicalization, no ASCII-only rejection. A `+91`
-    number containing a non-ASCII digit therefore keeps its legacy outcome, so the malformed-+91 rule is enforced only for
-    ASCII digits (see the proposed decision in the handoff). This test pins that: current == legacy for every input."""
-    assert _current(raw) == _legacy(raw)
-
-
-def test_a_previously_accepted_unicode_identifier_is_still_accepted_and_stored_as_written():
-    assert normalize_mobile("+91९876543210") == "+91९876543210"
-    assert normalize_mobile("+91 ९876543210") == "+91९876543210"
-
-
-# ---- the formatting characters that are still refused (undecided; each one is named here) ---------------------------
-
-
-@pytest.mark.parametrize("raw", ["98765/43210", "98765,43210", "98765#43210", "98765_43210", "[98765] 43210", "98765*43210"])
-def test_other_symbols_are_refused_for_now(raw):
-    """UNDECIDED, not source-supported either way: Section 64 item 2 says 'Anything else is refused with a plain message'
-    but does not list which separators are tolerated. These were erased silently before; they are refused until a ruling.
-    Tolerating them again means widening one set in identifiers.py and editing this test."""
-    assert _legacy(raw) == "+919876543210"
-    with pytest.raises(InvalidMobileNumber):
-        normalize_mobile(raw)
-
-
-@pytest.mark.parametrize("raw", ["98765​43210", "98765‍43210", "98765⁠43210"])
-def test_zero_width_characters_are_refused_for_now(raw):
-    """UNDECIDED: invisible format characters (zero-width space/joiner, word joiner) were erased silently before."""
-    assert _legacy(raw) == "+919876543210"
-    with pytest.raises(InvalidMobileNumber):
-        normalize_mobile(raw)
-
-
-# ---- refusal messages and the general differential ------------------------------------------------------------------
+# ---- messages and the complete differential -----------------------------------------------------------------------
 
 
 def test_the_refusal_messages_are_plain_and_say_what_to_fix():
     with pytest.raises(InvalidMobileNumber) as bad_91:
         normalize_mobile("+915123456789")
     assert "10-digit" in str(bad_91.value) and "6-9" in str(bad_91.value)
+    with pytest.raises(InvalidMobileNumber) as bad_unicode_91:
+        normalize_mobile("+91512345678९")
+    assert str(bad_unicode_91.value) == str(bad_91.value)
     with pytest.raises(InvalidMobileNumber) as letters:
         normalize_mobile("abc9876543210xyz")
     assert "digits" in str(letters.value)
+    with pytest.raises(InvalidMobileNumber, match="digits only after the"):
+        normalize_mobile("+91+9876543210")
 
 
 @pytest.mark.parametrize(
     "raw",
-    BENIGN_FORMATTING + UNICODE_DIGIT_INPUTS
-    + ["9876543210", "919876543210", "+919876543210", "5876543210", "12345", "+123", "+1234567890123456", "+", "   ", "98765432100"],
+    BENIGN_FORMATTING + [r for r, _ in VALID_UNICODE_RETAINED]
+    + ["9876543210", "919876543210", "+919876543210", "5876543210", "12345", "+123", "+1234567890123456", "+", "   ",
+       "98765432100", "+١ 415 555 0132"],
 )
 def test_the_corrections_change_nothing_else_differential_against_the_legacy_function(raw):
-    """Every input that is not a letter case, not a malformed ASCII +91 and not one of the named undecided symbols gives
-    exactly the legacy result (a number or a refusal)."""
+    """Outside the listed intentional differences (letters; excluded punctuation; malformed Indian numbers incl. Unicode
+    spellings; numbers valid by value that the legacy function refused) the result equals the legacy function's."""
     assert _current(raw) == _legacy(raw)

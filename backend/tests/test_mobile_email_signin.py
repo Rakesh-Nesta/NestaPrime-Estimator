@@ -432,3 +432,67 @@ def test_creating_the_same_unicode_identifier_twice_is_a_conflict(client, direct
         "/users", json={"name": "Dup Unicode", "mobile": UNICODE_STORED, "role": "sales", "password": "TestPass!1"}, headers=headers
     )
     assert res.status_code == 409, res.text
+
+
+# ---------------------------------------------------------------------------
+# Approved Unicode policy through the callers: malformed Unicode-containing Indian numbers are refused, valid ones keep
+# their spelling, refused identifiers give the generic failure and lock nothing
+# ---------------------------------------------------------------------------
+
+UNICODE_MALFORMED = ["+91512345678९", "+9198765432९", "+919876543210९", "+９１5123456789", "+९१5123456789"]
+
+
+@pytest.mark.parametrize("bad", UNICODE_MALFORMED)
+def test_create_refuses_a_malformed_unicode_containing_indian_number_with_the_existing_validation_response(
+    client, director_user, db_session, bad
+):
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/users", json={"name": "Bad Unicode", "mobile": bad, "role": "sales", "password": "TestPass!1"}, headers=headers
+    )
+    assert res.status_code == 400, res.text
+    assert "Indian mobile" in res.json()["detail"]
+    assert db_session.query(User).filter(User.name == "Bad Unicode").count() == 0
+
+
+@pytest.mark.parametrize("bad", UNICODE_MALFORMED)
+def test_edit_refuses_a_malformed_unicode_containing_indian_number_and_leaves_the_account_unchanged(
+    client, director_user, db_session, bad
+):
+    headers = _director_headers(client, director_user)
+    created = client.post(
+        "/users",
+        json={"name": "Edit Unicode", "email": "edit-unicode@test.local", "mobile": "9876543277", "role": "sales", "password": "TestPass!1"},
+        headers=headers,
+    ).json()
+    res = client.patch(f"/users/{created['id']}", json={"mobile": bad}, headers=headers)
+    assert res.status_code == 400, res.text
+    assert db_session.get(User, uuid.UUID(created["id"])).mobile == "+919876543277"
+
+
+def test_create_accepts_a_valid_unicode_spelled_number_and_stores_its_existing_spelling(client, director_user):
+    headers = _director_headers(client, director_user)
+    res = client.post(
+        "/users", json={"name": "Valid Unicode", "mobile": "+91 ९876543210", "role": "sales", "password": "TestPass!1"},
+        headers=headers,
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["mobile"] == UNICODE_STORED
+    assert _login(client, UNICODE_STORED).status_code == 200
+
+
+@pytest.mark.parametrize("bad", UNICODE_MALFORMED)
+def test_sign_in_with_a_malformed_unicode_containing_number_gives_the_generic_failure(client, db_session, bad):
+    _mobile_user(db_session)
+    res = _login(client, bad)
+    unknown = _login(client, "nobody@test.local")
+    assert res.status_code == unknown.status_code == 401
+    assert res.json()["detail"] == unknown.json()["detail"]
+
+
+def test_malformed_unicode_look_alikes_lock_nothing(client, db_session):
+    _mobile_user(db_session)
+    for bad in UNICODE_MALFORMED:
+        for _ in range(2):
+            assert _login(client, bad, password="wrong").status_code == 401
+    assert _login(client, "+919876543210").status_code == 200  # the real account was never counted against
