@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { createUser, listUsers, resetUserPassword, updateUser } from "./api";
 import MiniField from "./MiniField";
+import { IdentifierEditor, IdentifierFields, IdentifierText } from "./UserIdentifierFields";
+import { IDENTIFIER_RULE, buildCreateUserPayload } from "./userIdentifiers";
 
 // Amendment 51 (Section 55): moved here unchanged from MasterSettings.jsx, where it
 // was a tab under "Team & Access" -- which opened Master Settings. It is now the
@@ -32,7 +34,7 @@ export function mayManage(actorRole, target) {
 }
 
 function emptyUserForm(role = "sales") {
-  return { name: "", email: "", role, password: "" };
+  return { name: "", email: "", mobile: "", role, password: "" };
 }
 
 export default function UserManagementTab({ token, currentUser }) {
@@ -46,6 +48,10 @@ export default function UserManagementTab({ token, currentUser }) {
 
   const [resettingId, setResettingId] = useState(null);
   const [resetPassword, setResetPassword] = useState("");
+
+  // Amendment 61 Part B: which account's sign-in details (email / mobile number) are being edited, and what the server said.
+  const [editingId, setEditingId] = useState(null);
+  const [identifierError, setIdentifierError] = useState("");
 
   const actorRole = currentUser?.role;
   const createRoles = rolesThatMayBeCreated(actorRole, users);
@@ -66,13 +72,30 @@ export default function UserManagementTab({ token, currentUser }) {
   async function handleCreate(e) {
     e.preventDefault();
     setError("");
+    const built = buildCreateUserPayload(createForm);
+    if (!built.ok) {
+      setError(built.error);
+      return;
+    }
     try {
-      await createUser(token, createForm);
+      await createUser(token, built.payload);
       setCreateForm(emptyUserForm(createRoles[0]));
       setCreating(false);
       await load();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  // Never throws: a refusal (malformed number, duplicate, would-leave-neither) is shown inside the editor.
+  async function handleSaveIdentifiers(u, payload) {
+    setIdentifierError("");
+    try {
+      await updateUser(token, u.id, payload);
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setIdentifierError(err.message);
     }
   }
 
@@ -129,7 +152,7 @@ export default function UserManagementTab({ token, currentUser }) {
             "You can add people of any role except Admin, and change or reset anyone except an Admin. Only an Admin adds or changes an Admin. "}
           {actorRole === "pm" &&
             "You can add Sales, Procurement, Site Engineer and CA/Tax people. Changing, deactivating or resetting someone is for an Admin or the Director. "}
-          A newly created or reset account must change its password on first login -- enforced on the backend, not
+          A person signs in with their email or their mobile number; an account needs at least one. A newly created or reset account must change its password on first login -- enforced on the backend, not
           just hidden in this screen. Nobody can deactivate or change the role of their own account, and the last active
           Director and the last active Admin cannot be demoted or deactivated.
         </p>
@@ -148,7 +171,7 @@ export default function UserManagementTab({ token, currentUser }) {
                 <div>
                   <span className="font-medium">{u.name}</span>{" "}
                   <span className="text-xs text-text-secondary">
-                    ({u.email}){isSelf && " · you"}
+                    (<IdentifierText user={u} />){isSelf && " · you"}
                   </span>
                   {u.must_change_password && (
                     <span className="ml-2 text-[10px] uppercase rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-400">
@@ -171,6 +194,12 @@ export default function UserManagementTab({ token, currentUser }) {
                         <option key={r} value={r}>{r}</option>
                       ))}
                     </select>
+                    <button
+                      onClick={() => { setIdentifierError(""); setEditingId(editingId === u.id ? null : u.id); }}
+                      className="text-xs text-gold hover:underline"
+                    >
+                      Edit sign-in
+                    </button>
                     <button
                       onClick={() => handleToggleActive(u)}
                       disabled={isSelf && u.is_active}
@@ -218,6 +247,14 @@ export default function UserManagementTab({ token, currentUser }) {
                   </span>
                 )}
               </div>
+              {manageable && editingId === u.id && (
+                <IdentifierEditor
+                  user={u}
+                  serverError={identifierError}
+                  onSave={(payload) => handleSaveIdentifiers(u, payload)}
+                  onCancel={() => { setEditingId(null); setIdentifierError(""); }}
+                />
+              )}
             </div>
           );
         })}
@@ -228,7 +265,12 @@ export default function UserManagementTab({ token, currentUser }) {
           <form onSubmit={handleCreate} className="border border-green-500/30 bg-green-500/10 rounded p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <MiniField label="Name" value={createForm.name} onChange={(v) => setCreateForm((f) => ({ ...f, name: v }))} required />
-              <MiniField label="Email" value={createForm.email} onChange={(v) => setCreateForm((f) => ({ ...f, email: v }))} required />
+              <IdentifierFields
+                idPrefix="new-user"
+                email={createForm.email}
+                mobile={createForm.mobile}
+                onChange={(field, value) => setCreateForm((f) => ({ ...f, [field]: value }))}
+              />
               <div>
                 <label htmlFor="new-user-role" className="block text-xs text-text-secondary">Role</label>
                 <select
@@ -255,6 +297,7 @@ export default function UserManagementTab({ token, currentUser }) {
                 />
               </div>
             </div>
+            <p className="text-xs text-text-secondary">{IDENTIFIER_RULE}</p>
             <p className="text-xs text-text-secondary">
               The new user must change this password before they can use the app.
             </p>

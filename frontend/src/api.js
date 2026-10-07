@@ -18,9 +18,11 @@ async function handle(res) {
   return res.json();
 }
 
-export async function login(email, password) {
+// Amendment 61 Part B: the first argument is an email OR a mobile number, exactly as typed. It still travels in the
+// existing `username` field; the server decides which it is, and every failure keeps the one generic message.
+export async function login(identifier, password) {
   const body = new URLSearchParams();
-  body.set("username", email);
+  body.set("username", identifier);
   body.set("password", password);
 
   const res = await fetch(`${API_BASE}/auth/login`, {
@@ -35,7 +37,7 @@ export async function login(email, password) {
 export async function getCurrentUser(token) {
   const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders(token) });
   if (!res.ok) throw new Error("Session expired");
-  return res.json(); // { id, name, email, role }
+  return res.json(); // { id, name, email, mobile, role, must_change_password }
 }
 
 export async function listClients(token) {
@@ -2210,15 +2212,19 @@ export async function globalSearch(token, q, { signal } = {}) {
   return handle(res);
 }
 
-export async function createUser(token, { name, email, role, password }) {
+// Amendment 61 Part B: email and mobile are both optional here (at least one -- see userIdentifiers.js, which leaves a blank one
+// out of the object; JSON.stringify drops the undefined key, and the server rejects an empty email string).
+export async function createUser(token, { name, email, mobile, role, password }) {
   const res = await fetch(`${API_BASE}/users`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, role, password }),
+    body: JSON.stringify({ name, email, mobile, role, password }),
   });
   return handle(res);
 }
 
+// PATCH /users/{id}: `role`/`is_active` omitted = leave alone; for `email`/`mobile` an omitted key = leave alone, "" = clear.
+// The payload is passed through untouched so that distinction survives (see buildIdentifierPatch in userIdentifiers.js).
 export async function updateUser(token, userId, payload) {
   const res = await fetch(`${API_BASE}/users/${userId}`, {
     method: "PATCH",

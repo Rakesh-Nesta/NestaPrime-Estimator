@@ -348,7 +348,7 @@ export const DIRECTOR_ADMIN_GUIDE = {
     {
       title: "Team & Access — People",
       body:
-        "Create users, assign roles, reset passwords, deactivate/reactivate accounts. Who may do what: an Admin does all of it for anyone; a Director adds people of any role except Admin and manages anyone except an Admin; a PM adds Sales, Procurement, Site Engineer and CA/Tax people and nothing else. Guardrails are server-enforced and can't be worked around from the UI: nobody can deactivate or change the role of their own account, and the last active Director and the last active Admin can't be deactivated or demoted — hitting zero of either would need a raw database script to recover from.",
+        "Create users, assign roles, change how a person signs in, reset passwords, deactivate/reactivate accounts. Every person has an email, a mobile number, or both (at least one), and either can be used to sign in; the list shows whichever they have, and a mobile-only person is shown by their number. Admins and Directors use Edit sign-in to add, change or remove an email or mobile number (leave a box empty to remove it; an account can never be left with neither). Type a mobile number as you normally would, for example 98765 43210, 098765-43210 or +91 98765 43210 (spaces, hyphens, dots and brackets are fine; letters and other symbols are refused); a number outside India needs a + and its country code. The system stores it in one standard form and tells you plainly if a number is malformed or already belongs to someone else. Who may do what: an Admin does all of it for anyone; a Director adds people of any role except Admin and manages anyone except an Admin; a PM adds Sales, Procurement, Site Engineer and CA/Tax people and nothing else. Guardrails are server-enforced and can't be worked around from the UI: nobody can deactivate or change the role of their own account, and the last active Director and the last active Admin can't be deactivated or demoted — hitting zero of either would need a raw database script to recover from.",
     },
     {
       title: "Team & Access — Roles & permissions",
@@ -396,7 +396,11 @@ export const DIRECTOR_ADMIN_GUIDE = {
 export const FAQ = [
   {
     q: "I forgot my password — what do I do?",
-    a: "Ask an Admin or a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login. A password needs at least 10 characters and can't be your email address or your current password.",
+    a: "Ask an Admin or a Director to reset it from Team & Access → People. You'll be forced to set your own password on next login. A password needs at least 10 characters and can't be your email address, your mobile number or your current password.",
+  },
+  {
+    q: "How do I sign in?",
+    a: "On the sign-in page enter your email or your mobile number in the first box (whichever your account has) and your password in the second. A mobile number can be typed the usual way, for example 98765 43210 or +91 98765 43210. If anything is wrong you will see only \"Incorrect email or password\"; the page never says which part was wrong, and repeated failures lock the account for a while whichever of your email or number you use. If your password was assigned or reset by an Admin or Director you will be asked to choose your own before you can use the app. Forgot it, or locked out? Ask an Admin or a Director to reset it.",
   },
   {
     q: "The Rate Sheet doesn't have the rate I need — what now?",
@@ -424,7 +428,7 @@ export const FAQ = [
   },
   {
     q: "How do I create a new user?",
-    a: "Team & Access → People. An Admin adds any role; a Director any role except Admin; a PM adds Sales, Procurement, Site Engineer and CA/Tax people only. New accounts are forced to change their assigned password on first login.",
+    a: "Team & Access → People → add a person. Enter their name, an email, a mobile number, or both (at least one; either can be used to sign in), choose a role and give an initial password of at least 10 characters that is not their email or mobile number. An Admin adds any role; a Director any role except Admin; a PM adds Sales, Procurement, Site Engineer and CA/Tax people only. New accounts are forced to change their assigned password on first login. To fix or change an email or mobile number later, an Admin or Director uses Edit sign-in on that person.",
   },
   {
     q: "Can I reset someone else's password?",
