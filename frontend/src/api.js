@@ -1509,7 +1509,7 @@ export async function createVendorReply(token, priceRequestId, itemId, payload) 
   return handle(res);
 }
 
-export async function useVendorReply(token, replyId, payload) {
+export async function applyVendorReply(token, replyId, payload) {
   const res = await fetch(`${API_BASE}/vendor-replies/${replyId}/use`, {
     method: "POST",
     headers: { ...authHeaders(token), "Content-Type": "application/json" },
