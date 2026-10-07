@@ -32,14 +32,21 @@ export function buildCreateUserPayload(form) {
 }
 
 /**
- * The PATCH /users/{id} body for an identifier edit. `user` is the stored account, `edited` the form's `{ email, mobile }`.
- * A field that was not changed is OMITTED (leave alone); a field changed to something is sent as typed; a field changed to
- * blank is sent as an explicit "" (clear). An edit that would leave neither identifier is refused here, before any request
- * (the server refuses it too). `unchanged: true` with an empty payload means there is nothing to send.
+ * The PATCH /users/{id} body for an identifier edit. `user` is the account as the screen knows it NOW (a People list that may
+ * have refreshed since the editor opened), `edited` the boxes' `{ email, mobile }`, and `touched` which boxes the person
+ * intentionally edited in this editor session (`{ email?: boolean, mobile?: boolean }`; omitted = both, the old behaviour).
+ * Only touched boxes can go in the request: one changed to something is sent as typed, one changed to blank as an explicit ""
+ * (clear), one equal to the account's current value is left out. An UNTOUCHED box is never sent and is judged by the account's
+ * current value, so a stale copy of it cannot revert what an earlier save changed. An edit that would leave neither identifier
+ * is refused here, before any request (the server refuses it too). `unchanged: true` with an empty payload means nothing to send.
  */
-export function buildIdentifierPatch(user, edited) {
+export function buildIdentifierPatch(user, edited, touched) {
+  const isTouched = (field) => (touched === undefined ? true : Boolean(touched[field]));
   const was = { email: text(user?.email), mobile: text(user?.mobile) };
-  const now = { email: text(edited?.email), mobile: text(edited?.mobile) };
+  const now = {
+    email: isTouched("email") ? text(edited?.email) : was.email,
+    mobile: isTouched("mobile") ? text(edited?.mobile) : was.mobile,
+  };
   const payload = {};
   if (now.email !== was.email) payload.email = now.email; // "" clears
   if (now.mobile !== was.mobile) payload.mobile = now.mobile; // "" clears

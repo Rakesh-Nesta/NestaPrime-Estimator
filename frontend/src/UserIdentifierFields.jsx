@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { IDENTIFIER_RULE, MOBILE_HINT, buildIdentifierPatch, identifierLines } from "./userIdentifiers";
+import { draftValue, editDraft, newDraft, submitDraft } from "./identifierEditorDraft";
+import { IDENTIFIER_RULE, MOBILE_HINT, identifierLines } from "./userIdentifiers";
 
 // Amendment 61 Part B (Section 64 items 10-11): the Email and Mobile number fields shared by BOTH People screens
 // (UserManagement.jsx for the Director and PM, AdminPeoplePanel.jsx for the Admin), so the create form, the identifier-edit
@@ -61,19 +62,20 @@ export function IdentifierText({ user, stacked = false, separator = " · " }) {
 }
 
 /**
- * Inline editor for ONE account's identifiers. It builds the PATCH body with buildIdentifierPatch (unchanged fields are
- * omitted, a blanked field is sent as an explicit "" to clear it, and an edit that would leave neither is refused before
- * any request), hands it to `onSave`, and shows whatever the server answers (a malformed number, a duplicate) in place.
+ * Inline editor for ONE account's identifiers. It remembers only the boxes the person edited (identifierEditorDraft.js) and
+ * builds the PATCH body from those: untouched boxes are omitted and follow the refreshed list, a blanked box is sent as an
+ * explicit "" to clear it, and an edit that would leave neither is refused before any request. It hands the body to `onSave`
+ * and shows whatever the server answers (a malformed number, a duplicate) in place.
  */
 export function IdentifierEditor({ user, serverError, onSave, onCancel }) {
-  const [form, setForm] = useState({ email: user.email || "", mobile: user.mobile || "" });
+  const [draft, setDraft] = useState(newDraft);
   const [localError, setLocalError] = useState("");
   const [saving, setSaving] = useState(false);
   const idPrefix = `edit-${user.id}`;
 
   async function submit(e) {
     e.preventDefault();
-    const result = buildIdentifierPatch(user, form);
+    const result = submitDraft(draft, user);
     if (!result.ok) {
       setLocalError(result.error);
       return;
@@ -98,9 +100,9 @@ export function IdentifierEditor({ user, serverError, onSave, onCancel }) {
       <div className="grid grid-cols-1 gap-2">
         <IdentifierFields
           idPrefix={idPrefix}
-          email={form.email}
-          mobile={form.mobile}
-          onChange={(field, value) => setForm((f) => ({ ...f, [field]: value }))}
+          email={draftValue(draft, user, "email")}
+          mobile={draftValue(draft, user, "mobile")}
+          onChange={(field, value) => setDraft((current) => editDraft(current, field, value))}
         />
       </div>
       {message && <p role="alert" className="text-xs text-red-400">{message}</p>}
