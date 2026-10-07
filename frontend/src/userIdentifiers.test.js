@@ -12,6 +12,7 @@ import {
   buildIdentifierPatch,
   identifierLines,
   userMatchesSearch,
+  MOBILE_HINT,
   userSearchText,
 } from "./userIdentifiers.js";
 
@@ -149,4 +150,11 @@ test("search matches a mobile typed with spaces or without the country code", ()
   assert.equal(userMatchesSearch(user, "+91 98765"), true);
   assert.equal(userMatchesSearch(user, "98765 99999"), false);
   assert.equal(userMatchesSearch(user, "null"), false);
+});
+
+// ---- wording --------------------------------------------------------------------------------------------------------------------
+
+test("the mobile hint names parentheses (square brackets are refused by the server) and does not say 'brackets'", () => {
+  assert.match(MOBILE_HINT, /parentheses/);
+  assert.doesNotMatch(MOBILE_HINT, /brackets/);
 });

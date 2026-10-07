@@ -14,7 +14,7 @@ export const IDENTIFIER_RULE = "At least one -- either can be used to sign in.";
 // What the server accepts, in words (it stays authoritative; see the header comment). Shown under the Mobile number box.
 export const MOBILE_HINT =
   "An Indian number in any common format (98765 43210, 098765-43210, +91 98765 43210); another country needs + and its country code. " +
-  "Spaces, hyphens, dots and brackets are fine; letters and other symbols are refused.";
+  "Spaces, hyphens, dots and parentheses are fine; letters and other symbols are refused.";
 
 function text(value) {
   return typeof value === "string" ? value.trim() : "";

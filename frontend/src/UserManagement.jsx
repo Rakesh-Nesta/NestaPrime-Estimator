@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createUser, listUsers, resetUserPassword, updateUser } from "./api";
 import MiniField from "./MiniField";
 import { IdentifierEditor, IdentifierFields, IdentifierText } from "./UserIdentifierFields";
+import { useIdentifierEditor } from "./useIdentifierEditor";
 import { IDENTIFIER_RULE, buildCreateUserPayload } from "./userIdentifiers";
 
 // Amendment 51 (Section 55): moved here unchanged from MasterSettings.jsx, where it
@@ -49,9 +50,11 @@ export default function UserManagementTab({ token, currentUser }) {
   const [resettingId, setResettingId] = useState(null);
   const [resetPassword, setResetPassword] = useState("");
 
-  // Amendment 61 Part B: which account's sign-in details (email / mobile number) are being edited, and what the server said.
-  const [editingId, setEditingId] = useState(null);
-  const [identifierError, setIdentifierError] = useState("");
+  // Amendment 61 Part B: the "Edit sign-in" editor. Its saves are tied to the editor session that started them (see
+  // identifierEditSession.js), so a slow answer cannot close or fill in a different, later editor.
+  // Stable, so the hook does not see a new function every render; a failed refresh is a screen error, not an editor error.
+  const reload = useCallback(() => listUsers(token).then(setUsers).catch((err) => setError(err.message)), [token]);
+  const editor = useIdentifierEditor({ token, reload });
 
   const actorRole = currentUser?.role;
   const createRoles = rolesThatMayBeCreated(actorRole, users);
@@ -84,18 +87,6 @@ export default function UserManagementTab({ token, currentUser }) {
       await load();
     } catch (err) {
       setError(err.message);
-    }
-  }
-
-  // Never throws: a refusal (malformed number, duplicate, would-leave-neither) is shown inside the editor.
-  async function handleSaveIdentifiers(u, payload) {
-    setIdentifierError("");
-    try {
-      await updateUser(token, u.id, payload);
-      setEditingId(null);
-      await load();
-    } catch (err) {
-      setIdentifierError(err.message);
     }
   }
 
@@ -195,7 +186,7 @@ export default function UserManagementTab({ token, currentUser }) {
                       ))}
                     </select>
                     <button
-                      onClick={() => { setIdentifierError(""); setEditingId(editingId === u.id ? null : u.id); }}
+                      onClick={() => editor.toggle(u.id)}
                       className="text-xs text-gold hover:underline"
                     >
                       Edit sign-in
@@ -247,12 +238,13 @@ export default function UserManagementTab({ token, currentUser }) {
                   </span>
                 )}
               </div>
-              {manageable && editingId === u.id && (
+              {manageable && editor.userId === u.id && (
                 <IdentifierEditor
+                  key={editor.key}
                   user={u}
-                  serverError={identifierError}
-                  onSave={(payload) => handleSaveIdentifiers(u, payload)}
-                  onCancel={() => { setEditingId(null); setIdentifierError(""); }}
+                  serverError={editor.error}
+                  onSave={(payload) => editor.save(editor.key, u.id, payload)}
+                  onCancel={editor.close}
                 />
               )}
             </div>
