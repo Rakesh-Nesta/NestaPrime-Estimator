@@ -46,7 +46,10 @@ def wait_http(url, *, kind, expected=None, timeout=60, interval=1, request_timeo
             return body
         except (OSError, urllib.error.URLError, http.client.HTTPException, ValueError, AttributeError) as error:
             # No response body, environment or credentials in diagnostics.
-            last_error = f"{type(error).__name__}: {error}"
+            # An attempt at the deadline must not erase an already established
+            # wrong response/reset/HTTP error with a generic timeout.
+            if not isinstance(error, TimeoutError) or last_error == "no response":
+                last_error = f"{type(error).__name__}: {error}"
             if isinstance(error, urllib.error.HTTPError):
                 error.close()
         remaining = deadline - time.monotonic()

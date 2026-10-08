@@ -1,0 +1,184 @@
+2026-10-08T02:58:15.0628763Z Current runner version: '2.337.0'
+2026-10-08T02:58:15.0663959Z ##[group]Runner Image Provisioner
+2026-10-08T02:58:15.0665338Z Hosted Compute Agent
+2026-10-08T02:58:15.0666319Z Version: 20261002.596
+2026-10-08T02:58:15.0667506Z Commit: c3d12f3313a95f25162a1503be624f3b0617f8c0
+2026-10-08T02:58:15.0668778Z Build Date: 2026-10-02T22:28:27Z
+2026-10-08T02:58:15.0670195Z Worker ID: {4c2910dc-19c4-4cd6-8b12-732142d081ed}
+2026-10-08T02:58:15.0671565Z Region: eastus
+2026-10-08T02:58:15.0672497Z Cloud: Azure
+2026-10-08T02:58:15.0673426Z ##[endgroup]
+2026-10-08T02:58:15.0675735Z ##[group]Operating System
+2026-10-08T02:58:15.0676775Z Ubuntu
+2026-10-08T02:58:15.0677855Z 24.04.5
+2026-10-08T02:58:15.0678760Z LTS
+2026-10-08T02:58:15.0679877Z ##[endgroup]
+2026-10-08T02:58:15.0680946Z ##[group]Runner Image
+2026-10-08T02:58:15.0681936Z Image: ubuntu-24.04
+2026-10-08T02:58:15.0682954Z Version: 20261004.327.1
+2026-10-08T02:58:15.0685140Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261004.327/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-08T02:58:15.0687893Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261004.327
+2026-10-08T02:58:15.0689887Z ##[endgroup]
+2026-10-08T02:58:15.0691812Z ##[group]GITHUB_TOKEN Permissions
+2026-10-08T02:58:15.0694486Z Contents: read
+2026-10-08T02:58:15.0695478Z Metadata: read
+2026-10-08T02:58:15.0696354Z ##[endgroup]
+2026-10-08T02:58:15.0700078Z Secret source: Actions
+2026-10-08T02:58:15.0701623Z Cache mode: write
+2026-10-08T02:58:15.0702987Z Prepare workflow directory
+2026-10-08T02:58:15.1181897Z Prepare all required actions
+2026-10-08T02:58:15.1253665Z Getting action download info
+2026-10-08T02:58:15.3202551Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-08T02:58:15.5451903Z Complete job name: disposable
+2026-10-08T02:58:15.6381636Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-10-08T02:58:15.6382731Z with:
+2026-10-08T02:58:15.6383222Z   persist-credentials: false
+2026-10-08T02:58:15.6383832Z   repository: Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:58:15.6387963Z   token: ***
+2026-10-08T02:58:15.6388430Z   ssh-strict: true
+2026-10-08T02:58:15.6388888Z   ssh-user: git
+2026-10-08T02:58:15.6389331Z   clean: true
+2026-10-08T02:58:15.6390001Z   sparse-checkout-cone-mode: true
+2026-10-08T02:58:15.6390546Z   fetch-depth: 1
+2026-10-08T02:58:15.6390997Z   fetch-tags: false
+2026-10-08T02:58:15.6391456Z   show-progress: true
+2026-10-08T02:58:15.6391932Z   lfs: false
+2026-10-08T02:58:15.6392367Z   submodules: false
+2026-10-08T02:58:15.6392834Z   set-safe-directory: true
+2026-10-08T02:58:15.6393355Z   allow-unsafe-pr-checkout: false
+2026-10-08T02:58:15.6394163Z ##[endgroup]
+2026-10-08T02:58:15.7406775Z Syncing repository: Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:58:15.7410101Z ##[group]Getting Git version info
+2026-10-08T02:58:15.7411487Z Working directory is '/home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator'
+2026-10-08T02:58:15.7413366Z [command]/usr/bin/git version
+2026-10-08T02:58:15.7509135Z git version 2.55.0
+2026-10-08T02:58:15.7565016Z ##[endgroup]
+2026-10-08T02:58:15.7582488Z Temporarily overriding HOME='/home/runner/work/_temp/93d448f9-0bb8-42b7-92ab-d1d734688ec6' before making global git config changes
+2026-10-08T02:58:15.7585408Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-08T02:58:15.7588601Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator
+2026-10-08T02:58:15.7643291Z Deleting the contents of '/home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator'
+2026-10-08T02:58:15.7652865Z ##[group]Initializing the repository
+2026-10-08T02:58:15.7654519Z [command]/usr/bin/git init /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator
+2026-10-08T02:58:15.7770128Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-08T02:58:15.7771708Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-08T02:58:15.7773365Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-08T02:58:15.7774649Z hint: call:
+2026-10-08T02:58:15.7775631Z hint:
+2026-10-08T02:58:15.7776520Z hint: 	git config --global init.defaultBranch <name>
+2026-10-08T02:58:15.7777683Z hint:
+2026-10-08T02:58:15.7778754Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-08T02:58:15.7780246Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-08T02:58:15.7781125Z hint:
+2026-10-08T02:58:15.7781662Z hint: 	git branch -m <name>
+2026-10-08T02:58:15.7782204Z hint:
+2026-10-08T02:58:15.7783673Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-08T02:58:15.7785409Z Initialized empty Git repository in /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator/.git/
+2026-10-08T02:58:15.7787758Z [command]/usr/bin/git remote add origin https://github.com/Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:58:15.7875155Z ##[endgroup]
+2026-10-08T02:58:15.7876550Z ##[group]Disabling automatic garbage collection
+2026-10-08T02:58:15.7877663Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-08T02:58:15.7924844Z ##[endgroup]
+2026-10-08T02:58:15.7925621Z ##[group]Setting up auth
+2026-10-08T02:58:15.7926367Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-08T02:58:15.7959334Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-08T02:58:15.8320186Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-08T02:58:15.8360005Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-08T02:58:15.8587822Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-08T02:58:15.8624563Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-08T02:58:15.8851642Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-08T02:58:15.8893524Z ##[endgroup]
+2026-10-08T02:58:15.8894990Z ##[group]Fetching the repository
+2026-10-08T02:58:15.8905044Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0cdb3c15b88a484a2f084b2b0f0461c3937de6d2:refs/remotes/pull/297/merge
+2026-10-08T02:58:16.3863943Z From https://github.com/Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:58:16.3866005Z  * [new ref]         0cdb3c15b88a484a2f084b2b0f0461c3937de6d2 -> pull/297/merge
+2026-10-08T02:58:16.3870825Z ##[endgroup]
+2026-10-08T02:58:16.3872569Z ##[group]Determining the checkout info
+2026-10-08T02:58:16.3874798Z ##[endgroup]
+2026-10-08T02:58:16.3880116Z [command]/usr/bin/git sparse-checkout disable
+2026-10-08T02:58:16.3932819Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-08T02:58:16.3973505Z ##[group]Checking out the ref
+2026-10-08T02:58:16.3976825Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/297/merge
+2026-10-08T02:58:16.4512355Z Note: switching to 'refs/remotes/pull/297/merge'.
+2026-10-08T02:58:16.4518794Z 
+2026-10-08T02:58:16.4520005Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-08T02:58:16.4522355Z changes and commit them, and you can discard any commits you make in this
+2026-10-08T02:58:16.4524736Z state without impacting any branches by switching back to a branch.
+2026-10-08T02:58:16.4526125Z 
+2026-10-08T02:58:16.4526996Z If you want to create a new branch to retain commits you create, you may
+2026-10-08T02:58:16.4528508Z do so (now or later) by using -c with the switch command. Example:
+2026-10-08T02:58:16.4530210Z 
+2026-10-08T02:58:16.4530621Z   git switch -c <new-branch-name>
+2026-10-08T02:58:16.4531377Z 
+2026-10-08T02:58:16.4531763Z Or undo this operation with:
+2026-10-08T02:58:16.4532452Z 
+2026-10-08T02:58:16.4532787Z   git switch -
+2026-10-08T02:58:16.4533369Z 
+2026-10-08T02:58:16.4534075Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-08T02:58:16.4535248Z 
+2026-10-08T02:58:16.4536436Z HEAD is now at 0cdb3c1 Merge 9bf59391494f67003437f462ae95c55f740317ed into 17a67113c47075a06234f442a198e272e66eaaf5
+2026-10-08T02:58:16.4540553Z ##[endgroup]
+2026-10-08T02:58:16.4573398Z [command]/usr/bin/git log -1 --format=%H
+2026-10-08T02:58:16.4601410Z 0cdb3c15b88a484a2f084b2b0f0461c3937de6d2
+2026-10-08T02:58:16.4611763Z ##[group]Removing auth
+2026-10-08T02:58:16.4615716Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-08T02:58:16.4652663Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-08T02:58:16.4876322Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-08T02:58:16.4905593Z http.https://github.com/.extraheader
+2026-10-08T02:58:16.4916007Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-08T02:58:16.4955106Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-08T02:58:16.5174676Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-08T02:58:16.5207526Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-08T02:58:16.5426799Z ##[endgroup]
+2026-10-08T02:58:16.5679314Z ##[group]Run bash deploy/automation/disposable.sh
+2026-10-08T02:58:16.5681189Z bash deploy/automation/disposable.sh
+2026-10-08T02:58:16.5932891Z shell: /usr/bin/bash -e {0}
+2026-10-08T02:58:16.5934006Z ##[endgroup]
+2026-10-08T02:58:17.5352212Z ....F...
+2026-10-08T02:58:17.5353816Z ======================================================================
+2026-10-08T02:58:17.5354655Z FAIL: test_wrong_frontend_never_passes (test_readiness.ReadinessTests.test_wrong_frontend_never_passes)
+2026-10-08T02:58:17.5355360Z ----------------------------------------------------------------------
+2026-10-08T02:58:17.5356295Z TimeoutError: frontend readiness deadline (0.15s) expired after 15 attempt(s); last failure: TimeoutError: deadline reached while reading response
+2026-10-08T02:58:17.5356924Z 
+2026-10-08T02:58:17.5357199Z During handling of the above exception, another exception occurred:
+2026-10-08T02:58:17.5357571Z 
+2026-10-08T02:58:17.5357747Z Traceback (most recent call last):
+2026-10-08T02:58:17.5358673Z   File "/home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator/deploy/automation/test_readiness.py", line 63, in test_wrong_frontend_never_passes
+2026-10-08T02:58:17.5359965Z     with self.assertRaisesRegex(TimeoutError, "frontend content mismatch.*sha256"):
+2026-10-08T02:58:17.5361669Z AssertionError: "frontend content mismatch.*sha256" does not match "frontend readiness deadline (0.15s) expired after 15 attempt(s); last failure: TimeoutError: deadline reached while reading response"
+2026-10-08T02:58:17.5362491Z 
+2026-10-08T02:58:17.5472384Z ----------------------------------------------------------------------
+2026-10-08T02:58:17.5473224Z Ran 8 tests in 0.844s
+2026-10-08T02:58:17.5473612Z 
+2026-10-08T02:58:17.5473885Z FAILED (failures=1)
+2026-10-08T02:58:17.5474835Z FAIL: disposable release verification exited 1; container state and last 80 log lines follow
+2026-10-08T02:58:17.5475600Z --- disposable db ---
+2026-10-08T02:58:17.6308528Z 
+2026-10-08T02:58:17.6309734Z Error: No such object: np-release-test-1791428296-2358-db
+2026-10-08T02:58:17.6436093Z Error response from daemon: No such container: np-release-test-1791428296-2358-db
+2026-10-08T02:58:17.6445880Z --- disposable restore ---
+2026-10-08T02:58:17.6627411Z 
+2026-10-08T02:58:17.6639816Z Error: No such object: np-release-test-1791428296-2358-restore
+2026-10-08T02:58:17.6753792Z Error response from daemon: No such container: np-release-test-1791428296-2358-restore
+2026-10-08T02:58:17.6763365Z --- disposable app ---
+2026-10-08T02:58:17.6950593Z 
+2026-10-08T02:58:17.6953010Z Error: No such object: np-release-test-1791428296-2358-app
+2026-10-08T02:58:17.7070869Z Error response from daemon: No such container: np-release-test-1791428296-2358-app
+2026-10-08T02:58:17.7081662Z --- disposable web ---
+2026-10-08T02:58:17.7256271Z 
+2026-10-08T02:58:17.7258812Z Error: No such object: np-release-test-1791428296-2358-web
+2026-10-08T02:58:17.7388069Z Error response from daemon: No such container: np-release-test-1791428296-2358-web
+2026-10-08T02:58:17.7804946Z ##[error]Process completed with exit code 1.
+2026-10-08T02:58:17.8057585Z Post job cleanup.
+2026-10-08T02:58:17.8915010Z [command]/usr/bin/git version
+2026-10-08T02:58:17.8959602Z git version 2.55.0
+2026-10-08T02:58:17.9001336Z Temporarily overriding HOME='/home/runner/work/_temp/b53e40c1-07ca-4506-80f4-af4e4f053b90' before making global git config changes
+2026-10-08T02:58:17.9003059Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-08T02:58:17.9006840Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator
+2026-10-08T02:58:17.9047190Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-08T02:58:17.9082897Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-08T02:58:17.9336121Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-08T02:58:17.9384181Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-08T02:58:17.9763833Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-08T02:58:17.9837672Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-08T02:58:18.0270523Z Cleaning up orphan processes
+2026-10-08T02:58:18.0608410Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

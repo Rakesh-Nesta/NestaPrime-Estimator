@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from wait_http import wait_http
 
@@ -51,12 +52,12 @@ class ReadinessTests(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=1)
 
-    def check(self, path, **kwargs):
+    def check(self, path, timeout=0.15, **kwargs):
         with contextlib.redirect_stdout(io.StringIO()):
-            return wait_http(self.base + path, timeout=0.15, interval=0.01, request_timeout=0.03, **kwargs)
+            return wait_http(self.base + path, timeout=timeout, interval=0.01, request_timeout=0.03, **kwargs)
 
     def test_reset_then_ready_requires_exact_frontend(self):
-        self.assertEqual(self.check("/recover", kind="frontend", expected=b"built frontend"), b"built frontend")
+        self.assertEqual(self.check("/recover", timeout=2, kind="frontend", expected=b"built frontend"), b"built frontend")
         self.assertEqual(self.server.attempts, 3)
 
     def test_wrong_frontend_never_passes(self):
@@ -64,7 +65,7 @@ class ReadinessTests(unittest.TestCase):
             self.check("/wrong", kind="frontend", expected=b"built frontend")
 
     def test_health_must_report_ok(self):
-        self.assertEqual(self.check("/health", kind="health"), b'{"status":"ok"}')
+        self.assertEqual(self.check("/health", timeout=2, kind="health"), b'{"status":"ok"}')
         with self.assertRaisesRegex(TimeoutError, "status=ok"):
             self.check("/bad-health", kind="health")
 
@@ -78,6 +79,19 @@ class ReadinessTests(unittest.TestCase):
         with self.assertRaisesRegex(TimeoutError, "deadline.*last failure"):
             self.check("/stall", kind="health")
         self.assertLess(time.monotonic() - started, 0.5)
+
+    def test_deadline_timeout_preserves_last_rejected_response(self):
+        # Force the exact CI boundary deterministically: wrong bytes, then a
+        # request timeout at the deadline. No scheduling-dependent assertion.
+        clock = [0.0]
+        response = io.BytesIO(b"nginx welcome")
+        response.status = 200
+        with patch("wait_http.time.monotonic", side_effect=lambda: clock[0]), \
+             patch("wait_http.time.sleep", side_effect=lambda delay: clock.__setitem__(0, clock[0] + delay)), \
+             patch("wait_http.urllib.request.urlopen", side_effect=[response, TimeoutError("deadline read")]) as request:
+            with self.assertRaisesRegex(TimeoutError, "frontend content mismatch.*sha256"):
+                wait_http(self.base, kind="frontend", expected=b"built frontend", timeout=0.2, interval=0.1)
+            self.assertEqual(request.call_count, 2)
 
 
 if __name__ == "__main__":
