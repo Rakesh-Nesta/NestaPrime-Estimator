@@ -6,8 +6,8 @@ names and types are checked, and every route in the app needs a login unless it 
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
-from jose import jwt
 
 from app.api.role_permissions import _flatten
 from app.config import settings
