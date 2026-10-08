@@ -22,7 +22,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -47,7 +47,7 @@ jobs:
     # deploy/README.md's smoke test is what proves it actually serves.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build backend image
         run: docker build -f Dockerfile -t nestaprime-backend:ci .
@@ -61,7 +61,7 @@ jobs:
     # fix and the flaw is not reachable here) record the reason in docs/security/ and ignore that one ID.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
