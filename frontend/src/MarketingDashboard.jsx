@@ -1,41 +1,87 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMarketingDashboard } from "./api";
+import { createDashboardLoader, hasUnappliedFilters } from "./marketingDashboardLogic";
 
-// P3 contract (revision 4), Section 9: Phase A's aggregate-only dashboard -- a CURRENT-STAGE
-// SNAPSHOT grouped by import cohort, not a true historical conversion funnel (that would need
-// Opportunity stage-change history from audit_log, not built this release). Counts and rates
-// only -- never individual buyer fields, never raw payload, never full Opportunity rows.
+// P3 contract (revision 4), Section 9: Phase A's aggregate-only dashboard -- counts by source, QUERY_TYPE and
+// date bucket, plus a CURRENT-STAGE SNAPSHOT of the Opportunities imported in the selected period (that count is
+// the explicit denominator). Not a historical conversion funnel (that would need stage-change history from
+// audit_log, not built). Counts and rates only -- never individual buyer fields, never raw payload.
+//
+// Choices the contract leaves open are explicit here and echoed by the API: which date defines the cohort, the
+// bucket size, and the calendar (IST days).
 
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
+// Today's date as an IST calendar date (YYYY-MM-DD) -- the dashboard's calendar -- not the browser's UTC date.
+function istDate(offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d);
 }
 
 const STAGE_LABELS = { new: "New", contacted: "Contacted", qualified: "Qualified", won: "Won", lost: "Lost" };
+const BASIS_LABELS = {
+  enquiry_time: "Enquiry date (when the buyer enquired)",
+  received_at: "Import date (when we received the lead)",
+};
+const BUCKET_LABELS = { day: "Day", week: "Week (Mon-Sun)", month: "Month" };
+
+function Section({ title, children }) {
+  return (
+    <div className="bg-surface shadow rounded-lg p-6 space-y-2">
+      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function CountRows({ entries, empty }) {
+  if (entries.length === 0) return <p className="text-sm text-text-secondary">{empty}</p>;
+  return entries.map(([label, count]) => (
+    <div key={label} className="flex items-center justify-between text-sm border-b border-border-dark last:border-0 py-1.5">
+      <span className="text-text-secondary">{label}</span>
+      <span className="text-text-primary font-medium">{count}</span>
+    </div>
+  ));
+}
 
 export default function MarketingDashboard({ token }) {
-  const today = new Date();
-  const monthAgo = new Date(today);
-  monthAgo.setDate(monthAgo.getDate() - 30);
-
-  const [periodStart, setPeriodStart] = useState(isoDate(monthAgo));
-  const [periodEnd, setPeriodEnd] = useState(isoDate(today));
+  const [periodStart, setPeriodStart] = useState(istDate(-30));
+  const [periodEnd, setPeriodEnd] = useState(istDate(0));
+  const [basis, setBasis] = useState("enquiry_time");
+  const [bucket, setBucket] = useState("day");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Validation (empty / malformed / reversed dates) and "only the LATEST request may update data, error and loading"
+  // live in marketingDashboardLogic.js, where they are unit-tested (`node --test src/marketingDashboardLogic.test.js`).
+  // An invalid period makes no request and clears the previous results; a superseded request's success, failure or
+  // abort is ignored even if it arrives later.
+  const loaderRef = useRef(null);
+  if (loaderRef.current === null) {
+    loaderRef.current = createDashboardLoader({
+      fetchDashboard: (params, signal) => getMarketingDashboard(params.token, { ...params, signal }),
+      onChange: (update) => {
+        if ("data" in update) setData(update.data);
+        if ("loading" in update) setLoading(update.loading);
+        if ("error" in update) setError(update.error);
+      },
+    });
+  }
+
   function load() {
-    setLoading(true);
-    setError("");
-    getMarketingDashboard(token, { periodStart, periodEnd })
-      .then(setData)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    loaderRef.current.load({ token, periodStart, periodEnd, basis, bucket });
   }
 
   useEffect(() => {
     load();
+    return () => loaderRef.current.cancel(); // a response arriving after unmount or a token change must not be applied
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  // The results on screen are described by the RESPONSE (what was actually applied), never by the controls, which
+  // may have been changed since. `dirty` is true while the controls differ from what the results show.
+  const dirty = hasUnappliedFilters({ periodStart, periodEnd, basis, bucket }, data);
+  const maxBucket = data ? Math.max(1, ...data.by_date_bucket.map((b) => b.count)) : 1;
+  const fieldClass = "block mt-1 bg-surface-raised border border-border-dark rounded px-2 py-1 text-sm";
 
   return (
     <div className="max-w-3xl mx-auto mt-8 mb-10 space-y-6">
@@ -43,76 +89,134 @@ export default function MarketingDashboard({ token }) {
         <div>
           <h2 className="text-lg font-semibold text-text-primary">Marketing -- IndiaMART leads</h2>
           <p className="text-sm text-text-secondary">
-            Current-stage snapshot for leads imported in the selected period, by their own enquiry date. Not a
-            historical conversion rate over time -- that would need a separate, not-yet-built report.
+            Leads for the selected period, grouped by the date you choose, and where the Opportunities they produced are
+            sitting <em>today</em>. This is a snapshot of current stages, not a historical conversion rate over time.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs text-text-secondary">
             From
-            <input
-              type="date"
-              value={periodStart}
-              onChange={(e) => setPeriodStart(e.target.value)}
-              className="block mt-1 bg-surface-raised border border-border-dark rounded px-2 py-1 text-sm"
-            />
+            <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className={fieldClass} />
           </label>
           <label className="text-xs text-text-secondary">
             To
-            <input
-              type="date"
-              value={periodEnd}
-              onChange={(e) => setPeriodEnd(e.target.value)}
-              className="block mt-1 bg-surface-raised border border-border-dark rounded px-2 py-1 text-sm"
-            />
+            <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={fieldClass} />
           </label>
-          <button
-            onClick={load}
-            className="text-xs rounded px-3 py-1.5 bg-gold text-base font-medium hover:bg-gold/90"
-          >
+          <label className="text-xs text-text-secondary">
+            Group leads by
+            <select value={basis} onChange={(e) => setBasis(e.target.value)} className={fieldClass}>
+              {Object.entries(BASIS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs text-text-secondary">
+            Bucket
+            <select value={bucket} onChange={(e) => setBucket(e.target.value)} className={fieldClass}>
+              {Object.entries(BUCKET_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <button onClick={load} className="text-xs rounded px-3 py-1.5 bg-gold text-base font-medium hover:bg-gold/90">
             Refresh
           </button>
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
       </div>
 
       {loading && <p className="text-sm text-text-secondary">Loading…</p>}
 
       {!loading && data && (
         <>
-          <div className="bg-surface shadow rounded-lg p-6">
-            <p className="text-[10px] uppercase tracking-wider text-text-secondary/70">Imported in period</p>
-            <p className="text-2xl font-heading font-semibold text-text-primary mt-1">{data.imported_total}</p>
-          </div>
-
-          <div className="bg-surface shadow rounded-lg p-6 space-y-2">
-            <h3 className="text-sm font-semibold text-text-primary">By enquiry type</h3>
-            {Object.keys(data.by_query_type).length === 0 && (
-              <p className="text-sm text-text-secondary">No enquiries in this period.</p>
+          <div className="bg-surface shadow rounded-lg px-6 py-3 space-y-1" data-testid="applied-summary">
+            <p className="text-sm text-text-primary">
+              Showing <strong>{data.period_start}</strong> to <strong>{data.period_end}</strong> · grouped by{" "}
+              {BASIS_LABELS[data.cohort_basis] || data.cohort_basis} · by {data.bucket}
+            </p>
+            {dirty && (
+              <p className="text-xs text-amber-300" role="status" data-testid="unapplied-filters">
+                Filters changed — these results are for the settings above, not the ones now selected. Press Refresh to apply.
+              </p>
             )}
-            {Object.entries(data.by_query_type).map(([type, count]) => (
-              <div key={type} className="flex items-center justify-between text-sm border-b border-border-dark last:border-0 py-1.5">
-                <span className="text-text-secondary">{type}</span>
-                <span className="text-text-primary font-medium">{count}</span>
-              </div>
-            ))}
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-surface shadow rounded-lg p-6">
+              <p className="text-[10px] uppercase tracking-wider text-text-secondary/70">Leads received</p>
+              <p className="text-2xl font-heading font-semibold text-text-primary mt-1" data-testid="received-total">
+                {data.received_total}
+              </p>
+              <p className="text-xs text-text-secondary mt-1">Every lead in the period, whatever its status.</p>
+            </div>
+            <div className="bg-surface shadow rounded-lg p-6">
+              <p className="text-[10px] uppercase tracking-wider text-text-secondary/70">Opportunities imported</p>
+              <p className="text-2xl font-heading font-semibold text-text-primary mt-1" data-testid="imported-total">
+                {data.imported_total}
+              </p>
+              <p className="text-xs text-text-secondary mt-1">The denominator for the stage percentages below.</p>
+            </div>
+          </div>
+          <p className="text-xs text-text-secondary">
+            {data.timezone}.
+            {data.excluded_missing_enquiry_time > 0 &&
+              ` ${data.excluded_missing_enquiry_time} lead${data.excluded_missing_enquiry_time === 1 ? "" : "s"} received in this period ${
+                data.excluded_missing_enquiry_time === 1 ? "has" : "have"
+              } no enquiry date and ${data.excluded_missing_enquiry_time === 1 ? "is" : "are"} not counted here; group by import date to include ${
+                data.excluded_missing_enquiry_time === 1 ? "it" : "them"
+              }.`}
+          </p>
 
-          <div className="bg-surface shadow rounded-lg p-6 space-y-2">
-            <h3 className="text-sm font-semibold text-text-primary">Current stage (as of today)</h3>
-            {data.current_stage_distribution.length === 0 && (
-              <p className="text-sm text-text-secondary">No linked Opportunities in this period yet.</p>
+          <Section title="By source">
+            <CountRows entries={Object.entries(data.by_source)} empty="No leads in this period." />
+          </Section>
+
+          <Section title="By enquiry type">
+            <CountRows entries={Object.entries(data.by_query_type)} empty="No enquiries in this period." />
+            {data.by_query_type.unknown > 0 && (
+              <p className="text-xs text-text-secondary">
+                "unknown" are leads whose type has not been recorded yet (not processed, or the type was missing).
+              </p>
             )}
-            {data.current_stage_distribution.map((s) => (
-              <div key={s.stage} className="flex items-center justify-between text-sm border-b border-border-dark last:border-0 py-1.5">
-                <span className="text-text-secondary">{STAGE_LABELS[s.stage] || s.stage}</span>
-                <span className="text-text-primary font-medium">
-                  {s.count}
-                  {data.imported_total > 0 ? ` (${Math.round((s.count / data.imported_total) * 100)}%)` : ""}
-                </span>
+          </Section>
+
+          <Section title={`By ${data.bucket}`}>
+            {data.received_total === 0 ? (
+              <p className="text-sm text-text-secondary">No leads in this period.</p>
+            ) : (
+              <div className="max-h-72 overflow-y-auto space-y-1" data-testid="bucket-rows">
+                {data.by_date_bucket.map((b) => (
+                  <div key={b.bucket_start} className="flex items-center gap-3 text-xs">
+                    <span className="w-28 shrink-0 text-text-secondary">{b.label}</span>
+                    <div className="flex-1 h-3 bg-surface-raised rounded overflow-hidden">
+                      <div className="h-3 bg-gold/70" style={{ width: `${(b.count / maxBucket) * 100}%` }} />
+                    </div>
+                    <span className="w-8 text-right text-text-primary font-medium">{b.count}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </Section>
+
+          <Section title="Current stage (as of today)">
+            {data.current_stage_distribution.length === 0 ? (
+              <p className="text-sm text-text-secondary">No Opportunities were imported in this period.</p>
+            ) : (
+              <>
+                {data.current_stage_distribution.map((s) => (
+                  <div
+                    key={s.stage}
+                    className="flex items-center justify-between text-sm border-b border-border-dark last:border-0 py-1.5"
+                  >
+                    <span className="text-text-secondary">{STAGE_LABELS[s.stage] || s.stage}</span>
+                    <span className="text-text-primary font-medium">
+                      {s.count} ({Math.round(s.rate * 100)}%)
+                    </span>
+                  </div>
+                ))}
+                <p className="text-xs text-text-secondary">Percentages are of the {data.imported_total} Opportunities imported.</p>
+              </>
+            )}
+          </Section>
         </>
       )}
     </div>

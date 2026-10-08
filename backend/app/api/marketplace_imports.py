@@ -3,11 +3,12 @@ Marketing Phase A aggregate dashboard (a new, narrow, aggregates-only endpoint -
 added to this one role gate and nowhere else)."""
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import marketplace_imports as mi
@@ -222,65 +223,223 @@ def run_backfill(
 
 
 # --- Section 9: Marketing Phase A aggregate dashboard ------------------------------------------
+#
+# Governing text, P3 contract (revision 4), Section 9: "Aggregate volume dashboard (counts by source,
+# QUERY_TYPE, and date bucket) and a current-stage distribution by import cohort" -- a current-stage
+# snapshot, "grouped by import cohort (leads whose enquiry_time or received_at -- stated explicitly, not
+# left implicit -- falls in the selected period), showing the count currently sitting at each Opportunity
+# stage as of now, with an explicit denominator (total Opportunities imported in that period)". Counts and
+# rates only: never individual buyer fields, never raw payload, never full Opportunity rows.
+#
+# The contract leaves five things open; none is invented silently -- each is an explicit, echoed choice:
+#   1. cohort basis ("enquiry_time or received_at"): the caller selects it (`basis`); the default stays
+#      enquiry_time, the behaviour this endpoint already shipped with. The response echoes it.
+#   2. date-bucket granularity: `bucket` = day | week | month (default day). Weeks start on Monday (ISO).
+#   3. timezone: `received_at` is stored as naive UTC and is converted to IST (Asia/Kolkata, UTC+05:30) calendar days.
+#      `enquiry_time` is the provider's own wall-clock value, parsed and never converted; the provider's timezone for it
+#      is NOT verified: the contract, and IndiaMART's Pull API guide (help.indiamart.com/knowledge-base/lms-crm-integration-v2/,
+#      checked 5 Oct 2026), state IST only for the start_time/end_time request parameters; the guide's text gives no timezone
+#      for the QUERY_TIME response field (its sample response is an image). So enquiry_time periods and buckets use the date
+#      exactly as recorded and the response says so rather than claiming IST.
+#   4. period boundaries: from period_start 00:00:00 to period_end 23:59:59.999999, both inclusive, in that calendar (the same
+#      set as "[start, end + 1 day)", but representable at the end of the calendar: 9999-12-31 + 1 day does not exist).
+#      The whole calendar (0001-01-01 .. 9999-12-31) is supported; there is no business-date cutoff. A lower bound that
+#      would fall before the first representable timestamp is exactly "no lower bound", since no stored value is earlier.
+#   5. denominator: Opportunities imported (ledger rows that produced an Opportunity), counted distinctly --
+#      not every ledger row, which also includes pending, quarantined, rejected and expired leads.
+
+# India has no daylight saving: IST is exactly UTC+05:30, so a fixed offset is exact and needs no timezone database
+# (the production image is python:slim and requirements.txt does not pin tzdata).
+IST = timezone(timedelta(hours=5, minutes=30), "IST")
+TIMEZONE_NOTES = {
+    "enquiry_time": "Provider-recorded time, timezone not verified: dates and buckets use the enquiry date exactly as the "
+    "provider recorded it (no timezone conversion)",
+    "received_at": "IST (UTC+05:30, Asia/Kolkata): received times are stored in UTC and converted; dates and buckets are "
+    "IST calendar days",
+}
+MAX_BUCKETS = 2000  # a response-size safeguard, not a business rule: ask for a coarser bucket or a shorter period
+
+CohortBasis = Literal["enquiry_time", "received_at"]
+BucketSize = Literal["day", "week", "month"]
 
 
 class StageCount(BaseModel):
     stage: str
+    count: int
+    rate: float  # count / imported_total (the explicit denominator); 0 impossible here, only stages with leads are listed
+
+
+class DateBucketCount(BaseModel):
+    bucket_start: date
+    label: str
     count: int
 
 
 class MarketingDashboardOut(BaseModel):
     period_start: date
     period_end: date
-    imported_total: int
+    cohort_basis: str
+    bucket: str
+    timezone: str
+    received_total: int  # every ledger row (lead) in the cohort, whatever its status
+    imported_total: int  # the DENOMINATOR: Opportunities imported from those leads
+    excluded_missing_enquiry_time: int  # enquiry_time basis only: leads received in the period that have no enquiry_time
+    by_source: dict[str, int]
     by_query_type: dict[str, int]
+    by_date_bucket: list[DateBucketCount]
     current_stage_distribution: list[StageCount]
+
+
+def _bucket_start(day: date, bucket: str) -> date:
+    if bucket == "week":
+        return day - timedelta(days=day.weekday())  # Monday
+    if bucket == "month":
+        return day.replace(day=1)
+    return day
+
+
+def _next_bucket(start: date, bucket: str) -> date:
+    if bucket == "week":
+        return start + timedelta(days=7)
+    if bucket == "month":
+        return date(start.year + (start.month == 12), start.month % 12 + 1, 1)
+    return start + timedelta(days=1)
+
+
+def _bucket_label(start: date, bucket: str) -> str:
+    if bucket == "week":
+        return f"Week of {start.isoformat()}"
+    if bucket == "month":
+        return start.strftime("%Y-%m")
+    return start.isoformat()
+
+
+def _bucket_starts(period_start: date, period_end: date, bucket: str) -> list[date]:
+    starts: list[date] = []
+    current = _bucket_start(period_start, bucket)
+    last = _bucket_start(period_end, bucket)
+    while True:
+        starts.append(current)
+        if len(starts) > MAX_BUCKETS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This period needs more than {MAX_BUCKETS} {bucket} buckets; choose a coarser bucket (week or month) "
+                "or a shorter period",
+            )
+        if current >= last:
+            break  # never step past the final required bucket: stepping from the last bucket of the calendar overflows
+        current = _next_bucket(current, bucket)
+    return starts
+
+
+def _ist_to_naive_utc(local: datetime) -> datetime | None:
+    """An IST wall-clock value as naive UTC, or None when that instant is before the first representable timestamp."""
+    try:
+        return local.replace(tzinfo=IST).astimezone(UTC).replace(tzinfo=None)
+    except OverflowError:
+        return None
+
+
+def _cohort_window(basis: str, period_start: date, period_end: date) -> tuple[datetime, datetime]:
+    """Inclusive (first instant, last instant) in the basis column's own stored clock (see the notes above). The upper bound
+    is the period's last microsecond, not "next midnight", so 9999-12-31 needs no date beyond the calendar."""
+    first = datetime.combine(period_start, time.min)
+    last = datetime.combine(period_end, time.max)
+    if basis != "received_at":
+        return first, last
+    lower = _ist_to_naive_utc(first)
+    upper = _ist_to_naive_utc(last)
+    if upper is None:
+        raise OverflowError("period ends before the first representable timestamp")
+    # IST 0001-01-01 00:00 is before the first UTC instant that exists: there is nothing earlier to exclude, so no lower bound.
+    return (datetime.min if lower is None else lower), upper
+
+
+def _local_date(basis: str, value: datetime) -> date:
+    if basis == "received_at":
+        return value.replace(tzinfo=UTC).astimezone(IST).date()
+    return value.date()
 
 
 @router.get("/marketing/dashboard", response_model=MarketingDashboardOut)
 def get_marketing_dashboard(
     period_start: date,
     period_end: date,
+    basis: CohortBasis = "enquiry_time",
+    bucket: BucketSize = "day",
     db: Session = Depends(get_db),
     current_user=Depends(require_roles(*MARKETING_ROLES)),
 ):
-    """Section 9 (revision 4, precisely redefined): a CURRENT-STAGE SNAPSHOT grouped by import
-    cohort (enquiry_time in [period_start, period_end]) -- not a true historical conversion
-    funnel, which would require querying Opportunity stage-change history from audit_log (not
-    attempted this release). Returns counts and rates only -- never individual buyer fields,
-    never raw payload, never full Opportunity rows. query_type is read from the ledger's own
-    durable column (not raw_payload), so this keeps working after the 90-day retention purge."""
-    period_start_dt = datetime.combine(period_start, datetime.min.time())
-    period_end_dt = datetime.combine(period_end, datetime.max.time())
+    """Section 9 (revision 4): see the notes above. A CURRENT-STAGE SNAPSHOT grouped by import cohort,
+    not a historical conversion funnel (that would need Opportunity stage-change history from audit_log,
+    not built). Counts and rates only. query_type comes from the ledger's own durable column, so the
+    grouping keeps working after the 90-day retention purge removes raw_payload."""
+    if period_end < period_start:
+        raise HTTPException(status_code=400, detail="period_end must not be before period_start")
+    try:
+        bucket_starts = _bucket_starts(period_start, period_end, bucket)  # also bounds the response size, before any query
+        window_start, window_end = _cohort_window(basis, period_start, period_end)
+        received_window = _cohort_window("received_at", period_start, period_end) if basis == "enquiry_time" else None
+    except (OverflowError, ValueError):  # defence in depth: an unrepresentable period is a clear 400, never a 500
+        raise HTTPException(status_code=400, detail="This period cannot be processed; choose dates within the supported calendar")
+    cohort_column = MarketplaceLeadImport.enquiry_time if basis == "enquiry_time" else MarketplaceLeadImport.received_at
+    in_window = (cohort_column >= window_start, cohort_column <= window_end)
 
-    ledger_rows = (
-        db.query(MarketplaceLeadImport)
-        .filter(MarketplaceLeadImport.enquiry_time.isnot(None))
-        .filter(MarketplaceLeadImport.enquiry_time >= period_start_dt, MarketplaceLeadImport.enquiry_time <= period_end_dt)
+    rows = (
+        db.query(MarketplaceLeadImport.platform, MarketplaceLeadImport.query_type, cohort_column)
+        .filter(cohort_column.isnot(None))
+        .filter(*in_window)
         .all()
     )
+    by_source: dict[str, int] = {}
     by_query_type: dict[str, int] = {}
-    for row in ledger_rows:
-        key = row.query_type or "unknown"
+    per_bucket = {start: 0 for start in bucket_starts}
+    for platform, query_type, value in rows:
+        by_source[platform] = by_source.get(platform, 0) + 1
+        key = query_type or "unknown"
         by_query_type[key] = by_query_type.get(key, 0) + 1
+        per_bucket[_bucket_start(_local_date(basis, value), bucket)] += 1
 
-    opportunity_ids = [row.opportunity_id for row in ledger_rows if row.opportunity_id is not None]
-    stage_counts: dict[str, int] = {}
-    if opportunity_ids:
-        rows = (
-            db.query(Opportunity.stage, func.count(Opportunity.id))
-            .filter(Opportunity.id.in_(opportunity_ids))
-            .group_by(Opportunity.stage)
-            .all()
-        )
-        for stage, count in rows:
-            stage_value = stage.value if isinstance(stage, OpportunityStage) else stage
-            stage_counts[stage_value] = count
+    # The denominator and the stage distribution come from the same set: distinct Opportunities that the cohort's
+    # leads produced. Ledger rows without an Opportunity (pending, quarantined, rejected, expired) are volume, not imports.
+    imported_ids = (
+        select(MarketplaceLeadImport.opportunity_id)
+        .where(MarketplaceLeadImport.opportunity_id.isnot(None))
+        .where(cohort_column.isnot(None), *in_window)
+    )
+    stage_rows = (
+        db.query(Opportunity.stage, func.count(Opportunity.id))
+        .filter(Opportunity.id.in_(imported_ids))
+        .group_by(Opportunity.stage)
+        .all()
+    )
+    stage_counts = {(s.value if isinstance(s, OpportunityStage) else s): n for s, n in stage_rows}
+    imported_total = sum(stage_counts.values())
+    ordered_stages = [s.value for s in OpportunityStage if stage_counts.get(s.value)]
+
+    excluded = 0
+    if basis == "enquiry_time":
+        received_start, received_end = received_window
+        excluded = (
+            db.query(func.count(MarketplaceLeadImport.id))
+            .filter(MarketplaceLeadImport.enquiry_time.is_(None))
+            .filter(MarketplaceLeadImport.received_at >= received_start, MarketplaceLeadImport.received_at <= received_end)
+            .scalar()
+        ) or 0
 
     return MarketingDashboardOut(
         period_start=period_start,
         period_end=period_end,
-        imported_total=len(ledger_rows),
+        cohort_basis=basis,
+        bucket=bucket,
+        timezone=TIMEZONE_NOTES[basis],
+        received_total=len(rows),
+        imported_total=imported_total,
+        excluded_missing_enquiry_time=excluded,
+        by_source=dict(sorted(by_source.items())),
         by_query_type=by_query_type,
-        current_stage_distribution=[StageCount(stage=k, count=v) for k, v in sorted(stage_counts.items())],
+        by_date_bucket=[DateBucketCount(bucket_start=s, label=_bucket_label(s, bucket), count=per_bucket[s]) for s in bucket_starts],
+        current_stage_distribution=[
+            StageCount(stage=s, count=stage_counts[s], rate=round(stage_counts[s] / imported_total, 4)) for s in ordered_stages
+        ],
     )

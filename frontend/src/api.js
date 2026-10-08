@@ -2530,9 +2530,11 @@ export async function runMarketplaceBackfill(token, { rangeStart, rangeEnd }) {
 }
 
 // P3: Section 9 Marketing Phase A aggregate dashboard.
-export async function getMarketingDashboard(token, { periodStart, periodEnd }) {
-  const params = new URLSearchParams({ period_start: periodStart, period_end: periodEnd });
-  const res = await fetch(`${API_BASE}/marketplace-imports/marketing/dashboard?${params}`, { headers: authHeaders(token) });
+// M4: the cohort basis (enquiry_time | received_at) and the date-bucket size (day | week | month) are explicit choices.
+// `signal` (optional AbortSignal) lets the caller cancel a request that a newer one has superseded.
+export async function getMarketingDashboard(token, { periodStart, periodEnd, basis = "enquiry_time", bucket = "day", signal }) {
+  const params = new URLSearchParams({ period_start: periodStart, period_end: periodEnd, basis, bucket });
+  const res = await fetch(`${API_BASE}/marketplace-imports/marketing/dashboard?${params}`, { headers: authHeaders(token), signal });
   return handle(res);
 }
 
