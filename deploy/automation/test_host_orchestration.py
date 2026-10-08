@@ -172,7 +172,7 @@ class HostOrchestration(unittest.TestCase):
         record = json.loads((controller.root / "record.json").read_text())
         self.reports.append({"case": self._testMethodName, "status": record["status"], "failure_category": record.get("failure_category"),
             "mutation_started": record["mutation_started"], "events": record["events"], "cleanup": record.get("cleanup", []),
-            "last_probe_failure": record.get("last_probe_failure")})
+            "last_probe_failure": record.get("last_probe_failure"), "backend_state": record.get("backend_state")})
         self.assertEqual(result, 1 if category else 0, console.getvalue())
         if category:
             self.assertIn(record["failure_category"], (category,) if isinstance(category, str) else category, record)
@@ -355,12 +355,48 @@ class HostOrchestration(unittest.TestCase):
         self.unchanged(record)
 
     def test_backend_replacement_failure(self):
-        self.cfg["health_seconds"] = 3
+        self.cfg["health_seconds"] = 10
         self.bundle("backend-failure")
         _, record = self.release("backend-readiness")
         self.assertTrue(record["mutation_started"])
         self.assertEqual(record["status"], "failed-needs-recovery")
         self.assertEqual(self.link.resolve(), self.root / "bootstrap")
+        self.assertEqual(record["backend_state"]["status"], "exited")
+        self.assertEqual(record["backend_state"]["exit_code"], 42)
+        self.assertEqual(record["backend_state"]["restart_count"], 0)
+        backend = run(self.compose + ["ps", "-a", "-q", "backend"]).decode().strip()
+        self.assertEqual(run(["docker", "inspect", "-f", "{{.HostConfig.RestartPolicy.Name}}", backend]).strip(), b"no")
+        self.assertFalse(record.get("frontend_switched", False))
+
+    def test_replacement_missing_container_id(self):
+        self.cfg["health_seconds"] = 3
+        removed = []
+        def remove_replacement(step, args):
+            if step == "backend.running-container" and not removed:
+                backend = run(self.compose + ["ps", "-a", "-q", "backend"]).decode().strip()
+                self.assertTrue(backend)
+                run(["docker", "rm", "-f", backend])
+                removed.append(True)
+        self.hook = remove_replacement
+        _, record = self.release("backend-readiness")
+        self.assertTrue(removed and record["mutation_started"])
+        self.assertEqual(record["backend_state"], {"status": "missing"})
+        self.assertFalse(any(e["step"] == "backend.running-image" for e in record["events"]))
+        self.assertEqual(record["status"], "failed-needs-recovery")
+        self.assertEqual(self.link.resolve(), self.root / "bootstrap")
+        self.assertFalse(record.get("frontend_switched", False))
+
+    def test_running_replacement_never_ready(self):
+        self.cfg["health_seconds"] = 5
+        self.bundle("backend-unready")
+        _, record = self.release("backend-readiness")
+        self.assertTrue(record["mutation_started"])
+        self.assertEqual(record["backend_state"]["status"], "running")
+        self.assertTrue(record["backend_state"]["running"])
+        self.assertEqual(record["backend_state"]["exit_code"], 0)
+        self.assertEqual(record["status"], "failed-needs-recovery")
+        self.assertEqual(self.link.resolve(), self.root / "bootstrap")
+        self.assertFalse(record.get("frontend_switched", False))
 
     def test_static_health_without_database_not_ready(self):
         # Let real backend startup reach its healthy response before injecting

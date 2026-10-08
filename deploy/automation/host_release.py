@@ -155,7 +155,7 @@ class Runner:
                         pass
                     process.wait()
 
-    def fetch(self, step, url):
+    def fetch(self, step, url, *, timeout=5):
         # Run network I/O in a bounded process: slow-drip responses cannot extend
         # socket timeouts indefinitely or swallow the controller deadline.
         code = """import sys,ssl,urllib.request,urllib.error
@@ -168,7 +168,7 @@ except urllib.error.URLError as e:
  sys.exit(32 if isinstance(e.reason,ssl.SSLCertVerificationError) else 34 if isinstance(e.reason,TimeoutError) else 33)
 except TimeoutError: sys.exit(34)
 """
-        return self.run(step, [sys.executable, "-I", "-c", code, url], timeout=5, capture=True, category="http-response")
+        return self.run(step, [sys.executable, "-I", "-c", code, url], timeout=timeout, capture=True, category="http-response")
 
     def cleanup(self, args):
         # Resource cleanup has a separate small bound after an interrupted operation.
@@ -377,12 +377,61 @@ class Release:
         self.event(step, "started")
         raise ReleaseFault({"backend.ready": "backend-readiness", "database.ready": "database-readiness"}.get(step, "readiness"))
 
-    def health(self, step, url):
-        body = self.runner.fetch(step, url)
+    def health(self, step, url, *, timeout=5):
+        body = self.runner.fetch(step, url, timeout=timeout)
         try:
             require(json.loads(body).get("status") == "ok", "readiness")
         except (ValueError, AttributeError):
             raise ReleaseFault("readiness") from None
+
+    def replacement_ready(self, image_id):
+        """Discover even exited replacements; allow restarts within one health budget."""
+        end = time.monotonic() + self.cfg.get("health_seconds", 180)
+
+        def budget():
+            self.runner.remaining()  # Global deadline/interrupts must propagate.
+            remaining = end - time.monotonic()
+            require(remaining > 0, "backend-readiness")
+            return min(5, remaining)
+
+        while time.monotonic() < end:
+            self.event("backend.ready", "started")
+            try:
+                ids = self.dc("backend.running-container", "ps", "-a", "-q", "backend",
+                    capture=True, timeout=budget()).decode().split()
+                if not ids:
+                    self.record["backend_state"] = {"status": "missing"}
+                    self.save()
+                    raise ReleaseFault("readiness")
+                require(len(ids) == 1 and re.fullmatch(r"[0-9a-f]{12,64}", ids[0]), "backend-identity")
+                backend = ids[0]
+                # Select only safe scalar fields: never retain Config, Error, logs,
+                # environment, command lines or healthcheck output from inspect.
+                fields = '[{{json .Image}},{{json .State.Status}},{{json .State.Running}},{{json .State.Restarting}},{{json .State.ExitCode}},{{json .State.OOMKilled}},{{json .RestartCount}}]'
+                values = json.loads(self.runner.run("backend.running-image",
+                    [self.docker, "inspect", "-f", fields, backend], capture=True, timeout=budget()))
+                actual, status, running, restarting, exit_code, oom, restarts = values
+                require(status in {"created", "running", "paused", "restarting", "removing", "exited", "dead"}
+                    and all(type(v) is bool for v in (running, restarting, oom))
+                    and all(type(v) is int for v in (exit_code, restarts)), "backend-state")
+                self.record["backend_state"] = {"status": status, "running": running, "restarting": restarting,
+                    "exit_code": exit_code, "oom_killed": oom, "restart_count": restarts}
+                self.save()
+                require(actual == image_id, "backend-identity")
+                require(status == "running" and running and not restarting, "readiness")
+                self.health("backend.http", self.cfg["backend_url"], timeout=budget())
+                self.event("backend.ready", "completed")
+                return backend
+            except ReleaseFault as fault:
+                self.record["last_probe_failure"] = {"step": self.record["step"], "category": fault.category, "exit_code": fault.code}
+                self.save()
+                if fault.category not in {"readiness", "command-exit", "command-timeout", "http-response",
+                        "http-status", "network-connect", "http-timeout", "backend-readiness"}:
+                    raise
+            time.sleep(min(1, max(0, end - time.monotonic())))
+        self.runner.remaining()
+        self.event("backend.ready", "started")
+        raise ReleaseFault("backend-readiness")
 
     def execute(self):
         cfg = self.cfg
@@ -459,9 +508,7 @@ class Release:
         self.record.update(status="deploying", mutation_started=True)
         self.event("backend.replace", "started")
         self.runner.run("backend.replace", self.compose + ["-f", str(override), "up", "-d", "--no-build", "--pull", "never", "--no-deps", "backend"], category="backend-replace")
-        backend = self.dc("backend.running-container", "ps", "-q", "backend", capture=True).decode().strip()
-        require(self.runner.run("backend.running-image", [self.docker, "inspect", "-f", "{{.Image}}", backend], capture=True).decode().strip() == image_id, "backend-identity")
-        self.wait("backend.ready", lambda: self.health("backend.http", cfg["backend_url"]), cfg.get("health_seconds", 180))
+        backend = self.replacement_ready(image_id)
         self.wait("database.ready", lambda: self.exec("database.backend-query", backend, "python", "-c", DATABASE_READY,
             json.dumps(heads), timeout=10), cfg.get("health_seconds", 180))
         self.event("backend.persist-image", "started")

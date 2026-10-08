@@ -78,6 +78,7 @@ def create(root):
     (dist / "index.html").write_bytes(original)
     frontend()
     for kind, recipe in [("backend-failure", "CMD [\"sh\",\"-c\",\"exit 42\"]\n"),
+                         ("backend-unready", "CMD [\"python\",\"-c\",\"import time; time.sleep(300)\"]\n"),
                          ("migration-failure", "RUN printf 'raise RuntimeError(\"disposable migration fault\")\\n' > /app/alembic/env.py\n")]:
         temp_tag = "np-release-test-fault:" + kind + "-" + run_id
         run(["docker", "build", "-t", temp_tag, "-"], input=("FROM " + old_tag + "\n" + recipe).encode(), stdout=subprocess.DEVNULL)
@@ -87,7 +88,7 @@ def create(root):
         pack(payload, root / (kind + ".tar"))
         run(["docker", "image", "rm", temp_tag], stdout=subprocess.DEVNULL)
     run(["docker", "tag", good, tag])
-    print("Created six disposable subjects; no production signer or real audit success claimed.")
+    print("Created seven disposable subjects; no production signer or real audit success claimed.")
 
 
 if __name__ == "__main__":
