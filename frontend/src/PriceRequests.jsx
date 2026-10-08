@@ -9,7 +9,7 @@ import {
   listVendorReplies,
   listVendors,
   updateVendor,
-  useVendorReply,
+  applyVendorReply,
 } from "./api";
 
 const CHANNELS = [
@@ -155,7 +155,7 @@ function RepliesPanel({ token, priceRequestId, item, vendors, onChanged }) {
   async function handleUse(replyId, applyTo) {
     setError("");
     try {
-      await useVendorReply(token, replyId, {
+      await applyVendorReply(token, replyId, {
         apply_to: applyTo,
         cost_sheet_line_id: applyTo !== "master" ? lineIdByReply[replyId] || null : null,
       });
