@@ -100,6 +100,10 @@ class Runner:
         self.cfg, self.event = cfg, event
         self.end = time.monotonic() + cfg.get("deadline_seconds", 900)
         self.env = {"PATH": "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL": "C.UTF-8", "GH_PROMPT_DISABLED": "1"}
+        # Give gh/TUF a private administrator-controlled cache, without inheriting
+        # the caller's GitHub config, credential helpers or home directory.
+        home = str(Path(cfg.get("release_root", "/var/empty")))
+        self.env.update(HOME=home, GH_CONFIG_DIR=home + "/.gh-config", XDG_CACHE_HOME=home + "/.gh-cache")
         if cfg.get("github_token_file"):
             self.env["GH_TOKEN"] = Path(cfg["github_token_file"]).read_text().strip()
         if cfg.get("tls_ca_file"):
@@ -284,7 +288,8 @@ class Release:
         cfg = self.cfg
         result = self.runner.run("provenance.verify", [cfg.get("gh", "/usr/bin/gh"), "attestation", "verify", str(self.root / "release.tar"),
             "--bundle", str(self.root / "attestation.json"), "--repo", cfg["repository"],
-            "--signer-workflow", cfg["repository"] + "/" + cfg["workflow"],
+            # Exact certificate identity already binds repository/workflow/ref.
+            # gh forbids combining it with the shorthand --signer-workflow.
             "--cert-identity", "https://github.com/" + cfg["repository"] + "/" + cfg["workflow"] + "@" + cfg.get("source_ref", "refs/heads/main"),
             "--source-ref", cfg.get("source_ref", "refs/heads/main"), "--source-digest", sha, "--signer-digest", sha,
             "--cert-oidc-issuer", "https://token.actions.githubusercontent.com", "--deny-self-hosted-runners",

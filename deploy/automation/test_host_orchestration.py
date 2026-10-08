@@ -275,7 +275,9 @@ class HostOrchestration(unittest.TestCase):
         self.assertEqual(self.link.resolve(), self.root / "bootstrap")
 
     def test_static_health_without_database_not_ready(self):
-        self.cfg["health_seconds"] = 3
+        # Let real backend startup reach its healthy response before injecting
+        # the DB fault. The DB negative control remains separately bounded.
+        self.cfg["health_seconds"] = 15
         done = []
         def stop_db(step, args):
             if step == "database.backend-query" and not done:

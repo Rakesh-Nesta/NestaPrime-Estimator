@@ -1,0 +1,306 @@
+disposable	Exercise real host helper against signed disposable subjects	﻿2026-10-08T04:27:02.3111403Z ##[group]Run cp "$BUNDLE" host-fixtures/attestation.json
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3111838Z ^[[36;1mcp "$BUNDLE" host-fixtures/attestation.json^[[0m
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3113284Z ^[[36;1mdocker run --rm --add-host host.docker.internal:host-gateway -v /var/run/docker.sock:/var/run/docker.sock -v "$GITHUB_WORKSPACE:/work" -w /work -e TEST_DOCKER_HOST=host.docker.internal -e HOST_FIXTURE_DIR=/work/host-fixtures -e HOST_REAL_PROVENANCE=1 -e HOST_TEST_REPORT=/work/host-results.json docker:cli sh -c 'apk add --no-cache python3 nginx openssl github-cli >/dev/null && python3 -m unittest discover -s deploy/automation -p test_host_orchestration.py -v'^[[0m
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3149766Z shell: /usr/bin/bash -e {0}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3150128Z env:
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3150460Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3150944Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3151400Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3151954Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3152369Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3152813Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3153248Z   BUNDLE: /home/runner/work/_temp/FOvxW9/attestation.json
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3153619Z ##[endgroup]
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.3328713Z Unable to find image 'docker:cli' locally
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:02.8734425Z cli: Pulling from library/docker
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0191650Z e2de96513ba9: Already exists
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0211644Z a25fa25ef9a2: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0212161Z 4f4fb700ef54: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0212602Z ecc71e2ca4ea: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0213143Z 767eb4f3c372: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0213429Z 78509240c435: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0213897Z b59d7c6fb281: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0214183Z ded769ae42b9: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0214649Z c27b8fbb76b1: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0214940Z 0a121f30e5d6: Pulling fs layer
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0215301Z b59d7c6fb281: Waiting
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0215590Z ded769ae42b9: Waiting
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0215874Z c27b8fbb76b1: Waiting
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0216291Z 0a121f30e5d6: Waiting
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0216555Z 767eb4f3c372: Waiting
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.0216990Z 78509240c435: Waiting
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.1628678Z ecc71e2ca4ea: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.1719965Z 4f4fb700ef54: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.2692463Z a25fa25ef9a2: Verifying Checksum
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.2693354Z a25fa25ef9a2: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.4604644Z 767eb4f3c372: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.4943483Z 78509240c435: Verifying Checksum
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.4952838Z 78509240c435: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.5109405Z b59d7c6fb281: Verifying Checksum
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.5109957Z b59d7c6fb281: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.5924864Z ded769ae42b9: Verifying Checksum
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.5925649Z ded769ae42b9: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.6251670Z c27b8fbb76b1: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.6314018Z 0a121f30e5d6: Verifying Checksum
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:03.6314443Z 0a121f30e5d6: Download complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:04.2005267Z a25fa25ef9a2: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:04.2260783Z 4f4fb700ef54: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:04.2339971Z ecc71e2ca4ea: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:04.5807930Z 767eb4f3c372: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.1763255Z 78509240c435: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.4651995Z b59d7c6fb281: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.4741294Z ded769ae42b9: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.4832035Z c27b8fbb76b1: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.4924999Z 0a121f30e5d6: Pull complete
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.4957955Z Digest: sha256:35cfcf893c20f2931f4909151b5407aaaeab711277de7ce8b8f521f095d54c32
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:05.4969471Z Status: Downloaded newer image for docker:cli
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:11.9221479Z test_backend_replacement_failure (test_host_orchestration.HostOrchestration.test_backend_replacement_failure) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:17.1560106Z test_backup_dump_failure (test_host_orchestration.HostOrchestration.test_backup_dump_failure) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:22.9818679Z test_candidate_migration_failure (test_host_orchestration.HostOrchestration.test_candidate_migration_failure) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:28.3032679Z test_deadline_during_real_backup (test_host_orchestration.HostOrchestration.test_deadline_during_real_backup) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:34.3224148Z test_disabled_before_any_commands (test_host_orchestration.HostOrchestration.test_disabled_before_any_commands) ... ok
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:39.0726015Z test_lock_contended (test_host_orchestration.HostOrchestration.test_lock_contended) ... ok
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:43.1989667Z test_migration_unknown_revision (test_host_orchestration.HostOrchestration.test_migration_unknown_revision) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:48.4371765Z test_missing_approval (test_host_orchestration.HostOrchestration.test_missing_approval) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:53.7265725Z test_readable_dump_cannot_restore (test_host_orchestration.HostOrchestration.test_readable_dump_cannot_restore) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:27:58.9265301Z test_served_frontend_failure_recorded_after_switch (test_host_orchestration.HostOrchestration.test_served_frontend_failure_recorded_after_switch) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:04.8466378Z test_signed_altered_file_rejected (test_host_orchestration.HostOrchestration.test_signed_altered_file_rejected) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:10.7786794Z test_signed_extra_file_rejected (test_host_orchestration.HostOrchestration.test_signed_extra_file_rejected) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:16.7591651Z test_signed_missing_file_rejected (test_host_orchestration.HostOrchestration.test_signed_missing_file_rejected) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:21.9559839Z test_stale_after_backup_before_mutation (test_host_orchestration.HostOrchestration.test_stale_after_backup_before_mutation) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:27.1970974Z test_static_health_without_database_not_ready (test_host_orchestration.HostOrchestration.test_static_health_without_database_not_ready) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:32.4816417Z test_success_real_orchestration_and_restore (test_host_orchestration.HostOrchestration.test_success_real_orchestration_and_restore) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:40.6332898Z test_tamper_even_with_recomputed_checksums (test_host_orchestration.HostOrchestration.test_tamper_even_with_recomputed_checksums) ... ok
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:44.4903320Z test_termination_during_health_is_not_retried (test_host_orchestration.HostOrchestration.test_termination_during_health_is_not_retried) ... FAIL
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:51.1802023Z test_wrong_commit_real_provenance (test_host_orchestration.HostOrchestration.test_wrong_commit_real_provenance) ... ok
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:28:56.5378373Z test_wrong_repository_real_provenance (test_host_orchestration.HostOrchestration.test_wrong_repository_real_provenance) ... ok
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9087701Z test_wrong_workflow_real_provenance (test_host_orchestration.HostOrchestration.test_wrong_workflow_real_provenance) ... ok
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9104767Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9105348Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9106266Z FAIL: test_backend_replacement_failure (test_host_orchestration.HostOrchestration.test_backend_replacement_failure)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9107775Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9108602Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9122178Z   File "/work/deploy/automation/test_host_orchestration.py", line 272, in test_backend_replacement_failure
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9123197Z     _, record = self.release("backend-readiness")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9123766Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9124453Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9125199Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9125793Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9126629Z AssertionError: 'authenticity' != 'backend-readiness'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9127145Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9127478Z + backend-readiness
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9129617Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9131448Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9131625Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9132343Z FAIL: test_backup_dump_failure (test_host_orchestration.HostOrchestration.test_backup_dump_failure)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9133166Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9133730Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9134431Z   File "/work/deploy/automation/test_host_orchestration.py", line 255, in test_backup_dump_failure
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9135143Z     _, record = self.release("backup-dump")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9135546Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9136111Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9137077Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9137651Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9138179Z AssertionError: 'authenticity' != 'backup-dump'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9138682Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9139598Z + backup-dump
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9141606Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9143516Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9143820Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9144610Z FAIL: test_candidate_migration_failure (test_host_orchestration.HostOrchestration.test_candidate_migration_failure)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9145513Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9146080Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9146907Z   File "/work/deploy/automation/test_host_orchestration.py", line 246, in test_candidate_migration_failure
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9147742Z     _, record = self.release("migration-rehearsal")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9148255Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9148854Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9150320Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9151135Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9151923Z AssertionError: 'authenticity' != 'migration-rehearsal'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9152630Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9153064Z + migration-rehearsal
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9155719Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9157846Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9158088Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9159262Z FAIL: test_deadline_during_real_backup (test_host_orchestration.HostOrchestration.test_deadline_during_real_backup)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9160193Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9160999Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9162077Z   File "/work/deploy/automation/test_host_orchestration.py", line 304, in test_deadline_during_real_backup
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9163098Z     _, record = self.release("deadline")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9163654Z                 ~~~~~~~~~~~~^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9164331Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9165138Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9165741Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9166276Z AssertionError: 'authenticity' != 'deadline'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9166781Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9167137Z + deadline
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9169816Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9171921Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9172127Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9172850Z FAIL: test_migration_unknown_revision (test_host_orchestration.HostOrchestration.test_migration_unknown_revision)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9173744Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9174348Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9175171Z   File "/work/deploy/automation/test_host_orchestration.py", line 241, in test_migration_unknown_revision
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9176019Z     _, record = self.release("migration-compatibility")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9176577Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9177315Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9178097Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9178676Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9179453Z AssertionError: 'authenticity' != 'migration-compatibility'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9180136Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9180624Z + migration-compatibility
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9183092Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9185025Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9185286Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9186183Z FAIL: test_missing_approval (test_host_orchestration.HostOrchestration.test_missing_approval)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9186950Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9187566Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9188359Z   File "/work/deploy/automation/test_host_orchestration.py", line 236, in test_missing_approval
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9189430Z     _, record = self.release("eligibility-or-approval")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9190163Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9190831Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9191701Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9192321Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9193034Z AssertionError: 'authenticity' != 'eligibility-or-approval'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9193568Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9193911Z + eligibility-or-approval
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9196083Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9198068Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9198307Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9199279Z FAIL: test_readable_dump_cannot_restore (test_host_orchestration.HostOrchestration.test_readable_dump_cannot_restore)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9200059Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9200632Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9201753Z   File "/work/deploy/automation/test_host_orchestration.py", line 264, in test_readable_dump_cannot_restore
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9202539Z     _, record = self.release("backup-restore")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9203039Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9203709Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9204507Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9205697Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9206262Z AssertionError: 'authenticity' != 'backup-restore'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9206761Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9207091Z + backup-restore
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9209422Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9211605Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9211845Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9212890Z FAIL: test_served_frontend_failure_recorded_after_switch (test_host_orchestration.HostOrchestration.test_served_frontend_failure_recorded_after_switch)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9213985Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9214567Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9215529Z   File "/work/deploy/automation/test_host_orchestration.py", line 295, in test_served_frontend_failure_recorded_after_switch
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9216485Z     _, record = self.release("served-frontend")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9217012Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9217805Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9218581Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9219385Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9219969Z AssertionError: 'authenticity' != 'served-frontend'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9220493Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9220973Z + served-frontend
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9223229Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9225496Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9225710Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9226727Z FAIL: test_signed_altered_file_rejected (test_host_orchestration.HostOrchestration.test_signed_altered_file_rejected)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9227699Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9228299Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9229492Z   File "/work/deploy/automation/test_host_orchestration.py", line 225, in test_signed_altered_file_rejected
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9230365Z     _, record = self.release("frontend-digest")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9230926Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9231581Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9232384Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9233300Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9233970Z AssertionError: 'authenticity' != 'frontend-digest'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9234505Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9234857Z + frontend-digest
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9237081Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9239327Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9239604Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9240559Z FAIL: test_signed_extra_file_rejected (test_host_orchestration.HostOrchestration.test_signed_extra_file_rejected)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9241617Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9242193Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9243036Z   File "/work/deploy/automation/test_host_orchestration.py", line 215, in test_signed_extra_file_rejected
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9243805Z     _, record = self.release("frontend-file-set")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9244300Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9245013Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9245820Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9246466Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9247069Z AssertionError: 'authenticity' != 'frontend-file-set'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9247712Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9248212Z + frontend-file-set
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9250539Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9252495Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9252714Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9253672Z FAIL: test_signed_missing_file_rejected (test_host_orchestration.HostOrchestration.test_signed_missing_file_rejected)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9254847Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9255446Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9256433Z   File "/work/deploy/automation/test_host_orchestration.py", line 220, in test_signed_missing_file_rejected
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9257303Z     _, record = self.release("frontend-file-set")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9257847Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9258494Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9259349Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9260077Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9260711Z AssertionError: 'authenticity' != 'frontend-file-set'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9261258Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9261672Z + frontend-file-set
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9263722Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9266021Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9266332Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9267334Z FAIL: test_stale_after_backup_before_mutation (test_host_orchestration.HostOrchestration.test_stale_after_backup_before_mutation)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9268401Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9269172Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9270187Z   File "/work/deploy/automation/test_host_orchestration.py", line 230, in test_stale_after_backup_before_mutation
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9271186Z     _, record = self.release("eligibility-stale")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9271719Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9272487Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9273426Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9274167Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9274809Z AssertionError: 'authenticity' != 'eligibility-stale'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9275339Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9275710Z + eligibility-stale
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9277741Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9279907Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9280144Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9281980Z FAIL: test_static_health_without_database_not_ready (test_host_orchestration.HostOrchestration.test_static_health_without_database_not_ready)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9282808Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9283392Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9284328Z   File "/work/deploy/automation/test_host_orchestration.py", line 285, in test_static_health_without_database_not_ready
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9285334Z     _, record = self.release("database-readiness")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9285790Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9286318Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9287201Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9287777Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9288251Z AssertionError: 'authenticity' != 'database-readiness'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9288745Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9289231Z + database-readiness
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9291479Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9293511Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9293679Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9294498Z FAIL: test_success_real_orchestration_and_restore (test_host_orchestration.HostOrchestration.test_success_real_orchestration_and_restore)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9295423Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9295966Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9296688Z   File "/work/deploy/automation/test_host_orchestration.py", line 194, in test_success_real_orchestration_and_restore
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9297571Z     controller, record = self.release()
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9297880Z                          ~~~~~~~~~~~~^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9298385Z   File "/work/deploy/automation/test_host_orchestration.py", line 174, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9299114Z     self.assertEqual(result, 1 if category else 0, console.getvalue())
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9299801Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9300280Z AssertionError: 1 != 0 : Release stopped: provenance.verify / authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9300573Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9300579Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9300715Z ======================================================================
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9301355Z FAIL: test_termination_during_health_is_not_retried (test_host_orchestration.HostOrchestration.test_termination_during_health_is_not_retried)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9302522Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9303067Z Traceback (most recent call last):
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9303793Z   File "/work/deploy/automation/test_host_orchestration.py", line 312, in test_termination_during_health_is_not_retried
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9304434Z     _, record = self.release("interrupted")
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9304932Z                 ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9305459Z   File "/work/deploy/automation/test_host_orchestration.py", line 176, in release
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9306155Z     self.assertEqual(record["failure_category"], category, record)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9306639Z     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9307133Z AssertionError: 'authenticity' != 'interrupted'
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9307656Z - authenticity
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9307948Z + interrupted
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9309999Z  : {'slot': '37727223189-1', 'status': 'rejected-before-mutation', 'step': 'provenance.verify', 'events': [{'step': 'enablement', 'result': 'started'}, {'step': 'lock.acquire', 'result': 'started'}, {'step': 'bundle.snapshot', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'started'}, {'step': 'provenance.verify', 'result': 'failed', 'category': 'authenticity', 'exit_code': 1}], 'mutation_started': False, 'failure_category': 'authenticity'}
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9311718Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9311945Z ----------------------------------------------------------------------
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9312394Z Ran 21 tests in 115.140s
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9312919Z 
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:01.9313074Z FAILED (failures=15)
+disposable	Exercise real host helper against signed disposable subjects	2026-10-08T04:29:02.1802328Z ##[error]Process completed with exit code 1.
