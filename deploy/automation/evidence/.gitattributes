@@ -1,0 +1,3 @@
+* -text whitespace=cr-at-eol
+# Preserve original console whitespace as evidence rather than editing it.
+*.log whitespace=-blank-at-eol,cr-at-eol

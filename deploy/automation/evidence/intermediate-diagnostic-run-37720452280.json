@@ -1,0 +1,58 @@
+{
+  "conclusion": "failure",
+  "headSha": "9bf59391494f67003437f462ae95c55f740317ed",
+  "jobs": [
+    {
+      "completedAt": "2026-10-08T02:58:19Z",
+      "conclusion": "failure",
+      "databaseId": 113126649097,
+      "name": "disposable",
+      "startedAt": "2026-10-08T02:58:14Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-10-08T02:58:15Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-10-08T02:58:15Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-08T02:58:16Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "number": 2,
+          "startedAt": "2026-10-08T02:58:15Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-08T02:58:17Z",
+          "conclusion": "failure",
+          "name": "Run bash deploy/automation/disposable.sh",
+          "number": 3,
+          "startedAt": "2026-10-08T02:58:16Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-08T02:58:18Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+          "number": 6,
+          "startedAt": "2026-10-08T02:58:17Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-08T02:58:18Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 7,
+          "startedAt": "2026-10-08T02:58:18Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/Rakesh-Nesta/NestaPrime-Estimator/actions/runs/37720452280/job/113126649097"
+    }
+  ],
+  "url": "https://github.com/Rakesh-Nesta/NestaPrime-Estimator/actions/runs/37720452280"
+}

@@ -1,0 +1,139 @@
+name: Prepare and deploy Lightsail release
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full current-main-tip SHA (must equal dispatch workflow SHA)
+        required: true
+        type: string
+      deploy:
+        description: Request approval only after separate production authorization
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: lightsail-production-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Reject disabled deployment requests before build or approval
+        if: inputs.deploy
+        env:
+          ENABLED: ${{ vars.RELEASE_DEPLOY_REQUESTS_ENABLED }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$ENABLED" = explicitly-authorized
+          python deploy/automation/environment_gate.py
+      - name: Verify exact main-tip CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.commit }}
+        run: |
+          mkdir release
+          python deploy/automation/eligibility.py > release/eligibility.json
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.commit }}
+          path: source
+          persist-credentials: false
+      - name: Build and audit actual artifacts
+        env:
+          RELEASE_SHA: ${{ inputs.commit }}
+        run: bash deploy/automation/prepare.sh "$RELEASE_SHA"
+      - name: Retain audit evidence even when audit rejects the image
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/backend-packages.txt
+            release/backend-audit.json
+            release/backend-audit.log
+            release/image-id
+            release/image-tag
+            release/commit
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Attest complete release bytes with GitHub OIDC identity
+        id: attest
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661
+        with:
+          subject-path: transfer/release.tar
+      - name: Include signed provenance
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" transfer/attestation.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: transfer/
+          retention-days: 30
+          if-no-files-found: error
+  deploy:
+    needs: prepare
+    if: inputs.deploy && vars.RELEASE_DEPLOY_REQUESTS_ENABLED == 'explicitly-authorized' && github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Recheck enablement, approval policy and main tip after approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.commit }}
+          ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+        run: |
+          test "$ENABLED" = explicitly-authorized
+          python deploy/automation/environment_gate.py
+          python deploy/automation/eligibility.py > /dev/null
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: transfer
+      - name: Transfer signed artifacts; host independently verifies authority
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          test -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          trap 'rm -f ~/.ssh/deploy_key ~/.ssh/release_known_hosts' EXIT
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/release_known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/release_known_hosts
+          opts=(-F /dev/null -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/release_known_hosts" -o GlobalKnownHostsFile=/dev/null -o ConnectionAttempts=1 -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          slot="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ "$slot" =~ ^[0-9]+-[0-9]+$ ]]
+          # Validated numeric/user values intentionally expand on the client.
+          # shellcheck disable=SC2029
+          timeout 60 ssh -n "${opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -m 700 /home/$DEPLOY_USER/incoming/$slot"
+          timeout 180 scp "${opts[@]}" transfer/release.tar transfer/attestation.json "$DEPLOY_USER@$DEPLOY_HOST:incoming/$slot/"
+          # shellcheck disable=SC2029
+          timeout 960 ssh -n "${opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "timeout --signal=TERM --kill-after=10s 940s sudo /usr/local/sbin/nestaprime-release $slot"

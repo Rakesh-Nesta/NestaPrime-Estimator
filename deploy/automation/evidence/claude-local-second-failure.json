@@ -1,0 +1,533 @@
+{
+  "tests": 21,
+  "preserved_failure": {
+    "case": "test_static_health_without_database_not_ready",
+    "status": "failed-needs-recovery",
+    "failure_category": "backend-readiness",
+    "mutation_started": true,
+    "events": [
+      {
+        "step": "enablement",
+        "result": "started"
+      },
+      {
+        "step": "lock.acquire",
+        "result": "started"
+      },
+      {
+        "step": "bundle.snapshot",
+        "result": "started"
+      },
+      {
+        "step": "provenance.verify",
+        "result": "started"
+      },
+      {
+        "step": "provenance.verify",
+        "result": "started"
+      },
+      {
+        "step": "bundle.integrity",
+        "result": "started"
+      },
+      {
+        "step": "eligibility.after-approval",
+        "result": "started"
+      },
+      {
+        "step": "frontend.integrity",
+        "result": "started"
+      },
+      {
+        "step": "prerequisites",
+        "result": "started"
+      },
+      {
+        "step": "nginx.config",
+        "result": "started"
+      },
+      {
+        "step": "nginx.config",
+        "result": "started"
+      },
+      {
+        "step": "nginx.config",
+        "result": "completed"
+      },
+      {
+        "step": "database.container",
+        "result": "started"
+      },
+      {
+        "step": "database.container",
+        "result": "started"
+      },
+      {
+        "step": "database.container",
+        "result": "completed"
+      },
+      {
+        "step": "backend.previous-container",
+        "result": "started"
+      },
+      {
+        "step": "backend.previous-container",
+        "result": "started"
+      },
+      {
+        "step": "backend.previous-container",
+        "result": "completed"
+      },
+      {
+        "step": "database.authenticated-ready",
+        "result": "started"
+      },
+      {
+        "step": "database.authenticated-ready",
+        "result": "started"
+      },
+      {
+        "step": "database.authenticated-ready",
+        "result": "completed"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "completed"
+      },
+      {
+        "step": "backend.previous-image",
+        "result": "started"
+      },
+      {
+        "step": "backend.previous-image",
+        "result": "started"
+      },
+      {
+        "step": "backend.previous-image",
+        "result": "completed"
+      },
+      {
+        "step": "database.image",
+        "result": "started"
+      },
+      {
+        "step": "database.image",
+        "result": "started"
+      },
+      {
+        "step": "database.image",
+        "result": "completed"
+      },
+      {
+        "step": "backend.load",
+        "result": "started"
+      },
+      {
+        "step": "backend.load",
+        "result": "started"
+      },
+      {
+        "step": "backend.load",
+        "result": "completed"
+      },
+      {
+        "step": "backend.image-id",
+        "result": "started"
+      },
+      {
+        "step": "backend.image-id",
+        "result": "started"
+      },
+      {
+        "step": "backend.image-id",
+        "result": "completed"
+      },
+      {
+        "step": "backend.image-label",
+        "result": "started"
+      },
+      {
+        "step": "backend.image-label",
+        "result": "started"
+      },
+      {
+        "step": "backend.image-label",
+        "result": "completed"
+      },
+      {
+        "step": "migration.compatibility",
+        "result": "started"
+      },
+      {
+        "step": "migration.compatibility",
+        "result": "started"
+      },
+      {
+        "step": "migration.compatibility",
+        "result": "completed"
+      },
+      {
+        "step": "backend.retain-previous",
+        "result": "started"
+      },
+      {
+        "step": "backend.retain-previous",
+        "result": "started"
+      },
+      {
+        "step": "backend.retain-previous",
+        "result": "completed"
+      },
+      {
+        "step": "backup.dump",
+        "result": "started"
+      },
+      {
+        "step": "backup.dump",
+        "result": "started"
+      },
+      {
+        "step": "backup.dump",
+        "result": "completed"
+      },
+      {
+        "step": "backup.readable",
+        "result": "started"
+      },
+      {
+        "step": "backup.readable",
+        "result": "started"
+      },
+      {
+        "step": "backup.readable",
+        "result": "completed"
+      },
+      {
+        "step": "backup.rehearsal-network",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-network",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-network",
+        "result": "completed"
+      },
+      {
+        "step": "backup.rehearsal-start",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-start",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-start",
+        "result": "completed"
+      },
+      {
+        "step": "backup.rehearsal-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "started"
+      },
+      {
+        "step": "backup.rehearsal-pg-ready",
+        "result": "completed"
+      },
+      {
+        "step": "backup.rehearsal-ready",
+        "result": "completed"
+      },
+      {
+        "step": "backup.restore",
+        "result": "started"
+      },
+      {
+        "step": "backup.restore",
+        "result": "started"
+      },
+      {
+        "step": "backup.restore",
+        "result": "completed"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "completed"
+      },
+      {
+        "step": "migration.rehearsal",
+        "result": "started"
+      },
+      {
+        "step": "migration.rehearsal",
+        "result": "started"
+      },
+      {
+        "step": "migration.rehearsal",
+        "result": "completed"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "completed"
+      },
+      {
+        "step": "eligibility.before-mutation",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "started"
+      },
+      {
+        "step": "database.revision",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "started"
+      },
+      {
+        "step": "database.marker-exists",
+        "result": "completed"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "started"
+      },
+      {
+        "step": "database.marker",
+        "result": "completed"
+      },
+      {
+        "step": "backend.replace",
+        "result": "started"
+      },
+      {
+        "step": "backend.replace",
+        "result": "started"
+      },
+      {
+        "step": "backend.replace",
+        "result": "started"
+      },
+      {
+        "step": "backend.replace",
+        "result": "completed"
+      },
+      {
+        "step": "backend.running-container",
+        "result": "started"
+      },
+      {
+        "step": "backend.running-container",
+        "result": "started"
+      },
+      {
+        "step": "backend.running-container",
+        "result": "completed"
+      },
+      {
+        "step": "backend.running-image",
+        "result": "started"
+      },
+      {
+        "step": "backend.running-image",
+        "result": "started"
+      },
+      {
+        "step": "backend.running-image",
+        "result": "completed"
+      },
+      {
+        "step": "backend.ready",
+        "result": "started"
+      },
+      {
+        "step": "backend.http",
+        "result": "started"
+      },
+      {
+        "step": "backend.http",
+        "result": "started"
+      },
+      {
+        "step": "backend.ready",
+        "result": "started"
+      },
+      {
+        "step": "backend.http",
+        "result": "started"
+      },
+      {
+        "step": "backend.http",
+        "result": "started"
+      },
+      {
+        "step": "backend.ready",
+        "result": "started"
+      },
+      {
+        "step": "backend.http",
+        "result": "started"
+      },
+      {
+        "step": "backend.http",
+        "result": "started"
+      },
+      {
+        "step": "backend.ready",
+        "result": "started"
+      },
+      {
+        "step": "backend.ready",
+        "result": "failed",
+        "category": "backend-readiness"
+      }
+    ]
+  },
+  "skipped": 4,
+  "real_provenance": false,
+  "correction": "The database negative control used a three-second backend startup window and rejected at backend readiness before reaching its intended DB fault. It now permits bounded normal backend startup, then stops DB only after successful HTTP readiness.",
+  "duration_seconds": 914.558,
+  "failures": 1
+}

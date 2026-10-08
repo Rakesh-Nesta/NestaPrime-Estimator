@@ -30,3 +30,7 @@ Thumbs.db
 
 # Logs
 *.log
+# Disposable release-test outputs are never deployable source.
+host-fixtures*/
+host-*-results.json
+legacy-guard-failures.json

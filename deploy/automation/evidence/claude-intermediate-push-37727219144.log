@@ -1,0 +1,46 @@
+disposable	Run bash deploy/automation/disposable.sh	﻿2026-10-08T04:23:13.6300566Z ##[group]Run bash deploy/automation/disposable.sh
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6301075Z ^[[36;1mbash deploy/automation/disposable.sh^[[0m
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6624673Z shell: /usr/bin/bash -e {0}
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6625050Z env:
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6625353Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6626061Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6626520Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6626943Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6627363Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6628012Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:13.6628349Z ##[endgroup]
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4009356Z ......Esssssssssssssssssssss.........
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4010026Z ======================================================================
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4010925Z ERROR: test_subprocess_tree_deadline (test_host_guards.HostGuards.test_subprocess_tree_deadline)
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4011934Z ----------------------------------------------------------------------
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4012540Z Traceback (most recent call last):
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4017662Z   File "/home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator/deploy/automation/test_host_guards.py", line 123, in test_subprocess_tree_deadline
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4018682Z     self.assertTrue(not status.exists() or status.read_text().split()[2] == "Z", "Grandchild survived deadline")
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4019231Z                                            ^^^^^^^^^^^^^^^^^^
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4019804Z   File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/pathlib.py", line 1028, in read_text
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4020292Z     return f.read()
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4020507Z            ^^^^^^^^
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4020754Z ProcessLookupError: [Errno 3] No such process
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4020975Z 
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4021131Z ----------------------------------------------------------------------
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4021560Z Ran 37 tests in 1.311s
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4021742Z 
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4021852Z FAILED (errors=1, skipped=21)
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4179499Z FAIL: disposable release verification exited 1; container state and last 80 log lines follow
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.4180368Z --- disposable db ---
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5138492Z 
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5139737Z Error: No such object: np-release-test-1791433393-2465-db
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5263358Z Error response from daemon: No such container: np-release-test-1791433393-2465-db
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5273126Z --- disposable restore ---
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5442000Z 
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5442545Z Error: No such object: np-release-test-1791433393-2465-restore
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5560196Z Error response from daemon: No such container: np-release-test-1791433393-2465-restore
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5571160Z --- disposable app ---
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5744055Z 
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5744834Z Error: No such object: np-release-test-1791433393-2465-app
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5859627Z Error response from daemon: No such container: np-release-test-1791433393-2465-app
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.5869322Z --- disposable web ---
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.6042143Z 
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.6042873Z Error: No such object: np-release-test-1791433393-2465-web
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.6177804Z Error response from daemon: No such container: np-release-test-1791433393-2465-web
+disposable	Run bash deploy/automation/disposable.sh	2026-10-08T04:23:15.6596994Z ##[error]Process completed with exit code 1.

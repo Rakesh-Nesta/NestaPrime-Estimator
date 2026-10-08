@@ -1,0 +1,6 @@
+test_static_health_without_database_not_ready (test_host_orchestration.HostOrchestration.test_static_health_without_database_not_ready) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 144.002s
+
+OK

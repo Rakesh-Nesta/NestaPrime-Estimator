@@ -1,0 +1,247 @@
+2026-10-08T02:49:07.3982465Z Current runner version: '2.337.0'
+2026-10-08T02:49:07.4008500Z ##[group]Runner Image Provisioner
+2026-10-08T02:49:07.4009437Z Hosted Compute Agent
+2026-10-08T02:49:07.4010015Z Version: 20260901.588
+2026-10-08T02:49:07.4010718Z Commit: f88ec8081b781fac6c440065ac7ff9e710ce3d0b
+2026-10-08T02:49:07.4011504Z Build Date: 2026-09-01T19:56:44Z
+2026-10-08T02:49:07.4012159Z Worker ID: {c8a45a76-b8b0-4e56-8cca-46ddc32be67b}
+2026-10-08T02:49:07.4012930Z Azure Region: northcentralus
+2026-10-08T02:49:07.4013966Z ##[endgroup]
+2026-10-08T02:49:07.4015580Z ##[group]Operating System
+2026-10-08T02:49:07.4016239Z Ubuntu
+2026-10-08T02:49:07.4016757Z 24.04.5
+2026-10-08T02:49:07.4017305Z LTS
+2026-10-08T02:49:07.4017809Z ##[endgroup]
+2026-10-08T02:49:07.4018377Z ##[group]Runner Image
+2026-10-08T02:49:07.4019066Z Image: ubuntu-24.04
+2026-10-08T02:49:07.4019666Z Version: 20260927.320.1
+2026-10-08T02:49:07.4020943Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260927.320/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-08T02:49:07.4022560Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260927.320
+2026-10-08T02:49:07.4023720Z ##[endgroup]
+2026-10-08T02:49:07.4024782Z ##[group]GITHUB_TOKEN Permissions
+2026-10-08T02:49:07.4027211Z Contents: read
+2026-10-08T02:49:07.4027963Z Metadata: read
+2026-10-08T02:49:07.4028605Z ##[endgroup]
+2026-10-08T02:49:07.4030680Z Secret source: Actions
+2026-10-08T02:49:07.4032093Z Cache mode: write
+2026-10-08T02:49:07.4033119Z Prepare workflow directory
+2026-10-08T02:49:07.4369016Z Prepare all required actions
+2026-10-08T02:49:07.4416834Z Getting action download info
+2026-10-08T02:49:07.6789553Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-08T02:49:07.8801083Z Complete job name: disposable
+2026-10-08T02:49:07.9663620Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-10-08T02:49:07.9664824Z with:
+2026-10-08T02:49:07.9665291Z   persist-credentials: false
+2026-10-08T02:49:07.9665902Z   repository: Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:49:07.9669624Z   token: ***
+2026-10-08T02:49:07.9670067Z   ssh-strict: true
+2026-10-08T02:49:07.9670500Z   ssh-user: git
+2026-10-08T02:49:07.9670917Z   clean: true
+2026-10-08T02:49:07.9671356Z   sparse-checkout-cone-mode: true
+2026-10-08T02:49:07.9671873Z   fetch-depth: 1
+2026-10-08T02:49:07.9672304Z   fetch-tags: false
+2026-10-08T02:49:07.9672752Z   show-progress: true
+2026-10-08T02:49:07.9673198Z   lfs: false
+2026-10-08T02:49:07.9673864Z   submodules: false
+2026-10-08T02:49:07.9674426Z   set-safe-directory: true
+2026-10-08T02:49:07.9674993Z   allow-unsafe-pr-checkout: false
+2026-10-08T02:49:07.9676082Z ##[endgroup]
+2026-10-08T02:49:08.0666386Z Syncing repository: Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:49:08.0668438Z ##[group]Getting Git version info
+2026-10-08T02:49:08.0669305Z Working directory is '/home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator'
+2026-10-08T02:49:08.0670656Z [command]/usr/bin/git version
+2026-10-08T02:49:08.0766182Z git version 2.55.0
+2026-10-08T02:49:08.0790359Z ##[endgroup]
+2026-10-08T02:49:08.0808393Z Temporarily overriding HOME='/home/runner/work/_temp/cb7df7e3-2a7b-4304-9331-4c55a519cddf' before making global git config changes
+2026-10-08T02:49:08.0811394Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-08T02:49:08.0816138Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator
+2026-10-08T02:49:08.0874921Z Deleting the contents of '/home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator'
+2026-10-08T02:49:08.0880564Z ##[group]Initializing the repository
+2026-10-08T02:49:08.0885517Z [command]/usr/bin/git init /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator
+2026-10-08T02:49:08.1015737Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-08T02:49:08.1017668Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-08T02:49:08.1019994Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-08T02:49:08.1021353Z hint: call:
+2026-10-08T02:49:08.1022200Z hint:
+2026-10-08T02:49:08.1022797Z hint: 	git config --global init.defaultBranch <name>
+2026-10-08T02:49:08.1023800Z hint:
+2026-10-08T02:49:08.1024465Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-08T02:49:08.1025535Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-08T02:49:08.1026377Z hint:
+2026-10-08T02:49:08.1026844Z hint: 	git branch -m <name>
+2026-10-08T02:49:08.1027381Z hint:
+2026-10-08T02:49:08.1028096Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-08T02:49:08.1029480Z Initialized empty Git repository in /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator/.git/
+2026-10-08T02:49:08.1040968Z [command]/usr/bin/git remote add origin https://github.com/Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:49:08.1085072Z ##[endgroup]
+2026-10-08T02:49:08.1086029Z ##[group]Disabling automatic garbage collection
+2026-10-08T02:49:08.1088743Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-08T02:49:08.1120862Z ##[endgroup]
+2026-10-08T02:49:08.1121751Z ##[group]Setting up auth
+2026-10-08T02:49:08.1128868Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-08T02:49:08.1161823Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-08T02:49:08.1574915Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-08T02:49:08.1615221Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-08T02:49:08.1837132Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-08T02:49:08.1872728Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-08T02:49:08.2092430Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-08T02:49:08.2134138Z ##[endgroup]
+2026-10-08T02:49:08.2134989Z ##[group]Fetching the repository
+2026-10-08T02:49:08.2144282Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +27198b1af2f6df83630caf11f2bb81389891b23c:refs/remotes/origin/codex/lightsail-release-automation
+2026-10-08T02:49:08.8738883Z From https://github.com/Rakesh-Nesta/NestaPrime-Estimator
+2026-10-08T02:49:08.8741375Z  * [new ref]         27198b1af2f6df83630caf11f2bb81389891b23c -> origin/codex/lightsail-release-automation
+2026-10-08T02:49:08.8746329Z ##[endgroup]
+2026-10-08T02:49:08.8748234Z ##[group]Determining the checkout info
+2026-10-08T02:49:08.8750256Z ##[endgroup]
+2026-10-08T02:49:08.8755001Z [command]/usr/bin/git sparse-checkout disable
+2026-10-08T02:49:08.8812376Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-08T02:49:08.8847514Z ##[group]Checking out the ref
+2026-10-08T02:49:08.8863150Z [command]/usr/bin/git checkout --progress --force -B codex/lightsail-release-automation refs/remotes/origin/codex/lightsail-release-automation
+2026-10-08T02:49:08.9406520Z Switched to a new branch 'codex/lightsail-release-automation'
+2026-10-08T02:49:08.9411123Z branch 'codex/lightsail-release-automation' set up to track 'origin/codex/lightsail-release-automation'.
+2026-10-08T02:49:08.9418953Z ##[endgroup]
+2026-10-08T02:49:08.9465403Z [command]/usr/bin/git log -1 --format=%H
+2026-10-08T02:49:08.9491645Z 27198b1af2f6df83630caf11f2bb81389891b23c
+2026-10-08T02:49:08.9500926Z ##[group]Removing auth
+2026-10-08T02:49:08.9505269Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-08T02:49:08.9540128Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-08T02:49:08.9763174Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-08T02:49:08.9792520Z http.https://github.com/.extraheader
+2026-10-08T02:49:08.9802846Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-08T02:49:08.9839115Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-08T02:49:09.0058567Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-08T02:49:09.0091717Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-08T02:49:09.0309844Z ##[endgroup]
+2026-10-08T02:49:09.0557162Z ##[group]Run bash deploy/automation/disposable.sh
+2026-10-08T02:49:09.0558763Z bash deploy/automation/disposable.sh
+2026-10-08T02:49:09.0860773Z shell: /usr/bin/bash -e {0}
+2026-10-08T02:49:09.0862050Z ##[endgroup]
+2026-10-08T02:49:09.1824333Z ...
+2026-10-08T02:49:09.1826354Z ----------------------------------------------------------------------
+2026-10-08T02:49:09.1828467Z Ran 3 tests in 0.007s
+2026-10-08T02:49:09.1829160Z 
+2026-10-08T02:49:09.1829601Z OK
+2026-10-08T02:49:09.3412750Z Unable to find image 'postgres:16' locally
+2026-10-08T02:49:09.7335652Z 16: Pulling from library/postgres
+2026-10-08T02:49:09.8494609Z ecc510c1e359: Pulling fs layer
+2026-10-08T02:49:09.8495596Z 79faf13a8736: Pulling fs layer
+2026-10-08T02:49:09.8496382Z 6456bfbf35e7: Pulling fs layer
+2026-10-08T02:49:09.8496959Z b353db459ed1: Pulling fs layer
+2026-10-08T02:49:09.8497503Z 99f49de4fe2b: Pulling fs layer
+2026-10-08T02:49:09.8498026Z 83d1a2a3917c: Pulling fs layer
+2026-10-08T02:49:09.8498588Z 715ea0948cb1: Pulling fs layer
+2026-10-08T02:49:09.8499123Z 486e8305f56f: Pulling fs layer
+2026-10-08T02:49:09.8499612Z e7d675f11ded: Pulling fs layer
+2026-10-08T02:49:09.8500092Z c49864c27f35: Pulling fs layer
+2026-10-08T02:49:09.8500594Z 770ef8b308ea: Pulling fs layer
+2026-10-08T02:49:09.8501087Z 50c25daa0302: Pulling fs layer
+2026-10-08T02:49:09.8501766Z 8309db3ae5b6: Pulling fs layer
+2026-10-08T02:49:09.8502564Z 9731e27f2541: Pulling fs layer
+2026-10-08T02:49:09.8503013Z 83d1a2a3917c: Waiting
+2026-10-08T02:49:09.8503658Z 715ea0948cb1: Waiting
+2026-10-08T02:49:09.8504149Z 486e8305f56f: Waiting
+2026-10-08T02:49:09.8504641Z e7d675f11ded: Waiting
+2026-10-08T02:49:09.8505070Z c49864c27f35: Waiting
+2026-10-08T02:49:09.8505330Z 770ef8b308ea: Waiting
+2026-10-08T02:49:09.8505594Z 50c25daa0302: Waiting
+2026-10-08T02:49:09.8505903Z 8309db3ae5b6: Waiting
+2026-10-08T02:49:09.8506280Z 9731e27f2541: Waiting
+2026-10-08T02:49:09.8506550Z b353db459ed1: Waiting
+2026-10-08T02:49:09.8506809Z 99f49de4fe2b: Waiting
+2026-10-08T02:49:09.9323973Z 79faf13a8736: Verifying Checksum
+2026-10-08T02:49:09.9325635Z 79faf13a8736: Download complete
+2026-10-08T02:49:09.9658960Z 6456bfbf35e7: Verifying Checksum
+2026-10-08T02:49:09.9661765Z 6456bfbf35e7: Download complete
+2026-10-08T02:49:10.0157153Z b353db459ed1: Verifying Checksum
+2026-10-08T02:49:10.0163219Z b353db459ed1: Download complete
+2026-10-08T02:49:10.0271050Z ecc510c1e359: Verifying Checksum
+2026-10-08T02:49:10.0272084Z ecc510c1e359: Download complete
+2026-10-08T02:49:10.0869504Z 99f49de4fe2b: Verifying Checksum
+2026-10-08T02:49:10.0870268Z 99f49de4fe2b: Download complete
+2026-10-08T02:49:10.0987804Z 83d1a2a3917c: Verifying Checksum
+2026-10-08T02:49:10.0988653Z 83d1a2a3917c: Download complete
+2026-10-08T02:49:10.1082887Z 715ea0948cb1: Verifying Checksum
+2026-10-08T02:49:10.1083880Z 715ea0948cb1: Download complete
+2026-10-08T02:49:10.1586494Z 486e8305f56f: Verifying Checksum
+2026-10-08T02:49:10.1587590Z 486e8305f56f: Download complete
+2026-10-08T02:49:10.1917727Z c49864c27f35: Verifying Checksum
+2026-10-08T02:49:10.1918424Z c49864c27f35: Download complete
+2026-10-08T02:49:10.2445311Z 770ef8b308ea: Verifying Checksum
+2026-10-08T02:49:10.2446006Z 770ef8b308ea: Download complete
+2026-10-08T02:49:10.2634959Z 50c25daa0302: Verifying Checksum
+2026-10-08T02:49:10.2635568Z 50c25daa0302: Download complete
+2026-10-08T02:49:10.3233507Z 8309db3ae5b6: Verifying Checksum
+2026-10-08T02:49:10.3234226Z 8309db3ae5b6: Download complete
+2026-10-08T02:49:10.3354531Z 9731e27f2541: Verifying Checksum
+2026-10-08T02:49:10.3355191Z 9731e27f2541: Download complete
+2026-10-08T02:49:10.7520772Z e7d675f11ded: Verifying Checksum
+2026-10-08T02:49:10.7521402Z e7d675f11ded: Download complete
+2026-10-08T02:49:11.1786537Z ecc510c1e359: Pull complete
+2026-10-08T02:49:11.5099343Z 79faf13a8736: Pull complete
+2026-10-08T02:49:11.6810102Z 6456bfbf35e7: Pull complete
+2026-10-08T02:49:11.7211580Z b353db459ed1: Pull complete
+2026-10-08T02:49:12.0217358Z 99f49de4fe2b: Pull complete
+2026-10-08T02:49:12.0979718Z 83d1a2a3917c: Pull complete
+2026-10-08T02:49:12.1054483Z 715ea0948cb1: Pull complete
+2026-10-08T02:49:12.1160177Z 486e8305f56f: Pull complete
+2026-10-08T02:49:15.1015081Z e7d675f11ded: Pull complete
+2026-10-08T02:49:15.1164328Z c49864c27f35: Pull complete
+2026-10-08T02:49:15.1249241Z 770ef8b308ea: Pull complete
+2026-10-08T02:49:15.1330824Z 50c25daa0302: Pull complete
+2026-10-08T02:49:15.1436585Z 8309db3ae5b6: Pull complete
+2026-10-08T02:49:15.1515296Z 9731e27f2541: Pull complete
+2026-10-08T02:49:15.1551085Z Digest: sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+2026-10-08T02:49:15.1561175Z Status: Downloaded newer image for postgres:16
+2026-10-08T02:49:41.8090427Z curl: (56) Recv failure: Connection reset by peer
+2026-10-08T02:49:53.2529235Z Unable to find image 'nginx:alpine' locally
+2026-10-08T02:49:53.6583914Z alpine: Pulling from library/nginx
+2026-10-08T02:49:53.7827423Z e2de96513ba9: Already exists
+2026-10-08T02:49:53.7849393Z d9aae54b5831: Pulling fs layer
+2026-10-08T02:49:53.7849919Z 6c53d0b2a666: Pulling fs layer
+2026-10-08T02:49:53.7854563Z 745dfb2690dd: Pulling fs layer
+2026-10-08T02:49:53.7855050Z 9a9a644fdd6a: Pulling fs layer
+2026-10-08T02:49:53.7855808Z 64c8194480fe: Pulling fs layer
+2026-10-08T02:49:53.7856244Z e76228b47809: Pulling fs layer
+2026-10-08T02:49:53.7856943Z e72112c14215: Pulling fs layer
+2026-10-08T02:49:53.7857437Z 9a9a644fdd6a: Waiting
+2026-10-08T02:49:53.7858169Z e76228b47809: Waiting
+2026-10-08T02:49:53.7858555Z 64c8194480fe: Waiting
+2026-10-08T02:49:53.7859256Z e72112c14215: Waiting
+2026-10-08T02:49:53.8588232Z 745dfb2690dd: Download complete
+2026-10-08T02:49:53.8763824Z 6c53d0b2a666: Verifying Checksum
+2026-10-08T02:49:53.8764479Z 6c53d0b2a666: Download complete
+2026-10-08T02:49:53.8779897Z d9aae54b5831: Verifying Checksum
+2026-10-08T02:49:53.8780565Z d9aae54b5831: Download complete
+2026-10-08T02:49:53.9312191Z 9a9a644fdd6a: Verifying Checksum
+2026-10-08T02:49:53.9313066Z 9a9a644fdd6a: Download complete
+2026-10-08T02:49:53.9492079Z e76228b47809: Verifying Checksum
+2026-10-08T02:49:53.9493252Z e76228b47809: Download complete
+2026-10-08T02:49:53.9564649Z 64c8194480fe: Verifying Checksum
+2026-10-08T02:49:53.9565109Z 64c8194480fe: Download complete
+2026-10-08T02:49:54.0825826Z e72112c14215: Verifying Checksum
+2026-10-08T02:49:54.0826209Z e72112c14215: Download complete
+2026-10-08T02:49:54.0834724Z d9aae54b5831: Pull complete
+2026-10-08T02:49:54.0918886Z 6c53d0b2a666: Pull complete
+2026-10-08T02:49:54.0991626Z 745dfb2690dd: Pull complete
+2026-10-08T02:49:54.1061825Z 9a9a644fdd6a: Pull complete
+2026-10-08T02:49:54.1132106Z 64c8194480fe: Pull complete
+2026-10-08T02:49:54.1216299Z e76228b47809: Pull complete
+2026-10-08T02:49:54.6023003Z e72112c14215: Pull complete
+2026-10-08T02:49:54.6058814Z Digest: sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+2026-10-08T02:49:54.6069722Z Status: Downloaded newer image for nginx:alpine
+2026-10-08T02:49:54.7723691Z curl: (56) Recv failure: Connection reset by peer
+2026-10-08T02:49:55.1935194Z ##[error]Process completed with exit code 56.
+2026-10-08T02:49:55.2144694Z Post job cleanup.
+2026-10-08T02:49:55.3043363Z [command]/usr/bin/git version
+2026-10-08T02:49:55.3089080Z git version 2.55.0
+2026-10-08T02:49:55.3134545Z Temporarily overriding HOME='/home/runner/work/_temp/f2cb7a16-b7fb-49f8-80d0-052ee8ed0f93' before making global git config changes
+2026-10-08T02:49:55.3135989Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-08T02:49:55.3141187Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/NestaPrime-Estimator/NestaPrime-Estimator
+2026-10-08T02:49:55.3181991Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-08T02:49:55.3219327Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-08T02:49:55.3483956Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-08T02:49:55.3521799Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-08T02:49:55.3785114Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-08T02:49:55.3824867Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-08T02:49:55.4345499Z Cleaning up orphan processes
+2026-10-08T02:49:55.4748591Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

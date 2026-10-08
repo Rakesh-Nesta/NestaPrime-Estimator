@@ -10,3 +10,8 @@ frontend/dist
 frontend/.vite
 docs
 *.md
+host-fixtures*/
+host-*-results.json
+release/
+transfer/
+frontend-export/
