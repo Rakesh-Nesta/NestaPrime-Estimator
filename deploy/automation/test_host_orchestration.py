@@ -5,6 +5,7 @@ injects only that unavailable signing boundary and is reported separately.
 """
 import contextlib
 import copy
+import errno
 import fcntl
 import io
 import json
@@ -186,6 +187,91 @@ class HostOrchestration(unittest.TestCase):
         self.assertEqual(self.link.resolve(), self.root / "bootstrap")
         current = run(self.compose + ["ps", "-q", "backend"]).decode().strip()
         self.assertEqual(run(["docker", "inspect", "-f", "{{.Image}}", current]).decode().strip(), self.previous_id)
+
+    def deployment_snapshot(self):
+        """Observable deployment state, before or after a successful first use."""
+        containers = run(self.compose + ["ps", "-q"]).decode().split()
+        return {
+            "containers": sorted((item["Id"], item["Image"], item["State"]["StartedAt"],
+                json.dumps(item["Mounts"], sort_keys=True))
+                for item in json.loads(run(["docker", "inspect", *containers]))),
+            "override": Path(self.cfg["active_override"]).read_bytes(),
+            "frontend": str(self.link.resolve()),
+            "files": {str(path.relative_to(self.link.resolve())): digest(path)
+                for path in self.link.resolve().rglob("*") if path.is_file()},
+            "database": self.sql("SELECT version_num FROM alembic_version ORDER BY version_num; "
+                "SELECT id, deployed_at FROM p5_migration_marker ORDER BY id; SELECT id FROM release_test_probe ORDER BY id"),
+        }
+
+    def assert_provenance_rejection(self, record, before, *, verified):
+        self.unchanged(record)
+        self.assertEqual(record["step"], "provenance.verify")
+        results = [event["result"] for event in record["events"] if event["step"] == "provenance.verify"]
+        self.assertIn("completed" if verified else "failed", results)
+        if not verified:
+            self.assertNotIn("completed", results)
+        self.assertFalse(any(event["step"] in ("bundle.integrity", "eligibility.after-approval", "backend.load", "backup.dump")
+            for event in record["events"]))
+        self.assertEqual(self.policy.checks, 0)
+        self.assertEqual(self.deployment_snapshot(), before)
+
+    def test_signed_bundle_wrong_slot_real_provenance(self):
+        if not self.real_crypto:
+            self.skipTest("Authenticity negative control requires real CI attestation")
+        before = self.deployment_snapshot()
+        original = self.incoming
+        self.slot = self.meta["run_id"] + "-" + str(int(self.meta["run_attempt"]) + 1)
+        self.incoming = original.parent / self.slot
+        shutil.copytree(original, self.incoming)
+        _, record = self.release("provenance-run-or-digest")
+        # Real signature verification succeeds; the signed invocation/slot guard rejects.
+        self.assert_provenance_rejection(record, before, verified=True)
+
+    def test_duplicate_slot_after_success_real_provenance(self):
+        if not self.real_crypto:
+            self.skipTest("Authenticity negative control requires real CI attestation")
+        controller, record = self.release()
+        self.assertTrue(record["mutation_started"] and record["frontend_switched"])
+        self.assertEqual(self.link.resolve(), controller.root / "dist")
+        self.assertEqual(self.policy.checks, 2)
+        before = self.deployment_snapshot()
+        original_record = (controller.root / "record.json").read_bytes()
+        retry = Release(self.cfg, self.slot, github=self.policy)
+        # The exclusive directory reservation rejects before any event/command,
+        # preserving the successful record instead of overwriting it on reuse.
+        with self.assertRaises(FileExistsError) as rejected:
+            retry.run()
+        self.assertEqual(rejected.exception.errno, errno.EEXIST)
+        self.assertEqual(Path(rejected.exception.filename), controller.root)
+        self.assertEqual(retry.record["step"], "initialization")
+        self.assertEqual(retry.record["events"], [])
+        self.assertFalse(retry.record["mutation_started"])
+        self.assertEqual(self.policy.checks, 2)
+        self.assertEqual((controller.root / "record.json").read_bytes(), original_record)
+        self.assertEqual(self.deployment_snapshot(), before)
+        self.reports.append({"case": self._testMethodName, "phase": "reuse", "guard": "exclusive-slot-reservation",
+            "exception": "FileExistsError", "errno": errno.EEXIST, "events": [], "mutation_started": False,
+            "prior_success_record_preserved": True, "deployment_snapshot_unchanged": True})
+
+    def test_valid_attestation_wrong_tarball_real_provenance(self):
+        if not self.real_crypto:
+            self.skipTest("Authenticity negative control requires real CI attestation")
+        before = self.deployment_snapshot()
+        proof = (self.incoming / "attestation.json").read_bytes()
+        # All generated fixture tarballs share one signed subject set. Append a
+        # legal tar end-padding block to create a readable, unsigned outer archive
+        # with identical inner contents, rather than selecting another signed subject.
+        with (self.incoming / "release.tar").open("ab") as archive:
+            archive.write(bytes(512))
+        self.assertNotIn(digest(self.incoming / "release.tar"), {digest(path) for path in self.fixtures.glob("*.tar")})
+        payload = self.root / "wrong-tar-readable"
+        extract_frontend(self.incoming / "release.tar", payload, FILES | {"SHA256SUMS"})
+        original = self.root / "original-readable"
+        extract_frontend(self.fixtures / "success.tar", original, FILES | {"SHA256SUMS"})
+        self.assertEqual({p.name: digest(p) for p in payload.iterdir()}, {p.name: digest(p) for p in original.iterdir()})
+        self.assertEqual((self.incoming / "attestation.json").read_bytes(), proof)
+        _, record = self.release("authenticity")
+        self.assert_provenance_rejection(record, before, verified=False)
 
     def test_success_real_orchestration_and_restore(self):
         def check_probe(step, args):
