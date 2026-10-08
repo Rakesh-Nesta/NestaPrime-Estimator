@@ -12,7 +12,8 @@ printf '%s\n' "$sha" > release/commit
 # Inventory is taken FROM THE IMAGE; audit tools never alter the release image.
 docker run --rm --entrypoint python "$id" -m pip list --format=freeze > release/backend-packages.txt
 python -m pip install 'pip-audit==2.9.0' > audit-install.log 2>&1
-pip-audit --no-deps --disable-pip -r release/backend-packages.txt --ignore-vuln PYSEC-2026-1325 -f json -o release/backend-audit.json > release/backend-audit.log 2>&1
+# Audit the complete installed inventory without the retired ecdsa exception.
+pip-audit --no-deps --disable-pip -r release/backend-packages.txt -f json -o release/backend-audit.json > release/backend-audit.log 2>&1
 docker save "$image" | gzip > release/backend.tar.gz
 docker build --platform linux/amd64 -f source/frontend/Dockerfile --target export --build-arg VITE_API_URL=/api --output type=local,dest=frontend-export source/frontend > build-frontend.log 2>&1
 test -s frontend-export/dist/index.html

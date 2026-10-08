@@ -31,7 +31,7 @@ class HostGuards(unittest.TestCase):
             commands = {
                 "docker": '#!/bin/sh\ncase "$1" in build) exit 0;; image) printf "sha256:fixture\\n";; run) printf "fixture-package==1\\n";; *) exit 99;; esac\n',
                 "python": "#!/bin/sh\nexit 0\n",
-                "pip-audit": '#!/bin/sh\nprintf \'{"fixture":"rejected"}\\n\' > release/backend-audit.json\nprintf "fixture audit failure\\n"\nexit 1\n',
+                "pip-audit": '#!/bin/sh\nprintf "%s\\n" "$@" > audit-args.txt\nprintf \'{"fixture":"rejected"}\\n\' > release/backend-audit.json\nprintf "fixture audit failure\\n"\nexit 1\n',
             }
             for name, content in commands.items():
                 path = binaries / name
@@ -40,6 +40,9 @@ class HostGuards(unittest.TestCase):
             env = dict(os.environ, PATH=str(binaries) + ":" + os.environ["PATH"], GITHUB_RUN_ID="1", GITHUB_RUN_ATTEMPT="1")
             result = subprocess.run(["bash", str(script), "a" * 40], cwd=root, env=env, capture_output=True, timeout=10)
             self.assertEqual(result.returncode, 1)
+            audit_args = (root / "audit-args.txt").read_text().splitlines()
+            self.assertIn("release/backend-packages.txt", audit_args)
+            self.assertFalse(any(arg.startswith("--ignore-vuln") or arg == "PYSEC-2026-1325" for arg in audit_args))
             self.assertEqual((root / "release/backend-packages.txt").read_text(), "fixture-package==1\n")
             self.assertEqual(json.loads((root / "release/backend-audit.json").read_text()), {"fixture": "rejected"})
             self.assertIn("fixture audit failure", (root / "release/backend-audit.log").read_text())
