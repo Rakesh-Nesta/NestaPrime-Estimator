@@ -1,0 +1,12 @@
+./usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 503: 'Service Unavailable'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.......
+----------------------------------------------------------------------
+Ran 8 tests in 0.848s
+
+OK
+/var/run/postgresql:5432 - accepting connections
+/var/run/postgresql:5432 - accepting connections
+READY: health, 9 attempt(s), verified response
+READY: frontend, 1 attempt(s), verified response
+PASS: exact image reload, migration startup, health, whole DB restore, original P5 marker, built frontend served by nginx.
