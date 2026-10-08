@@ -1,0 +1,17 @@
+name: Release automation safety
+on:
+  pull_request:
+    paths: ['deploy/automation/**', '.github/workflows/lightsail-release.yml', '.github/workflows/release-safety.yml']
+  push:
+    paths: ['deploy/automation/**', '.github/workflows/lightsail-release.yml', '.github/workflows/release-safety.yml']
+permissions:
+  contents: read
+jobs:
+  disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: bash deploy/automation/disposable.sh

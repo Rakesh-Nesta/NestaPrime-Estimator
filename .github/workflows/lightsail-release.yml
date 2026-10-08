@@ -1,0 +1,105 @@
+name: Prepare and deploy Lightsail release
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full eligible main commit SHA
+        required: true
+        type: string
+      deploy:
+        description: Request production approval (first deployment needs separate authorization)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: lightsail-production-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify eligible commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          python deploy/automation/eligibility.py > release/eligibility.json
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+      - name: Require existing protected environment before requesting approval
+        if: inputs.deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python deploy/automation/environment_gate.py
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.commit }}
+          path: source
+          persist-credentials: false
+      - name: Build and audit exact release artifacts
+        env:
+          RELEASE_SHA: ${{ inputs.commit }}
+        run: bash deploy/automation/prepare.sh "$RELEASE_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/
+          retention-days: 30
+          if-no-files-found: error
+  deploy:
+    needs: prepare
+    if: inputs.deploy && github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Recheck CI after approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.commit }}
+        run: |
+          python deploy/automation/environment_gate.py
+          python deploy/automation/eligibility.py > /dev/null
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release
+      - name: Transfer verified artifacts and deploy
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+        run: |
+          set -euo pipefail
+          test "$ENABLED" = explicitly-authorized
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          test -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          trap 'rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts' EXIT
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          opts=(-i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15)
+          (cd release && sha256sum -c SHA256SUMS)
+          slot="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          # Validated user and numeric run identifiers deliberately expand locally.
+          # shellcheck disable=SC2029
+          ssh "${opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -m 700 /home/$DEPLOY_USER/incoming/$slot"
+          scp "${opts[@]}" release/* "$DEPLOY_USER@$DEPLOY_HOST:incoming/$slot/"
+          # shellcheck disable=SC2029
+          ssh "${opts[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "sudo /usr/local/sbin/nestaprime-release $slot"
