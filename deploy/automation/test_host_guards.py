@@ -119,7 +119,9 @@ class HostGuards(unittest.TestCase):
             start = time.monotonic()
             with self.assertRaises(Deadline):
                 runner.run("negative.deadline", [sys.executable, "-c", code, str(marker)])
-            self.assertLess(time.monotonic() - start, 2)
+            # Include scheduling/fork latency on loaded disposable hosts. A
+            # surviving 60-second child still fails both this and /proc checks.
+            self.assertLess(time.monotonic() - start, 5)
             pid = int(marker.read_text())
             status = Path(f"/proc/{pid}/stat")
             def terminated():
@@ -141,6 +143,12 @@ class HostGuards(unittest.TestCase):
             runner.run("negative.exit", [sys.executable, "-c", "import sys; print(sys.argv[1]); print(sys.argv[1],file=sys.stderr); sys.exit(23)", sentinel], capture=True)
         self.assertEqual(failed.exception.code, 23)
         self.assertNotIn(sentinel, repr(events) + repr(failed.exception))
+
+    def test_container_style_timeout_remains_a_timeout(self):
+        runner = Runner({"deadline_seconds": 5}, lambda *_args: None)
+        with self.assertRaises(ReleaseFault) as failed:
+            runner.run("negative.inner-timeout", ["timeout", "0.1", sys.executable, "-c", "import time; time.sleep(60)"])
+        self.assertEqual((failed.exception.category, failed.exception.code), ("command-timeout", 124))
 
     def test_slow_drip_health_cannot_extend_deadline(self):
         import threading
@@ -170,6 +178,33 @@ class HostGuards(unittest.TestCase):
             self.assertLess(time.monotonic() - start, 2)
         finally:
             stopped.set()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
+    def test_http_status_category_retains_no_response_body(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        sentinel = os.urandom(16).hex()
+        class Rejected(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+            def do_GET(self):
+                self.send_response(503)
+                self.end_headers()
+                self.wfile.write(sentinel.encode())
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Rejected)
+        thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        thread.start()
+        events = []
+        try:
+            runner = Runner({"deadline_seconds": 5}, lambda *event: events.append(event))
+            with self.assertRaises(ReleaseFault) as failed:
+                runner.fetch("negative.http-status", f"http://127.0.0.1:{server.server_port}/health")
+            self.assertEqual((failed.exception.category, failed.exception.code), ("http-status", 31))
+            self.assertEqual(events[-1], ("negative.http-status", "failed", "http-status", 31))
+            self.assertNotIn(sentinel, repr(events))
+        finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=1)

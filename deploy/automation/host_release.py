@@ -140,6 +140,11 @@ class Runner:
             except ReleaseFault as fault:
                 if process is not None and process.poll() is not None:
                     fault.code = process.returncode
+                    if fault.code == 124:
+                        fault.category = "command-timeout"
+                    if fault.category == category and category == "http-response":
+                        fault.category = {31: "http-status", 32: "tls-verification", 33: "network-connect", 34: "http-timeout"}.get(process.returncode, category)
+                self.event(step, "failed", fault.category, fault.code)
                 raise
             finally:
                 if process is not None:
@@ -153,7 +158,16 @@ class Runner:
     def fetch(self, step, url):
         # Run network I/O in a bounded process: slow-drip responses cannot extend
         # socket timeouts indefinitely or swallow the controller deadline.
-        code = "import sys,urllib.request; r=urllib.request.urlopen(sys.argv[1],timeout=2); assert r.status==200; sys.stdout.buffer.write(r.read(4194305))"
+        code = """import sys,ssl,urllib.request,urllib.error
+try:
+ with urllib.request.urlopen(sys.argv[1],timeout=2) as r:
+  if r.status!=200: sys.exit(31)
+  sys.stdout.buffer.write(r.read(4194305))
+except urllib.error.HTTPError: sys.exit(31)
+except urllib.error.URLError as e:
+ sys.exit(32 if isinstance(e.reason,ssl.SSLCertVerificationError) else 34 if isinstance(e.reason,TimeoutError) else 33)
+except TimeoutError: sys.exit(34)
+"""
         return self.run(step, [sys.executable, "-I", "-c", code, url], timeout=5, capture=True, category="http-response")
 
     def cleanup(self, args):
@@ -224,7 +238,7 @@ MIGRATE = "from alembic import command; from alembic.config import Config; comma
 DATABASE_READY = """import json,sys
 from sqlalchemy import create_engine,text
 from app.config import settings
-with create_engine(settings.database_url).connect() as c:
+with create_engine(settings.database_url,connect_args={'connect_timeout':2,'options':'-c statement_timeout=2000'}).connect() as c:
  assert c.execute(text('SELECT 1')).scalar()==1
  assert sorted(c.execute(text('SELECT version_num FROM alembic_version')).scalars())==json.loads(sys.argv[1])
 """
@@ -354,7 +368,9 @@ class Release:
                 return
             except ReleaseFault as fault:
                 # A global Deadline/Interrupted signal is deliberately not caught.
-                if fault.category not in {"command-exit", "http-response", "readiness"}:
+                self.record["last_probe_failure"] = {"step": self.record["step"], "category": fault.category, "exit_code": fault.code}
+                self.save()
+                if fault.category not in {"command-exit", "http-response", "http-status", "network-connect", "http-timeout", "readiness"}:
                     raise
             time.sleep(min(1, max(0, end - time.monotonic())))
         self.runner.remaining()
@@ -447,7 +463,7 @@ class Release:
         require(self.runner.run("backend.running-image", [self.docker, "inspect", "-f", "{{.Image}}", backend], capture=True).decode().strip() == image_id, "backend-identity")
         self.wait("backend.ready", lambda: self.health("backend.http", cfg["backend_url"]), cfg.get("health_seconds", 180))
         self.wait("database.ready", lambda: self.exec("database.backend-query", backend, "python", "-c", DATABASE_READY,
-            json.dumps(heads), timeout=5), cfg.get("health_seconds", 180))
+            json.dumps(heads), timeout=10), cfg.get("health_seconds", 180))
         self.event("backend.persist-image", "started")
         active = Path(cfg["active_override"] + ".next")
         shutil.copyfile(override, active)

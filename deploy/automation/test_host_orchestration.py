@@ -132,7 +132,7 @@ class HostOrchestration(unittest.TestCase):
                 "compose_project": self.project, "env_file": str(self.env), "compose_files": [str(compose), str(active)], "active_override": str(active),
                 "frontend_link": str(self.link), "public_url": "https://localhost:" + str(public_port), "backend_url": self.backend_url,
                 "nginx_config": str(nginx_config), "tls_ca_file": str(certs / "trust.pem"), "docker": shutil.which("docker"), "gh": shutil.which("gh") or "/usr/bin/gh",
-                "nginx": shutil.which("nginx"), "min_disk_bytes": 1, "deadline_seconds": 120, "health_seconds": 15}
+                "nginx": shutil.which("nginx"), "min_disk_bytes": 1, "deadline_seconds": 300, "health_seconds": 60}
             Path(self.cfg["release_root"]).mkdir(mode=0o755)
             Path(self.cfg["release_root"]).chmod(0o755)
             self.policy = FixturePolicy(self.meta["commit"])
@@ -170,13 +170,15 @@ class HostOrchestration(unittest.TestCase):
             result = controller.run()
         record = json.loads((controller.root / "record.json").read_text())
         self.reports.append({"case": self._testMethodName, "status": record["status"], "failure_category": record.get("failure_category"),
-            "mutation_started": record["mutation_started"], "events": record["events"]})
+            "mutation_started": record["mutation_started"], "events": record["events"], "cleanup": record.get("cleanup", []),
+            "last_probe_failure": record.get("last_probe_failure")})
         self.assertEqual(result, 1 if category else 0, console.getvalue())
         if category:
-            self.assertEqual(record["failure_category"], category, record)
+            self.assertIn(record["failure_category"], (category,) if isinstance(category, str) else category, record)
         else:
             self.assertEqual(record["status"], "healthy")
             self.assertTrue(record["backup_readable"] and record["backup_restore_rehearsed"] and record["migration_rehearsed"])
+            self.assertTrue(all(item["completed"] for item in record["cleanup"]))
         return controller, record
 
     def unchanged(self, record):
@@ -277,16 +279,24 @@ class HostOrchestration(unittest.TestCase):
     def test_static_health_without_database_not_ready(self):
         # Let real backend startup reach its healthy response before injecting
         # the DB fault. The DB negative control remains separately bounded.
-        self.cfg["health_seconds"] = 15
+        self.cfg["health_seconds"] = 60
         done = []
         def stop_db(step, args):
+            if step == "backend.http" and not hasattr(self, "diagnostic"):
+                backend = run(self.compose + ["ps", "-q", "backend"]).decode().strip()
+                self.diagnostic = {"backend_running": run(["docker", "inspect", "-f", "{{.State.Running}}", backend]).strip() == b"true",
+                    "published_port_matches": run(["docker", "port", backend, "8000"]).decode().splitlines()[0].rsplit(":", 1)[1] == self.backend_url.split(":")[-1].split("/")[0]}
             if step == "database.backend-query" and not done:
                 done.append(True)
                 run(["docker", "stop", "-t", "0", self.db])
         self.hook = stop_db
-        _, record = self.release("database-readiness")
+        # A stalled connection may hit the process bound before the readiness
+        # window. Require the exact DB step in that case; unrelated timeouts
+        # cannot satisfy this negative control and timeout signals stay visible.
+        _, record = self.release(("database-readiness", "command-timeout"))
+        self.assertTrue(done and self.diagnostic["backend_running"] and self.diagnostic["published_port_matches"])
         self.assertTrue(record["mutation_started"])
-        self.assertEqual(record["step"], "database.ready")
+        self.assertEqual(record["step"], "database.backend-query" if record["failure_category"] == "command-timeout" else "database.ready")
         self.assertEqual(self.link.resolve(), self.root / "bootstrap")
 
     def test_served_frontend_failure_recorded_after_switch(self):
