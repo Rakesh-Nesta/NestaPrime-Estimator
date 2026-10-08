@@ -9,14 +9,13 @@ id=$(docker image inspect --format '{{.Id}}' "$image")
 # Inventory is taken FROM THE IMAGE; audit tools never alter the release image.
 docker run --rm --entrypoint python "$id" -m pip list --format=freeze > release/backend-packages.txt
 python -m pip install 'pip-audit==2.9.0' > audit-install.log 2>&1
-pip-audit --no-deps --disable-pip -r release/backend-packages.txt --ignore-vuln PYSEC-2026-1325 -f json -o release/backend-audit.json
+pip-audit --no-deps --disable-pip -r release/backend-packages.txt --ignore-vuln PYSEC-2026-1325 -f json -o release/backend-audit.json > release/backend-audit.log 2>&1
 docker save "$image" | gzip > release/backend.tar.gz
 docker build --platform linux/amd64 -f source/frontend/Dockerfile --target export --build-arg VITE_API_URL=/api --output type=local,dest=frontend-export source/frontend > build-frontend.log 2>&1
 test -s frontend-export/dist/index.html
 printf '%s\n' "$sha" > frontend-export/dist/release.txt
-(cd frontend-export/dist && find . -type f -print0 | sort -z | xargs -0 sha256sum) > release/frontend-files.sha256
 tar -C frontend-export/dist -czf release/frontend.tar.gz .
 printf '%s\n' "$image" > release/image-tag
 printf '%s\n' "$id" > release/image-id
 printf '%s\n' "$sha" > release/commit
-(cd release && sha256sum backend.tar.gz frontend.tar.gz frontend-files.sha256 backend-packages.txt backend-audit.json image-tag image-id commit eligibility.json > SHA256SUMS)
+python deploy/automation/package_release.py

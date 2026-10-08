@@ -1,0 +1,42 @@
+test_command_error_does_not_expose_output (test_host_guards.HostGuards.test_command_error_does_not_expose_output) ... ok
+test_environment_and_independent_approval (test_host_guards.HostGuards.test_environment_and_independent_approval) ... ok
+test_failed_actual_image_audit_retains_evidence_and_stops_packaging (test_host_guards.HostGuards.test_failed_actual_image_audit_retains_evidence_and_stops_packaging) ... ok
+test_frontend_exact_set_and_hash (test_host_guards.HostGuards.test_frontend_exact_set_and_hash) ... ok
+test_slow_drip_health_cannot_extend_deadline (test_host_guards.HostGuards.test_slow_drip_health_cannot_extend_deadline) ... ok
+test_stale_tip_rejected_before_checks (test_host_guards.HostGuards.test_stale_tip_rejected_before_checks) ... ok
+test_subprocess_tree_deadline (test_host_guards.HostGuards.test_subprocess_tree_deadline) ... ok
+test_backend_replacement_failure (test_host_orchestration.HostOrchestration.test_backend_replacement_failure) ... skipped 'real helper fixtures are generated in disposable CI'
+test_backup_dump_failure (test_host_orchestration.HostOrchestration.test_backup_dump_failure) ... skipped 'real helper fixtures are generated in disposable CI'
+test_candidate_migration_failure (test_host_orchestration.HostOrchestration.test_candidate_migration_failure) ... skipped 'real helper fixtures are generated in disposable CI'
+test_deadline_during_real_backup (test_host_orchestration.HostOrchestration.test_deadline_during_real_backup) ... skipped 'real helper fixtures are generated in disposable CI'
+test_disabled_before_any_commands (test_host_orchestration.HostOrchestration.test_disabled_before_any_commands) ... skipped 'real helper fixtures are generated in disposable CI'
+test_lock_contended (test_host_orchestration.HostOrchestration.test_lock_contended) ... skipped 'real helper fixtures are generated in disposable CI'
+test_migration_unknown_revision (test_host_orchestration.HostOrchestration.test_migration_unknown_revision) ... skipped 'real helper fixtures are generated in disposable CI'
+test_missing_approval (test_host_orchestration.HostOrchestration.test_missing_approval) ... skipped 'real helper fixtures are generated in disposable CI'
+test_readable_dump_cannot_restore (test_host_orchestration.HostOrchestration.test_readable_dump_cannot_restore) ... skipped 'real helper fixtures are generated in disposable CI'
+test_served_frontend_failure_recorded_after_switch (test_host_orchestration.HostOrchestration.test_served_frontend_failure_recorded_after_switch) ... skipped 'real helper fixtures are generated in disposable CI'
+test_signed_altered_file_rejected (test_host_orchestration.HostOrchestration.test_signed_altered_file_rejected) ... skipped 'real helper fixtures are generated in disposable CI'
+test_signed_extra_file_rejected (test_host_orchestration.HostOrchestration.test_signed_extra_file_rejected) ... skipped 'real helper fixtures are generated in disposable CI'
+test_signed_missing_file_rejected (test_host_orchestration.HostOrchestration.test_signed_missing_file_rejected) ... skipped 'real helper fixtures are generated in disposable CI'
+test_stale_after_backup_before_mutation (test_host_orchestration.HostOrchestration.test_stale_after_backup_before_mutation) ... skipped 'real helper fixtures are generated in disposable CI'
+test_static_health_without_database_not_ready (test_host_orchestration.HostOrchestration.test_static_health_without_database_not_ready) ... skipped 'real helper fixtures are generated in disposable CI'
+test_success_real_orchestration_and_restore (test_host_orchestration.HostOrchestration.test_success_real_orchestration_and_restore) ... skipped 'real helper fixtures are generated in disposable CI'
+test_tamper_even_with_recomputed_checksums (test_host_orchestration.HostOrchestration.test_tamper_even_with_recomputed_checksums) ... skipped 'real helper fixtures are generated in disposable CI'
+test_termination_during_health_is_not_retried (test_host_orchestration.HostOrchestration.test_termination_during_health_is_not_retried) ... skipped 'real helper fixtures are generated in disposable CI'
+test_wrong_commit_real_provenance (test_host_orchestration.HostOrchestration.test_wrong_commit_real_provenance) ... skipped 'real helper fixtures are generated in disposable CI'
+test_wrong_repository_real_provenance (test_host_orchestration.HostOrchestration.test_wrong_repository_real_provenance) ... skipped 'real helper fixtures are generated in disposable CI'
+test_wrong_workflow_real_provenance (test_host_orchestration.HostOrchestration.test_wrong_workflow_real_provenance) ... skipped 'real helper fixtures are generated in disposable CI'
+test_deadline_timeout_preserves_last_rejected_response (test_readiness.ReadinessTests.test_deadline_timeout_preserves_last_rejected_response) ... ok
+test_health_must_report_ok (test_readiness.ReadinessTests.test_health_must_report_ok) ... ok
+test_reset_and_http_error_report_deadline (test_readiness.ReadinessTests.test_reset_and_http_error_report_deadline) ... ok
+test_reset_then_ready_requires_exact_frontend (test_readiness.ReadinessTests.test_reset_then_ready_requires_exact_frontend) ... ok
+test_stalled_service_is_bounded (test_readiness.ReadinessTests.test_stalled_service_is_bounded) ... ok
+test_wrong_frontend_never_passes (test_readiness.ReadinessTests.test_wrong_frontend_never_passes) ... ok
+test_archive_traversal_and_link (test_release.SafetyTests.test_archive_traversal_and_link) ... ok
+test_bundle_tamper_and_missing_hash (test_release.SafetyTests.test_bundle_tamper_and_missing_hash) ... ok
+test_eligibility_failures (test_release.SafetyTests.test_eligibility_failures) ... ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 1.557s
+
+OK (skipped=21)

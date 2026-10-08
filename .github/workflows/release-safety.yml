@@ -10,8 +10,38 @@ jobs:
   disposable:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
       - run: bash deploy/automation/disposable.sh
+      - name: Build disposable host subjects
+        run: python deploy/automation/host_fixtures.py host-fixtures
+      - name: Sign disposable test subjects (not production workflow identity)
+        id: attest
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661
+        with:
+          subject-path: host-fixtures/*.tar
+      - name: Exercise real host helper against signed disposable subjects
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" host-fixtures/attestation.json
+          docker run --rm --add-host host.docker.internal:host-gateway -v /var/run/docker.sock:/var/run/docker.sock -v "$GITHUB_WORKSPACE:/work" -w /work -e TEST_DOCKER_HOST=host.docker.internal -e HOST_FIXTURE_DIR=/work/host-fixtures -e HOST_REAL_PROVENANCE=1 -e HOST_TEST_REPORT=/work/host-results.json docker:cli sh -c 'apk add --no-cache python3 nginx openssl github-cli >/dev/null && python3 -m unittest discover -s deploy/automation -p test_host_orchestration.py -v'
+      - name: Preserve sanitized orchestration results on success or failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: host-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: host-results.json
+          if-no-files-found: warn

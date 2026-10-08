@@ -24,13 +24,18 @@ def api(path):
         return json.load(response)
 
 
-if __name__ == "__main__":
-    sha = os.environ["RELEASE_SHA"]
+def eligible(sha, get=api):
     assert re.fullmatch(r"[0-9a-f]{40}", sha)
-    # Membership is also checked locally with merge-base after fetching main.
-    runs = api("/actions/workflows/backend-ci.yml/runs?event=push&branch=main&head_sha=" + sha)["workflow_runs"]
+    assert get("/git/ref/heads/main")["object"]["sha"] == sha, "Release must be the current main tip"
+    runs = get("/actions/workflows/backend-ci.yml/runs?event=push&branch=main&head_sha=" + sha)["workflow_runs"]
     assert runs, "No main push CI run for commit"
     run = max(runs, key=lambda r: r["id"])
-    jobs = api(f'/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')["jobs"]
+    jobs = get(f'/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')["jobs"]
     validate(run, jobs, sha, os.environ["GITHUB_REPOSITORY"])
-    print(json.dumps({"commit": sha, "ci_run": run["id"], "ci_attempt": run["run_attempt"], "required_jobs": sorted(REQUIRED)}))
+    return {"commit": sha, "ci_run": run["id"], "ci_attempt": run["run_attempt"], "required_jobs": sorted(REQUIRED)}
+
+
+if __name__ == "__main__":
+    sha = os.environ["RELEASE_SHA"]
+    assert sha == os.environ["GITHUB_SHA"], "Dispatch workflow must execute at the selected main tip"
+    print(json.dumps(eligible(sha)))

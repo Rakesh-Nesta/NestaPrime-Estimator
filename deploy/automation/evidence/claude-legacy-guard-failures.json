@@ -1,0 +1,6 @@
+{
+  "reviewed_head": "cff58ccf4a52ccc6a4ddf9e7790ce94efd0b4ef7",
+  "scope": "legacy verifier/extraction utilities only; legacy main was never invoked",
+  "recomputed_self_checksums_accepted": true,
+  "unlisted_frontend_file_accepted": true
+}

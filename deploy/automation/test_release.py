@@ -15,7 +15,7 @@ from eligibility import validate
 # fcntl exists on the Linux target; allow pure verifier testing on Windows.
 if sys.platform == "win32":
     sys.modules["fcntl"] = type("Fcntl", (), {})()
-from host_release import FILES, extract_frontend, verify_bundle
+from host_release import FILES, ReleaseFault, extract_frontend, verify_bundle
 
 
 class SafetyTests(unittest.TestCase):
@@ -50,10 +50,10 @@ class SafetyTests(unittest.TestCase):
             (root / "SHA256SUMS").write_text(sums)
             verify_bundle(root)
             (root / "backend.tar.gz").write_text("tampered")
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ReleaseFault):
                 verify_bundle(root)
             (root / "SHA256SUMS").write_text(sums.splitlines()[0] + "\n")
-            with self.assertRaises(AssertionError):
+            with self.assertRaises(ReleaseFault):
                 verify_bundle(root)
 
     def test_archive_traversal_and_link(self):
@@ -65,7 +65,7 @@ class SafetyTests(unittest.TestCase):
                     member.type = kind
                     member.linkname = "/etc/passwd"
                     out.addfile(member)
-                with self.assertRaises(AssertionError):
+                with self.assertRaises(ReleaseFault):
                     extract_frontend(archive, Path(temp) / "dist")
 
 

@@ -1,0 +1,17 @@
+{
+  "kind": "preserved-initial-local-orchestration-failures",
+  "source_head": "cff58ccf4a52ccc6a4ddf9e7790ce94efd0b4ef7",
+  "execution": "uncommitted Claude corrections; HOST_REAL_PROVENANCE=0",
+  "tests": 19,
+  "duration_seconds": 691.136,
+  "failures": 4,
+  "skipped": 4,
+  "cases": {
+    "test_readable_dump_cannot_restore": "expected backup-restore, got invalid-input-or-internal at rehearsal-ready: injected ALTER DATABASE raced temporary initialization server",
+    "test_served_frontend_failure_recorded_after_switch": "expected served-frontend, got backup-restore exit 1 before mutation",
+    "test_stale_after_backup_before_mutation": "expected eligibility-stale, got backup-restore exit 1 before mutation",
+    "test_static_health_without_database_not_ready": "readiness failed at backend.ready rather than intended database.ready"
+  },
+  "corrections": ["Final TCP Postgres server plus target DB SQL assertion before restore; Unix-socket init-server readiness is insufficient", "Fixed published backend port across replacement", "Explicit directory traversal permissions for disposable nginx", "Failed records captured before test assertions"],
+  "limitations": "Original full trace remains in Codex execution output. This metadata summarizes it; initial sanitized report excludes failed cases because its collection followed assertions. No production evidence or real provenance verification is claimed."
+}
