@@ -66,6 +66,9 @@ jobs:
             release/backend-packages.txt
             release/backend-audit.json
             release/backend-audit.log
+            release/image-id
+            release/image-tag
+            release/commit
           if-no-files-found: warn
           retention-days: 30
       - name: Attest complete release bytes with GitHub OIDC identity

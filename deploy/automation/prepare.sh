@@ -6,6 +6,9 @@ mkdir -p release
 image="nestaprime-release:$sha-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$sha" -t "$image" source > build-backend.log 2>&1
 id=$(docker image inspect --format '{{.Id}}' "$image")
+printf '%s\n' "$image" > release/image-tag
+printf '%s\n' "$id" > release/image-id
+printf '%s\n' "$sha" > release/commit
 # Inventory is taken FROM THE IMAGE; audit tools never alter the release image.
 docker run --rm --entrypoint python "$id" -m pip list --format=freeze > release/backend-packages.txt
 python -m pip install 'pip-audit==2.9.0' > audit-install.log 2>&1
@@ -15,7 +18,4 @@ docker build --platform linux/amd64 -f source/frontend/Dockerfile --target expor
 test -s frontend-export/dist/index.html
 printf '%s\n' "$sha" > frontend-export/dist/release.txt
 tar -C frontend-export/dist -czf release/frontend.tar.gz .
-printf '%s\n' "$image" > release/image-tag
-printf '%s\n' "$id" > release/image-id
-printf '%s\n' "$sha" > release/commit
 python deploy/automation/package_release.py

@@ -43,6 +43,8 @@ class HostGuards(unittest.TestCase):
             self.assertEqual((root / "release/backend-packages.txt").read_text(), "fixture-package==1\n")
             self.assertEqual(json.loads((root / "release/backend-audit.json").read_text()), {"fixture": "rejected"})
             self.assertIn("fixture audit failure", (root / "release/backend-audit.log").read_text())
+            self.assertEqual((root / "release/image-id").read_text().strip(), "sha256:fixture")
+            self.assertEqual((root / "release/commit").read_text().strip(), "a" * 40)
             self.assertFalse((root / "transfer/release.tar").exists())
 
     def test_frontend_exact_set_and_hash(self):
@@ -112,7 +114,7 @@ class HostGuards(unittest.TestCase):
     def test_subprocess_tree_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
             marker = Path(tmp) / "child-pid"
-            runner = Runner({"deadline_seconds": 0.2}, lambda *_args: None)
+            runner = Runner({"deadline_seconds": 1}, lambda *_args: None)
             code = "import pathlib,subprocess,sys,time; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); pathlib.Path(sys.argv[1]).write_text(str(p.pid)); time.sleep(60)"
             start = time.monotonic()
             with self.assertRaises(Deadline):
@@ -120,7 +122,16 @@ class HostGuards(unittest.TestCase):
             self.assertLess(time.monotonic() - start, 2)
             pid = int(marker.read_text())
             status = Path(f"/proc/{pid}/stat")
-            self.assertTrue(not status.exists() or status.read_text().split()[2] == "Z", "Grandchild survived deadline")
+            def terminated():
+                try:
+                    return status.read_text().split()[2] == "Z"
+                except (FileNotFoundError, ProcessLookupError):
+                    # Linux can reap between open/read, not just before exists().
+                    return True
+            end = time.monotonic() + 1
+            while not terminated() and time.monotonic() < end:
+                time.sleep(0.01)
+            self.assertTrue(terminated(), "Grandchild survived deadline")
 
     def test_command_error_does_not_expose_output(self):
         sentinel = os.urandom(16).hex()
