@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, Fragment, useEffect, useMemo, useState } from "react";
 import { createUser, listUsers, resetUserPassword, updateUser } from "./api";
 import { rolesThatMayBeCreated } from "./UserManagement";
 import MiniField from "./MiniField";
+import { IdentifierEditor, IdentifierFields, IdentifierText } from "./UserIdentifierFields";
+import { useIdentifierEditor } from "./useIdentifierEditor";
+import { IDENTIFIER_RULE, buildCreateUserPayload, userMatchesSearch } from "./userIdentifiers";
 import { ClockIcon, LockIcon, SearchIcon, ShieldIcon, UsersIcon } from "./Icons";
 
 // Team & Access (Admin view) redesign (2026-09-27, Director's request): the People tab, restyled to match the
@@ -21,7 +24,7 @@ const ROLE_LABELS = {
 const ALL_ROLES = Object.keys(ROLE_LABELS);
 
 function emptyUserForm(role = "sales") {
-  return { name: "", email: "", role, password: "" };
+  return { name: "", email: "", mobile: "", role, password: "" };
 }
 
 function Tile({ icon: TileIcon, tone, label, value }) {
@@ -65,6 +68,12 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
   const [resettingId, setResettingId] = useState(null);
   const [resetPassword, setResetPassword] = useState("");
 
+  // Amendment 61 Part B: the "Edit sign-in" editor. Its saves are tied to the editor session that started them (see
+  // identifierEditSession.js), so a slow answer cannot close or fill in a different, later editor.
+  // Stable, so the hook does not see a new function every render; a failed refresh is a screen error, not an editor error.
+  const reload = useCallback(() => listUsers(token).then(setUsers).catch((err) => setError(err.message)), [token]);
+  const editor = useIdentifierEditor({ token, reload });
+
   const createRoles = rolesThatMayBeCreated("admin", users);
 
   function load() {
@@ -82,8 +91,13 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
   async function handleCreate(e) {
     e.preventDefault();
     setError("");
+    const built = buildCreateUserPayload(createForm);
+    if (!built.ok) {
+      setError(built.error);
+      return;
+    }
     try {
-      await createUser(token, createForm);
+      await createUser(token, built.payload);
       setCreateForm(emptyUserForm(createRoles[0]));
       setCreating(false);
       await load();
@@ -142,15 +156,13 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
     [users]
   );
 
-  const needle = search.trim().toLowerCase();
   const visible = users.filter((u) => {
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
     if (statusFilter === "active" && !u.is_active) return false;
     if (statusFilter === "inactive" && u.is_active) return false;
     if (statusFilter === "pending" && !(u.is_active && u.must_change_password)) return false;
     if (statusFilter === "locked" && !u.is_locked) return false;
-    if (!needle) return true;
-    return `${u.name} ${u.email}`.toLowerCase().includes(needle);
+    return userMatchesSearch(u, search); // name, email or mobile; a blank search matches everyone
   });
 
   if (loading) return null;
@@ -169,7 +181,7 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
 
       <div className="flex items-start gap-2 bg-gold/5 border border-gold/20 rounded-lg px-3 py-2.5 text-xs text-text-secondary">
         <span className="text-gold shrink-0">ℹ</span>
-        <span>As Admin you can add, change, deactivate and reset anyone, including other Admins.</span>
+        <span>As Admin you can add, change, deactivate and reset anyone, including other Admins. A person signs in with their email or their mobile number; an account needs at least one.</span>
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
@@ -182,7 +194,7 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search people"
+            placeholder="Search by name, email or mobile"
             className="w-full rounded border border-border-dark bg-surface-raised text-text-primary pl-7 pr-2 py-1.5 text-xs"
           />
         </div>
@@ -224,12 +236,13 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
             {visible.map((u) => {
               const isSelf = u.id === currentUser?.id;
               return (
-                <tr key={u.id} className="border-t border-border-dark align-top">
+                <Fragment key={u.id}>
+                <tr className="border-t border-border-dark align-top">
                   <td className="px-1 py-2.5">
                     <span className="block font-medium text-text-primary">{u.name}</span>
                     <span className="block text-[11px] text-text-secondary">
-                      {u.email}
-                      {isSelf && " · you"}
+                      <IdentifierText user={u} stacked />
+                      {isSelf && <span className="block">you</span>}
                     </span>
                   </td>
                   <td className="px-1 py-2.5">
@@ -272,6 +285,12 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
                   <td className="px-1 py-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <button
+                        onClick={() => editor.toggle(u.id)}
+                        className="text-gold hover:underline"
+                      >
+                        Edit sign-in
+                      </button>
+                      <button
                         onClick={() => handleToggleActive(u)}
                         disabled={isSelf && u.is_active}
                         title={isSelf && u.is_active ? "You cannot deactivate your own account" : undefined}
@@ -313,6 +332,23 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
                     </div>
                   </td>
                 </tr>
+                {editor.userId === u.id && (
+                  <tr>
+                    <td colSpan={5} className="px-1 pb-3">
+                      {/* A full-width row (not inside the narrow Person cell), pinned to the left edge so it stays in view while the table scrolls on a phone. */}
+                      <div className="sticky left-0 w-[min(100%,24rem)] max-w-[calc(100vw-4rem)]">
+                        <IdentifierEditor
+                          key={editor.key}
+                          user={u}
+                          serverError={editor.error}
+                          onSave={(payload) => editor.save(editor.key, u.id, payload)}
+                          onCancel={editor.close}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -327,7 +363,12 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
           <form onSubmit={handleCreate} className="border border-green-500/30 bg-green-500/10 rounded p-3 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <MiniField label="Name" value={createForm.name} onChange={(v) => setCreateForm((f) => ({ ...f, name: v }))} required />
-              <MiniField label="Email" value={createForm.email} onChange={(v) => setCreateForm((f) => ({ ...f, email: v }))} required />
+              <IdentifierFields
+                idPrefix="admin-new-user"
+                email={createForm.email}
+                mobile={createForm.mobile}
+                onChange={(field, value) => setCreateForm((f) => ({ ...f, [field]: value }))}
+              />
               <div>
                 <label htmlFor="admin-new-user-role" className="block text-xs text-text-secondary">Role</label>
                 <select
@@ -354,6 +395,7 @@ export default function AdminPeoplePanel({ token, currentUser, initialRoleFilter
                 />
               </div>
             </div>
+            <p className="text-xs text-text-secondary">{IDENTIFIER_RULE}</p>
             <p className="text-xs text-text-secondary">The new user must change this password before they can use the app.</p>
             <div className="flex gap-2">
               <button type="submit" className="bg-green-600 text-white text-xs rounded px-3 py-1.5 hover:bg-green-700">

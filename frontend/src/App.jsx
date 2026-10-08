@@ -43,7 +43,7 @@ import TenderMode from "./TenderMode";
 import VendorsAdmin from "./VendorsAdmin";
 
 export default function App() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [user, setUser] = useState(null);
   const [accessToken, setAccessToken] = useState("");
@@ -197,7 +197,7 @@ export default function App() {
     setError("");
     setLoading(true);
     try {
-      const { access_token } = await login(email, password);
+      const { access_token } = await login(identifier, password);
       const me = await getCurrentUser(access_token);
       setAccessToken(access_token);
       setUser(me);
@@ -211,7 +211,7 @@ export default function App() {
   function handleLogout() {
     setUser(null);
     setAccessToken("");
-    setEmail("");
+    setIdentifier("");
     setPassword("");
     setActiveProject(null);
     setActiveClientId(null);
@@ -571,20 +571,28 @@ export default function App() {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wider text-text-secondary">Email</label>
+          <label htmlFor="signin-identifier" className="block text-xs uppercase tracking-wider text-text-secondary">Email or mobile number</label>
           <input
-            type="email"
+            id="signin-identifier"
+            name="username"
+            type="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             className="mt-1.5 w-full rounded border border-border-dark bg-surface-raised text-text-primary px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gold"
           />
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wider text-text-secondary">Password</label>
+          <label htmlFor="signin-password" className="block text-xs uppercase tracking-wider text-text-secondary">Password</label>
           <input
+            id="signin-password"
+            name="password"
             type="password"
+            autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
