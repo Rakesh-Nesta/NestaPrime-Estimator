@@ -12,6 +12,7 @@ a reversed period (400), and a period needing more buckets than the response lim
 from datetime import date, datetime, timedelta
 
 import pytest
+from sqlalchemy import text
 
 from tests.test_m4_marketing_dashboard_conformance import _get, _ingest
 from tests.test_p3_marketplace_imports_api import _marketing_headers
@@ -123,3 +124,69 @@ def test_an_unexpected_overflow_while_planning_the_period_is_a_400(client, db_se
     h = _marketing_headers(client, db_session)
     res = _get(client, h, period_start="2026-09-01", period_end="2026-09-30")
     assert res.status_code == 400 and "period" in res.json()["detail"].lower()
+
+
+@pytest.mark.parametrize("basis", BASES)
+def test_final_microsecond_included_with_representable_utc_exclusion(client, db_session, basis):
+    """The last IST microsecond is in the cohort; 18:30 UTC is outside that day."""
+    h = _marketing_headers(client, db_session)
+    last_utc = datetime(9999, 12, 31, 18, 29, 59, 999999)
+    next_utc = datetime(9999, 12, 31, 18, 30, 0)
+    inside_id = _ingest(db_session, "MICRO-IN", qtype="W", received_at=last_utc)
+    outside_id = _ingest(db_session, "MICRO-OUT", qtype="B", received_at=next_utc)
+    db_session.execute(
+        text("UPDATE marketplace_lead_imports SET enquiry_time = :value WHERE id = :id"),
+        {"value": datetime.max, "id": inside_id},
+    )
+    db_session.commit()
+
+    inside = db_session.execute(
+        text("SELECT enquiry_time, received_at FROM marketplace_lead_imports WHERE id = :id"),
+        {"id": inside_id},
+    ).one()
+    outside = db_session.execute(
+        text("SELECT enquiry_time, received_at FROM marketplace_lead_imports WHERE id = :id"),
+        {"id": outside_id},
+    ).one()
+    assert inside.enquiry_time == datetime.max and inside.received_at == last_utc
+    assert outside.enquiry_time == datetime(2026, 9, 15, 12) and outside.received_at == next_utc
+
+    res = _get(client, h, period_start="9999-12-31", period_end="9999-12-31", basis=basis, bucket="day")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["received_total"] == 1 and body["imported_total"] == 1
+    assert body["excluded_missing_enquiry_time"] == 0
+    assert body["by_source"] == {"indiamart": 1} and body["by_query_type"] == {"W": 1}
+    assert [(b["bucket_start"], b["count"]) for b in body["by_date_bucket"]] == [("9999-12-31", 1)]
+
+
+@pytest.mark.parametrize(
+    "period,received_at",
+    [
+        ("0001-01-01", datetime(1, 1, 1, 0, 0, 0)),
+        ("9999-12-31", datetime(9999, 12, 31, 18, 29, 59, 999999)),
+    ],
+    ids=["first-day", "last-day"],
+)
+def test_missing_enquiry_time_at_calendar_edge_is_reported(client, db_session, period, received_at):
+    h = _marketing_headers(client, db_session)
+    row_id = _ingest(db_session, f"MISSING-{period}", "not a date", process=False, received_at=received_at)
+    stored = db_session.execute(
+        text("SELECT enquiry_time, received_at FROM marketplace_lead_imports WHERE id = :id"),
+        {"id": row_id},
+    ).one()
+    assert stored.enquiry_time is None and stored.received_at == received_at
+
+    enquiry = _get(client, h, period_start=period, period_end=period, basis="enquiry_time", bucket="day")
+    assert enquiry.status_code == 200, enquiry.text
+    by_enquiry = enquiry.json()
+    assert by_enquiry["received_total"] == 0 and by_enquiry["imported_total"] == 0
+    assert by_enquiry["excluded_missing_enquiry_time"] == 1
+    assert [(b["bucket_start"], b["count"]) for b in by_enquiry["by_date_bucket"]] == [(period, 0)]
+
+    received = _get(client, h, period_start=period, period_end=period, basis="received_at", bucket="day")
+    assert received.status_code == 200, received.text
+    by_received = received.json()
+    assert by_received["received_total"] == 1 and by_received["imported_total"] == 0
+    assert by_received["excluded_missing_enquiry_time"] == 0
+    assert [(b["bucket_start"], b["count"]) for b in by_received["by_date_bucket"]] == [(period, 1)]
